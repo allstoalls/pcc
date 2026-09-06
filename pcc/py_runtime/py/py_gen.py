@@ -18,6 +18,7 @@ from pcc.unsafe import (
     call_ptr2,
     cstr,
     global_load_ptr,
+    function_addr,
     is_tagged_int,
     load_i32,
     load_i64,
@@ -239,6 +240,26 @@ def py_gen_finish(gen, value):
     py_raise(stop)
     py_decref(stop)
     return null()
+
+
+@c_abi_export("py_gen_completed_resume")
+def py_gen_completed_resume(gen, value):
+    if not ptr_is_null(py_current_exception()):
+        py_gen_set_done(gen)
+        return null()
+    return py_gen_finish(gen, value)
+
+
+@c_abi_export("py_gen_completed")
+def py_gen_completed(value):
+    # The resume ABI accepts arbitrary managed userdata. A completed call
+    # needs its result owner, not a list of suspended Python locals.
+    if ptr_is_null(value):
+        value = global_load_ptr("py_None")
+    gen = py_gen_new(function_addr("py_gen_completed_resume"), value)
+    if not ptr_is_null(gen):
+        py_gen_set_may_park(gen)
+    return gen
 
 
 @c_abi_export("py_gen_next")

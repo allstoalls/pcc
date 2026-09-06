@@ -1151,6 +1151,7 @@ int64_t   py_obj_is_slice(PyObject *o);
 /* ---- Native generator objects ------------------------------------------ */
 PyObject *py_gen_frame_new(int64_t slot_count); /* fixed-size, None-filled list frame */
 PyObject *py_gen_new(void *resume, PyObject *frame);
+PyObject *py_gen_completed(PyObject *value); /* owned completed continuation */
 void      py_gen_set_may_park(PyObject *gen);
 int64_t   py_gen_is_may_park(PyObject *gen);
 PyObject *py_gen_next(PyObject *gen);

@@ -190,6 +190,8 @@ class DecoratorLoweringMixin:
         return None
 
     def _decorator_is_noop_whitelist(self, dec) -> bool:
+        if self._native_builtin_value_kind_for_expr(dec) == "pcc.virtual_thread.continuation_factory":
+            return True
         qn = self._decorator_qualname(dec)
         if qn is None:
             return False

@@ -7,7 +7,7 @@ Each line is a mechanism that was established by an experiment, not a
 plausible explanation. Use it to recognise a repeat of a known failure
 instead of re-diagnosing it.
 
-1544 confirmations across 449 investigations.
+1545 confirmations across 450 investigations.
 
 ## [Investigation: direct AArch64 instruction capture order and lifetime](../investigations/aarch64-direct-instruction-capture-order.md)
 
@@ -2867,6 +2867,10 @@ instead of re-diagnosing it.
 ## [Investigation: unrelated parking methods reject a concrete nonparking call](../investigations/vthread-concrete-nonparking-method-collision.md)
 
 - Test [CONFIRMED] — The reduced Resource.close returns 42 without parking. A separate Parking.close
+
+## [Investigation: avoid full generator frames on nonparking factory paths](../investigations/vthread-continuation-factory-fast-path.md)
+
+- Test [CONFIRMED] — The five host-model diagnostic tests verify identical payloads, the declared
 
 ## [Investigation: handled exception context survives only in an SSA value](../investigations/vthread-handler-context-across-park.md)
 

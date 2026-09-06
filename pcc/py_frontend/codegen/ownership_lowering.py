@@ -319,6 +319,8 @@ class OwnershipLoweringMixin:
                 return True
             if (
                 native_call == "pcc.virtual_thread.spawn"
+                or native_call == "pcc.virtual_thread.continuation"
+                or native_call == "pcc.virtual_thread.completed"
                 or native_call == "pcc.virtual_thread.call"
                 or native_call == "pcc.virtual_thread.join"
                 or native_call == "pcc.virtual_thread.current"
@@ -689,6 +691,8 @@ class OwnershipLoweringMixin:
                 return True
             if (
                 native_call == "pcc.virtual_thread.spawn"
+                or native_call == "pcc.virtual_thread.continuation"
+                or native_call == "pcc.virtual_thread.completed"
                 or native_call == "pcc.virtual_thread.call"
                 or native_call == "pcc.virtual_thread.join"
                 or native_call == "pcc.virtual_thread.current"

@@ -140,6 +140,9 @@ def _is_virtual_thread_export(name: str) -> bool:
     return (
         name in _VIRTUAL_THREAD_CONSTANTS
         or name == "spawn"
+        or name == "continuation"
+        or name == "completed"
+        or name == "continuation_factory"
         or name == "call"
         or name == "join"
         or name == "cancel"
@@ -3713,6 +3716,9 @@ class NativeModuleAliasMixin:
                     ast_func_def=ast_func_def,
                     effect_proven=True,
                 )
+            if (bool(info.get("may_park", False))
+                    and self._funcdef_is_continuation_factory(self.current_func_def)):
+                raise L1CodegenError("factory methods must defer parking calls with continuation()")
             if ast_func_def.is_async:
                 return self._emit_async_user_function_call(
                     attr.name,

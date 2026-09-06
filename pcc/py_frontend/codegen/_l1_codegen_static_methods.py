@@ -266,16 +266,17 @@ def _part_19(out):
 
 def _part_20(out):
     _append_method(out, '_funcdef_has_yield_sentinel', (('self', 'pos', False), ('fd', 'pos', False)))
+    _append_method(out, '_funcdef_is_continuation_factory', (('self', 'pos', False), ('fd', 'pos', False)))
     _append_method(out, '_funcdef_uses_boxed_int_abi', (('self', 'pos', False), ('fd', 'pos', False), ('', 'kw_only', False), ('c_abi_sym', 'pos', False)))
     _append_method(out, '_function_arg_ir_type_or_none', (('self', 'pos', False), ('fn', 'pos', False), ('index', 'pos', False), ('ir_arg', 'pos', False)))
     _append_method(out, '_gc_one_slot_borrowed_frame_map', (('self', 'pos', False),))
     _append_method(out, '_gc_one_slot_frame_map', (('self', 'pos', False),))
     _append_method(out, '_gc_release', (('self', 'pos', False), ('obj', 'pos', False), ('label', 'pos', True)))
     _append_method(out, '_gc_pin', (('self', 'pos', False), ('obj', 'pos', False)))
-    _append_method(out, '_gc_unpin', (('self', 'pos', False), ('obj', 'pos', False)))
 
 
 def _part_21(out):
+    _append_method(out, '_gc_unpin', (('self', 'pos', False), ('obj', 'pos', False)))
     _append_method(out, '_note_global_backed_value', (('self', 'pos', False), ('value', 'pos', False), ('source', 'pos', False)))
     _append_method(out, '_value_available_at_insertion_point', (('self', 'pos', False), ('value', 'pos', False)))
     _append_method(out, '_gc_release_if_owned', (('self', 'pos', False), ('obj', 'pos', False), ('source_expr', 'pos', False)))
@@ -283,10 +284,10 @@ def _part_21(out):
     _append_method(out, '_value_is_never_gc_object', (('self', 'pos', False), ('value', 'pos', False)))
     _append_method(out, '_gc_retain', (('self', 'pos', False), ('obj', 'pos', False), ('name', 'pos', True)))
     _append_method(out, '_get_floor_intrinsic', (('self', 'pos', False),))
-    _append_method(out, '_get_fmt_bool_false', (('self', 'pos', False),))
 
 
 def _part_22(out):
+    _append_method(out, '_get_fmt_bool_false', (('self', 'pos', False),))
     _append_method(out, '_get_fmt_bool_true', (('self', 'pos', False),))
     _append_method(out, '_get_fmt_float', (('self', 'pos', False),))
     _append_method(out, '_get_fmt_int', (('self', 'pos', False),))
@@ -294,10 +295,10 @@ def _part_22(out):
     _append_method(out, '_init_l1_state', (('self', 'pos', False), ('module', 'pos', False), ('emit_cpy_main_exitcode', 'pos', False), ('ir_scaffold_mode', 'pos', False)))
     _append_method(out, '_instruction_is_terminator', (('self', 'pos', False), ('instr', 'pos', False)))
     _append_method(out, '_instruction_opname_text', (('self', 'pos', False), ('instr', 'pos', False)))
-    _append_method(out, '_int_expr_needs_exact_object_boundary', (('self', 'pos', False), ('expr', 'pos', False)))
 
 
 def _part_23(out):
+    _append_method(out, '_int_expr_needs_exact_object_boundary', (('self', 'pos', False), ('expr', 'pos', False)))
     _append_method(out, '_int_exprs_are_boxed', (('self', 'pos', False),))
     _append_method(out, '_ir_module_symbol_target', (('self', 'pos', False), ('attr', 'pos', False)))
     _append_method(out, '_ir_scaffold_class_symbol', (('self', 'pos', False), ('expr', 'pos', False)))
@@ -305,10 +306,10 @@ def _part_23(out):
     _append_method(out, '_ir_type_matches', (('self', 'pos', False), ('actual', 'pos', False), ('expected', 'pos', False)))
     _append_method(out, '_is_extern_scaffold_import_module', (('self', 'pos', False), ('module_name', 'pos', False)))
     _append_method(out, '_is_object', (('self', 'pos', False), ('ty', 'pos', False)))
-    _append_method(out, '_is_scalar', (('self', 'pos', False), ('ty', 'pos', False)))
 
 
 def _part_24(out):
+    _append_method(out, '_is_scalar', (('self', 'pos', False), ('ty', 'pos', False)))
     _append_method(out, '_is_starred_unpack', (('self', 'pos', False), ('arg_exprs', 'pos', False)))
     _append_method(out, '_is_starred_unpack_expr', (('self', 'pos', False), ('arg', 'pos', False)))
     _append_method(out, '_is_test_facade_import_module', (('self', 'pos', False), ('module_name', 'pos', False)))
@@ -316,10 +317,10 @@ def _part_24(out):
     _append_method(out, '_lambda_attr_chain', (('self', 'pos', False), ('expr', 'pos', False), ('param_name', 'pos', False)))
     _append_method(out, '_lambda_method_call', (('self', 'pos', False), ('expr', 'pos', False), ('param_name', 'pos', False)))
     _append_method(out, '_lambda_simple_subscript', (('self', 'pos', False), ('expr', 'pos', False), ('param_name', 'pos', False)))
-    _append_method(out, '_load_cpython_builtin', (('self', 'pos', False), ('name', 'pos', False)))
 
 
 def _part_25(out):
+    _append_method(out, '_load_cpython_builtin', (('self', 'pos', False), ('name', 'pos', False)))
     _append_method(out, '_map_type', (('self', 'pos', False), ('ty', 'pos', False)))
     _append_method(out, '_mark_cpy_value', (('self', 'pos', False), ('value', 'pos', False)))
     _append_method(out, '_mark_owned_cpy_value', (('self', 'pos', False), ('value', 'pos', False)))
@@ -327,10 +328,10 @@ def _part_25(out):
     _append_method(out, '_forget_owned_cpy_value', (('self', 'pos', False), ('value', 'pos', False)))
     _append_method(out, '_release_cpy_callable_if_owned', (('self', 'pos', False), ('fn_val', 'pos', False)))
     _append_method(out, '_guard_cpy_value_not_null', (('self', 'pos', False), ('value', 'pos', False), ('owned_on_error', 'pos', True), ('rooted_pcc_on_error', 'pos', True), ('pinned_pcc_on_error', 'pos', True), ('pcc_release_on_error', 'pos', True)))
-    _append_method(out, '_guard_cpy_status_not_negative', (('self', 'pos', False), ('status', 'pos', False), ('owned_on_error', 'pos', True), ('rooted_pcc_on_error', 'pos', True), ('pinned_pcc_on_error', 'pos', True), ('pcc_release_on_error', 'pos', True)))
 
 
 def _part_26(out):
+    _append_method(out, '_guard_cpy_status_not_negative', (('self', 'pos', False), ('status', 'pos', False), ('owned_on_error', 'pos', True), ('rooted_pcc_on_error', 'pos', True), ('pinned_pcc_on_error', 'pos', True), ('pcc_release_on_error', 'pos', True)))
     _append_method(out, '_cpy_literal_cleanup_values', (('self', 'pos', False), ('container', 'pos', False), ('first_callable', 'pos', False), ('second_callable', 'pos', False), ('pending_owned', 'pos', False), ('extra_owned', 'pos', True)))
     _append_method(out, '_load_cpython_builtin_with_cleanup', (('self', 'pos', False), ('name', 'pos', False), ('live_owned', 'pos', False), ('pinned_pcc', 'pos', True)))
     _append_method(out, '_require_supported_cpy_kw_mapping', (('self', 'pos', False), ('kwargs_expr', 'pos', False)))
@@ -338,10 +339,10 @@ def _part_26(out):
     _append_method(out, '_make_cpy_operand_cleanup_block', (('self', 'pos', False), ('live_owned', 'pos', False), ('rooted_pcc', 'pos', False), ('target', 'pos', False), ('name', 'pos', False), ('pinned_pcc', 'pos', True), ('rooted_pcc_lifetimes', 'pos', True)))
     _append_method(out, '_emit_expr_with_cpy_operand_cleanup', (('self', 'pos', False), ('expr', 'pos', False), ('live_owned', 'pos', False), ('rooted_pcc', 'pos', True), ('pinned_pcc', 'pos', True), ('as_pcc_object', 'pos', True), ('as_object', 'pos', True), ('as_i64', 'pos', True), ('rooted_pcc_lifetimes', 'pos', True)))
     _append_method(out, '_begin_cpy_operand_evaluation', (('self', 'pos', False), ('fn_val', 'pos', False)))
-    _append_method(out, '_emit_checked_cpython_call_arg', (('self', 'pos', False), ('expr', 'pos', False), ('live_owned', 'pos', False), ('rooted_pcc_on_error', 'pos', True)))
 
 
 def _part_27(out):
+    _append_method(out, '_emit_checked_cpython_call_arg', (('self', 'pos', False), ('expr', 'pos', False), ('live_owned', 'pos', False), ('rooted_pcc_on_error', 'pos', True)))
     _append_method(out, '_bridge_cpy_arglist_operand', (('self', 'pos', False), ('value', 'pos', False), ('cpy_live_owned', 'pos', False), ('rooted_pcc_on_error', 'pos', True)))
     _append_method(out, '_mark_owned_local_for_unpack_target', (('self', 'pos', False), ('target', 'pos', False), ('value_ty', 'pos', False), ('value_is_owned', 'pos', True)))
     _append_method(out, '_mark_owned_local_if_object', (('self', 'pos', False), ('name', 'pos', False), ('ir_ty', 'pos', False), ('expr', 'pos', True)))
@@ -349,10 +350,10 @@ def _part_27(out):
     _append_method(out, '_marshal_to_cpython_consuming_source', (('self', 'pos', False), ('value', 'pos', False), ('value_ty', 'pos', False), ('source_expr', 'pos', False), ('cpy_owned_on_error', 'pos', True), ('rooted_pcc_on_error', 'pos', True), ('pinned_pcc_on_error', 'pos', True), ('pcc_release_on_error', 'pos', True)))
     _append_method(out, '_maybe_emit_builtin_type_method', (('self', 'pos', False), ('expr', 'pos', False)))
     _append_method(out, '_maybe_emit_bytes_method_via_dyn', (('self', 'pos', False), ('expr', 'pos', False)))
-    _append_method(out, '_maybe_emit_discard_assignment', (('self', 'pos', False), ('target', 'pos', False), ('value_expr', 'pos', False)))
 
 
 def _part_28(out):
+    _append_method(out, '_maybe_emit_discard_assignment', (('self', 'pos', False), ('target', 'pos', False), ('value_expr', 'pos', False)))
     _append_method(out, '_maybe_emit_exact_int_object', (('self', 'pos', False), ('expr', 'pos', False)))
     _append_method(out, '_maybe_emit_valueclass_constructor_payload', (('self', 'pos', False), ('target_ty', 'pos', False), ('value_expr', 'pos', False)))
     _append_method(out, '_maybe_emit_issubclass_builtin', (('self', 'pos', False), ('expr', 'pos', False)))
@@ -360,10 +361,10 @@ def _part_28(out):
     _append_method(out, '_maybe_register_class_alias_assign', (('self', 'pos', False), ('stmt', 'pos', False)))
     _append_method(out, '_method_arg_prefers_native_callable_value', (('self', 'pos', False), ('expr', 'pos', False)))
     _append_method(out, '_method_returns_receiver', (('self', 'pos', False), ('fd', 'pos', False)))
-    _append_method(out, '_module_global_valueclass_payload_field_slot', (('self', 'pos', False), ('gv', 'pos', False), ('field_path', 'pos', False), ('', 'kw_only', False), ('name', 'pos', False)))
 
 
 def _part_29(out):
+    _append_method(out, '_module_global_valueclass_payload_field_slot', (('self', 'pos', False), ('gv', 'pos', False), ('field_path', 'pos', False), ('', 'kw_only', False), ('name', 'pos', False)))
     _append_method(out, '_module_global_needs_teardown', (('self', 'pos', False), ('gv', 'pos', False), ('declared_ty', 'pos', False)))
     _append_method(out, '_module_symbol_suffix', (('self', 'pos', False), ('module_name', 'pos', True)))
     _append_method(out, '_module_teardown_name', (('self', 'pos', False), ('module_name', 'pos', True)))
@@ -371,10 +372,10 @@ def _part_29(out):
     _append_method(out, '_name_returns_owned_function_value', (('self', 'pos', False), ('ident', 'pos', False)))
     _append_method(out, '_native_builtin_module_for_name', (('self', 'pos', False), ('ident', 'pos', False)))
     _append_method(out, '_native_builtin_value_for_name', (('self', 'pos', False), ('ident', 'pos', False)))
-    _append_method(out, '_native_re_call_returns_owned_object', (('self', 'pos', False), ('expr', 'pos', False)))
 
 
 def _part_30(out):
+    _append_method(out, '_native_re_call_returns_owned_object', (('self', 'pos', False), ('expr', 'pos', False)))
     _append_method(out, '_note_owned_object_value', (('self', 'pos', False), ('value', 'pos', False)))
     _append_method(out, '_value_is_owned_object', (('self', 'pos', False), ('value', 'pos', False)))
     _append_method(out, '_note_owned_dynamic_call_value', (('self', 'pos', False), ('value', 'pos', False)))
@@ -382,10 +383,10 @@ def _part_30(out):
     _append_method(out, '_native_re_compile_alias_for_name', (('self', 'pos', False), ('alias', 'pos', False)))
     _append_method(out, '_native_builtin_value_kind_for_expr', (('self', 'pos', False), ('expr', 'pos', False)))
     _append_method(out, '_native_module_attr_global', (('self', 'pos', False), ('module_name', 'pos', False), ('attr_name', 'pos', False)))
-    _append_method(out, '_native_module_expr_export_info', (('self', 'pos', False), ('module_expr', 'pos', False), ('attr_name', 'pos', False)))
 
 
 def _part_31(out):
+    _append_method(out, '_native_module_expr_export_info', (('self', 'pos', False), ('module_expr', 'pos', False), ('attr_name', 'pos', False)))
     _append_method(out, '_ordered_declare_extern_class_args', (('self', 'pos', False), ('expr', 'pos', False)))
     _append_method(out, '_param_ir_and_bind_type', (('self', 'pos', False), ('arg', 'pos', False), ('', 'kw_only', False), ('require_annotation', 'pos', False), ('owner_name', 'pos', False), ('box_int_params', 'pos', True)))
     _append_method(out, '_patch_fn_err_exit_gc_root_leave', (('self', 'pos', False), ('name', 'pos', False), ('alloca', 'pos', False)))
@@ -393,10 +394,10 @@ def _part_31(out):
     _append_method(out, '_prescan_function_module_globals', (('self', 'pos', False), ('fd', 'pos', False)))
     _append_method(out, '_ptr_to_cstr', (('self', 'pos', False), ('gv', 'pos', False)))
     _append_method(out, '_push_try_err_block', (('self', 'pos', False), ('err_bb', 'pos', False)))
-    _append_method(out, '_raw_scaffold_object_rhs_is_owned', (('self', 'pos', False), ('expr', 'pos', False)))
 
 
 def _part_32(out):
+    _append_method(out, '_raw_scaffold_object_rhs_is_owned', (('self', 'pos', False), ('expr', 'pos', False)))
     _append_method(out, '_register_extern_scaffold_imports', (('self', 'pos', False), ('stmt', 'pos', False)))
     _append_method(out, '_register_native_builtin_import_from_aliases', (('self', 'pos', False), ('stmt', 'pos', False), ('import_module', 'pos', False)))
     _append_method(out, '_register_native_builtin_module_alias', (('self', 'pos', False), ('local_name', 'pos', False), ('module_name', 'pos', False)))
@@ -404,10 +405,10 @@ def _part_32(out):
     _append_method(out, '_release_context_label', (('self', 'pos', False), ('kind', 'pos', False)))
     _append_method(out, '_release_existing_owned_local', (('self', 'pos', False), ('name', 'pos', False)))
     _append_method(out, '_release_expr_label', (('self', 'pos', False), ('kind', 'pos', False), ('expr', 'pos', False)))
-    _append_method(out, '_resolve_call_kwargs', (('self', 'pos', False), ('positional', 'pos', False), ('kwargs_pairs', 'pos', False), ('formal_args', 'pos', False), ('skip_self', 'pos', True)))
 
 
 def _part_33(out):
+    _append_method(out, '_resolve_call_kwargs', (('self', 'pos', False), ('positional', 'pos', False), ('kwargs_pairs', 'pos', False), ('formal_args', 'pos', False), ('skip_self', 'pos', True)))
     _append_method(out, '_resolve_class_alias', (('self', 'pos', False), ('name', 'pos', False)))
     _append_method(out, '_resolve_class_attr_mro', (('self', 'pos', False), ('class_name', 'pos', False), ('attr_name', 'pos', False)))
     _append_method(out, '_resolve_method_mro', (('self', 'pos', False), ('class_name', 'pos', False), ('method_name', 'pos', False)))
@@ -415,10 +416,10 @@ def _part_33(out):
     _append_method(out, '_restore_try_err_block', (('self', 'pos', False), ('prev_err_block', 'pos', False)))
     _append_method(out, '_return_expr_looks_cpython', (('self', 'pos', False), ('expr', 'pos', False), ('call_arg_map', 'pos', False)))
     _append_method(out, '_rewrite_traceback_handler_bindings', (('self', 'pos', False),))
-    _append_method(out, '_should_box_python_ints', (('self', 'pos', False),))
 
 
 def _part_34(out):
+    _append_method(out, '_should_box_python_ints', (('self', 'pos', False),))
     _append_method(out, '_strict_no_libpython_import_fallback_enabled', (('self', 'pos', False),))
     _append_method(out, '_strict_stub_user_function_with_cpy_fallback', (('self', 'pos', False), ('fn', 'pos', False), ('fd', 'pos', False)))
     _append_method(out, '_storage_ir_type', (('self', 'pos', False), ('ty', 'pos', False)))
@@ -426,10 +427,10 @@ def _part_34(out):
     _append_method(out, '_store_module_global_root_value', (('self', 'pos', False), ('gv', 'pos', False), ('value', 'pos', False), ('', 'kw_only', False), ('declared_ty', 'pos', True), ('value_is_owned', 'pos', True), ('is_cpy_value', 'pos', True), ('raw_pointer', 'pos', True)))
     _append_method(out, '_clear_module_global_valueclass_payload_roots', (('self', 'pos', False), ('gv', 'pos', False), ('declared_ty', 'pos', False)))
     _append_method(out, '_refresh_module_global_valueclass_payload_roots', (('self', 'pos', False), ('gv', 'pos', False), ('declared_ty', 'pos', False)))
-    _append_method(out, '_subprocess_check_output_text_mode', (('self', 'pos', False), ('expr', 'pos', False)))
 
 
 def _part_35(out):
+    _append_method(out, '_subprocess_check_output_text_mode', (('self', 'pos', False), ('expr', 'pos', False)))
     _append_method(out, '_threading_constructor_kind_for_expr', (('self', 'pos', False), ('expr', 'pos', False)))
     _append_method(out, '_threading_list_elem_kind_for_expr', (('self', 'pos', False), ('expr', 'pos', False)))
     _append_method(out, '_threading_list_elem_kind_for_type', (('self', 'pos', False), ('ty', 'pos', False)))
@@ -437,10 +438,10 @@ def _part_35(out):
     _append_method(out, '_to_int64', (('self', 'pos', False), ('v', 'pos', False), ('ty', 'pos', False)))
     _append_method(out, '_truthy', (('self', 'pos', False), ('v', 'pos', False), ('ty', 'pos', False)))
     _append_method(out, '_try_emit_native_file_stream_print', (('self', 'pos', False), ('call', 'pos', False)))
-    _append_method(out, '_unpack_target_value_is_owned', (('self', 'pos', False), ('value_ty', 'pos', False)))
 
 
 def _part_36(out):
+    _append_method(out, '_unpack_target_value_is_owned', (('self', 'pos', False), ('value_ty', 'pos', False)))
     _append_method(out, '_unbox_scalar_attr_result', (('self', 'pos', False), ('result', 'pos', False), ('result_ty', 'pos', False)))
     _append_method(out, '_unsafe_intrinsic_for_name', (('self', 'pos', False), ('name', 'pos', False)))
     _append_method(out, '_unsafe_void_result', (('self', 'pos', False),))
@@ -448,10 +449,10 @@ def _part_36(out):
     _append_method(out, '_utf8_byte_values', (('self', 'pos', False), ('payload', 'pos', False)))
     _append_method(out, '_valueclass_field_info', (('self', 'pos', False), ('ty', 'pos', False), ('attr_name', 'pos', False)))
     _append_method(out, '_valueclass_field_payload_ir_type', (('self', 'pos', False), ('field_ty', 'pos', False)))
-    _append_method(out, '_valueclass_payload_expr_type', (('self', 'pos', False), ('expr', 'pos', False)))
 
 
 def _part_37(out):
+    _append_method(out, '_valueclass_payload_expr_type', (('self', 'pos', False), ('expr', 'pos', False)))
     _append_method(out, '_valueclass_payload_pointer_field_paths', (('self', 'pos', False), ('ty', 'pos', False), ('prefix', 'pos', True)))
     _append_method(out, '_emit_entry_valueclass_payload_field_slot', (('self', 'pos', False), ('payload_alloca', 'pos', False), ('field_path', 'pos', False), ('name', 'pos', False)))
     _append_method(out, '_ensure_valueclass_payload_gc_roots', (('self', 'pos', False), ('name', 'pos', False), ('payload_alloca', 'pos', False), ('ty', 'pos', False), ('', 'kw_only', False), ('borrowed', 'pos', True)))
@@ -459,10 +460,10 @@ def _part_37(out):
     _append_method(out, '_emit_valueclass_payload_fields_eq', (('self', 'pos', False), ('lhs', 'pos', False), ('rhs', 'pos', False), ('ty', 'pos', False)))
     _append_method(out, '_valueclass_payload_ir_type', (('self', 'pos', False), ('ty', 'pos', False)))
     _append_method(out, '_is_valueclass_payload_type', (('self', 'pos', False), ('ty', 'pos', False)))
-    _append_method(out, '_virtual_thread_frame_map', (('self', 'pos', False), ('n_slots', 'pos', False)))
 
 
 def _part_38(out):
+    _append_method(out, '_virtual_thread_frame_map', (('self', 'pos', False), ('n_slots', 'pos', False)))
     _append_method(out, '_weak_dict_constructor_kind_for_expr', (('self', 'pos', False), ('expr', 'pos', False)))
     _append_method(out, '_weakref_call_expr_returns_owned_object', (('self', 'pos', False), ('expr', 'pos', False)))
     _append_method(out, '_weakref_constructor_kind_for_expr', (('self', 'pos', False), ('expr', 'pos', False)))
@@ -470,10 +471,10 @@ def _part_38(out):
     _append_method(out, '_attr_name_ptr', (('self', 'pos', False), ('name', 'pos', False)))
     _append_method(out, '_codegen_trace_dump', (('self', 'pos', False), ('exc', 'pos', False)))
     _append_method(out, '_codegen_trace_push', (('self', 'pos', False), ('boundary', 'pos', False), ('stmt_index', 'pos', False), ('stmt_kind', 'pos', False), ('expr_kind', 'pos', False), ('span', 'pos', False)))
-    _append_method(out, '_codegen_trace_set_stmt_context', (('self', 'pos', False), ('stmt_index', 'pos', False), ('stmt_kind', 'pos', False)))
 
 
 def _part_39(out):
+    _append_method(out, '_codegen_trace_set_stmt_context', (('self', 'pos', False), ('stmt_index', 'pos', False), ('stmt_kind', 'pos', False)))
     _append_method(out, '_codegen_trace_span', (('self', 'pos', False), ('node', 'pos', False)))
     _append_method(out, '_emit_attribute_error_if_null', (('self', 'pos', False), ('value', 'pos', False), ('attr_name', 'pos', False), ('span', 'pos', False)))
     _append_method(out, '_emit_direct_method_call', (('self', 'pos', False), ('method_fn', 'pos', False), ('self_val', 'pos', False), ('info', 'pos', False), ('method_name', 'pos', False), ('arg_exprs', 'pos', False), ('kwargs', 'pos', True), ('park_expr', 'pos', True)))
@@ -481,10 +482,10 @@ def _part_39(out):
     _append_method(out, '_active_handler_exception_for_current_function', (('self', 'pos', False),))
     _append_method(out, '_emit_exception_frame', (('self', 'pos', False), ('exc', 'pos', False), ('span', 'pos', False)))
     _append_method(out, '_emit_generator_wrapper_function', (('self', 'pos', False), ('fd', 'pos', False), ('fn', 'pos', False), ('symbol_name', 'pos', True), ('class_info', 'pos', True), ('method_kind', 'pos', True)))
-    _append_method(out, '_emit_native_func_signature', (('self', 'pos', False), ('original_args', 'pos', False)))
 
 
 def _part_40(out):
+    _append_method(out, '_emit_native_func_signature', (('self', 'pos', False), ('original_args', 'pos', False)))
     _append_method(out, '_emit_stmt', (('self', 'pos', False), ('stmt', 'pos', False)))
     _append_method(out, '_emit_thread_safepoint', (('self', 'pos', False),))
     _append_method(out, '_native_re_class_compile_attr_string_value', (('self', 'pos', False), ('class_name', 'pos', False), ('attr_name', 'pos', False), ('value_expr', 'pos', False)))

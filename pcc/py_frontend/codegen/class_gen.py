@@ -3302,6 +3302,8 @@ class ClassLowering:
                 kind = "static"
             elif _classgen_name_eq(dname, "classmethod"):
                 kind = "classmethod"
+            elif self.parent._native_builtin_value_kind_for_expr(dec) == "pcc.virtual_thread.continuation_factory":
+                continue
             elif (
                 _classgen_name_eq(dname, "property")
                 or _classgen_name_eq(dname, "cached_property")
@@ -3373,6 +3375,11 @@ class ClassLowering:
         # For @<name>.setter / @<name>.deleter we keep the getter's
         # "property_getter" entry intact — mutators are looked up
         # separately by scanning the AST decorators at emit time.
+        if self.parent._funcdef_is_continuation_factory(fd):
+            if kind != "instance" or (fd.name.startswith("__") and fd.name.endswith("__")):
+                raise L1CodegenError("continuation_factory requires an ordinary instance method")
+            if not isinstance(fd.return_ty, DynType):
+                raise L1CodegenError("continuation_factory requires an inferred or Any return type")
         if kind != "property_setter" and kind != "property_deleter":
             info.method_kinds[fd.name] = kind
 
@@ -3967,7 +3974,7 @@ class ClassLowering:
         kind = info.method_kinds.get(fd.name, "instance")
 
         try:
-            if (
+            if not parent._funcdef_is_continuation_factory(fd) and (
                 parent._funcdef_has_yield_sentinel(fd)
                 or cd.name + "." + fd.name
                 in getattr(parent, "_vthread_may_park_method_keys", set())

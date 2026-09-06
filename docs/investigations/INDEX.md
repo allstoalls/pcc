@@ -1138,6 +1138,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - The user rejects the gateway's zero-wait concurrency-100 baseline and requires
 - [vthread-concrete-nonparking-method-collision.md](vthread-concrete-nonparking-method-collision.md) — **unrelated parking methods reject a concrete nonparking call**
   - The external gateway dashboard cannot compile: TaskScope.close parks, and the
+- [vthread-continuation-factory-fast-path.md](vthread-continuation-factory-fast-path.md) — **avoid full generator frames on nonparking factory paths**
+  - Gateway's normal TaskScope.fork/close calls pay for generator frames because
 - [vthread-handler-context-across-park.md](vthread-handler-context-across-park.md) — **handled exception context survives only in an SSA value**
   - After fixing return-root dominance, the external dashboard still fails the
 - [vthread-owned-local-return-double-release.md](vthread-owned-local-return-double-release.md) — **generator return consumes a local owner twice**

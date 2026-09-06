@@ -371,6 +371,7 @@ L1_CODEGEN_HOST_METHODS = (
     "_fresh",
     "_func_decorators",
     "_funcdef_has_yield_sentinel",
+    "_funcdef_is_continuation_factory",
     "_funcdef_uses_boxed_int_abi",
     "_function_arg_ir_type_or_none",
     "_gc_one_slot_borrowed_frame_map",

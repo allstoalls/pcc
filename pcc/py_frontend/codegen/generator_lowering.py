@@ -504,6 +504,14 @@ class GeneratorLoweringMixin:
             == "pcc.virtual_thread.call"
         )
 
+    def _funcdef_is_continuation_factory(self, fd: FuncDef) -> bool:
+        if fd is None:
+            return False
+        for decorator in fd.decorators:
+            if self._native_builtin_value_kind_for_expr(decorator) == "pcc.virtual_thread.continuation_factory":
+                return True
+        return False
+
     def _funcdef_has_yield_sentinel(self, fd: FuncDef) -> bool:
         """Return True when ``fd`` contains a parser-lifted yield call.
 

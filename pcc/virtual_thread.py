@@ -44,6 +44,46 @@ def call(fn: Callable[..., Any], *args: Any) -> Any:
     return fn(*args)
 
 
+class _Continuation:
+    def __init__(self, fn, args, value, done):
+        self.fn = fn
+        self.args = args
+        self.value = value
+        self.done = done
+
+
+def continuation(fn: Callable[..., Any], *args: Any) -> Any:
+    """Construct a deferred, closed-world parking call for a factory."""
+    return _Continuation(fn, args, None, False)
+
+
+def completed(value: Any) -> Any:
+    """Return a factory result without allocating a suspended-local frame."""
+    return _Continuation(None, (), value, True)
+
+
+def continuation_factory(fn):
+    """A nonparking method returning completed(value) or continuation(fn, ...).
+
+    Calls retain ordinary blocking-looking semantics. Under pcc, the body
+    keeps the continuation return ABI without becoming another generator.
+    Native factories currently require methods with an inferred/Any return.
+    A factory cannot directly park or be passed to spawn; deferred targets
+    must be ordinary closed-world resumable functions.
+    """
+    def invoke(*args, **kwargs):
+        result = fn(*args, **kwargs)
+        if not isinstance(result, _Continuation):
+            raise TypeError("continuation factory must return completed() or continuation()")
+        while isinstance(result, _Continuation):
+            if result.done:
+                return result.value
+            result = result.fn(*result.args)
+        return result
+    invoke.__name__ = fn.__name__
+    return invoke
+
+
 def join(vthread: Any) -> Any:
     _trap("join")
 
@@ -232,6 +272,9 @@ __all__ = [
     "SELECT_LEFT",
     "SELECT_RIGHT",
     "spawn",
+    "continuation",
+    "completed",
+    "continuation_factory",
     "call",
     "join",
     "cancel",

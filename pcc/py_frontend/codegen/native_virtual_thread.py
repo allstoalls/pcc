@@ -27,6 +27,9 @@ _CSTR = _I8.as_pointer()
 
 _VTHREAD_EXPORTS = (
     "spawn",
+    "continuation",
+    "completed",
+    "continuation_factory",
     "call",
     "join",
     "cancel",
@@ -67,6 +70,9 @@ _VTHREAD_EXPORTS = (
 def _is_vthread_export(name: str) -> bool:
     return (
         name == "spawn"
+        or name == "continuation"
+        or name == "completed"
+        or name == "continuation_factory"
         or name == "call"
         or name == "join"
         or name == "cancel"
@@ -353,6 +359,8 @@ class NativeVirtualThreadLoweringMixin:
             producer = self._native_builtin_value_kind_for_expr(source_expr.func)
         if producer in (
             "pcc.virtual_thread.spawn",
+            "pcc.virtual_thread.continuation",
+            "pcc.virtual_thread.completed",
             "pcc.virtual_thread.call",
             "pcc.virtual_thread.join",
             "pcc.virtual_thread.current",
@@ -1720,6 +1728,8 @@ class NativeVirtualThreadLoweringMixin:
                 "FuncDef: "
                 + target.ident
             )
+        if self._funcdef_is_continuation_factory(ast_func_def):
+            raise L1CodegenError("continuation factories cannot be spawn targets")
 
         rejected = getattr(self, "_vthread_rejected_park_boundaries", {})
         reject_reason = rejected.get(target.ident)
@@ -1994,6 +2004,44 @@ class NativeVirtualThreadLoweringMixin:
         kwargs: tuple[tuple[str, Expr], ...],
         call_expr: Optional[Call] = None,
     ) -> Optional[ir.Value]:
+        if (call_expr is not None
+                and self._funcdef_is_continuation_factory(self.current_func_def)
+                and kind not in ("pcc.virtual_thread.continuation", "pcc.virtual_thread.completed")
+                and self._vthread_suspension_call(call_expr, self.current_func_def) is not None):
+            raise L1CodegenError("factory methods must defer parking operations with continuation()")
+        if kind in ("pcc.virtual_thread.continuation", "pcc.virtual_thread.completed"):
+            if call_expr is None:
+                raise L1CodegenError("continuation operations require a direct call site")
+            if not self._funcdef_is_continuation_factory(self.current_func_def):
+                raise L1CodegenError("continuation()/completed() require a continuation_factory method")
+            if kwargs:
+                raise L1CodegenError("continuation factories accept positional continuation arguments")
+            if kind == "pcc.virtual_thread.completed":
+                if len(args) != 1:
+                    raise L1CodegenError("completed() requires one result value")
+                value = self._emit_as_object(args[0])
+                result = self.builder.call(self.runtime["py_gen_completed"], [value],
+                                           name=self._fresh("vthread.completed"))
+                if self._pcc_pointer_source_is_owned(args[0]):
+                    result_slot = self._enter_container_temp_root(result, "vthread.completed")
+                    self._release_virtual_thread_argument(value, args[0])
+                    result = self._load_virtual_thread_operand_root((result_slot, False))
+                    self._leave_container_temp_root(result_slot)
+                self._emit_post_call_err_check(call_expr.span)
+                return result
+            if not args or not isinstance(args[0], Name):
+                raise L1CodegenError("continuation() requires a closed-world function name")
+            target_name = args[0].ident
+            target_fn = self.functions.get(target_name)
+            target_fd = self._find_user_funcdef(target_name)
+            if (target_fn is None or target_fd is None
+                    or self._funcdef_is_continuation_factory(target_fd)
+                    or target_name not in self._vthread_may_park_func_names):
+                raise L1CodegenError("continuation() requires an ordinary resumable function")
+            return self._emit_direct_user_function_call(
+                display_name=target_name, fn=target_fn, ast_func_def=target_fd,
+                args=args[1:], kwargs=(),
+            )
         if kind == "pcc.virtual_thread.spawn":
             return self._emit_virtual_thread_spawn(args, kwargs)
         if kind == "pcc.virtual_thread.call":

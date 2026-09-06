@@ -738,6 +738,7 @@ def _runtime_signatures_part_12():
     # ---- Native generator objects ----------------------------------
     "py_gen_frame_new": (_PYOBJ, [_I64], False),
     "py_gen_new": (_PYOBJ, [_PTR, _PYOBJ], False),
+    "py_gen_completed": (_PYOBJ, [_PYOBJ], False),
     "py_gen_set_may_park": (_VOID, [_PYOBJ], False),
     "py_gen_is_may_park": (_I64, [_PYOBJ], False),
     "py_gen_next": (_PYOBJ, [_PYOBJ], False),

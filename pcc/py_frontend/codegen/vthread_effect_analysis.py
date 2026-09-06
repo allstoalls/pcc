@@ -60,6 +60,8 @@ from ..vthread_effect_summary_wire import (
 
 
 _SUSPENSION_EXPORTS = (
+    "continuation",
+    "completed",
     "call",
     "yield_now",
     "join",
@@ -81,6 +83,9 @@ _SUSPENSION_EXPORTS = (
 # from-import alias, but only _SUSPENSION_EXPORTS makes the current function a
 # resumable continuation.
 _VTHREAD_VALUE_EXPORTS = (
+    "continuation",
+    "completed",
+    "continuation_factory",
     "spawn",
     "call",
     "join",

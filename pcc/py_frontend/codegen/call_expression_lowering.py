@@ -863,6 +863,9 @@ class CallExpressionLoweringMixin:
             self._emit_post_call_err_check(self._expr_span_or_none(expr))
             return result
         name = func_name
+        if (self._funcdef_is_continuation_factory(self.current_func_def)
+                and name in self._vthread_may_park_func_names):
+            raise L1CodegenError("factory methods must defer parking calls with continuation()")
         # A closed-world ``may_park`` callee has a generator ABI even though
         # source code uses an ordinary blocking-looking call.  While lowering
         # its affected caller, transparently drive/delegate that child state

@@ -172,6 +172,23 @@ PyObject *py_gen_finish(PyObject *gen, PyObject *value) {
 }
 
 
+static PyObject *completed_resume(PyObject *gen, PyObject *value) {
+    if (py_current_exception() != NULL) {
+        py_gen_set_done(gen);
+        return NULL;
+    }
+    return py_gen_finish(gen, value);
+}
+
+
+PyObject *py_gen_completed(PyObject *value) {
+    if (value == NULL) value = py_None;
+    PyObject *gen = py_gen_new((void *)completed_resume, value);
+    if (gen != NULL) py_gen_set_may_park(gen);
+    return gen;
+}
+
+
 PyObject *py_gen_next(PyObject *gen) {
     PyGenObject *g = checked_gen(gen);
     if (g == NULL) return NULL;

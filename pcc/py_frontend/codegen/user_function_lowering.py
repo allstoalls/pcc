@@ -1264,8 +1264,14 @@ class UserFunctionLoweringMixin:
 
         try:
             is_generator = self._funcdef_has_yield_sentinel(fd)
+            is_factory = self._funcdef_is_continuation_factory(fd)
+            if is_factory:
+                if self.current_class is None:
+                    raise L1CodegenError("continuation_factory currently requires a method")
+                is_generator = False
             if (
                 not is_generator
+                and not is_factory
                 and fd.name not in self._duplicate_module_function_names
             ):
                 is_generator = fd.name in getattr(
