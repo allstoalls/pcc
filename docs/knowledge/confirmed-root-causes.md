@@ -7,7 +7,7 @@ Each line is a mechanism that was established by an experiment, not a
 plausible explanation. Use it to recognise a repeat of a known failure
 instead of re-diagnosing it.
 
-1545 confirmations across 450 investigations.
+1546 confirmations across 450 investigations.
 
 ## [Investigation: direct AArch64 instruction capture order and lifetime](../investigations/aarch64-direct-instruction-capture-order.md)
 
@@ -2871,6 +2871,7 @@ instead of re-diagnosing it.
 ## [Investigation: avoid full generator frames on nonparking factory paths](../investigations/vthread-continuation-factory-fast-path.md)
 
 - Test [CONFIRMED] — The five host-model diagnostic tests verify identical payloads, the declared
+- CONFIRMED — controlled application improvement — Both runtime mirrors and the compiler factory gates passed under GC0–4
 
 ## [Investigation: handled exception context survives only in an SSA value](../investigations/vthread-handler-context-across-park.md)
 

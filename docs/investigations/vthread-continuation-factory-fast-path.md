@@ -32,6 +32,7 @@ mirror and factory execution are being qualified together.
 
 ## Proposals
 - No.1 explicit continuation factories with cheap completed results [pending]
+- No.2 capture completed values without a StopIteration round trip [pending]
 
 ## No.1 explicit continuation factories with cheap completed results
 ### Code Change
@@ -102,3 +103,40 @@ the native failure/cancellation/rejected-fork fixture: 3 passed in 282.21 s.
 Metadata/recorded-bootstrap checks passed (7 cases, 2 deselected, 2.44 s).
 Full new-source Stage2/Stage3 fixed-point qualification remains pending;
 these are pcc1 application and Stage1 claims, not a new fixed-point claim.
+
+## No.2 capture completed values without a StopIteration round trip
+### Code Change
+A completed factory result still passes through py_gen_next, allocating and
+raising StopIteration only for the caller to match, read and clear it. Add
+py_gen_take_completed: it returns a borrowed value only for a fresh completed
+continuation, marks it consumed, and leaves ordinary generators or pending
+exceptions on the existing protocol. The caller's existing retaining root
+store captures the value before releasing the completed generator.
+
+PCC_FAST_COMPLETED_CONTINUATIONS=1 selects the caller branch and is included
+in frontend cache identity. Public next/send/throw/close remain unchanged.
+The new post-factory application profile has 2,296 on-CPU samples, 2,100
+including py_gen_next; exception allocation is still visible (38 py_exc_alloc
+and 17 py_exc_new_with_value paths). These overlapping samples do not by
+themselves quantify the complete ownership/exception round-trip cost; an
+application A/B is required, with no claim yet that this closes the gap.
+
+### Validation in progress
+The borrowed-handoff test initially failed at link time for the missing
+symbol. The C implementation now passes pending-exception, ordinary-generator,
+None, consumed-result and ownership-transfer checks under GC0–4 (8.36 s).
+The Python runtime and compiler/cancellation gates are next.
+
+### CONFIRMED — controlled application improvement
+Both runtime mirrors and the compiler factory gates passed under GC0–4
+(7 cases, 110.40 s); the native gateway failure/cancellation canary passed
+(4.37 s). Seven-repeat application A/B completed all 42 runs with fixed source
+and runtime b89ff50b68910f71785b22e3-pcc-py. Zero-wait/C100 median QPS rises
+45,764.6 → 50,280.9 (+9.9%), with nonoverlapping ranges 44,854.3–47,411.2 and
+49,209.8–51,917.4. Process instructions/request fall 302,727 → 281,784 (-6.9%),
+and user CPU/request 21.5 → 19.5 microseconds. Asyncio is 91,584.1 QPS.
+The 100 ms row is essentially unchanged (935.7 / 933.3 / 940.0 QPS).
+Gateway report: benchmarks/results/2026-09-07-completed-handoff-ab.json.
+
+The flag remains opt-in pending fresh native pcc1 qualification. This closes
+the completed-value handoff slice, not the remaining overall throughput gap.

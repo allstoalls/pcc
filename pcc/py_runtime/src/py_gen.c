@@ -189,6 +189,17 @@ PyObject *py_gen_completed(PyObject *value) {
 }
 
 
+PyObject *py_gen_take_completed(PyObject *gen) {
+    if (py_current_exception() != NULL) return NULL;
+    PyGenObject *g = checked_gen(gen);
+    if (g == NULL || g->done != 0 || g->resume != (void *)completed_resume) {
+        return NULL;
+    }
+    g->done = 1;
+    return pcc_gc_load_ptr(gen, &g->frame); /* borrowed until caller capture */
+}
+
+
 PyObject *py_gen_next(PyObject *gen) {
     PyGenObject *g = checked_gen(gen);
     if (g == NULL) return NULL;

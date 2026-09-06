@@ -204,6 +204,14 @@ def emit_generator_may_park_child(
     propagate_bb = parent_fn.append_basic_block(
         name=host._fresh("vthread.delegate.propagate")
     )
+    fast_completed = str(
+        os.environ.get("PCC_FAST_COMPLETED_CONTINUATIONS", "0") or "0"
+    ).strip().lower() in ("1", "true", "yes", "on")
+    result_ready_bb = None
+    if fast_completed:
+        result_ready_bb = parent_fn.append_basic_block(
+            name=host._fresh("vthread.delegate.result.ready")
+        )
 
     host.builder.branch(next_bb)
     host.builder.position_at_end(next_bb)
@@ -211,6 +219,37 @@ def emit_generator_may_park_child(
         child_slot,
         name=host._fresh("vthread.delegate.child"),
     )
+    if fast_completed:
+        immediate = host.builder.call(
+            host.runtime["py_gen_take_completed"],
+            [current_child],
+            name=host._fresh("vthread.delegate.completed.borrowed"),
+        )
+        is_immediate = host.builder.icmp_unsigned(
+            "!=", immediate, ir.Constant(_CSTR, None),
+            name=host._fresh("vthread.delegate.completed.ready"),
+        )
+        immediate_bb = parent_fn.append_basic_block(
+            name=host._fresh("vthread.delegate.completed.capture")
+        )
+        step_bb = parent_fn.append_basic_block(
+            name=host._fresh("vthread.delegate.step")
+        )
+        host.builder.cbranch(is_immediate, immediate_bb, step_bb)
+        host.builder.position_at_end(immediate_bb)
+        # The generator still owns its borrowed value. Capture it before
+        # this retaining root store releases the generator in the same slot.
+        host.builder.call(
+            host.runtime["pcc_gc_store_root"],
+            [host._as_gc_ptr(child_slot), immediate],
+        )
+        host.builder.branch(result_ready_bb)
+        host.builder.position_at_end(step_bb)
+        current_child = host.builder.call(
+            host.runtime["pcc_gc_load_ptr"],
+            [ir.Constant(_CSTR, None), host._as_gc_ptr(child_slot)],
+            name=host._fresh("vthread.delegate.step.child"),
+        )
     yielded = host.builder.call(
         host.runtime["py_gen_next"],
         [current_child],
@@ -319,6 +358,12 @@ def emit_generator_may_park_child(
         [result_root_ptr, result_or_none],
     )
     host.builder.call(host.runtime["py_clear_exception"], [])
+    if fast_completed:
+        host.builder.branch(result_ready_bb)
+        host.builder.position_at_end(result_ready_bb)
+        result_root_ptr = host._as_gc_ptr(
+            child_slot, name=host._fresh("vthread.delegate.result.ready.root")
+        )
     rooted_result = host.builder.call(
         host.runtime["pcc_gc_load_ptr"],
         [ir.Constant(_CSTR, None), result_root_ptr],

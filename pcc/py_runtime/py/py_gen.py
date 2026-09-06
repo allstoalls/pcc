@@ -262,6 +262,23 @@ def py_gen_completed(value):
     return gen
 
 
+@c_abi_export("py_gen_take_completed")
+def py_gen_take_completed(gen):
+    # NULL means "use the normal generator protocol". Preserve any pending
+    # exception; only a fresh completed continuation can bypass StopIteration.
+    if not ptr_is_null(py_current_exception()):
+        return null()
+    gen = _checked_gen(gen)
+    if ptr_is_null(gen) or load_i64(gen, 40) != 0:
+        return null()
+    resume = load_ptr(gen, 16)
+    if ptr_eq(resume, function_addr("py_gen_completed_resume")) == 0:
+        return null()
+    store_i64(gen, 40, 1)
+    # Borrowed from gen. The caller captures this owner before releasing gen.
+    return pcc_gc_load_ptr(gen, ptr_add(gen, 24))
+
+
 @c_abi_export("py_gen_next")
 def py_gen_next(gen):
     gen = _checked_gen(gen)
