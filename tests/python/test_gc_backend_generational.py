@@ -1498,7 +1498,17 @@ def _assert_backend_three_extension_traverse_runs_after_graph_unlock(
             static void *lock_contender(void *arg) {
                 (void)arg;
                 __atomic_store_n(&worker_ready, 1, __ATOMIC_RELEASE);
-                while (__atomic_load_n(&worker_go, __ATOMIC_ACQUIRE) == 0) {}
+                while (__atomic_load_n(&worker_go, __ATOMIC_ACQUIRE) == 0) {
+                    /* Poll a safepoint, exactly as pcc-compiled code does.
+                     * pcc_stop_the_world() waits for every other live
+                     * thread to park and has no timeout, so a bare spin
+                     * loop deadlocks the collector before this probe can
+                     * observe anything: a tracing cycle's seed step
+                     * (pcc_gc_complete_mark_cycle_seed) stops the world,
+                     * and the extension traverse under test only runs on
+                     * the following step, after the world resumes. */
+                    pcc_thread_safepoint();
+                }
                 if (pcc_gc_object_is_known(anchor) != 1) {
                     return (void *)(uintptr_t)2;
                 }

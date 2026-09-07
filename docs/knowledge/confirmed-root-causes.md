@@ -7,7 +7,7 @@ Each line is a mechanism that was established by an experiment, not a
 plausible explanation. Use it to recognise a repeat of a known failure
 instead of re-diagnosing it.
 
-1554 confirmations across 453 investigations.
+1576 confirmations across 471 investigations.
 
 ## [Investigation: direct AArch64 instruction capture order and lifetime](../investigations/aarch64-direct-instruction-capture-order.md)
 
@@ -65,6 +65,10 @@ instead of re-diagnosing it.
 - No.4 Retain borrowed object returns in callee return lowering [CONFIRMED]
 - CONFIRMED — The broken module was part of the recent LowIR / layer1 split work, not an
 - CONFIRMED — The LLDB backtrace and generated IR tied the double-free to a user-function
+
+## [Investigation: an owned rebind consumes a borrowed local's source reference](../investigations/borrowed-local-owned-rebind-consumes-source.md)
+
+- Test [CONFIRMED] — The minimized native executable fails. Exact optimizer LR evidence:
 
 ## [Investigation: DynType boxed-float `-` / `*` / comparison against int or DynType operands produce wrong results (no py_obj_sub/py_obj_mul; falls to the i64 path)](../investigations/boxed-float-dyntype-sub-mul-compare-wrong.md)
 
@@ -1073,6 +1077,10 @@ instead of re-diagnosing it.
 - No.1 Release unused owned expression-statement results [CONFIRMED]
 - CONFIRMED — The focused gate now passes:
 
+## [Investigation: the tracing final cut runs extension traverse under a stopped world](../investigations/gc-final-cut-extension-traverse-under-stopped-world.md)
+
+- Test [CONFIRMED] — Observed 2026-09-08. Sampling the hung probe directly gives both halves of the
+
 ## [Investigation: native __del__ finalizers are not called](../investigations/gc-finalizer-del-not-called.md)
 
 - Test [CONFIRMED] — The command above was run on 2026-05-08 and produced:
@@ -1490,6 +1498,10 @@ instead of re-diagnosing it.
 
 - Test [CONFIRMED] — The focused run failed deterministically on 2026-08-31:
 
+## [Investigation: native optimizer masks truncate in the machine-int projection](../investigations/native-optimizer-wide-integer-projection.md)
+
+- Test [CONFIRMED] — The extended native regression observes both incorrect constants. A separate
+
 ## [Investigation: native package installation truncates hyphenated project identities](../investigations/native-package-hyphenated-source-identity.md)
 
 - Test [CONFIRMED] — The reduced test fails: native basename returns checkout while pyproject
@@ -1503,6 +1515,10 @@ instead of re-diagnosing it.
 ## [Investigation: native re.compile pattern OBJECT (replace literal-alias rewriting; numpy `.cpy.attr.compile`~71)](../investigations/native-re-compiled-pattern-object.md)
 
 - Test [CONFIRMED] — The off-mode compile above fails with `PCC-PY-COMPILE-001` on the current
+
+## [Investigation: native re.sub loses result ownership in raw-scaffold code](../investigations/native-re-sub-owned-result-raw-scaffold.md)
+
+- Test [CONFIRMED] — The 32-function native/host mismatch is observed before the fix. Full source
 
 ## [Investigation: native subprocess failures lose CalledProcessError fields](../investigations/native-subprocess-called-process-error-returncode.md)
 
@@ -1547,6 +1563,19 @@ instead of re-diagnosing it.
 
 - Test [CONFIRMED] — Step-2 failure and its real reason:
 - Verification [CONFIRMED] — Loader-probe replica (`PCC_RUNTIME_CC=cc PCC_RUNTIME_HIGH=c`, head-truth
+
+## [Investigation: multi-block inliner loses block names and return namespaces](../investigations/owned-inliner-block-namespace.md)
+
+- Test [CONFIRMED] — The real five-module input produces the deterministic malformed label in both
+
+## [Investigation: owned IR keeps identity casts and boolean round trips](../investigations/owned-ir-representation-roundtrips.md)
+
+- Test [CONFIRMED] — Four eq/ne and zero/one combinations recover the original i1 or its logical
+- No.1 verdict [CONFIRMED for the owned pipeline] — Extended native optimizer regression passes (23.17 s). Native and host output
+
+## [Investigation: owned simplifycfg reuses a value name after mem2reg/sroa](../investigations/owned-simplifycfg-value-namespace.md)
+
+- Test [CONFIRMED] — Observed under the commands above on 2026-09-08. The collision is
 
 ## [Investigation: acquired package install loses index provenance](../investigations/package-acquisition-install-provenance.md)
 
@@ -2054,6 +2083,10 @@ instead of re-diagnosing it.
 - No.1 Remove host stdio from the complete-archive harness [CONFIRMED]
 - CONFIRMED — The production archive intentionally supplies freestanding `stdin`, `stdout`,
 
+## [Investigation: public pcc entrypoints disagree on command execution](../investigations/public-cli-entrypoint-parity.md)
+
+- Test [CONFIRMED] — The first test ran the actual environment's pcc script and CPython -m pcc with
+
 ## [Investigation: call.ret.root alloca inside loop bodies leaks stack; hot loops SIGSEGV after ~500K call iterations](../investigations/py-frontend-call-ret-root-alloca-loop-stack-overflow.md)
 
 - Test [CONFIRMED] — LLDB, 2026-08-07:
@@ -2410,6 +2443,32 @@ instead of re-diagnosing it.
 - Bootstrap harness boundary [CONFIRMED] — The full gate also proved two harness assumptions that needed to be explicit:
 - Final gates [CONFIRMED] — Strict real M1 canary behavior, with the test setting both host escape hatches
 
+## [Investigation: self scalar ALU selection copies allocated registers](../investigations/self-aarch64-alu-register-copies.md)
+
+- Test [CONFIRMED] — The focused load/load/sub/store test fails on the original x9/x10/x11
+
+## [Investigation: self AArch64 spills block-local integer call results](../investigations/self-aarch64-call-result-spills.md)
+
+- Test [CONFIRMED] — The reduced allocation gate fails before editing the allocator. Require actual
+
+## [Investigation: self AArch64 materializes single-use field addresses](../investigations/self-aarch64-gep-memory-operand.md)
+
+- Test [CONFIRMED] — Require signed/unsigned offset selection, sign extension of small GEP index
+
+## [Investigation: self memory selection copies already allocated registers](../investigations/self-aarch64-memory-register-copies.md)
+
+- Test [CONFIRMED] — The first reduced load/store case fails on the pre-change fixed x10 output.
+- CONFIRMED — removes redundant memory instructions; QPS unqualified — Native emitter SHA256 44742eb02a20d28f95ab6ca4332b63fb568e4c0ba68212f21201368c6714c606
+
+## [Investigation: self AArch64 calls memset for small unaligned zero fills](../investigations/self-aarch64-small-memset-call.md)
+
+- Test [CONFIRMED] — Observe the pre-change external call in the reduced case. Require byte-exact
+- CONFIRMED for the newly covered lowering; limited performance scope — The executable byte-boundary regression found missing halfword instruction
+
+## [Investigation: self emits ordinary calls for proven scalar tail positions](../investigations/self-aarch64-tail-call-lowering.md)
+
+- Test [CONFIRMED] — The original direct-call shape test fails on BL (0.14s). Execute argument forwarding and deep tail recursion
+
 ## [Investigation: HEAD ad60403d drops the entry module's trailing `main()` call — every self-backend program ending in `main()` silently does nothing (exit 0, no output)](../investigations/self-backend-entry-main-call-dropped-exitcode-regression.md)
 
 - Test [CONFIRMED] — Observed under the pytest command above (14 failures, e.g.
@@ -2491,6 +2550,10 @@ instead of re-diagnosing it.
 - Fix (CONFIRMED) — `pcc/py_frontend/codegen/class_gen.py`:
 - Repro (`docs`-local; CONFIRMED 2026-06-26 under `--python-libpython=off`) — class Base:
 
+## [Investigation: target optimization deletes exception stack-map labels](../investigations/self-exception-successor-label-elision.md)
+
+- Test [CONFIRMED] — The minimal reproducer fails with host emission, before editing the backend.
+
 ## [Investigation: self-host oracle cold warmup cascades across xdist fixtures](../investigations/self-host-oracle-cold-warmup-xdist-fixture-cascade.md)
 
 - Test [CONFIRMED] — The test-infrastructure contract now requires the self-host oracle, runtime
@@ -2499,6 +2562,19 @@ instead of re-diagnosing it.
 ## [Investigation: pcc1→pcc2 stage 2 fails with LiftError AttributeError obj across unrelated modules](../investigations/self-host-stage2-lift-attributeerror-obj.md)
 
 - Test [CONFIRMED] — Failure observed personally 2026-08-26, twice:
+
+## [Investigation: native aggregate literal masks erase 64-bit vector lanes](../investigations/self-native-aggregate-literal-masks.md)
+
+- Test [CONFIRMED] — Host/native PCO bytes differ; textual ASM narrows the difference to vector
+
+## [Investigation: native trampoline threading corrupts retained branch strings](../investigations/self-native-trampoline-string-lifetime.md)
+
+- Test [CONFIRMED] — Both real-module and five-line native/host differential failures are observed.
+
+## [Investigation: self verifier rejects valid PHIs with parallel CFG edges](../investigations/self-verifier-parallel-edge-phi.md)
+
+- Test [CONFIRMED] — The first reduced acceptance case fails before the correction. LLVM's
+- CONFIRMED — The verifier now checks multiplicity and equal values while preserving the
 
 ## [Investigation: list()/sum()/tuple()/set() consume DynType via len+getitem, silently yielding empty/wrong results for iterator-only objects (generators)](../investigations/sequence-builtins-len-getitem-not-iterator-protocol.md)
 

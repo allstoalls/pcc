@@ -401,6 +401,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - `tests/test_gc_effectiveness.py::test_generator_referencing_self_collected`
 - [gc-effectiveness-module-roots-function-slot-regression.md](gc-effectiveness-module-roots-function-slot-regression.md) — **GC effectiveness: module roots and stale pcc-Python function slots**
   - resolved (2026-07-18)
+- [gc-final-cut-extension-traverse-under-stopped-world.md](gc-final-cut-extension-traverse-under-stopped-world.md) — **the tracing final cut runs extension traverse under a stopped world**
+  - `pcc_gc_complete_claimed_tracing_cycle` releases the object-graph lock before
 - [gc-finalizer-del-not-called.md](gc-finalizer-del-not-called.md) — **native __del__ finalizers are not called**
   - The remaining GC xfail closure bucket includes several finalizer failures.
 - [gc-frame-index-entry-pool-perf.md](gc-frame-index-entry-pool-perf.md) — **gc3/gc4 stage2 ~10-14x slower than gc0 — per-frame index-entry malloc**
@@ -598,6 +600,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - Last of the four blocked-numpy-module root causes (siblings:
 - [boc-speedup-proofs-xdist-cpu-contention.md](boc-speedup-proofs-xdist-cpu-contention.md) — **BOC speedup proofs collapse under xdist CPU contention**
   - The default six-worker non-integration suite produced correct native BOC
+- [borrowed-local-owned-rebind-consumes-source.md](borrowed-local-owned-rebind-consumes-source.md) — **an owned rebind consumes a borrowed local's source reference**
+  - Native optimizer execution on the real py_gen IR crashes in pcc_gc_unpin.
 - [boxed-float-dyntype-sub-mul-compare-wrong.md](boxed-float-dyntype-sub-mul-compare-wrong.md) — **DynType boxed-float `-` / `*` / comparison against int or DynType operands produce wrong results (no py_obj_sub/py_obj_mul; falls to the i64 path)**
   - resolved (fixes #26 `+`, #27 `-`/`*`, #28 comparison — all full-bootstrap-passed)
 - [bytearray-repr-and-methods-cluster-no-libpython.md](bytearray-repr-and-methods-cluster-no-libpython.md) — **bytearray repr + mutable methods unsupported (no-libpython cluster)**
@@ -920,6 +924,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - The gateway facade re-exports PCC_TLS_REQUIRED_CAPABILITIES, computed by
 - [native-json-load-file-no-libpython.md](native-json-load-file-no-libpython.md) — **native `json.load(file)` falls into a no-libpython function stub**
   - pcc lowers `json.loads(str)` and `json.dumps(obj)` natively but does not lower
+- [native-optimizer-wide-integer-projection.md](native-optimizer-wide-integer-projection.md) — **native optimizer masks truncate in the machine-int projection**
+  - After native optimizer lifetime fixes, the real py_gen result is structurally
 - [native-package-hyphenated-source-identity.md](native-package-hyphenated-source-identity.md) — **native package installation truncates hyphenated project identities**
   - The user requires pcc-gui, pcc-gateway and NumPy to install into one consistently
 - [native-provider-closure-scan-reparses-export-ast.md](native-provider-closure-scan-reparses-export-ast.md) — **Native provider closure scan reparses the export AST**
@@ -928,6 +934,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - active — focused native execution passes; fresh pcc1/bootstrap pending
 - [native-re-compiled-pattern-object.md](native-re-compiled-pattern-object.md) — **native re.compile pattern OBJECT (replace literal-alias rewriting; numpy `.cpy.attr.compile`~71)**
   - `B-P0-PKG` gating feature (a) from the 2026-05-28 NEXT pivot note in
+- [native-re-sub-owned-result-raw-scaffold.md](native-re-sub-owned-result-raw-scaffold.md) — **native re.sub loses result ownership in raw-scaffold code**
+  - After repairing borrowed-local replacement, the owned native optimizer still
 - [native-subprocess-called-process-error-returncode.md](native-subprocess-called-process-error-returncode.md) — **native subprocess failures lose CalledProcessError fields**
   - Under the self backend with `--python-libpython=off`, native lowering for
 - [native-subprocess-provider-omitted-from-shallow-multi-file-closure.md](native-subprocess-provider-omitted-from-shallow-multi-file-closure.md) — **native subprocess provider omitted from shallow multi-file closure**
@@ -944,6 +952,12 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - The active `B-P0-PKG` first-import tracer for the repository-local NumPy 2.4.4 package no longer matches the stale status/test expectatio...
 - [numpy-loader-probe-cext-reimport-load-once.md](numpy-loader-probe-cext-reimport-load-once.md) — **NumPy head-truth loader probe fails on cext re-import ("load once per process")**
   - `scripts/numpy_head_gate.py run` (README numpy step 2) exits non-zero with
+- [owned-inliner-block-namespace.md](owned-inliner-block-namespace.md) — **multi-block inliner loses block names and return namespaces**
+  - Integer-comparison inversion makes a previously oversized runtime helper
+- [owned-ir-representation-roundtrips.md](owned-ir-representation-roundtrips.md) — **owned IR keeps identity casts and boolean round trips**
+  - The owned optimized runtime IR still contains `bitcast ptr %p to ptr` and
+- [owned-simplifycfg-value-namespace.md](owned-simplifycfg-value-namespace.md) — **owned simplifycfg reuses a value name after mem2reg/sroa**
+  - Adding the owned `simplifycfg` to the runtime archive's pass list makes the
 - [package-acquisition-install-provenance.md](package-acquisition-install-provenance.md) — **acquired package install loses index provenance**
   - The compiled pcc1 owned-acquisition path correctly recorded its Simple API URL,
 - [package-acquisition-target-python.md](package-acquisition-target-python.md) — **package acquisition ignores the pcc target Python language version**
@@ -988,6 +1002,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - The receipt-bound v34 GC0 Stage2 compile was active at 151 seconds with 26
 - [production-archive-external-resource-host-stdio-symbol-collision.md](production-archive-external-resource-host-stdio-symbol-collision.md) — **production archive external-resource host stdio symbol collision**
   - The strict freestanding external-resource object passed its standalone LLVM,
+- [public-cli-entrypoint-parity.md](public-cli-entrypoint-parity.md) — **public pcc entrypoints disagree on command execution**
+  - active — P0 entry convergence, separate from concurrent performance work
 - [py-frontend-call-ret-root-alloca-loop-stack-overflow.md](py-frontend-call-ret-root-alloca-loop-stack-overflow.md) — **call.ret.root alloca inside loop bodies leaks stack; hot loops SIGSEGV after ~500K call iterations**
   - Any pcc-compiled hot loop whose body contains a rooted user-function call
 - [py-instance-eq-ignored-in-container-keys.md](py-instance-eq-ignored-in-container-keys.md) — **container key equality never dispatches user-instance __eq__**
@@ -1010,16 +1026,36 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - The current-source `tests/python/test_runtime_oracle_diff.py` session fixture
 - [s-p0-native-self-emitter-no-host.md](s-p0-native-self-emitter-no-host.md) — **native self-backend emission from pcc1 without host Python**
   - resolved 2026-07-13
+- [self-aarch64-alu-register-copies.md](self-aarch64-alu-register-copies.md) — **self scalar ALU selection copies allocated registers**
+  - After the memory-operand change (see self-aarch64-memory-register-copies.md),
+- [self-aarch64-call-result-spills.md](self-aarch64-call-result-spills.md) — **self AArch64 spills block-local integer call results**
+  - The matched LLVM-O2-IR runtime emits about twice as many process instructions
+- [self-aarch64-gep-memory-operand.md](self-aarch64-gep-memory-operand.md) — **self AArch64 materializes single-use field addresses**
+  - The same LLVM-O2 IR executes roughly twice as many process instructions with
+- [self-aarch64-memory-register-copies.md](self-aarch64-memory-register-copies.md) — **self memory selection copies already allocated registers**
+  - The indexed AArch64 memory emitter always materializes addresses into x9 and
+- [self-aarch64-small-memset-call.md](self-aarch64-small-memset-call.md) — **self AArch64 calls memset for small unaligned zero fills**
+  - The same LLVM-O2 IR emits a gateway runtime that reaches about 34,213 QPS
+- [self-aarch64-tail-call-lowering.md](self-aarch64-tail-call-lowering.md) — **self emits ordinary calls for proven scalar tail positions**
+  - After native correctness repair, the matched C100 handler comparison is
 - [self-bootstrap-146-module-ir-emission-regression.md](self-bootstrap-146-module-ir-emission-regression.md) — **self bootstrap closure and IR growth make one GC gate take tens of minutes**
   - The user reported that `full_gc0` historically completed in seconds but the
 - [self-bootstrap-reliability-performance-2026-05-15.md](self-bootstrap-reliability-performance-2026-05-15.md) — **self-bootstrap reliability and performance regression**
   - resolved for the 80s regression; future <60s work remains codegen/IR-size work
 - [self-class-attr-ignores-subclass-override.md](self-class-attr-ignores-subclass-override.md) — **`self.<class_attr>` inside an inherited method ignores subclass override**
   - **FIXED 2026-06-26 (focused loop tick) — verified, shippable.**
+- [self-exception-successor-label-elision.md](self-exception-successor-label-elision.md) — **target optimization deletes exception stack-map labels**
+  - An empty exceptional-successor block is threaded away and then its label is
 - [self-host-oracle-cold-warmup-xdist-fixture-cascade.md](self-host-oracle-cold-warmup-xdist-fixture-cascade.md) — **self-host oracle cold warmup cascades across xdist fixtures**
   - A complete non-integration run after a `pcc/` source change reported one
 - [self-host-stage2-lift-attributeerror-obj.md](self-host-stage2-lift-attributeerror-obj.md) — **pcc1→pcc2 stage 2 fails with LiftError AttributeError obj across unrelated modules**
   - A cold `scripts/bootstrap.sh --backend self` chain built stage 1
+- [self-native-aggregate-literal-masks.md](self-native-aggregate-literal-masks.md) — **native aggregate literal masks erase 64-bit vector lanes**
+  - Fresh native self emitters disagree with host self emission on exact LLVM O2
+- [self-native-trampoline-string-lifetime.md](self-native-trampoline-string-lifetime.md) — **native trampoline threading corrupts retained branch strings**
+  - Native self target-on emission differs from host on LLVM O2 py_obj IR. Three
+- [self-verifier-parallel-edge-phi.md](self-verifier-parallel-edge-phi.md) — **self verifier rejects valid PHIs with parallel CFG edges**
+  - The same-IR self/LLVM O2 runtime codegen comparison stops before emission:
 - [sequence-builtins-len-getitem-not-iterator-protocol.md](sequence-builtins-len-getitem-not-iterator-protocol.md) — **list()/sum()/tuple()/set() consume DynType via len+getitem, silently yielding empty/wrong results for iterator-only objects (generators)**
   - Under strict no-libpython (`--backend self --python-libpython=off`, DEFAULT
 - [set-and-frozenset-of-dict-lower-to-empty.md](set-and-frozenset-of-dict-lower-to-empty.md) — **`set(d)` / `frozenset(d)` on a mapping lower to an EMPTY set in pcc-compiled code**

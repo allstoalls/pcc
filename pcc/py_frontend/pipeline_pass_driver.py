@@ -11,6 +11,7 @@ from .compiled_default_passes import (
     is_compiled_default_tier,
     run_compiled_default_tier,
 )
+from .compiled_owned_passes import owns_passes, run_owned_passes
 from .pipeline_ir_split import split_python_ir_module_for_pass_shards
 from .pipeline_modes import normalize_native_backend_name
 from .pipeline_pass_config import (
@@ -212,14 +213,16 @@ def apply_passes(
             logger(
                 "python IR passes["
                 + module_name
-                + "]: compiled "
+                + "]: owned "
                 + join_strings(pass_names, ", ")
             )
-        return run_compiled_default_tier(
-            str(ir_text),
-            pass_names,
-            strict_no_libpython=strict_no_libpython,
-        )
+        return run_owned_passes(str(ir_text), pass_names, strict_no_libpython)
+    if str(default_raw or "").strip().lower() == "default":
+        if not owns_passes(pass_names):
+            raise PassDriverError(
+                "self optimizer does not own requested passes: " + join_strings(pass_names, ", ")
+            )
+        return run_owned_passes(str(ir_text), pass_names, strict_no_libpython)
     default_transport = default_python_ir_pass_transport(pass_names, default_raw)
     if verbose and logger is not None:
         logger(
@@ -295,21 +298,29 @@ def apply_passes_many(
                 out.append(
                     (
                         module_name,
-                        run_compiled_default_tier(
-                            text,
-                            pass_names,
-                            strict_no_libpython=strict_no_libpython,
-                        ),
+                        run_owned_passes(text, pass_names, strict_no_libpython),
                     )
                 )
         if verbose and logger is not None:
             logger(
                 "python IR passes batch["
                 + str(len(out))
-                + " modules]: compiled "
+                + " modules]: owned "
                 + join_strings(pass_names, ", ")
             )
         return out
+    if str(default_raw or "").strip().lower() == "default":
+        if not owns_passes(pass_names):
+            raise PassDriverError(
+                "self optimizer does not own requested passes: " + join_strings(pass_names, ", ")
+            )
+        owned_results: list[tuple[str, str]] = []
+        for module_name, ir_text in module_ir_texts:
+            text = str(ir_text)
+            if not python_ir_pass_should_skip_module(module_name):
+                text = run_owned_passes(text, pass_names, strict_no_libpython)
+            owned_results.append((module_name, text))
+        return owned_results
     default_transport = default_python_ir_pass_transport(pass_names, default_raw)
     normalized = [(name, str(text)) for name, text in module_ir_texts]
     split_large_modules = (
@@ -413,7 +424,7 @@ def default_raw_for_backend(native_backend: Optional[str]) -> Optional[str]:
     if native_backend == "self":
         # The self path deliberately selects only the versioned bounded
         # default manifest.  Its finite implementation is compiled into pcc1;
-        # explicit higher tiers remain owned by the host subprocess.
+        # Additional supported passes use the owned dispatcher as well.
         return "default"
     return None
 
@@ -425,6 +436,17 @@ def _compiled_default_requested(
     # ``default_raw`` is supplied by the self-backend request path.  Do not
     # silently replace the normal LLVM/host optimizer when a caller did not
     # select that mode-labeled route.
+    #
+    # This predicate names the versioned bounded manifest; it no longer picks
+    # the implementation.  It used to route the exact ``mem2reg,sroa`` tuple to
+    # `run_compiled_default_tier`, whose mem2reg is a textual single-block
+    # subset -- and because the self backend is now the default, that made the
+    # weakest of pcc's three mem2reg implementations the one every self compile
+    # and every runtime-archive member actually got.  Measured on the 186
+    # archive modules it removed 24.5% of the memory operations where the owned
+    # `native_ir.mem2reg` removes 75.1%, matching LLVM's own mem2reg+sroa to
+    # within two allocas.  `run_owned_passes` is a strict superset: it runs the
+    # owned kernel and then the same textual tier.
     return (
         str(default_raw or "").strip().lower() == "default"
         and is_compiled_default_tier(pass_names)

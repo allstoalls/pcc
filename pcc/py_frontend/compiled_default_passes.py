@@ -124,7 +124,144 @@ def _rewrite_functions(ir_text: str) -> str:
     return "".join(out)
 
 
+def _promote_entry_single_store(lines: list[str]) -> list[str]:
+    """Promote a non-escaping scalar slot written exactly once in the entry block.
+
+    The owned single-block promotion below rejects any slot whose loads leave
+    the alloca's own block, so on real runtime functions it promotes nothing:
+    every ``%x.addr`` parameter spill is stored in the entry block and read in
+    later blocks.  Measured on ``py_obj.ll``, 148 non-escaping scalar slots
+    carry 843 memory operations and the owned tier removed zero of them, while
+    the llvmlite-backed ``ir_passes/mem2reg`` removed 49% of the object's frame
+    load/store traffic -- the whole of LLVM O2's win on that module.
+
+    This promotion needs no dominance analysis and is correct by construction:
+    the entry block dominates every block, the slot's address never escapes, so
+    nothing but these loads and this store can touch it, and requiring the
+    store to precede any entry-block load means every load observes exactly
+    that value.  Slots with a second store, an escape, an atomic/volatile
+    access or a type mismatch are left alone, and the result still passes the
+    fail-closed dangling-reference check.
+    """
+    block_ids = _block_ids(lines)
+    if not block_ids:
+        return lines
+    entry_block = -1
+    for index, line in enumerate(lines):
+        parsed = _parse_alloca(line)
+        if parsed is not None:
+            entry_block = block_ids[index]
+            break
+    if entry_block < 0:
+        return lines
+
+    candidates: dict[str, dict[str, object]] = {}
+    for index, line in enumerate(lines):
+        parsed = _parse_alloca(line)
+        if parsed is None:
+            continue
+        name, ty, _indent = parsed
+        if not _is_scalar_type(ty):
+            continue
+        if block_ids[index] != entry_block:
+            continue
+        candidates[name] = {
+            "line": index,
+            "type": ty,
+            "loads": [],
+            "store_line": -1,
+            "store_value": "",
+            "safe": True,
+        }
+    if not candidates:
+        return lines
+
+    for index, line in enumerate(lines):
+        names = _ssa_names_in(line)
+        if not names:
+            continue
+        store = _parse_store(line)
+        load = _parse_load(line)
+        for name in names:
+            if name not in candidates:
+                continue
+            candidate = candidates[name]
+            if not candidate["safe"]:
+                continue
+            if index == candidate["line"]:
+                continue
+            if store is not None:
+                store_ty, value, pointer = store
+                if pointer == name and store_ty == candidate["type"]:
+                    if _contains_ssa_name(value, name):
+                        candidate["safe"] = False
+                        continue
+                    if int(candidate["store_line"]) >= 0:
+                        candidate["safe"] = False
+                        continue
+                    candidate["store_line"] = index
+                    candidate["store_value"] = value
+                    continue
+            if load is not None:
+                result, load_ty, pointer = load
+                if pointer == name and load_ty == candidate["type"]:
+                    load_lines = candidate["loads"]
+                    load_lines.append((index, result))
+                    continue
+            candidate["safe"] = False
+
+    removed: set[int] = set()
+    removed_definitions: list[str] = []
+    replacements: dict[str, str] = {}
+    for name, candidate in candidates.items():
+        if not candidate["safe"]:
+            continue
+        store_line = int(candidate["store_line"])
+        if store_line < 0:
+            continue
+        if block_ids[store_line] != entry_block:
+            continue
+        load_lines = candidate["loads"]
+        usable = True
+        position = 0
+        while position < len(load_lines):
+            load_index = int(load_lines[position][0])
+            if block_ids[load_index] == entry_block and load_index < store_line:
+                usable = False
+            position += 1
+        if not usable:
+            continue
+        removed.add(int(candidate["line"]))
+        removed.add(store_line)
+        removed_definitions.append(str(name))
+        position = 0
+        while position < len(load_lines):
+            load_index, result = load_lines[position]
+            removed.add(int(load_index))
+            replacements[str(result)] = str(candidate["store_value"])
+            removed_definitions.append(str(result))
+            position += 1
+
+    if not removed:
+        return lines
+    replacements = _resolved_replacements(replacements)
+    out: list[str] = []
+    for index, line in enumerate(lines):
+        if index in removed:
+            continue
+        out.append(_replace_ssa_names(line, replacements))
+    if _references_removed_definitions(out, removed_definitions):
+        return lines
+    return out
+
+
 def _mem2reg_function(lines: list[str]) -> list[str]:
+    """Owned mem2reg: entry-block single-store promotion, then the
+    single-block scan.  The two are independent and both fail closed."""
+    return _mem2reg_single_block_function(_promote_entry_single_store(lines))
+
+
+def _mem2reg_single_block_function(lines: list[str]) -> list[str]:
     block_ids = _block_ids(lines)
     blocked = _control_flow_blocks(lines, block_ids)
     candidates: dict[str, dict[str, object]] = {}

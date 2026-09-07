@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import pytest
 
 from pcc.py_frontend import compiled_default_passes, pipeline
 
@@ -61,13 +62,99 @@ def test_compiled_default_tier_splits_bounded_literal_struct():
     assert "ret i64 %arg" in out
 
 
-def test_compiled_default_tier_leaves_unproved_control_flow_unchanged():
+def test_entry_block_single_store_promotes_across_control_flow():
+    """An entry-block store with no second store is proved, not unproved.
+
+    The entry block dominates every block, so a non-escaping scalar slot
+    written exactly once there and read later observes exactly that value.
+    The tier used to decline this and therefore promoted nothing at all on
+    real runtime functions, where every parameter spill has this shape.
+    """
     source = """\
 define i64 @probe(i1 %cond, i64 %arg) {
 entry:
   %slot = alloca i64
   store i64 %arg, ptr %slot
   br i1 %cond, label %read, label %read
+read:
+  %value = load i64, ptr %slot
+  ret i64 %value
+}
+"""
+
+    out = compiled_default_passes.run_compiled_default_tier(
+        source,
+        ["mem2reg", "sroa"],
+        strict_no_libpython=False,
+    )
+    assert "alloca" not in out
+    assert "load" not in out
+    assert "ret i64 %arg" in out
+
+
+def test_second_store_in_another_block_stays_unproved():
+    """Two stores need a phi; without one the tier must leave the slot alone."""
+    source = """\
+define i64 @probe(i1 %cond, i64 %arg, i64 %other) {
+entry:
+  %slot = alloca i64
+  store i64 %arg, ptr %slot
+  br i1 %cond, label %alt, label %read
+alt:
+  store i64 %other, ptr %slot
+  br label %read
+read:
+  %value = load i64, ptr %slot
+  ret i64 %value
+}
+"""
+
+    assert compiled_default_passes.run_compiled_default_tier(
+        source,
+        ["mem2reg", "sroa"],
+        strict_no_libpython=False,
+    ) == source
+
+
+def test_a_load_before_the_entry_store_stays_unproved():
+    """The store must precede every entry-block load.
+
+    The load here reads the slot before it is written, so the stored value is
+    not what it observes.  The case is cross-block so only the entry-block
+    promotion could act on it; it must decline. (A single-block version of the
+    same shape is promoted to ``undef`` by the single-block scan, which is
+    correct LLVM semantics for reading an uninitialised slot.)
+    """
+    source = """\
+define i64 @probe(i1 %cond, i64 %arg) {
+entry:
+  %slot = alloca i64
+  %early = load i64, ptr %slot
+  store i64 %arg, ptr %slot
+  br i1 %cond, label %read, label %read
+read:
+  %late = load i64, ptr %slot
+  %sum = add i64 %early, %late
+  ret i64 %sum
+}
+"""
+
+    assert compiled_default_passes._promote_entry_single_store(
+        source.splitlines(keepends=True)
+    ) == source.splitlines(keepends=True)
+
+
+def test_a_store_outside_the_entry_block_stays_unproved():
+    """A single store that is not in the entry block does not dominate the
+    loads without a dominator tree the owned tier does not have yet."""
+    source = """\
+define i64 @probe(i1 %cond, i64 %arg) {
+entry:
+  %slot = alloca i64
+  br i1 %cond, label %write, label %read
+write:
+  store i64 %arg, ptr %slot
+  br label %read
 read:
   %value = load i64, ptr %slot
   ret i64 %value
@@ -167,26 +254,32 @@ def test_self_default_pass_batch_preserves_input_order_without_host(monkeypatch)
     assert all("alloca" not in text for _name, text in out)
 
 
-def test_explicit_higher_pass_keeps_bounded_host_boundary(monkeypatch):
-    seen = []
-
+def test_explicit_owned_pass_does_not_use_host_boundary(monkeypatch):
     def fake_run(command, **kwargs):
-        seen.append((command, kwargs))
-        raise subprocess.CalledProcessError(7, command)
+        raise AssertionError("owned pass escaped to host Python")
 
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "dce")
     monkeypatch.setattr(pipeline.subprocess, "run", fake_run)
 
-    try:
+    source = 'define i64 @probe(i64 %arg) {\nentry:\n  %dead = add i64 %arg, 1\n  ret i64 %arg\n}\n'
+    result = pipeline._apply_python_ir_pass_pipeline(
+        source, module_name="probe", default_raw="default",
+    )
+    assert "%dead" not in result
+
+
+def test_unsupported_self_pass_fails_without_host_fallback(monkeypatch):
+    def fake_run(command, **kwargs):
+        raise AssertionError("unsupported self pass escaped to host Python")
+
+    monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "licm")
+    monkeypatch.setattr(pipeline.subprocess, "run", fake_run)
+    with pytest.raises(pipeline.PyPipelineError, match="self optimizer does not own"):
         pipeline._apply_python_ir_pass_pipeline(
             _SCALAR_IR,
             module_name="probe",
             default_raw="default",
         )
-    except pipeline.PyPipelineError:
-        pass
-
-    assert seen
 
 
 def _two_pass_reference(ir_text: str) -> str:
@@ -357,7 +450,10 @@ def test_mem2reg_token_scan_matches_the_all_candidates_scan():
     ]
     for text in cases:
         lines = text.splitlines(keepends=True)
-        assert compiled_default_passes._mem2reg_function(lines) == (
+        # The reference models the single-block scan, so compare against that
+        # core rather than the composition that also runs the entry-block
+        # single-store promotion.
+        assert compiled_default_passes._mem2reg_single_block_function(lines) == (
             _mem2reg_all_candidates_reference(lines)
         ), text[:200]
 

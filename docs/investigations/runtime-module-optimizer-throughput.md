@@ -208,3 +208,448 @@ The new AGENTS.md contract covers C processing too: host pcc may use only
 CPython and its standard library; pcc1 may not require external interpreters,
 compilers or toolchain utilities. Earlier descriptions of host helpers and
 LLVM policies are historical observations, not exceptions to that contract.
+
+## Update: native pass execution work, uncommitted (2026-09-07)
+
+The maintainer pauses commit/push in both repositories. First complete native
+execution of the useful O2 transformations, including optimizer runtime and
+memory costs; only then continue the per-request ownership-cost investigation.
+Do not call a subset a full LLVM O2 implementation.
+
+The dependency-denial regression in tests/python/test_owned_ir_passes.py fails
+before implementation (ModuleNotFoundError for pcc.native_ir, 0.22 s). First
+proposal: extract existing scalar/CFG transformation kernels into an importable
+standard-library-only package while retaining legacy LLVM verifier adapters
+for differential tests. DCE must inspect owned function/instruction text rather
+than call LLVM merely to enumerate instructions. Preserve volatile/atomic
+operations. Validate existing semantic suites, native execution and optimizer
+CPU/RSS on the exact five runtime inputs before wiring a new compiler tier.
+
+Previous performance policy is relevant: python-ir-passes-on-huge-memory-skip-
+2026-05-27.md documents expensive full/fast passes and preset skips; compiled
+default passes avoid importing the full legacy analysis/harness closure.
+The new route must measure parsing/traversal/allocation overhead explicitly.
+
+## Update: owned runtime emission pilot and Codon assessment (2026-09-07)
+
+The owned scalar/CFG/DCE/inliner kernels now execute natively. Legacy
+LLVM-verifying pass adapters reuse those kernels; explicit supported self
+pipeline requests execute in-process and unsupported requests fail closed.
+This remains a bounded tier, not a complete O2 replacement. Native correctness
+required fixes to borrowed-local rebind ownership, native re.sub result
+ownership and wide-integer projection; see the three linked investigations
+in docs/knowledge/2026-09-07-native-optimizer-wip.md.
+
+Host profiling found 319 simplifycfg module splits and 142 per-function
+context reconstructions in py_obj. Sharing module function attributes reduced
+the native diagnostic from 4.827 s / about 960 MiB to 1.455 s / 234.5 MiB;
+all five native scalar-pass outputs equal the host output. These are single
+diagnostic runs, not repeated whole-compiler performance acceptance.
+
+The exact application PCOs are held constant in the new runtime-emission
+pilot. Only five runtime members differ. Seven rotating repetitions per arm,
+C100/zero wait/20,000 measured requests each, yield 28 valid runs and 560,000
+validated responses. Median QPS: self-control 19,763.3; self with additional
+owned passes 22,185.0; historical LLVM-O2 runtime reference 57,777.4; same-run
+CPython 3.15.0rc1 asyncio 86,080.5. Self-owned gains 12.3% and reduces process
+instructions 5.1%. Report: pcc-gateway/benchmarks/results/
+2026-09-07-owned-runtime-emission-pilot.json/.md.
+
+The retained gateway benchmarks/build_runtime_variants.py recreated all 12
+PCOs and three programs byte-for-byte. Native optimizer/emitter calls deny
+host Python/cc and PATH. Host pcc parsing/codec/linker orchestration and other
+prebuilt runtime members remain; this does not qualify an independent whole
+runtime build. No default-policy or installed-pcc1 promotion follows.
+
+The gap now establishes a substantial runtime emission-path contribution
+with unchanged runtime source/algorithms. It does not distinguish missing IR
+transforms from target code quality, and does not by itself prove register
+allocation is the largest cause. The block-local register allocator's
+call-crossing/PHI spills and indexed emission's optimize=False route are
+specific pending candidates. Preserve stack-map/unwind offset integrity when
+evaluating existing target peepholes.
+
+At the maintainer's request, Codon source at 8057bf9856169fad6ad7dfbb60c9e3eecbcbfd46
+was inspected. See [the evidence assessment](../knowledge/codon-performance-assessment-2026-09-07.md).
+Its specialization, high-level typed operations, value layouts and analysis
+cache/invalidation are useful references. Unconditional dictionary fusion,
+fixed-width ordinary Python ints, LLVM coroutine/codegen dependencies and
+erasing observable scheduling cannot be imported into pcc's contract. There
+is no measured Codon binary/gateway comparison. The next ownership study must
+still distinguish dynamic operations/request from cost/operation; the old
+37.0% profile belongs to the historical LLVM-runtime artifact.
+
+Validation rerun: 14 tests pass in 27.27 s with the explicit provenance-checked
+prebuilt runtime, including native optimizer execution, borrowed rebind under
+five GC backends, and valueclass zero-additional-allocation plus boxed escapes.
+An earlier default-runtime-building packet reached 13 passes but timed out
+at 180 s; it is not counted as a completed test packet. Both repositories
+remain uncommitted per the maintainer's instruction.
+
+
+## Update: the open question answered — target code quality, not missing IR transforms (2026-09-08)
+
+The previous update left this undecided: "It does not distinguish missing IR
+transforms from target code quality, and does not by itself prove register
+allocation is the largest cause." A same-source, same-program comparison of the
+two emission backends answers it.
+
+One compute kernel (`collatz` integer loop, sieve over a list, float harmonic
+sum) compiled twice from identical source with `pcc --backend self` and
+`pcc --backend llvm`, outputs byte-identical (`475716 17984 13476`):
+
+```text
+                    compile wall   binary size   marginal runtime per unit
+self backend            3.70 s      2,458,968     0.0835 s
+llvm backend            2.42 s      2,668,184     0.0625 s
+CPython 3.15.0rc1          --             --      0.0630 s (N=20 total 1.26 s)
+```
+
+Marginal cost is (N=40 minus N=20)/20, so startup and runtime init cancel; two
+repetitions agreed to three significant digits. The self backend is 1.33x
+slower than the LLVM backend on this kernel, and 1.33x slower than CPython,
+while the LLVM backend is level with CPython.
+
+### The GC protocol is a shared floor, not the differentiator
+
+Disassembling the same function from both binaries gives *identical* runtime
+call inventories — LLVM eliminates none of them:
+
+```text
+both arms, user_bench_collatz_steps: 17 unpin, 12 release, 10 load_ptr,
+                                      7 pin, 5 err_occurred, 4 store_root_take,
+                                      4 frame_leave, 2 store_root
+```
+
+A 6-second profile of the self-backend binary puts 43% of self time in that
+protocol on a pure-integer kernel (`pcc_gc_load_borrowed_ptr` 15.6%,
+`pcc_gc_load_ptr` 8.4%, `store_root_take` 5.2%, `granule_is_object_start` 4.2%,
+`unpin` 3.2%, `pin` 2.5%, `release` 2.2%, `store_ptr` 1.6%), with the user
+function itself at 25.7% and boxed `py_int_mod`/`py_int_floordiv` at 8.4%.
+Because the calls are opaque, neither backend optimizes across them. Reducing
+the *number* of these calls is a frontend/value-model question and is the only
+route to beating LLVM; it is not what separates the two backends today.
+
+### What separates them: 61% of the excess is frame traffic
+
+Same function, instruction census:
+
+```text
+                 instructions   frame load/store
+self                     905        261  (28.8%)
+llvm                     631         95  (15.1%)
+excess in self           274        166  (61% of the excess)
+```
+
+Two distinct owners, both in target code quality:
+
+1. **Block-local register allocation.** 166 excess frame loads/stores plus
+   `mov` +130 (172 vs 42) — register shuffling and spill/reload around the
+   opaque runtime calls. This confirms the previously named pending candidate
+   ("the block-local register allocator's call-crossing/PHI spills").
+2. **`i1` ownership flags kept in byte memory slots.** The self arm emits
+   `sturb` 41 and `ldurb` 33; the LLVM arm emits **zero** of either, and
+   correspondingly fewer `cmp` (+33), `cset` (+26), `and` (+23) and `cbz`
+   (+17). LLVM keeps these one-bit owned/borrowed flags in flags/registers;
+   the self backend materialises each one through memory. That is about 74
+   memory instructions plus ~99 boolean-materialisation instructions in one
+   small function, and it is independent of owner 1.
+
+### Vertical slice this names
+
+Owner 2 is the cheaper and better-bounded slice: promote the frontend's `i1`
+owned/borrowed flag slots so the self backend never materialises them through
+byte memory, and verify the count of `sturb`/`ldurb` in this kernel drops to
+zero without changing the runtime call inventory. Owner 1 (call-crossing
+spills) is the larger but riskier one and must not be started from profile
+shape alone — the census above is the measurement to re-run after any change.
+
+Artifacts: `scratchpad/llvmab/{bench.py,bench_self,bench_llvm,dis_self.txt,dis_llvm.txt}`.
+Claim boundary: one compute kernel on Darwin arm64, host `pcc` for both arms,
+identical source and identical program output. It is not a gateway QPS number,
+not a pcc1 claim, and not a bootstrap fixed point.
+
+
+## Update: what LLVM O2 actually buys on the runtime, measured (2026-09-08)
+
+The maintainer rejects the recorded runtime-axis gap (self-owned-target-on
+29,607 QPS / 13.16e9 instructions versus matched-llvm-runtime 57,355 QPS /
+5.54e9 instructions). This update identifies the single transform responsible,
+with a controlled measurement instead of an inference.
+
+### Controlled: same IR, only the LLVM module pipeline differs
+
+`pcc/py_runtime/build_py/py_obj.ll` emitted twice through
+`ir_to_obj._emit_object_with_triple`, optimization level 0 and 2, same
+llvmlite target machine, same triple (`arm64-apple-darwin25.5.0`). Census of
+every function in the produced object:
+
+```text
+                 O0      O2     ratio
+instructions   7,058   7,252    0.97x   (O2 is slightly LARGER)
+calls          1,294   1,247    1.04x   (inlining removes 3.6%)
+frame ld/st      810     427    1.90x   (halved)
+```
+
+Per function, the reduction lands exactly on the ownership helpers the
+application profile named as its top leaves:
+
+```text
+                                  frame ld/st      instructions   calls
+_user_py_obj__py_decref_prepare      45 ->   8      148 -> 120     9 -> 7
+_pcc_gc_alloc                        47 ->  10      170 -> 146    13 -> 12
+_user_py_obj__py_incref_prepare      38 ->   8      125 -> 100     8 -> 6
+_pcc_gc_store_plan_commit_locked     28 ->   8      101 ->  90     8 -> 8
+_pcc_gc_release                      23 ->   4       79 ->  91     9 -> 9
+_pcc_gc_load_ptr                     23 ->   4       86 ->  80     7 -> 7
+```
+
+So the O2 win on this runtime is **eliminating redundant stack-slot loads and
+stores in the ownership helpers — 79-85% of the frame traffic in the hottest
+functions**. It is not inlining (calls fall 3.6%) and it is not smaller code
+(instructions rise 3%). Static size barely moves while the gateway's dynamic
+instruction count falls 2.37x, which is what removing redundant memory
+operations from functions executed thousands of times per request looks like.
+
+A cross-check on the shipped artifacts agrees: baseline `py_obj.o` versus the
+frozen `runtime-ir-o2-five/build_py/py_obj.o` gives frame ld/st 810 -> 415 and
+calls 1,294 -> 1,246. That pair is not same-source (73 versus 70 functions), so
+the controlled emission above is the measurement of record.
+
+### Same owner as the application-backend axis
+
+The 2026-09-08 application-backend census in the previous update found 61% of
+the self backend's excess instructions were frame load/store. This runtime-axis
+result is the same owner, which is why the application axis measures almost
+nothing on the gateway (self 51,056 versus llvm 51,288 QPS, instructions per
+request 309,574 versus 305,041) while the runtime axis measures 2.58x: the
+gateway spends its time inside these helpers, not in application code.
+
+### The missing transform is a pass pcc does not own
+
+`pcc/native_ir/` provides `dce`, `inline`, `instcombine`, `instsimplify`,
+`simplifycfg` and `integer_fold_contract`; the selected default tier is
+`mem2reg, sroa`. None of those removes a redundant load from a stack slot.
+These particular slots cannot be promoted by mem2reg/SROA because their
+addresses escape to `pcc_gc_store_root`/`pcc_gc_frame_*`, so what is left on
+the table is redundant-load elimination and store forwarding across calls that
+provably do not clobber the slot (an EarlyCSE/GVN-class transform with the
+alias facts the GC protocol already guarantees).
+
+Acceptance criterion for that work, measurable without a gateway run: emit
+`py_obj.ll` with pcc's owned pipeline and require frame ld/st at or below 450
+(from 810) with the call inventory unchanged, then re-run the GC0-4 production
+contract and the ownership regressions before any QPS claim. Do not accept an
+IR-size change as evidence; the census above shows O2 wins while getting
+bigger.
+
+Artifacts: `scratchpad/o2ab/py_obj_O{0,2}.o`. Claim boundary: one runtime
+module, Darwin arm64, same-IR controlled emission through the same target
+machine. It does not measure the whole archive, does not prove the gateway gap
+closes proportionally, and is not a pcc1 or bootstrap claim.
+
+
+## Update: the owned tier promoted nothing; first increment implemented (2026-09-08)
+
+Two facts, measured, that redirect this whole line of work.
+
+### 1. The gap is an unapplied pass, not a missing one
+
+`pcc/ir_passes/` holds 69 ported passes (18,163 lines) including `early_cse`,
+`gvn`, `dse`, `licm` and `loop_load_elim`, each citing its upstream LLVM file.
+67 of the 69 `import llvmlite.binding`, and in `mem2reg`/`sroa` llvmlite is
+used for exactly one thing: `llvm.parse_assembly`. Only `constant_lattice` and
+`integer_fold_contract` are dependency-free. `early_cse` and `gvn` are not
+registered in the pipeline runner at all: requesting them raises "Python IR
+pass 'early_cse' has no registered IR-level implementation". Their documented
+subsets also exclude the relevant transform — EarlyCSE here is "identical pure
+binary expressions within a single basic block", GVN "pure binops and repeated
+icmp across dominated blocks". Neither eliminates a redundant load.
+
+**No CSE or GVN is needed to match LLVM O2 on this runtime.** On `py_obj.ll`,
+`ir_passes/mem2reg` + `sroa` alone reaches 414 frame load/stores against LLVM
+O2's 427, with fewer total instructions (6,732 versus 7,190):
+
+```text
+arm                          instructions   calls   frame ld/st
+no passes, O0                       6,981   1,294           810
+llvmlite mem2reg+sroa, O0           6,732   1,295           414
+no passes, LLVM O2                  7,190   1,247           427
+```
+
+So the entire O2 win on this module is available from a pass pcc already
+ported. The reason the shipped objects do not have it: the runtime archive's
+per-module rule (`pcc/py_runtime/Makefile:459-461`) emits `--emit-llvm` and
+feeds that pre-pass `.ll` to `ir_to_obj`, which applies no IR pass pipeline and
+defaults to optimization level 0. The archive members are built from
+pass-free IR.
+
+### 2. The owned, llvmlite-free tier was a no-op on real IR
+
+`compiled_default_passes.py` is the tier pcc1 executes and is llvmlite-free by
+construction. It owned `mem2reg`, yet on `py_obj.ll` it produced a
+byte-identical object (810 frame ops, 75,848 bytes) because
+`_mem2reg_function` rejected any slot whose loads leave the alloca's own block:
+
+```python
+if block_ids[index] != candidate["block"]:
+    candidate["safe"] = False
+```
+
+Every `%x.addr` parameter spill in a real function has exactly that shape, so
+the owned tier promoted zero of the 148 non-escaping scalar slots in that
+module. pcc1 was therefore llvmlite-free *and* effectively optimization-free.
+
+### Implemented: entry-block single-store promotion (owned, llvmlite-free)
+
+`_promote_entry_single_store` promotes a non-escaping scalar slot written
+exactly once in the entry block, with the store preceding any entry-block
+load. It needs no dominance analysis: the entry block dominates every block,
+the address never escapes, and one store means every load observes that value.
+The single-block scan is now `_mem2reg_single_block_function` and
+`_mem2reg_function` composes the two; both fail closed through the existing
+dangling-reference check.
+
+Measured across 40 runtime modules:
+
+```text
+                baseline     owned      llvmlite mem2reg+sroa
+allocas            2,422     1,699                        35
+loads             10,789     7,492                     1,942
+stores             5,604     4,881                     1,468
+memory ops        16,393    12,373                     3,410
+```
+
+The owned tier now removes 24.5% of runtime memory operations where it removed
+0%, which is **31% of what the llvmlite pass achieves**. On `py_obj.o` that is
+frame traffic 810 -> 739 (-9%) versus llvmlite's 414 (-49%). **This does not
+catch up with LLVM**, and it is not yet wired into the archive build, so no
+throughput claim follows from it: real builds are unchanged.
+
+Gates: `test_compiled_default_pass_tier.py` 19 passed, with the previous
+"leaves unproved control flow unchanged" contract replaced by the stronger one
+(entry-block single store is proved) plus three cases that must still be left
+alone — a second store in another block, a load before the entry store, and a
+single store outside the entry block. `test_owned_ir_passes.py`,
+`test_runtime_ir_optimization.py`, `test_py_frontend_ir_pass_pipeline.py`:
+101 passed.
+
+### What closing the gap requires
+
+The remaining 69% is one specific algorithm, not an unknown: phi insertion over
+dominance frontiers for slots with more than one store, or a single store
+outside the entry block. In `py_obj.ll` those are 49 slots with two stores, 14
+with three and 3 with more, plus 29 single-store slots whose store is not in
+the entry block. The owned tier has no dominator tree; `ir_passes/
+dominator_tree.py` exists but is llvmlite-bound, and `native_ir/ir_mutator.py`
+already provides a standard-library-only IR parser to build one against.
+
+Order of work, each independently measurable:
+1. Owned dominator tree over the owned IR model (no llvmlite).
+2. Single-store promotion where the store's block dominates every load
+   (covers the 29 non-entry single-store slots).
+3. Phi insertion for multi-store slots; acceptance is allocas per module
+   approaching the llvmlite figure (2,422 -> 35 across these 40 modules).
+4. Only then wire the tier into the archive build, re-run the GC0-4 production
+   contract and the ownership regressions, and measure gateway QPS.
+
+Do not measure throughput before step 4: the archive build currently bypasses
+the pass pipeline entirely, so the tier's improvements are invisible to it.
+
+## Update: the owned tier now matches LLVM's mem2reg, and the runtime archive gets it (2026-09-08)
+
+### What was actually wrong
+
+Not a missing algorithm.  A routing decision.
+
+`--backend self` became the default for `pcc` and `pcc1`.  The self request
+path sets `default_raw="default"` (`pipeline_pass_driver.default_raw_for_backend`),
+and the dispatcher's first branch, `_compiled_default_requested`, claimed the
+exact `mem2reg,sroa` manifest for `run_compiled_default_tier` -- the textual
+single-block subset in `compiled_default_passes.py`.  So the weakest of pcc's
+three mem2reg implementations became the one every self compile got, including
+every runtime archive member.  The stronger `run_owned_passes` branch sat
+directly below it and was unreachable for that manifest.
+
+Two secondary facts, both previously recorded here incorrectly:
+
+- The `PCC_PYTHON_IR_PASSES=default` make variable
+  (`pipeline_runtime_archive.py:782`) is **not** inert.  GNU make exports
+  command-line variables into recipe environments; verified directly.  The
+  passes were selected, they were just routed to the weak implementation.
+- `pcc/tools/ir_to_obj.py` emitting at optimization level 0 is correct and
+  should stay that way.  Adding a pass option there was tried and reverted:
+  it put the fix behind llvmlite, which is the dependency this work exists to
+  remove.  The fix belongs in the frontend, and that is where it now is.
+
+### The owned pass
+
+`pcc/native_ir/mem2reg.py`, new: the full algorithm over
+`native_ir.ir_mutator`'s standard-library-only IR model.  Cooper/Harvey/Kennedy
+iterative immediate dominators and dominance frontiers, Cytron phi placement at
+the iterated dominance frontier of the storing blocks, and an explicit-stack
+dominator-tree renaming walk.  No llvmlite, no `pcc.ir_passes` import; it
+compiles clean under `--backend self --python-libpython=off`, so pcc1 can run
+it.  Following upstream `Mem2Reg.cpp` it promotes only entry-block allocas,
+which is 17483 of the 17870 candidates (97.8%) and makes the transform correct
+by construction instead of by a loop analysis.
+
+Measured over the 170 real archive members (the 16 `pcc_gui_*` objects still in
+`build_py/` are not archive members and were excluded; an earlier revision of
+this section counted them):
+
+```
+                              alloca    load   store   mem ops removed   time
+weak textual tier (shipped)    17218   71035   34837             0.0%     1.5s
+owned native_ir.mem2reg         1730   14781    7382            79.1%     2.3s
+LLVM function(mem2reg,sroa)     1728   14777    7376            79.1%     1.0s
+```
+
+Two allocas from LLVM, on real emitted IR, with zero exceptions and zero LLVM
+verification failures across all 170 modules.  90.0% of the allocas are gone.
+
+### Throughput: the gateway, controlled
+
+`scripts/reoptimize_runtime_ir.py` gained an `--optimizer owned` arm so a
+runtime archive can be re-optimized from its recorded `.ll` without recompiling
+any source.  It also learned that `--modules all` means every archive *member*,
+resolved from the manifest, not every object in `build_py/`.
+
+The arms below were built the production way instead: wipe `build_py/*.o`, then
+one runtime rebuild with `PCC_RUNTIME_PYTHON_IR_PASSES=off` and one with
+`default`.  Both arms' 170 receipts carry the same `codegen_checksum`
+(`ae203824aa5d`), so the compiler is identical and only the pass mode differs.
+`pcc-gateway/benchmarks/runtime_ab.py`, concurrency 100, delay 0, 5 repeats of
+5000 requests:
+
+```
+arm                                 QPS median   instructions/request
+control  (passes off)                   24890                 481998
+candidate (owned mem2reg,sroa)          38747                 373890
+CPython asyncio                         77150                 227080
+```
+
++55.7% QPS and -22.4% instructions per request from the routing fix alone.
+The gap to asyncio narrows from 3.10x to 1.99x.
+
+### What this does not prove
+
+The candidate is at LLVM parity *for mem2reg*.  The previously recorded
+`matched-llvm-runtime` figure of 57355 QPS came from a runtime built with
+LLVM's whole O2 pipeline, so the remaining distance is the rest of that
+pipeline, not mem2reg.  pcc owns ports of instcombine, simplifycfg,
+instsimplify, dce and inline under `pcc/native_ir/`, and none of them are in
+the `("mem2reg", "sroa")` default manifest.  Extending that manifest is a
+configuration change against existing owned code, and is the next measurement.
+
+Also unproven here: pcc1's own compile throughput.  These numbers are the
+runtime the gateway executes, measured with the host compiler.  A pcc1 number
+needs a stage1 rebuild against the new archive.
+
+### A cache gap found on the way
+
+`PCC_RUNTIME_PYTHON_IR_PASSES` is not part of object staleness.  Switching it
+and recompiling reuses the cached objects, so the archive silently keeps the
+previous pass mode: the first attempt at the candidate arm "rebuilt" in 3
+seconds and produced the control's IR.  Wiping `build_py/*.o` was required.
+The pass mode belongs in the object identity alongside `codegen_checksum`.
