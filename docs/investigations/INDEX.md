@@ -800,6 +800,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - confirmed-regression (root-caused to a commit + pinpointed to the finalize site; exact
 - [gc4-zpage-bootstrap-hotpaths-2026-06-02.md](gc4-zpage-bootstrap-hotpaths-2026-06-02.md) — **backend #4 zpage bootstrap hot paths**
   - resolved for `PCC_GC_BACKEND=4` three-stage bootstrap
+- [generator-bulk-frame-save.md](generator-bulk-frame-save.md) — **batch the compiler's fixed-frame suspension stores**
+  - Continue pcc #188: latest pcc1 handler QPS trails same-run asyncio by 1.79x.
 - [generator-cpython-iteration-dominance.md](generator-cpython-iteration-dominance.md) — **generator bodies iterating CPython-backed iterables — LLVM dominance failure, then runtime SEGV**
   - active — No.1/No.2 (cpy slot spill + guard), No.4 (native protocol-for frame slot), and No.3-J1 (boxed iterator handle + precise cross-yi...
 - [generator-handler-close-skips-finally.md](generator-handler-close-skips-finally.md) — **closing a generator suspended in except skips finally**
