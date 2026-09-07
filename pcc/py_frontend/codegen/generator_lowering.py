@@ -1383,8 +1383,20 @@ class GeneratorLoweringMixin:
         # The cpy for lowering proves the name is not read across a
         # suspension before registering it here.
         skip_names = ctx.get("cpy_skip_save_names", ())
+        transfer_owners = str(
+            os.environ.get("PCC_TRANSFER_GENERATOR_FRAME_OWNERS", "0") or "0"
+        ).strip().lower() in ("1", "true", "yes", "on")
         for name, (idx, slot) in ctx["frame_slots"].items():
             if name in skip_names:
+                continue
+            if transfer_owners:
+                owned_flag = self._ensure_owned_local_flag(name, slot)
+                self.builder.call(
+                    self.runtime["py_list_set_from_owned_root"],
+                    [frame, ir.Constant(_I64, idx),
+                     self._as_gc_ptr(slot, name=self._fresh("gen.save.source")),
+                     self._as_gc_ptr(owned_flag, name=self._fresh("gen.save.owned"))],
+                )
                 continue
             value = self.builder.load(slot, name=self._fresh("gen.save"))
             self.builder.call(

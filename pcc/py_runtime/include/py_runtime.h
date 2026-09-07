@@ -152,6 +152,9 @@ PyObject *pcc_gc_resolve_owned_ptr(PyObject *value);
 void      pcc_gc_store_ptr(PyObject *owner, PyObject **slot, PyObject *value);
 void      pcc_gc_store_root(PyObject **slot, PyObject *value);
 void      pcc_gc_store_root_take(PyObject **slot, PyObject *value); /* consumes value's reference */
+/* Consume value into a heap slot under GC0. Other collectors return 0 with
+ * no mutation or ownership change; the caller must use its ordinary store. */
+int64_t pcc_gc_try_store_ptr_take(PyObject *owner, PyObject **slot, PyObject *value);
 void      pcc_gc_note_write_barrier(PyObject *owner, PyObject *value);
 void      pcc_gc_note_slot_write_barrier(
     PyObject *owner,
@@ -883,6 +886,7 @@ PyObject *py_list_getitem(PyObject *lst, int64_t i); /* a[i]; IndexError if OOB 
 int64_t   py_list_get_i64(PyObject *lst, int64_t i); /* borrowed typed-int fast path */
 int64_t   py_list_get_i64_nonnegative(PyObject *lst, int64_t i); /* non-negative typed-int fast path */
 void      py_list_set(PyObject *lst, int64_t i, PyObject *item);
+void py_list_set_from_owned_root(PyObject *lst, int64_t i, void *source_slot, void *owned_flag);
 int64_t   py_list_setitem(PyObject *lst, int64_t i, PyObject *item); /* a[i]=v; IndexError if OOB */
 int64_t   py_list_len(PyObject *lst);
 PyObject *py_list_slice(PyObject *lst, PyObject *lo, PyObject *hi, PyObject *step);

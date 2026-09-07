@@ -10,6 +10,8 @@ import pytest
 def test_rejected_bulk_save_stays_out_of_application_codegen(tmp_path, monkeypatch):
     from pcc.py_frontend.pipeline import compile_python
 
+    monkeypatch.setenv("PCC_TRANSFER_GENERATOR_FRAME_OWNERS", "0")
+
     source = tmp_path / "suspended.py"
     source.write_text('''def suspended(seed):
     first = [seed]

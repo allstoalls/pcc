@@ -877,6 +877,16 @@ void pcc_gc_store_root_take(PyObject **slot, PyObject *value) {
     if (!PY_IS_TAGGED_INT(stored) && stored != NULL) py_decref(stored);
 }
 
+int64_t pcc_gc_try_store_ptr_take(PyObject *owner, PyObject **slot, PyObject *value) {
+    if (slot == NULL || pcc_gc_backend() != PCC_GC_KIND_REFCOUNT_CYCLE) return 0;
+    pcc_obj_runtime_log_event_code(2, 3, PCC_GC_KIND_REFCOUNT_CYCLE, 0, owner);
+    PyObject *old = *slot;
+    *slot = value;
+    /* Self-stores also consume the caller's additional reference. */
+    if (!PY_IS_TAGGED_INT(old) && old != NULL) py_decref(old);
+    return 1;
+}
+
 void pcc_gc_frame_enter(const void *frame_map, PyObject **slots) {
     pcc_gc_note_frame_enter(frame_map, slots);
 }

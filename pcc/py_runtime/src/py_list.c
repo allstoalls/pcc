@@ -735,6 +735,26 @@ void py_list_set(PyObject *lst, int64_t i, PyObject *item) {
     (void)list_set_item_transaction(lst, i, item);
 }
 
+void py_list_set_from_owned_root(PyObject *lst, int64_t i, void *source_slot, void *owned_flag) {
+    if (source_slot == NULL || owned_flag == NULL) return;
+    PyObject **source = (PyObject **)source_slot;
+    unsigned char *owned = (unsigned char *)owned_flag;
+    if (pcc_gc_backend() == PCC_GC_KIND_REFCOUNT_CYCLE) {
+        PyObject *item = *source;
+        if ((*owned & 1) && lst != NULL && py_type_of(lst) == PY_TYPE_LIST) {
+            PyListObject *list = (PyListObject *)lst;
+            int64_t index = normalize_index(i, list->length, 0);
+            if (index >= 0 && pcc_gc_try_store_ptr_take(lst, &list->items[index], item)) {
+                *owned = 0;
+                return;
+            }
+        }
+        py_list_set(lst, i, item);
+        return;
+    }
+    py_list_set(lst, i, pcc_gc_load_ptr(NULL, source));
+}
+
 int64_t py_list_setitem(PyObject *lst, int64_t i, PyObject *item) {
     /* items[i] = v subscript store: like py_list_set but raises IndexError on
      * out-of-range so try/except can catch it (CPython: "list assignment

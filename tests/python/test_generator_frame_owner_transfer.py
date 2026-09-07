@@ -1,9 +1,84 @@
 """Frame stores may consume an owned local, but must retain borrowed values."""
 
 from pathlib import Path
+import os
+import re
 import subprocess
+import sys
 
 import pytest
+
+
+@pytest.mark.parametrize("enabled", ["0", "1"])
+def test_frame_replacement_preserves_finalizers_during_collection(tmp_path, monkeypatch, pcc_py_runtime_archive, enabled):
+    from pcc.py_frontend.pipeline import compile_python
+
+    source = tmp_path / "frame_finalizers.py"
+    source.write_text('''import gc
+events = []
+class Token:
+    def __init__(self, label):
+        self.label = label
+    def __del__(self):
+        events.append(self.label)
+        gc.collect()
+def worker():
+    first = Token("first")
+    second = Token("second")
+    yield None
+    first = Token("new-first")
+    second = Token("new-second")
+    yield None
+def exercise():
+    iterator = worker()
+    next(iterator)
+    print(events)
+    next(iterator)
+    print(events)
+    iterator.close()
+exercise()
+gc.collect()
+print(sorted(events))
+''')
+    oracle = subprocess.run([sys.executable, str(source)], text=True, capture_output=True, check=True, timeout=10)
+    source.write_text('from pcc.extern import extern, c_int64\n'
+        'backend = extern("pcc_gc_backend", (), c_int64)\n'
+        'print(backend())\n' + source.read_text())
+    monkeypatch.setenv("PCC_TRANSFER_GENERATOR_FRAME_OWNERS", enabled)
+    executable = tmp_path / "frame_finalizers"
+    compile_python(str(source), str(executable), backend="self", libpython_mode="off",
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+    for backend in range(5):
+        ran = subprocess.run([str(executable)], text=True, capture_output=True, timeout=15,
+                             env=dict(os.environ, PCC_GC_BACKEND=str(backend)))
+        assert ran.returncode == 0, f"GC{backend}: " + ran.stdout + ran.stderr
+        assert ran.stdout == str(backend) + "\n" + oracle.stdout
+
+
+def test_generator_save_uses_the_local_ownership_flag(tmp_path, monkeypatch):
+    from pcc.py_frontend.pipeline import compile_python
+
+    source = tmp_path / "owner_shape.py"
+    source.write_text('''def worker(seed):
+    saved = [seed]
+    yield saved
+iterator = worker(42)
+print(next(iterator))
+''')
+    counts = []
+    for enabled in ("0", "1"):
+        monkeypatch.setenv("PCC_TRANSFER_GENERATOR_FRAME_OWNERS", enabled)
+        output = tmp_path / ("owner_" + enabled + ".ll")
+        compile_python(str(source), str(output), emit_llvm_only=True,
+                       backend="self", libpython_mode="off", ir_scaffold_mode="on")
+        body = re.search(r"define[^\n]*worker__gen_resume[^\n]*\{\n(.*?)\n\}", output.read_text(), re.S)
+        assert body is not None
+        calls = re.findall(r"call[^\n]*@py_list_set_from_owned_root\([^\n]+", body.group(1))
+        counts.append(len(calls))
+        if enabled == "1":
+            assert "gen.save.addresses" not in body.group(1)
+            assert all("owned" in call for call in calls)
+    assert counts == [0, 2], "both persisted locals pass their actual ownership flag"
 
 
 @pytest.mark.parametrize("runtime_kind", ["c", "py"])
@@ -16,10 +91,9 @@ def test_frame_store_transfers_only_owned_sources(tmp_path, request, runtime_kin
 #include <stdlib.h>
 extern void py_list_set_from_owned_root(PyObject *, int64_t, void *, void *);
 extern int64_t pcc_gc_try_store_ptr_take(PyObject *, PyObject **, PyObject *);
-extern int32_t py_gc_tracked_count;
 int main(int argc, char **argv) {
     if (argc != 2 || pcc_gc_set_backend(atoi(argv[1])) != 0) return 1;
-    int32_t baseline = py_gc_tracked_count;
+    int64_t baseline = py_gc_get_count(0);
     PyObject *roots[3] = {py_gen_frame_new(1), py_list_new(0), NULL};
     int32_t map[1] = {3};
     pcc_gc_frame_enter(map, roots);
@@ -68,7 +142,7 @@ int main(int argc, char **argv) {
     pcc_gc_store_root(&roots[0], NULL);
     pcc_gc_frame_leave(roots);
     py_gc_collect();
-    if (atoi(argv[1]) == 0 && py_gc_tracked_count != baseline) return 10;
+    if (atoi(argv[1]) == 0 && py_gc_get_count(0) != baseline) return 10;
     puts("frame-owner-transfer-ok");
     return 0;
 }

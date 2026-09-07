@@ -58,6 +58,7 @@ from pcc.unsafe import (
     store_i32,
     store_i64,
     store_i8,
+    store_i8,
     store_ptr,
     untag_int,
 )
@@ -80,6 +81,7 @@ py_raise_owned = extern("py_raise_owned", (c_ptr,), c_void)
 py_err_occurred = extern("py_err_occurred", (), c_int64)
 py_gc_track = extern("py_gc_track", (c_ptr,), c_void)
 pcc_gc_store_ptr = extern("pcc_gc_store_ptr", (c_ptr, c_ptr, c_ptr), c_void)
+pcc_gc_try_store_ptr_take = extern("pcc_gc_try_store_ptr_take", (c_ptr, c_ptr, c_ptr), c_int64)
 pcc_gc_store_ptr_fresh_native_instance = extern(
     "pcc_gc_store_ptr_fresh_native_instance",
     (c_ptr, c_ptr, c_ptr),
@@ -745,6 +747,24 @@ def py_list_set(lst, i: int, item) -> None:
     # frames) index within bounds by construction. User-visible subscript
     # stores go through py_list_setitem below.
     _list_set_item_transaction(lst, i, item)
+
+
+@c_abi_export("py_list_set_from_owned_root")
+def py_list_set_from_owned_root(lst, i: int, source_slot, owned_flag) -> None:
+    if ptr_is_null(source_slot) or ptr_is_null(owned_flag):
+        return
+    if pcc_gc_backend() == 0:
+        item = load_ptr(source_slot, 0)
+        if (load_i8(owned_flag, 0) & 1) != 0 and _list_is_sane(lst, -104):
+            index: int = _normalize_index(i, load_i64(lst, PYLISTOBJECT_LENGTH_OFFSET), 0)
+            if index >= 0:
+                items = load_ptr(lst, PYLISTOBJECT_ITEMS_OFFSET)
+                if pcc_gc_try_store_ptr_take(lst, ptr_add(items, index * 8), item) != 0:
+                    store_i8(owned_flag, 0, 0)
+                    return
+        py_list_set(lst, i, item)
+        return
+    py_list_set(lst, i, pcc_gc_load_ptr(null(), source_slot))
 
 
 @c_abi_export("py_list_setitem")

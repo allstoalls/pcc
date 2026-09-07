@@ -550,6 +550,7 @@ def _runtime_signatures_part_9():
     "py_list_get_i64": (_I64, [_PYOBJ, _I64], False),
     "py_list_get_i64_nonnegative": (_I64, [_PYOBJ, _I64], False),
     "py_list_set": (_VOID, [_PYOBJ, _I64, _PYOBJ], False),
+    "py_list_set_from_owned_root": (_VOID, [_PYOBJ, _I64, _PTR, _PTR], False),
     "py_list_setitem": (_I64, [_PYOBJ, _I64, _PYOBJ], False),
     "py_list_len": (_I64, [_PYOBJ], False),
     "py_list_slice": (_PYOBJ, [_PYOBJ, _PYOBJ, _PYOBJ, _PYOBJ], False),

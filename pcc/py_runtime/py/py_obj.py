@@ -752,6 +752,20 @@ def pcc_gc_store_root_take(slot, value) -> None:
         py_decref(stored)
 
 
+@c_abi_export("pcc_gc_try_store_ptr_take")
+def pcc_gc_try_store_ptr_take(owner, slot, value) -> int:
+    if ptr_is_null(slot) != 0 or _gc_backend_fast() != 0:
+        return 0
+    if load_i32(global_addr("pcc_runtime_log_fast_state"), 0) != 0:
+        pcc_runtime_log_event_code(2, 3, 0, 0, owner)
+    old = load_ptr(slot, 0)
+    store_ptr(slot, 0, value)
+    # Same-value stores still consume the incoming additional owner.
+    if is_tagged_int(old) == 0 and ptr_is_null(old) == 0:
+        py_decref(old)
+    return 1
+
+
 @c_abi_export("pcc_gc_frame_enter")
 def pcc_gc_frame_enter(frame_map, slots) -> None:
     pcc_gc_note_frame_enter(frame_map, slots)

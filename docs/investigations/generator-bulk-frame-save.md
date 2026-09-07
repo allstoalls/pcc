@@ -106,3 +106,60 @@ identity: 34c3d139. The new owner-transfer regression fails at link time for
 py_list_set_from_owned_root and pcc_gc_try_store_ptr_take (0.96 s), as expected
 before these new contracts exist. It covers borrowed/owned inputs, self-stores,
 invalid indices, fallback ownership and GC0 live-object balance.
+
+## Update: No.2 runtime and finalizer gates
+The ownership-aware setter and GC0 consuming heap barrier pass both runtime
+mirrors under GC0–4 (2 cases, 121.82 s). The first test version referenced a
+Python-runtime-only tracked-count symbol; the corrected gate uses the shared
+py_gc_get_count(0) API and verifies GC0 returns to its initial live count.
+Archive: 35cd5715728d0738f65cf68b-pcc-py/libpy_runtime_pcc_py.a.
+
+PCC_TRANSFER_GENERATOR_FRAME_OWNERS now passes the existing local-root and
+owned-flag addresses to each setter, without the rejected address array.
+The source/IR gate first observed no transfer calls, then passed with 13
+existing generator/field/TCP/finally checks (14 cases, 28.44 s).
+
+An additional collecting-finalizer test first failed with optimization OFF:
+CPython and native code already destroy the two final remaining locals in
+opposite orders. The revised gate keeps exact ordering checks for overwritten
+frame values, and compares the final teardown markers as a sorted multiset.
+It does not change production teardown behavior or claim to repair that
+pre-existing ordering difference. This isolates old-slot release order and
+exactly-once finalization, which are the transfer proposal's actual contract.
+
+## Update: No.2 generated execution and measurement readiness
+With the transfer flag on, 14 IR/generator/field/real-TCP/finally cases pass
+(28.44 s). The collecting-finalizer differential passes both flag modes under
+GC0–4 (2 cases, 5.27 s), including exact old-slot finalizer order and final
+teardown counts. Gateway's native failure/cancellation/rejected-fork canary
+passes (4.79 s). The compiler source is frozen at
+~/.cache/pcc/gateway-optimization-20260907/frame-owner-transfer/compiler.
+The full workload A/B compares only PCC_TRANSFER_GENERATOR_FRAME_OWNERS=0/1,
+using the same 35cd5715 runtime and the three previous optimization flags.
+
+## No.2 verdict [DENIED as a speed improvement]
+The 42-run save-only transfer A/B completed. Zero-wait/C100 medians:
+control 48,508.0, candidate 47,949.2, asyncio 84,854.0 QPS. Native ranges
+overlap; candidate median is 1.15% lower. Instructions/request fall only
+309,740 to 306,930 (0.91%); user CPU remains 20.5 us. At 100 ms medians are
+956.6 / 959.5 / 959.2. No accepted throughput gain. Report:
+gateway benchmarks/results/2026-09-07-frame-owner-transfer-ab.json.
+The restore path still retains every frame value, and unchanged frame stores
+already skip their retaining write. Save-only donation therefore does not
+remove the full frame/local duplicate-reference lifetime.
+
+## No.3 move frame owners on restore and save [pending]
+### Code Change
+Complete the frame/local ownership transfer in both directions under GC0.
+Restoring a private frame slot replaces it with immortal None and returns its
+existing owned reference (the same ownership principle as list.pop, without
+changing frame size). Local owned flags remain true, so all existing mutation
+and cleanup paths keep their established contract. Suspension transfers those
+owners back using No.2's setter. GC1–4 retain their original read/store paths.
+This avoids introducing borrowed locals or removing their cleanup guards.
+
+### pending
+Verify frame slots hold their values while suspended, locals hold them while
+executing, source-visible identity survives, and finalizers/exception exits
+remain correct. Explicitly test collector transitions and completed generators
+held by callers. Benchmark only after these gates pass.
