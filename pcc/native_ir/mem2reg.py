@@ -49,8 +49,6 @@ a simple operand all leave the function exactly as it was.
 
 from __future__ import annotations
 
-import re
-
 from .ir_mutator import Instruction, MutableModule
 from .text_tokens import replace_local_names
 
@@ -69,17 +67,156 @@ _TERMINATORS_WITH_LABELS = frozenset(
     {"br", "switch", "indirectbr", "invoke", "callbr"}
 )
 
-_ALLOCA_RE = re.compile(
-    r"^\s*%(?P<name>[\w\.\$\-]+)\s*=\s*alloca\s+(?P<ty>[^,\n]+?)\s*(?:,|$)"
-)
-_STORE_RE = re.compile(
-    r"^\s*store\s+(?P<ty>[^\s,]+)\s+(?P<val>[^,\n]+?)\s*,"
-    r"\s*ptr\s+%(?P<ptr>[\w\.\$\-]+)\s*(?:,|$)"
-)
-_LOAD_RE = re.compile(
-    r"^\s*%(?P<res>[\w\.\$\-]+)\s*=\s*load\s+(?P<ty>[^\s,]+)\s*,"
-    r"\s*ptr\s+%(?P<ptr>[\w\.\$\-]+)\s*(?:,|$)"
-)
+# Instruction decoding is hand-rolled rather than regex-based, matching the
+# textual tier in ``py_frontend/compiled_default_passes``.  `re` is not
+# natively lowered in the no-libpython closure, so importing it here costs
+# CPython fallback calls in a module pcc1 runs on every compile: measured at
+# 20 for this module alone.  These three parsers are the same finite subsets
+# the textual tier proves, and they fail closed by returning None.
+
+
+def _split_assignment(line: str):
+    """``%name = rhs`` -> ``(name, rhs)``, or None."""
+    stripped = line.strip()
+    if not stripped.startswith("%"):
+        return None
+    marker = stripped.find(" = ")
+    if marker < 0:
+        return None
+    name = stripped[1:marker]
+    if not name or not _is_simple_name(name):
+        return None
+    return name, stripped[marker + 3 :].strip()
+
+
+def _split_top_level(text: str, delimiter: str) -> list[str]:
+    """Split on *delimiter* outside brackets; [] on unbalanced input."""
+    out: list[str] = []
+    round_depth = 0
+    square_depth = 0
+    brace_depth = 0
+    angle_depth = 0
+    start = 0
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char == "(":
+            round_depth = round_depth + 1
+        elif char == ")":
+            round_depth = round_depth - 1
+        elif char == "[":
+            square_depth = square_depth + 1
+        elif char == "]":
+            square_depth = square_depth - 1
+        elif char == "{":
+            brace_depth = brace_depth + 1
+        elif char == "}":
+            brace_depth = brace_depth - 1
+        elif char == "<":
+            angle_depth = angle_depth + 1
+        elif char == ">":
+            angle_depth = angle_depth - 1
+        elif char == delimiter and (
+            round_depth == 0
+            and square_depth == 0
+            and brace_depth == 0
+            and angle_depth == 0
+        ):
+            out.append(text[start:index])
+            start = index + 1
+        if round_depth < 0 or square_depth < 0 or brace_depth < 0 or angle_depth < 0:
+            return []
+        index = index + 1
+    if round_depth != 0 or square_depth != 0 or brace_depth != 0 or angle_depth != 0:
+        return []
+    out.append(text[start:])
+    return out
+
+
+def _pointer_operand_name(text: str):
+    """``ptr %name`` -> ``name``, or None."""
+    stripped = str(text).strip()
+    if not stripped.startswith("ptr "):
+        return None
+    operand = stripped[len("ptr ") :].strip()
+    if not operand.startswith("%"):
+        return None
+    pieces = operand[1:].split()
+    if not pieces:
+        return None
+    name = pieces[0]
+    if not _is_simple_name(name):
+        return None
+    return name
+
+
+def _parse_alloca(text: str):
+    """``%name = alloca ty[, ...]`` -> ``(name, ty)``, or None."""
+    assignment = _split_assignment(text)
+    if assignment is None:
+        return None
+    name, rhs = assignment
+    if not rhs.startswith("alloca "):
+        return None
+    pieces = _split_top_level(rhs[len("alloca ") :], ",")
+    if not pieces:
+        return None
+    slot_type = pieces[0].strip()
+    if not slot_type:
+        return None
+    return name, slot_type
+
+
+def _parse_store(text: str):
+    """``store ty value, ptr %p[, ...]`` -> ``(ty, value, p)``, or None.
+
+    ``store atomic`` and ``store volatile`` fall out on their own: the type
+    token becomes ``atomic``/``volatile``, which is not a scalar type.
+    """
+    stripped = text.strip()
+    if not stripped.startswith("store "):
+        return None
+    pieces = _split_top_level(stripped[len("store ") :], ",")
+    if len(pieces) < 2:
+        return None
+    first = pieces[0].strip()
+    split_at = first.find(" ")
+    if split_at <= 0:
+        return None
+    store_type = first[:split_at].strip()
+    value = first[split_at + 1 :].strip()
+    pointer = _pointer_operand_name(pieces[1])
+    if pointer is None:
+        return None
+    return store_type, value, pointer
+
+
+def _parse_load(text: str):
+    """``%r = load ty, ptr %p[, ...]`` -> ``(r, ty, p)``, or None."""
+    assignment = _split_assignment(text)
+    if assignment is None:
+        return None
+    result, rhs = assignment
+    if not rhs.startswith("load "):
+        return None
+    pieces = _split_top_level(rhs[len("load ") :], ",")
+    if len(pieces) < 2:
+        return None
+    load_type = pieces[0].strip()
+    pointer = _pointer_operand_name(pieces[1])
+    if pointer is None:
+        return None
+    return result, load_type, pointer
+
+
+def _is_simple_name(name: str) -> bool:
+    if not name:
+        return False
+    for char in name:
+        if char not in _NAME_CHARS:
+            return False
+    return True
+
 
 # A dominance-frontier runner walks up idom links, which is bounded by the
 # depth of the dominator tree.  The bound exists so that malformed dominance
@@ -153,13 +290,13 @@ def _entry_block_candidates(function) -> dict[str, str]:
     """
     out: dict[str, str] = {}
     for instruction in function.blocks[0].instructions:
-        matched = _ALLOCA_RE.match(instruction.text)
-        if matched is None:
+        parsed = _parse_alloca(instruction.text)
+        if parsed is None:
             continue
-        slot_type = matched.group("ty").strip()
+        alloca_name, slot_type = parsed
         if not _is_scalar_type(slot_type):
             continue
-        out[matched.group("name")] = slot_type
+        out[alloca_name] = slot_type
     return out
 
 
@@ -192,13 +329,13 @@ def _collect_uses(function, candidates: dict[str, str], reachable: set):
                     mentioned.append(name)
             if not mentioned:
                 continue
-            alloca_match = _ALLOCA_RE.match(text)
-            store_match = _STORE_RE.match(text)
-            load_match = _LOAD_RE.match(text)
+            alloca_parsed = _parse_alloca(text)
+            store_parsed = _parse_store(text)
+            load_parsed = _parse_load(text)
             for name in mentioned:
                 if name not in surviving:
                     continue
-                if alloca_match is not None and alloca_match.group("name") == name:
+                if alloca_parsed is not None and alloca_parsed[0] == name:
                     continue
                 # A slot whose load or store sits in a block the entry cannot
                 # reach has no place in the dominator-tree walk below, and
@@ -208,22 +345,22 @@ def _collect_uses(function, candidates: dict[str, str], reachable: set):
                     _drop(surviving, loads, stores, name)
                     continue
                 if (
-                    store_match is not None
-                    and store_match.group("ptr") == name
-                    and store_match.group("ty").strip() == surviving[name]
+                    store_parsed is not None
+                    and store_parsed[2] == name
+                    and store_parsed[0] == surviving[name]
                 ):
-                    value = store_match.group("val").strip()
+                    value = store_parsed[1]
                     if not _is_simple_operand(value) or value == "%" + name:
                         _drop(surviving, loads, stores, name)
                         continue
                     stores[name].append((block.name, index, value))
                     continue
                 if (
-                    load_match is not None
-                    and load_match.group("ptr") == name
-                    and load_match.group("ty").strip() == surviving[name]
+                    load_parsed is not None
+                    and load_parsed[2] == name
+                    and load_parsed[1] == surviving[name]
                 ):
-                    loads[name].append((block.name, index, load_match.group("res")))
+                    loads[name].append((block.name, index, load_parsed[0]))
                     continue
                 _drop(surviving, loads, stores, name)
     out: dict[str, dict] = {}
@@ -672,8 +809,8 @@ def _apply(function, plan: dict) -> bool:
             if index in drop:
                 continue
             if block is function.blocks[0]:
-                matched = _ALLOCA_RE.match(instruction.text)
-                if matched is not None and matched.group("name") in allocas:
+                parsed = _parse_alloca(instruction.text)
+                if parsed is not None and parsed[0] in allocas:
                     continue
             instructions.append(instruction)
         inserted = phi_lines.get(block.name)

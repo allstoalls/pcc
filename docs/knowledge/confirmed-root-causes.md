@@ -7,7 +7,7 @@ Each line is a mechanism that was established by an experiment, not a
 plausible explanation. Use it to recognise a repeat of a known failure
 instead of re-diagnosing it.
 
-1576 confirmations across 471 investigations.
+1577 confirmations across 472 investigations.
 
 ## [Investigation: direct AArch64 instruction capture order and lifetime](../investigations/aarch64-direct-instruction-capture-order.md)
 
@@ -2597,6 +2597,10 @@ instead of re-diagnosing it.
 - Test [CONFIRMED] — Measured 2026-08-07 on macOS arm64 (M-series), speedup = serial / parallel:
 - No.1 Expose the immortal bit as `gc.immortalize(obj)` [CONFIRMED]
 - CONFIRMED — Scaling: the matrix above (0.33x -> 4.20x on backend 0).
+
+## [Investigation: one CLI needs eleven frontend gaps closed, not a CLI rewrite](../investigations/single-cli-blocked-by-c-frontend-closure.md)
+
+- Test [CONFIRMED] — The blocker for the first route, enumerated 2026-09-08. Compute the tightened
 
 ## [Investigation: sorted()/min()/max() ignore a custom __lt__ (no-libpython)](../investigations/sorted-min-max-custom-lt-not-used-no-libpython.md)
 

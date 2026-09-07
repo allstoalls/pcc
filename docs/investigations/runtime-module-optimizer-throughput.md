@@ -750,3 +750,81 @@ Consequences for the comparison:
 - `scripts/reoptimize_runtime_ir.py`'s five-module allowlist was protecting
   against exactly this. The new flag exists so the failure is reproducible and
   named rather than folded into a comment; it stays off by default.
+
+## Update: the LLVM full-archive hang was pcc's missing `no-builtins` (2026-09-08)
+
+The previous update recorded the full-archive LLVM O2 arm as hanging with an
+unexplained program counter inside `_bzero`. The cause is pcc's own IR
+emission, not LLVM's.
+
+A freestanding module or runtime port *is* the libc implementation: it defines
+`memset`, `memcpy`, `bzero` and `memmove`. pcc emitted **no function
+attributes at all** on those definitions -- no `"no-builtins"`, no attribute
+groups, zero. Any conforming optimizer is then entitled to recognize the
+byte-fill loop inside `@memset` and rewrite it into a call to `memset`, which
+in a freestanding link is that same function. A real compiler prevents this
+with `-ffreestanding`/`-fno-builtin`; the IR spelling is the `"no-builtins"`
+function attribute.
+
+Fix: `generation_lowering._mark_freestanding_no_builtins` adds `"no-builtins"`
+to every defined function of a module that declares `__pcc_freestanding__` or
+`__pcc_runtime_port__`. 169 of the 170 archive members now carry it. The
+attribute renders after the signature's closing paren, which the self
+backend's function-header decoder ignores, so the self path is unaffected.
+Contract: `tests/python/test_freestanding_no_builtins_attribute.py`.
+
+Verified: after the fix, `default<O2>` leaves `@bzero` calling only
+`llvm.smin.i64` instead of `llvm.memset.p0.i64`, and the full-archive LLVM O2
+runtime **runs**. That unlocked the comparison the earlier update could not
+make.
+
+This matters beyond the LLVM arm. The owned pass tier does not recognize
+memset shapes today, which is the only reason the gap went unnoticed; the first
+owned pass that learns to would have hit the same self-call.
+
+### The measurement the fix unlocked
+
+One run, one compiler, all arms together, self backend everywhere, the three
+generator switches on. The `LLVM-O2 runtime` arm differs only in who optimized
+the same 170 archive members.
+
+```
+child wait  concurrency      pcc     pcc1   LLVM-O2 runtime   asyncio
+0           1              27898    31728             30411      8802
+0           10             39587    45762             41592     50544
+0           100            39097    46551             43056     80502
+100         1               10.0     10.0              10.0       9.9
+100         10              99.5     99.6              99.6      98.7
+100         100            972.3    977.5             974.2     976.8
+```
+
+`pcc1`, the native self-hosted compiler, is the fastest pcc arm and is **8.1%
+ahead of the LLVM-O2 runtime** at concurrency 100. On the whole archive the
+owned pass tier now beats LLVM's own O2 pipeline on this workload. The earlier
+"5.4% behind" figure was a five-module comparison against a fully un-optimized
+baseline and does not describe the shipped configuration.
+
+Against CPython asyncio: 3.2x to 3.6x faster at concurrency 1, 1.73x slower at
+concurrency 100, and every arm within 0.3% once a real child wait dominates.
+
+### What made a pcc1 arm possible at all
+
+Stage1 self-host had been failing. The blocking defect was unrelated to the
+optimizer: a dataclass field whose default is `field(default_factory=list)`
+could not be omitted by an importing module. `ParsedFunction` in
+`pcc/backend/self_backend_ir.py` ends with exactly that, and one construction
+site omits it, so the stage1 frontend worker rejected the call with "missing
+required argument". Two other sites had already been made to pass
+`aarch64_tail_call_ids=[]` explicitly, which is the shape of a workaround.
+
+The default is an AST `Call` node and the class signature is rebuilt from a
+plain dictionary, so the node did not survive and `has_default` was recomputed
+from it as False. Fix: `pipeline_exports.export_default_factory_name` records
+the factory as a plain string, `pipeline_context` carries it in the synthesized
+`__init__` signature, and `class_gen` rebuilds the call from it. Contract:
+`tests/python/test_dataclass_default_factory_across_modules.py`.
+
+Stage1 then completed: `rc=0`, 553.7 s, a 226 MB `pcc1` that compiles and runs
+a program containing a `def`, and that compiles the gateway benchmark package.
+553.7 s is above the 311-434 s envelope recorded for a cold stage1, so stage1
+cost is an open regression question, not a settled number.

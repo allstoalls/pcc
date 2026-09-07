@@ -3574,9 +3574,11 @@ class MultiFileBootstrapShimTests(unittest.TestCase):
             "curl_easy_setopt": "variadic",
             "pcc_metal_buffer_runtime_release": "fixed",
         }
+        # pcc_gui_cg.py left the core with the GUI framework on 2026-09-06 and
+        # now lives in allstoalls/pcc-gui.  Its inventory entry is that
+        # package's contract, not this repository's.
         expected_variable_symbols = {
             ("freestanding_metal_runtime.py", "dynamic_library_symbol", "symbol"),
-            ("pcc_gui_cg.py", "dynamic_library_symbol", "name"),
             ("py_extension_loader_runtime.py", "dynamic_library_symbol", "symbol"),
         }
 

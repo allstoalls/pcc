@@ -10402,37 +10402,63 @@ def _should_delegate_to_host_cli(argv) -> bool:
 
 
 def _run_c_cli(argv) -> int:
-    # The C driver lives in pcc.cli_core, and dispatch stays in-process so the
-    # three entrypoints keep one set of semantics.  The import is resolved by
-    # name rather than written as `from pcc.cli_core import ...` on purpose:
-    # pcc/__main__.py is both the `python -m pcc` entry and the module the
-    # bootstrap compiles into pcc1, so a static import here puts cli_core's
-    # whole transitive closure -- the C frontend, packaging and llvm_capi --
-    # into the pcc1 source closure.  Eight of those modules do not compile
-    # under the self backend today (ir.IRBuilder scaffold arity, iterable
-    # splat ordering, ByteArrayType slice assignment, ExternFn assignment,
-    # Path.read_text(errors=), a missing codegen argument, isinstance on a
-    # BinOp, and a missing diagnostics argument), so a static import fails
-    # stage1 outright.  Until they compile, a native stage reports an
-    # unimplemented capability instead of silently changing execution owner.
-    import importlib
+    """Hand a C/project input, or a Python input needing the full option set,
+    to the complete pcc CLI.
 
-    try:
-        cli_core = importlib.import_module("pcc.cli_core")
-    except ImportError:
-        sys.stderr.write(
-            "Error: PCC-CPY-UNSUPPORTED-L3-TOOLING-C-DRIVER: the C compilation "
-            "driver is not compiled into this stage; run the same command with "
-            "the host pcc\n"
-        )
-        return 2
-    cli_main = cli_core.cli_main
+    This runs the host driver in a child process rather than importing
+    ``pcc.cli_core`` here, and that is not a stylistic choice.  All three
+    entrypoints -- the ``pcc`` console script, ``python -m pcc`` and ``pcc1``
+    -- reach this module, and ``pcc/__main__.py`` is also the module the
+    bootstrap compiles into pcc1.  An import of ``pcc.cli_core`` therefore
+    lands in the pcc1 source closure two different ways:
+
+    * written statically, it drags the C frontend, packaging and llvm_capi in,
+      and eight of those modules do not compile under the self backend today,
+      so stage1 fails outright;
+    * resolved through ``importlib`` to hide it from the closure walker, it
+      costs 84 CPython fallback calls in this module, measured by
+      ``test_cli_bootstrap_package_schema_static_imports_stay_native``, and
+      this module's contract is zero.
+
+    Both were tried in this order.  The child process keeps the closure clean
+    and this module at zero fallbacks; the delegated process runs the same
+    ``cli_core`` in-process, so the user-visible semantics are the full CLI's
+    either way.  In-process dispatch from the compiled stage stays the target
+    and needs the C frontend closure to compile first.
+    """
+    host = os.environ.get("PCC_HOST_PCC")
+    if host:
+        if host == sys.executable:
+            _write_text(
+                "Error: PCC_HOST_PCC points at this bootstrap binary; "
+                "refusing recursive C delegation",
+                err=True,
+            )
+            return 2
+        cmd = [host]
+    else:
+        host_python = os.environ.get("PCC_HOST_PYTHON") or "python3"
+        cmd = [host_python, "-m", "pcc.pcc"]
 
     backend = os.environ.get("PCC_BACKEND", "") or DEFAULT_PUBLIC_BACKEND
-    forwarded = ["--backend", backend]
-    for arg in argv:
-        forwarded.append(arg)
-    return cli_main(forwarded)
+    cmd.append("--backend")
+    cmd.append(backend)
+    i = 0
+    while i < len(argv):
+        cmd.append(argv[i])
+        i += 1
+
+    try:
+        _bootstrap_subprocess_run(cmd, check=True)
+    except Exception:
+        _write_text(
+            "Error: PCC-CPY-UNSUPPORTED-L3-TOOLING-C-DRIVER: the C compilation "
+            "driver is not owned by this stage and delegating to the host pcc "
+            "failed; set PCC_HOST_PCC to a host pcc entrypoint",
+            err=True,
+        )
+        return 1
+    return 0
 
 
 def _requires_full_compile_cli(argv) -> bool:

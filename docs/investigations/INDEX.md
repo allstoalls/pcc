@@ -1062,6 +1062,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - Predecessor:
 - [shared-refcount-contention-thread-scaling.md](shared-refcount-contention-thread-scaling.md) — **shared-object refcount contention destroys thread scaling; gc.immortalize restores it on backend 0**
   - The Quansight post "Scaling NumPy on Free-Threaded Python"
+- [single-cli-blocked-by-c-frontend-closure.md](single-cli-blocked-by-c-frontend-closure.md) — **one CLI needs eleven frontend gaps closed, not a CLI rewrite**
+  - The repository carries three CLI surfaces (`cli_contract.ALL_CLI_SURFACES`:
 - [sorted-min-max-custom-lt-not-used-no-libpython.md](sorted-min-max-custom-lt-not-used-no-libpython.md) — **sorted()/min()/max() ignore a custom __lt__ (no-libpython)**
   - resolved 2026-05-30 — `sorted()` (fix #54, proposal No.4) and `min()`/`max()`
 - [splat-unpack-in-builtin-call-no-libpython.md](splat-unpack-in-builtin-call-no-libpython.md) — ***iterable splat in a builtin call / *args forwarding (no-libpython)**
