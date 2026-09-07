@@ -7,7 +7,7 @@ import subprocess
 import pytest
 
 
-def test_bulk_save_dispatch_keeps_the_ordinary_fallback(tmp_path, monkeypatch):
+def test_rejected_bulk_save_stays_out_of_application_codegen(tmp_path, monkeypatch):
     from pcc.py_frontend.pipeline import compile_python
 
     source = tmp_path / "suspended.py"
@@ -31,10 +31,8 @@ print(next(iterator))
         body = re.search(r"define[^\n]*suspended__gen_resume[^\n]*\{\n(.*?)\n\}", text, re.S)
         assert body is not None
         calls.append(len(re.findall(r"call[^\n]*@py_gen_frame_save\(", body.group(1))))
-        if enabled == "1":
-            assert "gen.save.fallback" in body.group(1)
-            assert re.search(r"call[^\n]*@py_list_set\(", body.group(1))
-    assert calls == [0, 2], "one bulk dispatch per yield, with the old collector path retained"
+        assert re.search(r"call[^\n]*@py_list_set\(", body.group(1))
+    assert calls == [0, 0], "the rejected experiment must not alter application codegen"
 
 
 @pytest.mark.parametrize("runtime_kind", ["c", "py"])

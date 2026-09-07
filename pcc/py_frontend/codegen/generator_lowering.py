@@ -1383,43 +1383,6 @@ class GeneratorLoweringMixin:
         # The cpy for lowering proves the name is not read across a
         # suspension before registering it here.
         skip_names = ctx.get("cpy_skip_save_names", ())
-        bulk_save = str(
-            os.environ.get("PCC_BULK_GENERATOR_FRAME_SAVE", "0") or "0"
-        ).strip().lower() in ("1", "true", "yes", "on")
-        done_bb = None
-        slot_count = len(ctx["frame_slots"])
-        if bulk_save and slot_count > 0 and len(skip_names) == 0:
-            # Addresses refer to the existing updateable local roots, rather
-            # than a second unrooted copy of their managed values.
-            addresses = self._alloca_in_entry(
-                ir.ArrayType(_CSTR, slot_count),
-                name=self._fresh("gen.save.addresses"),
-            )
-            for name, (idx, slot) in ctx["frame_slots"].items():
-                address = self.builder.gep(
-                    addresses, [ir.Constant(_I32, 0), ir.Constant(_I32, idx)],
-                    inbounds=True, name=self._fresh("gen.save.address"),
-                )
-                self.builder.store(self._as_gc_ptr(slot), address)
-            raw_addresses = self.builder.bitcast(
-                addresses, _CSTR, name=self._fresh("gen.save.addresses.ptr")
-            )
-            saved = self.builder.call(
-                self.runtime["py_gen_frame_save"],
-                [frame, raw_addresses, ir.Constant(_I64, slot_count)],
-                name=self._fresh("gen.save.bulk"),
-            )
-            handled = self.builder.icmp_signed(
-                "!=", saved, ir.Constant(_I64, 0), name=self._fresh("gen.save.handled")
-            )
-            fallback_bb = self.current_function.append_basic_block(
-                name=self._fresh("gen.save.fallback")
-            )
-            done_bb = self.current_function.append_basic_block(
-                name=self._fresh("gen.save.done")
-            )
-            self.builder.cbranch(handled, done_bb, fallback_bb)
-            self.builder.position_at_end(fallback_bb)
         for name, (idx, slot) in ctx["frame_slots"].items():
             if name in skip_names:
                 continue
@@ -1428,9 +1391,6 @@ class GeneratorLoweringMixin:
                 self.runtime["py_list_set"],
                 [frame, ir.Constant(_I64, idx), value],
             )
-        if done_bb is not None:
-            self.builder.branch(done_bb)
-            self.builder.position_at_end(done_bb)
 
     def _emit_generator_stop_iteration(
         self,

@@ -97,3 +97,12 @@ receives the corresponding local-root and ownership-flag addresses directly.
 Gate consumed and borrowed references, same-value stores, overwritten-value
 finalizers and all collectors before a new A/B. This targets the paired retain
 on frame save and release on local cleanup, not the denied list-check batching.
+
+## Update: withdraw No.1 and gate No.2
+The bulk-save compiler flag/path has been removed. Its runtime helper remains
+only as an experimental oracle; the codegen regression proves setting the old
+flag emits no calls to it (1 passed, 0.14 s). Experimental implementation
+identity: 34c3d139. The new owner-transfer regression fails at link time for
+py_list_set_from_owned_root and pcc_gc_try_store_ptr_take (0.96 s), as expected
+before these new contracts exist. It covers borrowed/owned inputs, self-stores,
+invalid indices, fallback ownership and GC0 live-object balance.
