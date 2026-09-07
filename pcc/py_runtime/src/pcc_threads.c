@@ -2994,6 +2994,8 @@ typedef struct PccVirtualThreadCarrierPoolWorker {
     int64_t carrier_index;
 } PccVirtualThreadCarrierPoolWorker;
 
+static int64_t resume_generator_owned(PyObject *vthread, PyObject *gen);
+
 int64_t py_virtual_thread_run_once(void) {
     (void)py_virtual_thread_poll_timers();
     (void)py_virtual_thread_poll_io(0);
@@ -3008,17 +3010,23 @@ int64_t py_virtual_thread_run_once(void) {
     }
 
     PyObject *continuation = pcc_gc_load_ptr(ready, &vt->continuation);
-    if (
-        continuation != NULL
-        && !PY_IS_TAGGED_INT(continuation)
-        && py_type_of(continuation) == PY_TYPE_CONTINUATION
-    ) {
-        void *resume_pc = py_continuation_resume_pc(continuation);
-        if (resume_pc != NULL) {
+    int continuation_kind = 0;
+    if (continuation != NULL && !PY_IS_TAGGED_INT(continuation)) {
+        continuation_kind = py_type_of(continuation);
+    }
+    if (continuation_kind == PY_TYPE_CONTINUATION || continuation_kind == PY_TYPE_GEN) {
+        void *resume_pc = NULL;
+        if (continuation_kind == PY_TYPE_CONTINUATION) {
+            resume_pc = py_continuation_resume_pc(continuation);
+        }
+        if (continuation_kind == PY_TYPE_GEN || resume_pc != NULL) {
             PyObject *saved_current = pcc_current_virtual_thread;
             pcc_current_virtual_thread = ready;
             int64_t resume_rc = 0;
-            if (
+            if (continuation_kind == PY_TYPE_GEN) {
+                py_incref(continuation);
+                resume_rc = resume_generator_owned(ready, continuation);
+            } else if (
                 py_continuation_resume_abi(continuation)
                 == PCC_CONTINUATION_RESUME_ABI_VTHREAD
             ) {
@@ -3637,6 +3645,10 @@ int64_t py_virtual_thread_resume_generator(
     PyObject *continuation
 ) {
     PyObject *gen = py_continuation_get_slot(continuation, 0);
+    return resume_generator_owned(vthread, gen);
+}
+
+static int64_t resume_generator_owned(PyObject *vthread, PyObject *gen) {
     if (gen == NULL) return -1;
 
     int64_t cancel_pending = py_virtual_thread_cancel_requested(vthread);

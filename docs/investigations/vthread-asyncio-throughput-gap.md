@@ -229,3 +229,17 @@ asyncio gap. Three adjacent candidates now have gains below 5%; per the
 convergence rule, stop selecting neighboring reference-count helpers. The
 next performance proposal must address the generated resumable-call owner
 (frame construction/completion and lifetime) as a whole, with caller evidence.
+
+## Update: after field-owner repair, profile the actual frame saves
+The corrected full-workload A/B is 50,870.8 QPS versus same-run asyncio
+88,804.3; details and the 17.48 MiB peak RSS are recorded in
+instance-field-iteration-owner-leak.md. A fresh 2,303-sample native profile
+places py_gen_next on 2,098 stacks and py_list_set on 403 (17.5% inclusive).
+Granule object-start validation is the leaf on 326 samples. These counts
+must not be added, and the profiled 1M-request run is not the throughput
+comparison. The compiler's _emit_generator_save_frame calls the full list
+setter once per persisted local at each suspension, then releases those
+local owners and retains them again at resume. Future work should address
+that generated suspension/state-transfer cost with GC/finalizer semantics
+preserved. The earlier bulk-frame-construction proposal remains denied as a
+speed claim; this profile concerns saves of an already existing frame.

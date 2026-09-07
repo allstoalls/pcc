@@ -227,10 +227,21 @@ def test_declared_signature_uses_static_fields_without_memoization(
         r"@pcc_gc_load_borrowed_ptr\([^\n]*%value\.gc\.slot\.",
         exact_body,
     )
-    assert re.search(
-        r"%self\.args\.[^\n]*@py_instance_get_field\([^\n]*i32 1\)"
-        r"[^\n]*\n(?:[^\n]*\n){0,3}[^\n]*@py_obj_iter\(",
+    args_load = re.search(
+        r"(?P<value>%self\.args\.[\w.]+) = [^\n]*@py_instance_get_field\([^\n]*i32 1\)",
         call_body,
+    )
+    assert args_load is not None
+    # The owned field result is now rooted across iterator construction.
+    # Check its data flow, rather than a three-line adjacency that excluded
+    # the required root setup, and require its separate owner to be consumed.
+    args_value = re.escape(args_load.group("value"))
+    after_load = call_body[args_load.end():]
+    iter_use = re.search(r"@py_obj_iter\(ptr " + args_value + r"\)", after_load)
+    assert iter_use is not None
+    assert re.search(
+        r"@pcc_gc_release\(ptr " + args_value + r"\)",
+        after_load[iter_use.end():],
     )
 
     # The typed ftype load is owned and must be rooted/released on all exits.

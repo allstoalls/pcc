@@ -6245,11 +6245,15 @@ class ClassLowering:
         runtime = self.parent.runtime
         idx = self.lookup_field_index(info, attr_name)
         if idx is not None:
-            return builder.call(
+            result = builder.call(
                 runtime["py_instance_get_field"],
                 [self_val, ir.Constant(_I32, idx)],
                 name=self._fresh(f"self.{attr_name}"),
             )
+            # The runtime getter returns a new reference even when the field
+            # has a dynamic type. Record the emitted owner's provenance.
+            self.parent._note_owned_object_value(result)
+            return result
         # A subclass override must win: ``self`` may be a subclass instance
         # even inside a base-class method. Only take the static class-attr
         # load when no subclass redeclares the attribute; otherwise fall
@@ -6260,11 +6264,13 @@ class ClassLowering:
                 return class_attr
         runtime_attr_name = self.mangle_private_attr_name(info, attr_name)
         name_ptr = self._cname_ptr(runtime_attr_name)
-        return builder.call(
+        result = builder.call(
             runtime["py_obj_getattr"],
             [self_val, name_ptr],
             name=self._fresh(f"self.attr.{attr_name}"),
         )
+        self.parent._note_owned_object_value(result)
+        return result
 
     def emit_self_attr_store(
         self,

@@ -862,6 +862,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - The installer's canary/dependency checks captured output in memory and wrote
 - [installed-pcc1-helper-cwd-shadowing.md](installed-pcc1-helper-cwd-shadowing.md) — **installed pcc1 helper imports can use the caller checkout**
   - The stable toolchain must consume its copied helper sources while compiling
+- [instance-field-iteration-owner-leak.md](instance-field-iteration-owner-leak.md) — **instance field iteration retains completed task trees**
+  - The gateway's native peak RSS scales with total request count. An isolated
 - [int-from-bytes-byteslike-no-libpython.md](int-from-bytes-byteslike-no-libpython.md) — **native `int.from_bytes` rejects bytearray and memoryview**
   - CPython accepts any bytes-like object in `int.from_bytes`, including `bytes`,
 - [isinstance-dynamic-classinfo-tuple.md](isinstance-dynamic-classinfo-tuple.md) — **dynamic isinstance classinfo tuples return false**
@@ -1140,6 +1142,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - The external gateway dashboard cannot compile: TaskScope.close parks, and the
 - [vthread-continuation-factory-fast-path.md](vthread-continuation-factory-fast-path.md) — **avoid full generator frames on nonparking factory paths**
   - Gateway's normal TaskScope.fork/close calls pay for generator frames because
+- [vthread-direct-generator-task.md](vthread-direct-generator-task.md) — **remove the redundant typed continuation around generator tasks**
+  - Generator-backed spawn currently creates a generator, a typed continuation,
 - [vthread-handler-context-across-park.md](vthread-handler-context-across-park.md) — **handled exception context survives only in an SSA value**
   - After fixing return-root dominance, the external dashboard still fails the
 - [vthread-owned-local-return-double-release.md](vthread-owned-local-return-double-release.md) — **generator return consumes a local owner twice**

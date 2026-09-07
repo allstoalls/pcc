@@ -1603,6 +1603,16 @@ class ExceptionLoweringMixin:
         # Position a small builder at err_bb to emit the sentinel return.
         save_block = self.builder._block
         self.builder.position_at_end(err_bb)
+        generator_exit = (
+            len(self._generator_ctx_stack) > 0
+            and len(fn.args) > 0
+            and self._generator_ctx_stack[-1]["gen"] is fn.args[0]
+        )
+        if generator_exit:
+            # Generator entry restores every frame slot with an owned read.
+            # An escaping exception ends this activation just like return;
+            # leaving those owners behind retains the suspended task tree.
+            self.builder.call(self.runtime["py_gen_set_done"], [fn.args[0]])
         # Function-level exact-int representation planning registers every
         # such local and its owned flag before body emission.  Release the
         # currently-owned object on the shared error epilogue before the root
@@ -1614,7 +1624,8 @@ class ExceptionLoweringMixin:
         for_target_names = getattr(self, "_for_target_owned_names", set())
         for local_name in sorted(getattr(self, "_owned_local_names", set())):
             if (
-                not exact_flags.get(local_name, False)
+                not generator_exit
+                and not exact_flags.get(local_name, False)
                 and local_name not in for_target_names
             ):
                 continue

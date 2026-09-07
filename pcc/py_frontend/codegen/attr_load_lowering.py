@@ -1824,11 +1824,14 @@ class AttrLoadLoweringMixin:
         a pointer where LLVM requires a native scalar.
         """
         if isinstance(result_ty, (IntType, FloatType, BoolType)):
-            return marshal.marshal_from_object(
+            native_result = marshal.marshal_from_object(
                 self.builder,
                 self.module,
                 self.runtime,
                 result,
                 result_ty,
             )
+            if self._value_is_owned_object(result):
+                self._gc_release(result, self._release_context_label("attr.scalar"))
+            return native_result
         return result

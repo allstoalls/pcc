@@ -7,7 +7,7 @@ Each line is a mechanism that was established by an experiment, not a
 plausible explanation. Use it to recognise a repeat of a known failure
 instead of re-diagnosing it.
 
-1546 confirmations across 450 investigations.
+1550 confirmations across 452 investigations.
 
 ## [Investigation: direct AArch64 instruction capture order and lifetime](../investigations/aarch64-direct-instruction-capture-order.md)
 
@@ -1298,6 +1298,11 @@ instead of re-diagnosing it.
 - Test [CONFIRMED] — The read-only interpreter probe above returned the mutable checkout before
 - No.1 Disable Python's implicit unsafe path at the installed boundary [CONFIRMED]
 - CONFIRMED — The focused generated-launcher execution regression passes. No native compiler
+
+## [Investigation: instance field iteration retains completed task trees](../investigations/instance-field-iteration-owner-leak.md)
+
+- Test [CONFIRMED] — The isolated gateway observer reproduces the growth without adding unsafe
+- Update: full workload A/B and reproducible lifetime probe [CONFIRMED] — The frozen-source A/B completed 42 runs. At zero wait/C100, control/candidate/
 
 ## [Investigation: native `int.from_bytes` rejects bytearray and memoryview](../investigations/int-from-bytes-byteslike-no-libpython.md)
 
@@ -2872,6 +2877,11 @@ instead of re-diagnosing it.
 
 - Test [CONFIRMED] — The five host-model diagnostic tests verify identical payloads, the declared
 - CONFIRMED — controlled application improvement — Both runtime mirrors and the compiler factory gates passed under GC0–4
+
+## [Investigation: remove the redundant typed continuation around generator tasks](../investigations/vthread-direct-generator-task.md)
+
+- Test [CONFIRMED] — tests/python/test_vthread_direct_generator.py failed under control GC0: the
+- Update: controlled application result [CONFIRMED] — The 42-run full-workload A/B completed with seven rotating repeats per wait
 
 ## [Investigation: handled exception context survives only in an SSA value](../investigations/vthread-handler-context-across-park.md)
 

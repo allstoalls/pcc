@@ -31,6 +31,7 @@ from pcc.py_runtime.py.py_abi_constants import (
     PCC_VTHREAD_WAIT_CHANNEL_SELECT2,
     PCC_VTHREAD_WAIT_CHANNEL_SEND,
     PY_TYPE_CONTINUATION,
+    PY_TYPE_GEN,
     PY_TYPE_VTHREAD_CHANNEL,
     PY_TYPE_VIRTUAL_THREAD,
 )
@@ -2988,17 +2989,22 @@ def py_virtual_thread_run_once() -> int:
     if ptr_is_null(ready):
         return 0
     continuation = pcc_gc_load_ptr(ready, ptr_add(ready, 16))
-    if (
-        ptr_is_null(continuation) == 0
-        and is_tagged_int(continuation) == 0
-        and load_i32(continuation, 8) == PY_TYPE_CONTINUATION
-    ):
-        resume = py_continuation_resume_pc(continuation)
-        if ptr_is_null(resume) == 0:
+    continuation_kind: int = 0
+    if ptr_is_null(continuation) == 0 and is_tagged_int(continuation) == 0:
+        continuation_kind = load_i32(continuation, 8)
+    if continuation_kind == PY_TYPE_CONTINUATION or continuation_kind == PY_TYPE_GEN:
+        resume = null()
+        if continuation_kind == PY_TYPE_CONTINUATION:
+            resume = py_continuation_resume_pc(continuation)
+        if continuation_kind == PY_TYPE_GEN or ptr_is_null(resume) == 0:
             saved = global_load_ptr("pcc_current_virtual_thread_py")
             global_store_ptr("pcc_current_virtual_thread_py", ready)
             rc = 0
-            if py_continuation_resume_abi(continuation) == 1:
+            if continuation_kind == PY_TYPE_GEN:
+                # Match the owned reference previously returned by slot zero.
+                py_incref(continuation)
+                rc = _resume_generator_owned(ready, continuation)
+            elif py_continuation_resume_abi(continuation) == 1:
                 rc = call_i64_ptr2(resume, ready, continuation)
             else:
                 call_void_ptr0(resume)
@@ -3633,6 +3639,11 @@ def py_virtual_thread_cancel_complete(vthread) -> int:
 @c_abi_export("py_virtual_thread_resume_generator")
 def py_virtual_thread_resume_generator(vthread, continuation) -> int:
     generator = py_continuation_get_slot(continuation, 0)
+    return _resume_generator_owned(vthread, generator)
+
+
+def _resume_generator_owned(vthread, generator) -> int:
+    """Consume one owned generator reference through the common task protocol."""
     if ptr_is_null(generator):
         return -1
     cancel_pending = py_virtual_thread_cancel_requested(vthread)

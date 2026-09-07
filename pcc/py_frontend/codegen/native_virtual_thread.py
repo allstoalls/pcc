@@ -1909,46 +1909,52 @@ class NativeVirtualThreadLoweringMixin:
             name=self._fresh(f"{name}.vthread.gen"),
         )
 
-        slots_ty = ir.ArrayType(_CSTR, 1)
-        slots_arr = self._alloca_in_entry(
-            slots_ty,
-            name=self._fresh("vthread.gen.slots"),
-        )
-        gep = self.builder.gep(
-            slots_arr,
-            [ir.Constant(_I32, 0), ir.Constant(_I32, 0)],
-            inbounds=True,
-            name=self._fresh("vthread.gen.slot.addr"),
-        )
-        self.builder.store(gen, gep)
-        slots_ptr = self.builder.gep(
-            slots_arr,
-            [ir.Constant(_I32, 0), ir.Constant(_I32, 0)],
-            inbounds=True,
-            name=self._fresh("vthread.gen.slots.ptr"),
-        )
-        slots_arg = self.builder.bitcast(
-            slots_ptr,
-            _CSTR,
-            name=self._fresh("vthread.gen.slots.arg"),
-        )
-        frame_map = self._virtual_thread_frame_map(1)
-        frame_map_ptr = self.builder.bitcast(
-            frame_map,
-            _CSTR,
-            name=self._fresh("vthread.gen.frame.map"),
-        )
-        resume_ptr = self.builder.bitcast(
-            self.runtime["py_virtual_thread_resume_generator"],
-            _CSTR,
-            name=self._fresh("vthread.gen.resume.ptr"),
-        )
-        cont = self.builder.call(
-            self.runtime["py_continuation_new_typed"],
-            [frame_map_ptr, slots_arg, resume_ptr],
-            name=self._fresh("vthread.gen.cont"),
-        )
-        self._gc_release(gen)
+        direct_generator = str(
+            os.environ.get("PCC_DIRECT_GENERATOR_TASKS", "0") or "0"
+        ).strip().lower() in ("1", "true", "yes", "on")
+        if direct_generator:
+            cont = gen
+        else:
+            slots_ty = ir.ArrayType(_CSTR, 1)
+            slots_arr = self._alloca_in_entry(
+                slots_ty,
+                name=self._fresh("vthread.gen.slots"),
+            )
+            gep = self.builder.gep(
+                slots_arr,
+                [ir.Constant(_I32, 0), ir.Constant(_I32, 0)],
+                inbounds=True,
+                name=self._fresh("vthread.gen.slot.addr"),
+            )
+            self.builder.store(gen, gep)
+            slots_ptr = self.builder.gep(
+                slots_arr,
+                [ir.Constant(_I32, 0), ir.Constant(_I32, 0)],
+                inbounds=True,
+                name=self._fresh("vthread.gen.slots.ptr"),
+            )
+            slots_arg = self.builder.bitcast(
+                slots_ptr,
+                _CSTR,
+                name=self._fresh("vthread.gen.slots.arg"),
+            )
+            frame_map = self._virtual_thread_frame_map(1)
+            frame_map_ptr = self.builder.bitcast(
+                frame_map,
+                _CSTR,
+                name=self._fresh("vthread.gen.frame.map"),
+            )
+            resume_ptr = self.builder.bitcast(
+                self.runtime["py_virtual_thread_resume_generator"],
+                _CSTR,
+                name=self._fresh("vthread.gen.resume.ptr"),
+            )
+            cont = self.builder.call(
+                self.runtime["py_continuation_new_typed"],
+                [frame_map_ptr, slots_arg, resume_ptr],
+                name=self._fresh("vthread.gen.cont"),
+            )
+            self._gc_release(gen)
         vt = self.builder.call(
             self.runtime["py_virtual_thread_new"],
             [cont],

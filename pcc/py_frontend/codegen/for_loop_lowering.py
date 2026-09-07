@@ -1149,6 +1149,7 @@ class ForLoopLoweringMixin:
     def _emit_for_obj_iterator(self, stmt: For, iter_val: ir.Value) -> None:
         """DynType for-loop through the native iterator protocol."""
         fn = self.current_function
+        source_owned = self._owned_release_needed(iter_val, stmt.iter)
         if not isinstance(iter_val.type, ir.PointerType):
             iter_val = marshal.marshal_to_object(
                 self.builder,
@@ -1157,12 +1158,17 @@ class ForLoopLoweringMixin:
                 iter_val,
                 stmt.iter.ty,
             )
+            source_owned = True
+        source_root = None
+        if source_owned:
+            source_root = self._enter_container_temp_root(
+                iter_val, self._fresh("for.obj.source")
+            )
         iterator = self.builder.call(
             self.runtime["py_obj_iter"],
             [iter_val],
             name=self._fresh("for.obj.iter"),
         )
-        self._emit_post_call_err_check(stmt.span)
         iter_slot = None
         owned_iter_name = None
         if len(self._generator_ctx_stack) > 0:
@@ -1205,6 +1211,14 @@ class ForLoopLoweringMixin:
                 iter_slot,
             )
             self.builder.store(ir.Constant(_I1, 1), owned_flag)
+
+        # The iterator now owns its source and has a rooted lifetime. Consume
+        # the iterable expression's separate owner on success and failure;
+        # otherwise a field getter retains the entire completed task tree.
+        if source_root is not None:
+            self._leave_container_temp_root(source_root)
+            self._gc_release(iter_val, self._release_context_label("for.source"))
+        self._emit_post_call_err_check(stmt.span)
 
         target_ident = stmt.target.ident
         slot = _for_prepare_owned_object_target(
