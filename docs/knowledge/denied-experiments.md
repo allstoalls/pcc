@@ -10,7 +10,7 @@ work. **Read this page before proposing a fix**; if your idea is here,
 either cite new evidence that overturns the verdict or do not make the
 change. The linked investigation holds the measurement.
 
-622 verdicts across 128 investigations.
+624 verdicts across 128 investigations.
 
 ## [Investigation: backend-0 finalizer re-enters the tracked-object table lock](../investigations/backend0-finalizer-table-lock-reentrancy.md)
 
@@ -1003,6 +1003,8 @@ change. The linked investigation holds the measurement.
 - No.3 initialize fixed-size generator frames in one operation [DENIED as a speed claim]
 - No.3 DENIED as a speed claim — The fixed-size frame helper passed C and pcc-Python runtime checks under all
 - preserved. The earlier bulk-frame-construction proposal remains denied as a
+- No.5 replace self application emission with LLVM [DENIED as a speed fix]
+- DENIED — All 42 runs passed. Zero-wait/C100 seven-repeat median QPS:
 
 ## [Investigation: a single carrier exits with sleeping children pending](../investigations/vthread-single-carrier-pending-timer-exit.md)
 

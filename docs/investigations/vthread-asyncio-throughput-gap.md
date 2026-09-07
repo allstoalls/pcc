@@ -243,3 +243,24 @@ local owners and retains them again at resume. Future work should address
 that generated suspension/state-transfer cost with GC/finalizer semantics
 preserved. The earlier bulk-frame-construction proposal remains denied as a
 speed claim; this profile concerns saves of an already existing frame.
+
+## No.5 replace self application emission with LLVM [DENIED as a speed fix]
+### Code Change
+No production source change. The gateway A/B runner now admits explicitly
+named self/LLVM application backends. One frozen field-owner compiler source,
+one runtime archive, the same full handler and all three existing optimization
+flags are held fixed; only application machine-code emission differs.
+The runtime archive's py_obj member was already emitted by llvmlite's target
+machine, so this experiment does not compare two runtime implementations.
+
+### DENIED
+All 42 runs passed. Zero-wait/C100 seven-repeat median QPS:
+self 51,056.2, LLVM 51,288.2 (+0.45%), asyncio 89,852.4. Process instructions
+per measured request: 309,574 / 305,041 / 175,335; native user CPU is 19.5 us
+in both arms. At 100 ms: 927.7 / 928.8 / 940.3 QPS. Raw evidence is gateway
+benchmarks/results/2026-09-07-self-llvm-application-ab.json.
+This does not establish a meaningful throughput gain or close the gap.
+Do not redirect the task to Stage1/Stage2 compiler-build optimization or
+re-label the LLVM oracle as the self-backend result. The fresh application
+profile and this controlled comparison point to the frontend-generated
+continuation/frame/ownership workload as the next owner to reduce.
