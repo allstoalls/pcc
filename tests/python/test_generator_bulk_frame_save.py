@@ -1,9 +1,40 @@
 """Batch saving keeps source/frame owners and the tracing-collector fallback."""
 
 from pathlib import Path
+import re
 import subprocess
 
 import pytest
+
+
+def test_bulk_save_dispatch_keeps_the_ordinary_fallback(tmp_path, monkeypatch):
+    from pcc.py_frontend.pipeline import compile_python
+
+    source = tmp_path / "suspended.py"
+    source.write_text('''def suspended(seed):
+    first = [seed]
+    second = first
+    yield first
+    second.append(seed)
+    yield second
+iterator = suspended(42)
+print(next(iterator))
+print(next(iterator))
+''')
+    calls = []
+    for enabled in ("0", "1"):
+        monkeypatch.setenv("PCC_BULK_GENERATOR_FRAME_SAVE", enabled)
+        output = tmp_path / ("save_" + enabled + ".ll")
+        compile_python(str(source), str(output), backend="self", libpython_mode="off",
+                       ir_scaffold_mode="on", emit_llvm_only=True)
+        text = output.read_text()
+        body = re.search(r"define[^\n]*suspended__gen_resume[^\n]*\{\n(.*?)\n\}", text, re.S)
+        assert body is not None
+        calls.append(len(re.findall(r"call[^\n]*@py_gen_frame_save\(", body.group(1))))
+        if enabled == "1":
+            assert "gen.save.fallback" in body.group(1)
+            assert re.search(r"call[^\n]*@py_list_set\(", body.group(1))
+    assert calls == [0, 2], "one bulk dispatch per yield, with the old collector path retained"
 
 
 @pytest.mark.parametrize("runtime_kind", ["c", "py"])

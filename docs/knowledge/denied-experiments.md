@@ -10,7 +10,7 @@ work. **Read this page before proposing a fix**; if your idea is here,
 either cite new evidence that overturns the verdict or do not make the
 change. The linked investigation holds the measurement.
 
-625 verdicts across 129 investigations.
+627 verdicts across 129 investigations.
 
 ## [Investigation: backend-0 finalizer re-enters the tracked-object table lock](../investigations/backend0-finalizer-table-lock-reentrancy.md)
 
@@ -322,6 +322,8 @@ change. The linked investigation holds the measurement.
 ## [Investigation: batch the compiler's fixed-frame suspension stores](../investigations/generator-bulk-frame-save.md)
 
 - Predecessor: vthread-asyncio-throughput-gap.md. Its denied bulk construction
+- No.1 verdict [DENIED] — The 42-run A/B completed. Zero-wait/C100 control/candidate/asyncio QPS medians
+- on frame save and release on local cleanup, not the denied list-check batching.
 
 ## [Granule span lookup radix](../investigations/granule-span-lookup-radix.md)
 

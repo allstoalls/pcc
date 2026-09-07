@@ -48,6 +48,21 @@ PyObject *py_gen_frame_new(int64_t slot_count) {
     return (PyObject *)frame;
 }
 
+int64_t py_gen_frame_save(PyObject *frame, void *slot_addresses, int64_t slot_count) {
+    if (pcc_gc_backend() != 0 || frame == NULL || slot_addresses == NULL ||
+        slot_count < 0 || !pcc_gc_pointer_is_managed(frame) ||
+        py_type_of(frame) != PY_TYPE_LIST) return 0;
+    PyListObject *list = (PyListObject *)frame;
+    if (list->length != slot_count || list->capacity < slot_count ||
+        list->capacity > 134217728 || list->items == NULL) return 0;
+    PyObject ***sources = (PyObject ***)slot_addresses;
+    for (int64_t index = 0; index < slot_count; index++) {
+        PyObject *value = pcc_gc_load_ptr(NULL, sources[index]);
+        pcc_gc_store_ptr(frame, &list->items[index], value);
+    }
+    return 1;
+}
+
 PyObject *py_gen_new(void *resume, PyObject *frame) {
     if (resume == NULL || frame == NULL) {
         return gen_require_result(

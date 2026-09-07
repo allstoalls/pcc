@@ -53,6 +53,8 @@ pcc_gc_publish_initialized = extern(
 )
 pcc_gc_alloc         = extern("pcc_gc_alloc",         (c_int64, c_int32, c_int32), c_ptr)
 pcc_gc_load_ptr      = extern("pcc_gc_load_ptr",      (c_ptr, c_ptr), c_ptr)
+pcc_gc_backend = extern("pcc_gc_backend", (), c_int64)
+pcc_gc_pointer_is_managed = extern("pcc_gc_pointer_is_managed", (c_ptr,), c_int64)
 pcc_gc_store_ptr     = extern("pcc_gc_store_ptr",     (c_ptr, c_ptr, c_ptr), c_void)
 pcc_gc_store_root    = extern("pcc_gc_store_root",    (c_ptr, c_ptr), c_void)
 pcc_gc_scheduler_root_register_handle = extern(
@@ -109,6 +111,32 @@ def py_gen_frame_new(slot_count: int):
     py_gc_track(frame)
     pcc_gc_publish_initialized(frame)
     return frame
+
+
+@c_abi_export("py_gen_frame_save")
+def py_gen_frame_save(frame, slot_addresses, slot_count: int) -> int:
+    """Batch one GC0 save; other collectors keep the ordinary setter path."""
+    if pcc_gc_backend() != 0 or ptr_is_null(frame) or ptr_is_null(slot_addresses):
+        return 0
+    if slot_count < 0 or pcc_gc_pointer_is_managed(frame) == 0:
+        return 0
+    if load_i32(frame, 8) != PY_TYPE_LIST:
+        return 0
+    capacity: int = load_i64(frame, PYLISTOBJECT_CAPACITY_OFFSET)
+    if load_i64(frame, PYLISTOBJECT_LENGTH_OFFSET) != slot_count:
+        return 0
+    if capacity < slot_count or capacity > 134217728:
+        return 0
+    items = load_ptr(frame, PYLISTOBJECT_ITEMS_OFFSET)
+    if ptr_is_null(items):
+        return 0
+    index: int = 0
+    while index < slot_count:
+        source_slot = load_ptr(slot_addresses, index * C_POINTER_SIZE)
+        value = pcc_gc_load_ptr(null(), source_slot)
+        pcc_gc_store_ptr(frame, ptr_add(items, index * C_POINTER_SIZE), value)
+        index += 1
+    return 1
 
 
 @c_abi_export("py_gen_new")

@@ -1150,6 +1150,9 @@ int64_t   py_obj_is_slice(PyObject *o);
 
 /* ---- Native generator objects ------------------------------------------ */
 PyObject *py_gen_frame_new(int64_t slot_count); /* fixed-size, None-filled list frame */
+/* Save compiler-owned, rooted local slots. Returns 0 without mutation when
+ * the collector/frame is not eligible; callers retain their ordinary path. */
+int64_t py_gen_frame_save(PyObject *frame, void *slot_addresses, int64_t slot_count);
 PyObject *py_gen_new(void *resume, PyObject *frame);
 PyObject *py_gen_completed(PyObject *value); /* owned completed continuation */
 PyObject *py_gen_take_completed(PyObject *gen); /* borrowed value, NULL if not ready */

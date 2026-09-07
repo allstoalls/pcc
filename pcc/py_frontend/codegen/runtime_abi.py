@@ -737,6 +737,7 @@ def _runtime_signatures_part_12():
     "py_functools_update_wrapper": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
     # ---- Native generator objects ----------------------------------
     "py_gen_frame_new": (_PYOBJ, [_I64], False),
+    "py_gen_frame_save": (_I64, [_PYOBJ, _PTR, _I64], False),
     "py_gen_new": (_PYOBJ, [_PTR, _PYOBJ], False),
     "py_gen_completed": (_PYOBJ, [_PYOBJ], False),
     "py_gen_take_completed": (_PYOBJ, [_PYOBJ], False),
