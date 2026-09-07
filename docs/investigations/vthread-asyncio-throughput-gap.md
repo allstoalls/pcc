@@ -264,3 +264,32 @@ Do not redirect the task to Stage1/Stage2 compiler-build optimization or
 re-label the LLVM oracle as the self-backend result. The fresh application
 profile and this controlled comparison point to the frontend-generated
 continuation/frame/ownership workload as the next owner to reduce.
+
+## Update: batch width confounds the concurrency curve
+The user asked why pcc wins at C1 and loses at C100. The native throughput
+itself rises: pcc1 31,741.6 to 48,457.6 QPS. Asyncio rises 9,255.1 to 86,611.5.
+In both scripts C is the number of request tasks created in one batch, followed
+by an all-request barrier before the next batch. Each request has two child
+tasks; execution still uses one carrier/event-loop thread. C is not a CPU-thread
+or socket count, and the workload does not continuously replenish completions.
+
+The gateway batch_costs.py diagnostic fits batch_time = fixed + C * incremental
+using C10/C100 from the current report. Approximate microsecond coefficients:
+pcc1 fixed 8.6, incremental 20.55; asyncio fixed 96.7, incremental 10.58.
+These are explanatory two-point fits, not independently timed cost components.
+The fit predicts asyncio C1 at 107.28 us versus observed 108.05 us.
+
+An instrumented counting-only run of the unchanged asyncio batch function
+observes exactly 700 selector.select(0) calls for 100 batches at every C in
+1/10/100. That is 7 polls per batch, or 7/0.7/0.07 per request. The installed
+CPython 3.15.0rc1 BaseEventLoop._run_once source unconditionally polls its
+selector before draining that iteration's ready callbacks. This supports
+amortization of fixed event-loop/polling work; it does not prove that all
+96.7 fitted microseconds are selector time. Raw analysis and counter output:
+pcc-gateway benchmarks/results/2026-09-07-batch-costs.json.
+
+Implication: the C1 advantage does not establish cheaper incremental native
+task execution. The larger-C cost remains consistent with the measured frame/
+ownership overhead. A sustained in-flight replenishment benchmark must separate
+concurrency from batch barriers before making steady-service scaling claims.
+Keep this as an additional workload mode, not a replacement for prior results.
