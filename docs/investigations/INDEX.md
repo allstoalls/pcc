@@ -1002,6 +1002,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - active — gap CONFIRMED; a FRONTEND static-dispatch fix was ATTEMPTED and
 - [resurrection-class-attr-libpython-fallback.md](resurrection-class-attr-libpython-fallback.md) — **resurrection test class attributes lower through libpython**
   - `tests/test_gc_resurrection.py::test_resurrection_only_happens_once_per_object`
+- [runtime-module-optimizer-throughput.md](runtime-module-optimizer-throughput.md) — **runtime object emission omits full module optimization**
+  - Continue pcc #188 after three frame protocol candidates fail to materially
 - [runtime-oracle-pcc-archive-atomic-thread-fence.md](runtime-oracle-pcc-archive-atomic-thread-fence.md) — **rebuilt pcc runtime archive leaves `__atomic_thread_fence` unresolved**
   - Once `libpy_runtime_pcc.a` could rebuild from current source, the pcc-C runtime
 - [runtime-oracle-pcc-archive-stdatomic-preprocess.md](runtime-oracle-pcc-archive-stdatomic-preprocess.md) — **runtime-oracle pcc archive rejects host `stdatomic.h` expansion**

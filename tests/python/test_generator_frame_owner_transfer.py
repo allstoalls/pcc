@@ -55,7 +55,7 @@ print(sorted(events))
         assert ran.stdout == str(backend) + "\n" + oracle.stdout
 
 
-def test_generator_save_uses_the_local_ownership_flag(tmp_path, monkeypatch):
+def test_unaccepted_frame_moves_stay_out_of_application_codegen(tmp_path, monkeypatch):
     from pcc.py_frontend.pipeline import compile_python
 
     source = tmp_path / "owner_shape.py"
@@ -77,9 +77,8 @@ print(next(iterator))
         counts.append(len(calls))
         if enabled == "1":
             assert "gen.save.addresses" not in body.group(1)
-            assert all("owned" in call for call in calls)
-            assert re.search(r"call[^\n]*@py_list_get_for_frame\(", body.group(1))
-    assert counts == [0, 2], "both persisted locals pass their actual ownership flag"
+            assert not re.search(r"call[^\n]*@py_list_get_for_frame\(", body.group(1))
+    assert counts == [0, 0], "the unaccepted experiment must not change application codegen"
 
 
 @pytest.mark.parametrize("runtime_kind", ["c", "py"])

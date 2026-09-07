@@ -7,7 +7,7 @@ Each line is a mechanism that was established by an experiment, not a
 plausible explanation. Use it to recognise a repeat of a known failure
 instead of re-diagnosing it.
 
-1550 confirmations across 452 investigations.
+1554 confirmations across 453 investigations.
 
 ## [Investigation: direct AArch64 instruction capture order and lifetime](../investigations/aarch64-direct-instruction-capture-order.md)
 
@@ -2380,6 +2380,13 @@ instead of re-diagnosing it.
 - Test [CONFIRMED] — The command above was run on 2026-05-08 and produced:
 - No.1 Add native dyn-list `clear()` dispatch [CONFIRMED]
 - CONFIRMED — IR-only reductions showed the fallback source:
+
+## [Investigation: runtime object emission omits full module optimization](../investigations/runtime-module-optimizer-throughput.md)
+
+- Test [CONFIRMED] — The pilot consumes the exact existing IR from the baseline runtime archive,
+- No.1 optimize py_obj, py_list and py_gen [CONFIRMED for host application]
+- CONFIRMED — The candidate passes eight field/suspended-iterator sources under GC0–4
+- No.2 verdict [CONFIRMED for host application] — Five-module runtime passes 8 sources / 40 GC0–4 executions (26.43 s) and the
 
 ## [Investigation: rebuilt pcc runtime archive leaves `__atomic_thread_fence` unresolved](../investigations/runtime-oracle-pcc-archive-atomic-thread-fence.md)
 

@@ -10,6 +10,7 @@ use its target machine directly.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -25,6 +26,29 @@ class ObjectEmissionContractError(ValueError):
 
 _UNKNOWN_TARGET_TRIPLES = {"", "unknown-unknown-unknown"}
 _MODULE_ASM_RE = re.compile(r'^\s*module\s+asm\s+"', flags=re.MULTILINE)
+
+# Measured runtime-only policy. Libc/allocator implementations need separate
+# libcall-recursion qualification and deliberately retain their existing path.
+_OPTIMIZED_RUNTIME_SOURCES = frozenset({
+    "py_obj.py", "py_list.py", "py_gen.py", "py_gc_backend.py",
+    "freestanding_gc_index_table.py",
+})
+
+
+def runtime_optimization_level(source_path=None, runtime_root=None) -> int:
+    if source_path is None or runtime_root is None:
+        return 0
+    source = Path(source_path).resolve()
+    root = Path(runtime_root).resolve()
+    if source.parent == root / "py" and source.name in _OPTIMIZED_RUNTIME_SOURCES:
+        return 2
+    return 0
+
+
+def runtime_emitter_identity() -> str:
+    digest = hashlib.sha256(Path(__file__).read_bytes())
+    digest.update(repr(llvm.llvm_version_info).encode("ascii"))
+    return digest.hexdigest()
 
 
 def _declared_module_triple(mod) -> str:
@@ -118,8 +142,10 @@ def _validate_inline_asm_parser_contract(mod, triple: str) -> None:
 
 
 def _emit_object_with_triple(
-    ir_text: str, *, target_triple: str | None = None
+    ir_text: str, *, target_triple: str | None = None, optimization_level: int = 0,
 ) -> tuple[bytes, str]:
+    if optimization_level not in (0, 1, 2, 3):
+        raise ObjectEmissionContractError("optimization level must be 0..3")
     llvm.initialize_all_targets()
     llvm.initialize_all_asmprinters()
     # Runtime modules use compiler-owned inline assembly for native syscall
@@ -134,6 +160,12 @@ def _emit_object_with_triple(
     tm = target.create_target_machine()
     _validate_module_target_contract(mod, triple, tm)
     _validate_inline_asm_parser_contract(mod, triple)
+    if optimization_level:
+        tuning = llvm.PipelineTuningOptions(speed_level=optimization_level, size_level=0)
+        builder = llvm.create_pass_builder(tm, tuning)
+        passes = builder.getModulePassManager()
+        passes.run(mod, builder)
+        mod.verify()
     return tm.emit_object(mod), triple
 
 
@@ -207,7 +239,8 @@ def main(argv: list[str] | None = None) -> int:
         with open(args.input, "r", encoding="utf-8") as f:
             ir_text = f.read()
         obj, resolved_triple = _emit_object_with_triple(
-            ir_text, target_triple=args.target
+            ir_text, target_triple=args.target,
+            optimization_level=runtime_optimization_level(args.source, args.runtime_root),
         )
         temporary_object = _unique_temporary_sibling(
             output_path,

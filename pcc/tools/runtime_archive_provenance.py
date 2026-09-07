@@ -326,8 +326,13 @@ def codegen_checksum() -> str:
         return cached
     try:
         from pcc.bootstrap_cache_identity import bootstrap_source_sha256
+        from pcc.tools.ir_to_obj import runtime_emitter_identity
 
-        value = bootstrap_source_sha256()
+        # Frontend identity intentionally excludes pcc/tools. Runtime objects
+        # also depend on this emitter's optimizer policy and LLVM version.
+        value = _sha256_bytes(
+            (bootstrap_source_sha256() + ":" + runtime_emitter_identity()).encode("ascii")
+        )
     except Exception:
         # Never fail an object build over provenance metadata; an unknown
         # identity is recorded verbatim so a reader can tell it apart from a

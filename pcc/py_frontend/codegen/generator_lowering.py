@@ -1245,10 +1245,6 @@ class GeneratorLoweringMixin:
         first_entry_init = str(
             os.environ.get("PCC_GENERATOR_FIRST_ENTRY_INIT", "0") or "0"
         ).strip().lower() in ("1", "true", "yes", "on")
-        move_frame_owners = str(
-            os.environ.get("PCC_MOVE_GENERATOR_FRAME_OWNERS", "0") or "0"
-        ).strip().lower() in ("1", "true", "yes", "on")
-        frame_read_helper = "py_list_get_for_frame" if move_frame_owners else "py_list_get"
         argument_names = {arg.name for arg in fd.args if arg.name != ""}
         if len(frame_names) == len(argument_names):
             # No placeholders means there is no first-entry work to elide.
@@ -1271,7 +1267,7 @@ class GeneratorLoweringMixin:
                 item = self._emit_none_literal()
             else:
                 item = self.builder.call(
-                    self.runtime[frame_read_helper],
+                    self.runtime["py_list_get"],
                     [fn.args[1], ir.Constant(_I64, idx)],
                     name=self._fresh(f"gen.frame.{local_name}"),
                 )
@@ -1298,7 +1294,7 @@ class GeneratorLoweringMixin:
                 if local_name in argument_names:
                     continue
                 item = self.builder.call(
-                    self.runtime[frame_read_helper],
+                    self.runtime["py_list_get"],
                     [fn.args[1], ir.Constant(_I64, idx)],
                     name=self._fresh(f"gen.frame.{local_name}"),
                 )
@@ -1387,20 +1383,8 @@ class GeneratorLoweringMixin:
         # The cpy for lowering proves the name is not read across a
         # suspension before registering it here.
         skip_names = ctx.get("cpy_skip_save_names", ())
-        transfer_owners = str(
-            os.environ.get("PCC_MOVE_GENERATOR_FRAME_OWNERS", "0") or "0"
-        ).strip().lower() in ("1", "true", "yes", "on")
         for name, (idx, slot) in ctx["frame_slots"].items():
             if name in skip_names:
-                continue
-            if transfer_owners:
-                owned_flag = self._ensure_owned_local_flag(name, slot)
-                self.builder.call(
-                    self.runtime["py_list_set_from_owned_root"],
-                    [frame, ir.Constant(_I64, idx),
-                     self._as_gc_ptr(slot, name=self._fresh("gen.save.source")),
-                     self._as_gc_ptr(owned_flag, name=self._fresh("gen.save.owned"))],
-                )
                 continue
             value = self.builder.load(slot, name=self._fresh("gen.save"))
             self.builder.call(
