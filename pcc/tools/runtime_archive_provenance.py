@@ -306,6 +306,12 @@ def write_pcc_python_receipt(
 _CODEGEN_CHECKSUM_CACHE: dict = {}
 
 
+def _runtime_emitter_source_identity() -> str:
+    # A freshness check is not an object-emission request. In particular,
+    # checking a prebuilt runtime must not import llvmlite or load LLVM.
+    return _sha256_bytes(Path(__file__).with_name("ir_to_obj.py").read_bytes())
+
+
 def codegen_checksum() -> str:
     """Identity of the COMPILER that produced an object, not just its source.
 
@@ -326,12 +332,11 @@ def codegen_checksum() -> str:
         return cached
     try:
         from pcc.bootstrap_cache_identity import bootstrap_source_sha256
-        from pcc.tools.ir_to_obj import runtime_emitter_identity
 
-        # Frontend identity intentionally excludes pcc/tools. Runtime objects
-        # also depend on this emitter's optimizer policy and LLVM version.
+        # Frontend identity excludes pcc/tools; bind emitter source without
+        # importing its LLVM implementation into the self compilation path.
         value = _sha256_bytes(
-            (bootstrap_source_sha256() + ":" + runtime_emitter_identity()).encode("ascii")
+            (bootstrap_source_sha256() + ":" + _runtime_emitter_source_identity()).encode("ascii")
         )
     except Exception:
         # Never fail an object build over provenance metadata; an unknown

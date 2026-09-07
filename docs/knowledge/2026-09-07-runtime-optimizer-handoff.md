@@ -1,5 +1,11 @@
 # Runtime optimizer checkpoint (2026-09-07)
 
+> Correction later on 2026-09-07: the automatic LLVM O2 policy described below
+> is withdrawn; the reported throughput belongs to the retained diagnostic
+> artifacts. Cache freshness now hashes emitter source without importing LLVM.
+> See the final update in runtime-module-optimizer-throughput.md for validation
+> and the distinction between selected passes and per-request runtime costs.
+
 Continue allstoalls/pcc#188: optimize actual gateway handler throughput toward
 exceeding asyncio. User authorizes changes and commit/push in both ~/my/pcc
 and ~/my/pcc-gateway. Python remains 3.15.0rc1. Shared ~/.local/bin/pcc1 is

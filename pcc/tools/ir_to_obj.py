@@ -10,7 +10,6 @@ use its target machine directly.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 from pathlib import Path
 import re
@@ -26,29 +25,6 @@ class ObjectEmissionContractError(ValueError):
 
 _UNKNOWN_TARGET_TRIPLES = {"", "unknown-unknown-unknown"}
 _MODULE_ASM_RE = re.compile(r'^\s*module\s+asm\s+"', flags=re.MULTILINE)
-
-# Measured runtime-only policy. Libc/allocator implementations need separate
-# libcall-recursion qualification and deliberately retain their existing path.
-_OPTIMIZED_RUNTIME_SOURCES = frozenset({
-    "py_obj.py", "py_list.py", "py_gen.py", "py_gc_backend.py",
-    "freestanding_gc_index_table.py",
-})
-
-
-def runtime_optimization_level(source_path=None, runtime_root=None) -> int:
-    if source_path is None or runtime_root is None:
-        return 0
-    source = Path(source_path).resolve()
-    root = Path(runtime_root).resolve()
-    if source.parent == root / "py" and source.name in _OPTIMIZED_RUNTIME_SOURCES:
-        return 2
-    return 0
-
-
-def runtime_emitter_identity() -> str:
-    digest = hashlib.sha256(Path(__file__).read_bytes())
-    digest.update(repr(llvm.llvm_version_info).encode("ascii"))
-    return digest.hexdigest()
 
 
 def _declared_module_triple(mod) -> str:
@@ -240,7 +216,6 @@ def main(argv: list[str] | None = None) -> int:
             ir_text = f.read()
         obj, resolved_triple = _emit_object_with_triple(
             ir_text, target_triple=args.target,
-            optimization_level=runtime_optimization_level(args.source, args.runtime_root),
         )
         temporary_object = _unique_temporary_sibling(
             output_path,

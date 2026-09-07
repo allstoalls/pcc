@@ -137,3 +137,74 @@ and py_decref_finish on 71. These are sampled shares, not cross-run absolute
 cost comparisons. Remaining helper chains and allocator validation warrant
 further attribution; do not reopen the rejected frame micro-experiments.
 Profile and folded stacks: gateway benchmarks/results/2026-09-07-runtime-o2-profile.json/.folded.
+
+## Update: default LLVM policy withdrawn; attribution corrected (2026-09-07)
+
+The normal-build integration in a64ad422 crossed the self-backend ownership
+boundary. Its automatic five-module LLVM O2 policy is withdrawn. Keep LLVM
+optimization available only as an explicit diagnostic oracle. The measurements
+above remain valid for their recorded artifacts, but are not the current
+default's throughput or proof of LLVM-free runtime construction.
+
+The same commit also made codegen_checksum import ir_to_obj merely to check
+cache freshness, loading llvmlite into a read-only verification path. With
+llvmlite imports blocked, the new regression first failed because the checksum
+became `unknown`. The fix hashes emitter source bytes without importing its
+implementation; source changes still invalidate receipts. Optimizer/provenance
+gates now pass 53 tests (60.07 s). A separate installed v84 pcc1 canary compiled
+and ran a square-sum program (285) with host-helper llvmlite imports blocked;
+no rejected imports were recorded. This is a tested compilation path, not a
+clean-room rebuild of the runtime or new-source bootstrap qualification.
+
+Attribution must distinguish available transforms from the selected pipeline.
+pipeline_pass_config.py selects mem2reg,sroa by default. The self request runs
+the compiled, bounded implementation in compiled_default_passes.py. These
+experiments did not compare all translated pcc optimizations against LLVM O2:
+both runtime A/B arms used the same LLVM target-machine emitter, with only
+the candidate receiving the additional O2 module pipeline.
+
+Exact saved IR shows pcc_gc_pointer_is_managed losing redundant boolean
+conversions and branch blocks, with graph-lock wrappers inlined. py_incref's
+finish helper is inlined, but its 56-byte prepared record and prepare call
+remain; py_decref retains the record and both calls. Those changes explain
+possible local savings, not which pass accounts for the measured total gain.
+
+The five leading disjoint leaves in the optimized application's folded profile
+sum to 852/2302 samples (37.0%): object-start validation 368, decref_prepare
+174, pointer-is-managed 136, incref_prepare 103, decref_finish 71. A leaf share
+cannot distinguish expensive operations from too many operations per request.
+The next attribution must count task/object creation, frame operations and
+ownership/validation calls per validated request in a separate diagnostic run,
+then measure uninstrumented QPS. Compare the actually selected pcc transforms
+on the same hot IR before changing any optimizer defaults. Preserve all five
+GC and cleanup contracts; do not treat LLVM O2 as the main cause of the gap.
+
+## Update: native emission capability and remaining pass owners
+
+scripts/probe_pcc1_self_runtime.py makes the next boundary reproducible. Using
+native pcc1 2b08f3a7aac1, all five profiled runtime sources passed source-to-IR,
+ARM64 assembly and indexed PCO emission (15 successful native compiler calls).
+Those calls set PCC_HOST_PYTHON and PCC_RUNTIME_CC to /usr/bin/false. The host
+orchestrator prepares indexed inputs with pcc's parser/codec, with llvmlite and
+pcc.llvm_capi.binding imports rejected. It structurally decodes every PCO.
+
+The five emitted PCOs then linked into a generator canary through pcc's own
+linker, with LLVM imports still rejected, and executed with exact output 42.
+Remaining runtime members were prebuilt. This proves useful native emission
+and execution, not a full zero-dependency runtime rebuild or O2 parity.
+The linker was pcc-owned Python running on CPython, which remains a dependency
+to eliminate under the maintainer's stronger pcc1 contract added to AGENTS.md.
+
+Explicit simplifycfg and inline probes both fail in ir_pass_pipeline.py's
+text runner while importing llvmlite. The current compiled default tier is
+mem2reg,sroa; those additional passes are not independently executable by pcc1
+through the tested entry. The needed work is to complete/wire pcc's native
+optimization execution path, not install LLVM. The runtime object generator
+already exists and must be reused. Core focused validation: 53 provenance/
+optimizer tests, 24 archive-consumer tests and 17 default-tier/knowledge tests.
+
+Verified report: gateway benchmarks/results/2026-09-07-self-runtime-capability.json.
+The new AGENTS.md contract covers C processing too: host pcc may use only
+CPython and its standard library; pcc1 may not require external interpreters,
+compilers or toolchain utilities. Earlier descriptions of host helpers and
+LLVM policies are historical observations, not exceptions to that contract.

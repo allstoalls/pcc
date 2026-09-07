@@ -31,6 +31,49 @@ Startup route for active goal work and direct human task intake:
    These two were split out of this file to stay under the context budget;
    the split lowered their resident-in-context cost, **not** their authority.
 
+## Dependency ownership contract (maintainer directive, 2026-09-07)
+
+**Host pcc depends only on CPython and the Python standard library. Native
+pcc1 requires no external toolchain or language-runtime dependencies.** This
+contract applies to the entire supported workflow, including C processing,
+runtime construction, optimization, object emission, linking, cache checks,
+bootstrap and installed use. It overrides historical implementation notes
+below that describe external execution owners.
+
+- Remove LLVM, libLLVM, llvmlite, cc/clang/gcc and equivalent dependencies
+  from the product paths. Host pcc must also remove third-party Python
+  dependencies such as pycparser, PLY and cffi; internal pcc implementations
+  may use CPython and its standard library only.
+- pcc1 must not invoke host Python/CPython, load libpython, or require
+  externally installed compiler, preprocessor, assembler, linker, archiver
+  or signing tools. These operations must use pcc-owned native code, compiled
+  into pcc1 or supplied as part of the pcc toolchain. Moving an external
+  dependency into a subprocess, build script, cache helper, bundled LLVM
+  library or compatibility wrapper does not remove the dependency.
+- C is part of this contract: preprocessing, parsing, semantic analysis,
+  optimization, code generation, assembly and linking must be owned by pcc.
+  C inputs, runtime builds and extension builds are not exceptions. Do not
+  route C processing to host cc or LLVM, or label that route self-hosted.
+- Reuse and complete pcc's existing implementations. A Python-authored
+  algorithm that still uses LLVM to parse, verify, optimize or emit its IR
+  has not completed this migration. Host execution of pcc's own code satisfies
+  the host-pcc contract only when it uses the standard library; the same host
+  subprocess remains an unfinished dependency in pcc1.
+- Existing external routes are migration defects to track and eliminate,
+  not evidence that those dependencies are necessary. Fail explicitly at an
+  unimplemented boundary; never silently restore an external owner to make a
+  test pass or improve a benchmark. Preserve Python/C semantics and all GC
+  contracts while completing the native path.
+- LLVM/cc measurements may be retained as explicitly labeled external
+  reference experiments. They cannot be required by the shipped compiler or
+  counted as proof of pcc1-owned optimization. Prove the owned route with
+  dependency-denial checks and execution of its emitted programs; checking
+  only dynamic library links or a successful compiler exit is insufficient.
+
+The target OS's kernel/platform ABI is the execution boundary, not a license
+to rely on an external compiler or language runtime. This is the required
+end state, not a claim that every current implementation already meets it.
+
 ## Working agreement
 
 There is no single-file task queue and no goal-mode protocol. Work is tracked
@@ -119,7 +162,7 @@ is just another speedup tool; with them it is a system rebuilding Python
 3. opt-in value model — identity-free immutable payloads for hot paths, with no
    theft of ordinary-class semantics (Java's Project Valhalla is a conceptual
    reference only, not pcc's brand or design constraint)
-4. self-backend as a first-class execution root (LLVM is oracle, not owner)
+4. self-backend owns execution (LLVM may only be an external reference)
 5. long-running runtime efficiency (pause / RSS / throughput / fragmentation
    over time, not single-shot compile+run speed)
 6. complete Python execution ownership — implement every missing surface in
@@ -258,8 +301,8 @@ production link rather than preserving two implementations indefinitely.
 
 `pcc` is two compilers and one runtime in one repo:
 
-1. A **C frontend** built on `pycparser`, LLVM (`llvmlite` and `pcc/llvm_capi`),
-   and a fake-libc layer. This is the most mature path; it runs real
+1. A **C frontend** with historical `pycparser`/LLVM/`llvmlite` routes that
+   must be removed under the Dependency ownership contract above. It runs real
    third-party projects (Lua, SQLite, PostgreSQL `libpq`, zlib, lz4, zstd,
    PCRE, OpenSSL, readline, nginx).
 2. An experimental **typed-Python frontend** (`pcc/py_frontend/` +
@@ -579,7 +622,7 @@ interrupting subtask, not a replacement.
 | `pcc/py_runtime/py/*.py` | pcc-Python runtime ports (mirror of C; for self-host) |
 | `pcc/py_runtime/include/py_runtime.h` | Public runtime header: object header, type tags, `PCC_GC_KIND_*` enum |
 | `pcc/py_runtime/src/py_internal.h` | Runtime-internal object layouts such as `PyClassObject` |
-| `pcc/llvm_capi/` | In-repo LLVM-C builder; fallback path is `llvmlite` |
+| `pcc/llvm_capi/` | In-repo IR builder plus legacy LLVM bindings; external bindings/fallbacks are migration debt |
 | `pcc/backend/` | Experimental LLVM-free self backend (AArch64 Darwin, x86_64 Linux subsets) |
 | `pcc/kernel_ir/` | Kernel-only GPU IR, TIRx-like freeze, Metal finalization, launch packages, HMM/fence, and DLPack/tensor ownership slices |
 | `pcc/gpu_gc/` | GPU-GC metadata/oracle and external-resource lifetime seam; CPU-only unless a focused gate proves runtime integration |
@@ -1303,12 +1346,10 @@ the IR builder cannot directly express.
 - Currently, the only acceptable remaining text-level lowering is the
   `va_arg` path. Anything else is a source-level compiler bug, fix it
   before serializing IR.
-- The system-link path no longer hands LLVM IR text to the system compiler
-  — `run_translation_units_with_system_cc()` optimizes each module with
-  repository-managed LLVM and emits native objects directly. If you ever
-  reintroduce a text-IR handoff, centralize attribute stripping (`nuw`,
-  `nneg`, `range()`, `initializes()`, `dead_on_unwind`) in
-  `postprocess_ir_text()`.
+- The historical `run_translation_units_with_system_cc()` path uses
+  repository-managed LLVM to optimize and emit objects. That is an unresolved
+  external dependency, even without a text-IR handoff. Replace its owner with
+  pcc's own implementation; do not reintroduce a handoff to cc/clang/LLVM.
 
 
 ## Investigation Workflow (mandatory for any non-trivial bug)
