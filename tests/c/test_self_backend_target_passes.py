@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from pcc.backend import BackendUnavailable
@@ -213,17 +215,17 @@ entry:
 
     assert "  madd " not in multi_use_body
     assert "  msub " not in multi_use_body
-    assert "  mul x11, x9, x10" in multi_use_body
-    assert "  add x11, x9, x10" in multi_use_body
+    assert re.search(r"  mul x\d+, x\d+, x\d+", multi_use_body)
+    assert re.search(r"  add x\d+, x\d+, x\d+", multi_use_body)
 
     assert "  madd " not in live_flags_body
     assert "  msub " not in live_flags_body
-    assert "  mul x11, x9, x10" in live_flags_body
-    assert "  add x11, x9, x10" in live_flags_body
+    assert re.search(r"  mul x\d+, x\d+, x\d+", live_flags_body)
+    assert re.search(r"  add x\d+, x\d+, x\d+", live_flags_body)
 
     assert "  madd " not in atomic_body
     assert "  msub " not in atomic_body
-    assert "  mul x11, x9, x10" in atomic_body
+    assert re.search(r"  mul x\d+, x\d+, x\d+", atomic_body)
     assert "  dmb ish" in atomic_body
 
 
@@ -335,7 +337,7 @@ entry:
         (16, 0, 32, "true"),
     ),
 )
-def test_aarch64_block_zero_controls_stay_on_existing_fallback(
+def test_aarch64_block_zero_controls_choose_scalar_or_call_fallback(
     monkeypatch,
     dst_alignment: int,
     fill: int,
@@ -357,7 +359,11 @@ entry:
 
     asm_text = emit_self_asm(ir_text)
 
-    assert "  bl _memset" in asm_text
+    if fill == 0 and is_volatile == "false" and size <= 128:
+        assert "  bl _memset" not in asm_text
+        assert "xzr" in asm_text
+    else:
+        assert "  bl _memset" in asm_text
     assert "  movi v0.16b, #0" not in asm_text
     assert "  str q0" not in asm_text
 

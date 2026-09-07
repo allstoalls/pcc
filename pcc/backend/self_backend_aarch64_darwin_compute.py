@@ -25,6 +25,7 @@ from .self_backend_aarch64_darwin_materialize import (
     store_large_aggregate_literal_to_address,
 )
 from .self_backend_aarch64_darwin_mem import (
+    emitted_addsub_immediate_line,
     emitted_compare_immediate_line,
     emitted_compare_register_line,
     emitted_cset_line,
@@ -44,6 +45,7 @@ from .self_backend_aarch64_darwin_ops import (
 )
 from .self_backend_aarch64_darwin_regs import emit_add_offset, emit_const_to_reg
 from .self_backend_aarch64_darwin_regalloc import (
+    allocated_scalar_register_indexed,
     commit_allocated_scalar_result,
     commit_allocated_scalar_result_indexed,
 )
@@ -1060,22 +1062,65 @@ def emit_compute_instruction_by_id(
                         )
                     )
                     return lines
+                lhs_register = 9
+                rhs_register = 10
+                result_register = 11
+                select_registers = value_type_header.second in (32, 64) and (
+                    binop_record.third >= 0 or lhs.lstrip("-").isdigit()
+                    or lhs in ("undef", "poison", "zeroinitializer")
+                ) and (
+                    binop_record.fourth >= 0 or rhs.lstrip("-").isdigit()
+                    or rhs in ("undef", "poison", "zeroinitializer")
+                )
+                if select_registers:
+                    selected = allocated_scalar_register_indexed(
+                        indexed_kernel, binop_record.third, value_type_id,
+                    )
+                    if selected >= 0:
+                        lhs_register = selected
+                    selected = allocated_scalar_register_indexed(
+                        indexed_kernel, binop_record.fourth, value_type_id,
+                    )
+                    if selected >= 0:
+                        rhs_register = selected
+                    selected = allocated_scalar_register_indexed(
+                        indexed_kernel, indexed_dest_id, value_type_id,
+                    )
+                    if selected >= 0:
+                        result_register = selected
                 lines = materialize_scalar_value_indexed(
                     func,
                     indexed_kernel,
                     lhs,
                     value_type_id,
-                    9,
+                    lhs_register,
                     module_symbols,
                     value_id=binop_record.third,
                 )
+                if select_registers and op in ("add", "sub") and binop_record.fourth < 0 and len(rhs) <= 5:
+                    immediate = const_int_from_value(rhs)
+                    if immediate is not None and -4095 <= immediate <= 4095:
+                        mnemonic = op
+                        if immediate < 0:
+                            mnemonic = "sub" if op == "add" else "add"
+                            immediate = -immediate
+                        result_name = reg_name_indexed(indexed_kernel, value_type_id, result_register)
+                        lines.append(emitted_addsub_immediate_line(
+                            mnemonic, result_name,
+                            reg_name_indexed(indexed_kernel, value_type_id, lhs_register),
+                            immediate,
+                        ))
+                        lines.extend(_commit_or_spill_scalar_result_indexed(
+                            func, indexed_kernel, indexed_dest_id, value_type_id, result_name,
+                        ))
+                        return lines
                 lines.extend(
                     materialize_scalar_value_indexed(
                         func,
                         indexed_kernel,
                         rhs,
                         value_type_id,
-                        10,
+                        rhs_register,
                         module_symbols,
                         value_id=binop_record.fourth,
                     )
@@ -1085,18 +1130,21 @@ def emit_compute_instruction_by_id(
                         sign_extend_int_reg_indexed(
                             indexed_kernel,
                             value_type_id,
-                            reg_name_indexed(indexed_kernel, value_type_id, 9),
+                            reg_name_indexed(indexed_kernel, value_type_id, lhs_register),
                         )
                     )
                     lines.extend(
                         sign_extend_int_reg_indexed(
                             indexed_kernel,
                             value_type_id,
-                            reg_name_indexed(indexed_kernel, value_type_id, 10),
+                            reg_name_indexed(indexed_kernel, value_type_id, rhs_register),
                         )
                     )
                 lines.extend(
-                    emit_binop_indexed(indexed_kernel, op, value_type_id)
+                    emit_binop_indexed(
+                        indexed_kernel, op, value_type_id,
+                        lhs_register, rhs_register, result_register,
+                    )
                 )
                 lines.extend(
                     _commit_or_spill_scalar_result_indexed(
@@ -1104,7 +1152,7 @@ def emit_compute_instruction_by_id(
                         indexed_kernel,
                         indexed_dest_id,
                         value_type_id,
-                        reg_name_indexed(indexed_kernel, value_type_id, 11),
+                        reg_name_indexed(indexed_kernel, value_type_id, result_register),
                     )
                 )
                 return lines

@@ -1668,6 +1668,7 @@ def _parse_functions(ir_text: str) -> list[ParsedFunction]:
                 indexed_kernel=None,
                 indexed_seed=indexed_seed,
                 indexed_slot_projection=False,
+                aarch64_tail_call_ids=[],
             )
         # Freeze/adopt the complete function plane at the parser boundary.
         # Downstream consumers never need the construction seed or a block
@@ -2432,15 +2433,17 @@ class _FunctionBlockPlane:
             cond_text = match.group("cond").strip()
             true_label = decode_label_ref(match.group("true").strip())
             false_label = decode_label_ref(match.group("false").strip())
-            if cond_text in {"1", "true"}:
+            # Preserve parallel edges until PHI validation: folding a branch
+            # with equal targets here would leave two PHI inputs for one edge.
+            if cond_text in {"1", "true"} and true_label != false_label:
                 kind = "br"
                 target0 = self._target_ref(true_label)
-            elif cond_text in {"0", "false", "undef", "poison"}:
+            elif cond_text in {"0", "false", "undef", "poison"} and true_label != false_label:
                 kind = "br"
                 target0 = self._target_ref(false_label)
             else:
                 kind = "br_cond"
-                value_ref = self._value_ref(decode_ssa_name(cond_text))
+                value_ref = self._value_ref(decode_value_token(cond_text))
                 target0 = self._target_ref(true_label)
                 target1 = self._target_ref(false_label)
         elif match := _BR_RE.match(line):
@@ -4794,14 +4797,14 @@ def _parse_terminator(function_name: str, block_name: str, line: str) -> ParsedI
         cond_text = match.group("cond").strip()
         true_label = decode_label_ref(match.group("true").strip())
         false_label = decode_label_ref(match.group("false").strip())
-        if cond_text in {"1", "true"}:
+        if cond_text in {"1", "true"} and true_label != false_label:
             return ParsedInstr("br", (true_label,))
-        if cond_text in {"0", "false", "undef", "poison"}:
+        if cond_text in {"0", "false", "undef", "poison"} and true_label != false_label:
             return ParsedInstr("br", (false_label,))
         return ParsedInstr(
             "br_cond",
             (
-                decode_ssa_name(cond_text),
+                decode_value_token(cond_text),
                 true_label,
                 false_label,
             ),

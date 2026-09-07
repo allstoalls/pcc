@@ -191,23 +191,25 @@ def test_indexed_module_codec_requires_the_published_preparation_boundary(
         encode_indexed_module_file(str(tmp_path / "module.pidx"), module)
 
 
+@pytest.mark.parametrize("optimize", [False, True])
 def test_indexed_module_fresh_emit_matches_the_text_assembly_oracle(
     tmp_path,
     monkeypatch,
+    optimize,
 ):
     module = _direct_module(monkeypatch)
     sidecar = tmp_path / "module.pidx"
     output = tmp_path / "module.pco"
     encode_indexed_module_file(str(sidecar), module)
 
-    oracle_asm = emit_aarch64_darwin_indexed_module(module, optimize=False)
+    oracle_asm = emit_aarch64_darwin_indexed_module(module, optimize=optimize)
     sections, undefined = assemble_file(oracle_asm)
     expected = encode_native_object_from_sections(
         sections,
         undefined=undefined,
     )
 
-    emit_indexed_module_file(str(sidecar), str(output), "PCO")
+    emit_indexed_module_file(str(sidecar), str(output), "PCO", optimize=optimize)
 
     assert output.read_bytes() == expected
     assert not (tmp_path / "module.pco.tmp").exists()

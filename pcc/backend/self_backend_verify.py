@@ -1189,6 +1189,20 @@ def _verify_phis(
     for block_index, block_name in enumerate(block_names):
         expected = set(predecessors[block_index])
         phi_fact: CompilerInt2 = kernel.block_phi_fact(block_index)
+        expected_counts: dict[int, int] = {}
+        if phi_fact.second:
+            # Dominance uses a graph of unique predecessor blocks, whereas a
+            # PHI has one incoming per CFG edge. A switch (or a conditional
+            # branch with equal targets) can contribute several such edges.
+            for pred_index in predecessors[block_index]:
+                edge_count = 0
+                successor_index = 0
+                successor_count = kernel.cfg_successor_count(pred_index)
+                while successor_index < successor_count:
+                    if kernel.cfg_successor_id(pred_index, successor_index) == block_index:
+                        edge_count += 1
+                    successor_index += 1
+                expected_counts[pred_index] = edge_count
         phi_index = 0
         while phi_index < phi_fact.second:
             phi: CompilerInt4 = kernel.phi_record(
@@ -1202,6 +1216,8 @@ def _verify_phis(
                     f"phi {phi_name!r} appears in predecessor-free block {block_name!r}",
                 )
             actual: set[int] = set()
+            actual_counts: dict[int, int] = {}
+            first_values: dict[int, int] = {}
             incoming_index = 0
             while incoming_index < phi.fourth:
                 incoming: CompilerInt2 = kernel.phi_incoming(
@@ -1220,13 +1236,23 @@ def _verify_phis(
                         f"phi {phi_name!r} in {block_name!r} names non-predecessor "
                         f"{incoming_label!r}",
                     )
-                if pred_index in actual:
+                actual_count = actual_counts.get(pred_index, 0) + 1
+                if actual_count > expected_counts[pred_index]:
                     _fail(
                         "phi-predecessors",
                         func,
-                        f"phi {phi_name!r} in {block_name!r} repeats predecessor "
+                        f"phi {phi_name!r} in {block_name!r} has excess edges from "
                         f"{incoming_label!r}",
                     )
+                if pred_index in first_values and first_values[pred_index] != incoming.first:
+                    _fail(
+                        "phi-predecessors",
+                        func,
+                        f"phi {phi_name!r} in {block_name!r} has different values "
+                        f"for parallel edges from {incoming_label!r}",
+                    )
+                first_values[pred_index] = incoming.first
+                actual_counts[pred_index] = actual_count
                 actual.add(pred_index)
                 if incoming.first < 0:
                     incoming_index += 1
@@ -1279,6 +1305,12 @@ def _verify_phis(
                     func,
                     f"phi {phi_name!r} in {block_name!r} is missing "
                     f"predecessors {missing!r}",
+                )
+            if actual_counts != expected_counts:
+                _fail(
+                    "phi-predecessors",
+                    func,
+                    f"phi {phi_name!r} in {block_name!r} has missing parallel edges",
                 )
             phi_index += 1
 

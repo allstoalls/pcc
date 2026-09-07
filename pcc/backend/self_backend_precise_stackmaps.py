@@ -4449,6 +4449,14 @@ def _build_function_stack_map_plan_native(
                 instruction_index += 1
                 continue
             call_id = metadata.second
+            if call_id in func.aarch64_tail_call_ids:
+                # Proven sibling transfers have no return PC in this frame.
+                # AArch64's planner permits this only with no root locations,
+                # reloads or exceptional state. Preserve entry/other records;
+                # do not invent an ordinary post-call safepoint for the jump.
+                last_instruction_has_record = False
+                instruction_index += 1
+                continue
             call_header: CompilerInt4 = kernel.call_header(call_id)
             if call_header.third & CALL_FLAG_FRAME_PROTOCOL:
                 root_state_id = kernel.call_aux_state_id(call_id)

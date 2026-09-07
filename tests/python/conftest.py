@@ -6,6 +6,8 @@ Provides immutable C and pcc-Python runtime archives used by native probes.
 from __future__ import annotations
 
 import os
+import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -19,6 +21,23 @@ from tests.runtime_build_cache import (
     cached_pcc_python_runtime,
     cached_threaded_c_runtime,
 )
+
+
+@pytest.fixture(scope="session")
+def pcc_diagnostic_runtime_archive(request):
+    """Explicit self-emission overlay for capability tests, not production gates."""
+    selected = os.environ.get("PCC_DIAGNOSTIC_RUNTIME_ARCHIVE")
+    if not selected:
+        return request.getfixturevalue("pcc_py_runtime_archive")
+    archive = Path(selected).resolve(strict=True)
+    receipt = json.loads(Path(str(archive) + ".diagnostic.json").read_text())
+    assert receipt["schema"] == "pcc.runtime-diagnostic-overlay.v1"
+    assert hashlib.sha256(archive.read_bytes()).hexdigest() == receipt["archive_sha256"]
+    root = Path(__file__).resolve().parents[2]
+    assert receipt["source_sha256"]
+    for source, expected in receipt["source_sha256"].items():
+        assert hashlib.sha256((root / source).read_bytes()).hexdigest() == expected
+    return archive
 
 
 @pytest.fixture(scope="session")

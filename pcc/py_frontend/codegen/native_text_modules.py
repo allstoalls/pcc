@@ -1045,6 +1045,10 @@ class NativeTextModulesLoweringMixin:
             ],
             name=self._fresh("re.sub.engine"),
         )
+        # This ABI always returns a new string reference. Record its owner
+        # at emission: raw-scaffold code can infer a Dyn result and otherwise
+        # lose the owner when assigning or copying the replacement string.
+        self._note_owned_object_value(result)
         # the engine raises for patterns outside the native subset or
         # backslash replacement templates
         self._emit_post_call_err_check(getattr(args[0], "span", None))

@@ -43,6 +43,18 @@ def emit_epilogue(func: ParsedFunction) -> list[str]:
     return lines
 
 
+def emit_tail_epilogue(func: ParsedFunction, target: str) -> list[str]:
+    """Restore the caller's frame/return address before a direct sibling jump."""
+    lines: list[str] = []
+    if func.frame_size:
+        lines.extend(emit_stack_adjust(func.frame_size))
+    lines.append(emitted_frame_pair_line(True))
+    if branch_protection_enabled():
+        lines.append(emitted_fixed_instruction_line("autiasp"))
+    lines.append(emitted_branch_line("b", target))
+    return lines
+
+
 def emit_branch_terminator(
     func: ParsedFunction,
     *,

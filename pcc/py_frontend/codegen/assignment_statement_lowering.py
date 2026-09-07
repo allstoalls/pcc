@@ -1026,6 +1026,13 @@ class AssignmentStatementLoweringMixin:
         exact_root_store = (
             manages_owned_local
             and (exact_int_result_is_owned or rhs_local_copy_is_owned)
+            # A borrowed alias can occupy this slot before its first owned
+            # assignment. store_root_take releases the previous slot value
+            # unconditionally; that would consume the caller's reference.
+            # Such locals need the normal ownership-flag-guarded replacement.
+            and target.ident not in getattr(
+                self, "_borrowed_gc_rooted_local_names", set()
+            )
             and isinstance(value.type, ir.PointerType)
             and value not in getattr(self, "_cpy_values", ())
             and self._ir_type_matches(ir_ty, _CSTR)

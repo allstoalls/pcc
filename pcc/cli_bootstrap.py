@@ -4,10 +4,12 @@ import sys
 
 from .cli_contract import (
     BACKEND_CHOICES,
+    DEFAULT_PUBLIC_BACKEND,
     DEFAULT_EMIT_LL,
     DIAGNOSTIC_FORMAT_CHOICES,
     IR_SCAFFOLD_CHOICES,
     PYTHON_LIBPYTHON_CHOICES,
+    cli_input_path,
 )
 
 from .package_schema import (
@@ -129,19 +131,21 @@ _HELP_TEXT = """Usage: pcc [OPTIONS] PATH [-- ARGS...]
        pcc -c COMMAND [ARGS...]
        pcc - [ARGS...]
 
-Bootstrap-oriented Python entry for pcc self-hosting.
+Shared pcc command interface (CPython-hosted or native pcc1).
 
-Python inputs are compiled by this bootstrap binary. C/project inputs are
-delegated to the full host pcc CLI; set PCC_HOST_PCC to override the host
-entrypoint.
+Python scripts and modules compile to native code before execution.
+C/project requests enter the full C frontend in the current process.
+The default backend is self. Native capability gaps fail explicitly.
 
 Options:
   -h, --help                Show this help message and exit.
   env info [--json]         Inspect the selected pcc package environment.
+  inspect PATH [--json]     Inspect a native artifact without executing it.
+  bindgen HEADER [-o PATH]  Generate extern declarations from expanded C prototypes.
   -m MODULE [ARGS...]       Compile and run a Python module through pcc1.
   -c COMMAND [ARGS...]      Compile and run a Python command through pcc1.
   - [ARGS...]               Compile and run Python source read from stdin.
-  --backend BACKEND         Native emission backend: llvm or self.
+  --backend BACKEND         Native emission backend: self (default), llvm, llvm_capi.
   --python-libpython MODE   off (default), auto, or on for Python fallback linkage.
   --python-library          Emit a Python library module without @main.
   -g, --debug               Emit DWARF line information.
@@ -243,7 +247,7 @@ def _copy_seq(values):
     return out
 
 
-_PY_RUN_CACHE_VERSION = "pcc-py-run-cache-v46"
+_PY_RUN_CACHE_VERSION = "pcc-py-run-cache-v47"
 
 
 def _path_list_sep() -> str:
@@ -389,38 +393,49 @@ def _python_run_cache_key(
         h = _fnv1a_update_u64(h, parts[i])
         h = _fnv1a_update_u64(h, "\0")
         i += 1
-    seen = []
+    # Identity, not content.  Hashing every byte of every ``.py`` file under
+    # every package-site root cost 29.3 s on CPython for one 13302-file /
+    # 236 MB root set, and pcc1's compiled byte loop turned ``pcc1 app.py``
+    # (run mode) into an apparent hang -- 2463 of 2487 samples inside this
+    # function.  A run cache only has to notice that a source changed, so it
+    # hashes each file's relative path, size and modification time: an edit
+    # always moves ``st_mtime_ns``.  ``seen`` is a dict because the previous
+    # list membership test was quadratic in the file count.
+    seen = {}
+    prefixes = []
     r = 0
     while r < len(roots):
-        root = roots[r]
-        sources = _iter_py_sources_under(root)
+        prefix = os.path.abspath(roots[r])
+        if not prefix.endswith(os.sep):
+            prefix = prefix + os.sep
+        prefixes.append(prefix)
+        r += 1
+    r = 0
+    while r < len(roots):
+        sources = _iter_py_sources_under(roots[r])
         s = 0
         while s < len(sources):
             path = sources[s]
             if path in seen:
                 s += 1
                 continue
-            seen.append(path)
-            try:
-                with open(path, "rb") as f:
-                    content = f.read()
-            except OSError:
-                h = _fnv1a_update_u64(h, "missing:" + path)
-                s += 1
-                continue
+            seen[path] = True
             rel = path
             r2 = 0
-            while r2 < len(roots):
-                prefix = os.path.abspath(roots[r2])
-                if not prefix.endswith(os.sep):
-                    prefix = prefix + os.sep
-                if path.startswith(prefix):
-                    rel = path[len(prefix) :]
+            while r2 < len(prefixes):
+                if path.startswith(prefixes[r2]):
+                    rel = path[len(prefixes[r2]) :]
                     break
                 r2 += 1
             h = _fnv1a_update_u64(h, rel)
-            h = _fnv1a_update_u64(h, str(len(content)))
-            h = _fnv1a_update_bytes_u64(h, content)
+            try:
+                # os.path.getsize/getmtime lower natively (codegen/native_os.py);
+                # os.stat(...).st_size attribute access does not and cost 17
+                # libpython fallbacks in this module.
+                h = _fnv1a_update_u64(h, str(os.path.getsize(path)))
+                h = _fnv1a_update_u64(h, str(os.path.getmtime(path)))
+            except OSError:
+                h = _fnv1a_update_u64(h, "missing")
             h = _fnv1a_update_u64(h, "\0")
             s += 1
         r += 1
@@ -10381,48 +10396,41 @@ def _is_host_cli_c_indicator(arg) -> bool:
 
 
 def _should_delegate_to_host_cli(argv) -> bool:
-    i = 0
-    while i < len(argv):
-        arg = argv[i]
+    # Historical name retained for internal callers; dispatch is in-process.
+    path = cli_input_path(argv)
+    return bool(path) and not path.endswith(".py")
+
+
+def _run_c_cli(argv) -> int:
+    from pcc.cli_core import cli_main
+
+    backend = os.environ.get("PCC_BACKEND", "") or DEFAULT_PUBLIC_BACKEND
+    forwarded = ["--backend", backend]
+    for arg in argv:
+        forwarded.append(arg)
+    return cli_main(forwarded)
+
+
+def _requires_full_compile_cli(argv) -> bool:
+    """Keep existing full-CLI compiler controls effective for Python too."""
+    takes_value = (
+        "--target", "--gpu-backend", "--link-arg", "--pass", "--disable-pass",
+        "--jobs", "--cache-dir", "--emit-obj", "--emit-asm",
+    )
+    for arg in argv:
         if arg == "--":
-            return False
-        if _is_host_cli_c_indicator(arg):
+            break
+        if arg in takes_value or arg in ("--no-cache", "--llvmdump", "-O0", "-O1", "-O2", "-O3"):
             return True
-        if not arg.startswith("-"):
-            if arg.endswith(".py"):
-                return False
-            if os.path.isdir(arg):
+        for option in takes_value:
+            if arg.startswith(option + "="):
                 return True
-        i += 1
     return False
 
 
 def _run_host_pcc_from_pcc1(argv) -> int:
-    host = os.environ.get("PCC_HOST_PCC")
-    if host:
-        if host == sys.executable:
-            _write_text(
-                "Error: PCC_HOST_PCC points at this bootstrap binary; "
-                "refusing recursive C delegation",
-                err=True,
-            )
-            return 2
-        cmd = [host]
-    else:
-        host_python = os.environ.get("PCC_HOST_PYTHON") or "python3"
-        cmd = [host_python, "-m", "pcc.pcc"]
-
-    i = 0
-    while i < len(argv):
-        cmd.append(argv[i])
-        i += 1
-
-    try:
-        _bootstrap_subprocess_run(cmd, check=True)
-    except Exception:
-        _write_text("Error: pcc1 host pcc delegation failed", err=True)
-        return 1
-    return 0
+    """Compatibility name; no host process or external compiler is launched here."""
+    return _run_c_cli(argv)
 
 
 def _option_value(arg):
@@ -11061,7 +11069,7 @@ def _resolve_pcc1_python_modes(python_libpython, ir_scaffold, backend):
         backend_value = os.environ.get("PCC_BACKEND", "")
     resolved_backend = str(backend_value or "").strip().lower()
     if not resolved_backend:
-        resolved_backend = "self"
+        resolved_backend = DEFAULT_PUBLIC_BACKEND
     if resolved_backend not in BACKEND_CHOICES:
         raise ValueError(
             "invalid --backend "
@@ -11323,6 +11331,17 @@ def _bootstrap_cli_main_impl(
     if len(raw_argv) == 1 and raw_argv[0] == "--tooling-capabilities":
         _write_text(python_tooling_capabilities_json())
         return 0
+    # Core tool modules use the ordinary native module compiler/runner. Keep
+    # their implementation outside the bootstrap closure and never route C
+    # header arguments through the legacy host-C delegation branch below.
+    if len(raw_argv) > 0 and raw_argv[0] == "inspect":
+        return _run_compiled_python_module_from_pcc1(
+            "pcc.artifact_inspect", raw_argv[1:]
+        )
+    if len(raw_argv) > 0 and raw_argv[0] == "bindgen":
+        return _run_compiled_python_module_from_pcc1(
+            "pcc.bindgen", raw_argv[1:]
+        )
     if len(raw_argv) == 0:
         _write_text(
             "Error: PCC-CPY-UNSUPPORTED-L3-TOOLING-INTERACTIVE-REPL: "
@@ -11435,8 +11454,8 @@ def _bootstrap_cli_main_impl(
         if restarted is not None:
             return restarted
         return _run_python_module_from_pcc1_with_mode(module_argv, module_mode)
-    if _should_delegate_to_host_cli(raw_argv):
-        return _run_host_pcc_from_pcc1(raw_argv)
+    if _should_delegate_to_host_cli(raw_argv) or _requires_full_compile_cli(raw_argv):
+        return _run_c_cli(raw_argv)
 
     parsed, status, err = parse_bootstrap_cli_args(argv)
     if parsed is None:

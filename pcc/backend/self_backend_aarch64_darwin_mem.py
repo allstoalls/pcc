@@ -96,12 +96,7 @@ def emitted_memory_instruction_line(
     """Return exact ASM text or one constant placeholder plus a packed word."""
 
     records = _DIRECT_INSTRUCTION_RECORDS
-    if records is not None and mnemonic not in (
-        "ldurh",
-        "sturh",
-        "ldrh",
-        "strh",
-    ):
+    if records is not None:
         try:
             word = encode_emitted_load_store_parts(
                 mnemonic,
@@ -114,7 +109,7 @@ def emitted_memory_instruction_line(
         else:
             family = (
                 EMITTED_INSTRUCTION_UNSCALED
-                if mnemonic in ("ldur", "stur", "ldurb", "sturb")
+                if mnemonic in ("ldur", "stur", "ldurb", "sturb", "ldurh", "sturh")
                 else EMITTED_INSTRUCTION_SCALAR
             )
             records.append4(word, family, 0, -1)

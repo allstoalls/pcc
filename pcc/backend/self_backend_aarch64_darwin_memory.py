@@ -19,6 +19,7 @@ from .self_backend_aarch64_darwin_materialize import (
     store_large_aggregate_literal_to_address,
 )
 from .self_backend_aarch64_darwin_regalloc import (
+    allocated_scalar_register_indexed,
     commit_allocated_scalar_result,
     commit_allocated_scalar_result_indexed,
 )
@@ -49,6 +50,7 @@ from .self_backend_ir import (
     PARSED_INSTRUCTION_KIND_ATOMICRMW,
     PARSED_INSTRUCTION_KIND_CMPXCHG,
     PARSED_INSTRUCTION_KIND_FENCE,
+    PARSED_INSTRUCTION_KIND_GEP,
     PARSED_INSTRUCTION_KIND_LOAD,
     PARSED_INSTRUCTION_KIND_LOAD_ATOMIC,
     PARSED_INSTRUCTION_KIND_STORE,
@@ -66,8 +68,8 @@ from .self_backend_ir import (
     _PARSED_INSTRUCTION_KIND_IDS,
 )
 from .self_backend_module_symbols import PreparedModuleSymbols
-from .self_backend_parse import is_aggregate_literal_value
-from .self_backend_value_arena import CompilerInt4
+from .self_backend_parse import const_int_from_value, is_aggregate_literal_value
+from .self_backend_value_arena import CompilerInt2, CompilerInt4
 from .self_backend_kernel import (
     TYPE_KIND_FP,
     TYPE_KIND_INT,
@@ -111,6 +113,72 @@ def _indexed_scalar_mem_store_op(type_header: CompilerInt4) -> str:
     if type_header.first == TYPE_KIND_INT and type_header.second <= 16:
         return "strh"
     return "str"
+
+
+def _scalar_access_bytes(header: CompilerInt4) -> int:
+    if header.first == TYPE_KIND_PTR:
+        return 8
+    if header.first == TYPE_KIND_FP and header.second in (32, 64):
+        return header.second // 8
+    if header.first == TYPE_KIND_INT and header.second in (1, 8, 16, 32, 64):
+        return max(1, header.second // 8)
+    return 0
+
+
+def adjacent_gep_memory_address(
+    kernel: IndexedFunctionKernel, block_id: int, position: int,
+) -> CompilerInt4:
+    """Return (GEP value, base ref, pointer type, byte offset), or first=-1."""
+    missing = CompilerInt4(-1, -1, -1, 0)
+    block: CompilerInt4 = kernel.block_fact(block_id)
+    if position < 0 or position + 1 >= block.second:
+        return missing
+    producer: CompilerInt4 = kernel.instruction_metadata_by_id(block.first + position)
+    consumer: CompilerInt4 = kernel.instruction_metadata_by_id(block.first + position + 1)
+    if producer.first != PARSED_INSTRUCTION_KIND_GEP or consumer.third:
+        return missing
+    if consumer.first not in (PARSED_INSTRUCTION_KIND_LOAD, PARSED_INSTRUCTION_KIND_STORE):
+        return missing
+    definition: CompilerInt4 = kernel.instruction_fact_by_id(block.first + position)
+    if definition.first < 0 or kernel.last_use(block_id, definition.first) != position + 1:
+        return missing
+    memory: CompilerInt4 = kernel.instruction_record(consumer.second)
+    pointer = memory.third if consumer.first == PARSED_INSTRUCTION_KIND_LOAD else memory.fourth
+    if pointer != definition.first:
+        return missing
+    if consumer.first == PARSED_INSTRUCTION_KIND_STORE and memory.second == pointer:
+        return missing
+    access_bytes = _scalar_access_bytes(kernel.type_header(memory.first))
+    if access_bytes == 0:
+        return missing
+    header: CompilerInt4 = kernel.gep_header(producer.second)
+    span: CompilerInt4 = kernel.gep_span(producer.second)
+    element: CompilerInt4 = kernel.type_header(header.first)
+    if element.first != TYPE_KIND_INT or element.second != 8 or span.first != 1:
+        return missing
+    index: CompilerInt2 = kernel.gep_index(header.fourth)
+    index_type: CompilerInt4 = kernel.type_header(index.first)
+    if index.second >= 0 or index_type.first != TYPE_KIND_INT or not 0 < index_type.second <= 64:
+        return missing
+    token = kernel.call_texts[-index.second - 1]
+    # Only small immediates can win. Avoid host/native integer-projection
+    # differences while parsing arbitrarily wide constant spellings.
+    if len(token) > 6:
+        return missing
+    offset = const_int_from_value(token)
+    if offset is None:
+        return missing
+    # The bounded spelling already fits every signed type of width >=32.
+    # Keep shifts below 32 so native raw integers cannot wrap a 1<<63 mask.
+    if index_type.second < 32:
+        modulus = 1 << index_type.second
+        offset = offset & (modulus - 1)
+        if offset >= modulus // 2:
+            offset -= modulus
+    scaled = offset >= 0 and offset % access_bytes == 0 and offset // access_bytes <= 4095
+    if not scaled and not -256 <= offset <= 255:
+        return missing
+    return CompilerInt4(definition.first, header.third, header.second, offset)
 
 
 def _indexed_scalar_stack_load_op(type_header: CompilerInt4) -> str:
@@ -165,6 +233,9 @@ def emit_memory_instruction_by_id(
     block_id: int = -1,
     instruction_index: int = -1,
     indexed_dest_id: int = -1,
+    pointer_override_ref: int = -1,
+    pointer_override_type: int = -1,
+    memory_offset: int = 0,
 ) -> list[str] | None:
     indexed_dest_has_slot = bool(
         indexed_kernel is not None
@@ -186,15 +257,20 @@ def emit_memory_instruction_by_id(
                 if store_record.second >= 0
                 else indexed_kernel.call_texts[-store_record.second - 1]
             )
+            pointer_ref = store_record.fourth
+            pointer_type = store_record.third
+            if pointer_override_type >= 0:
+                pointer_ref = pointer_override_ref
+                pointer_type = pointer_override_type
             ptr_name = (
-                indexed_kernel.value_name(store_record.fourth)
-                if store_record.fourth >= 0
-                else indexed_kernel.call_texts[-store_record.fourth - 1]
+                indexed_kernel.value_name(pointer_ref)
+                if pointer_ref >= 0
+                else indexed_kernel.call_texts[-pointer_ref - 1]
             )
             if _indexed_scalar_type(value_type_header):
                 alloca_type_id = (
                     indexed_kernel.alloca_type_id(store_record.fourth)
-                    if store_record.fourth >= 0
+                    if store_record.fourth >= 0 and pointer_override_type < 0
                     else -1
                 )
                 storage_matches = alloca_type_id == value_type_id
@@ -226,31 +302,46 @@ def emit_memory_instruction_by_id(
                         )
                     )
                     return lines
-                lines = materialize_scalar_value_indexed(
-                    func,
-                    indexed_kernel,
-                    ptr_name,
-                    store_record.third,
-                    9,
-                    module_symbols,
-                    value_id=store_record.fourth,
+                value_register = allocated_scalar_register_indexed(
+                    indexed_kernel, store_record.second, value_type_id,
                 )
-                lines.extend(
-                    materialize_scalar_value_indexed(
-                        func,
-                        indexed_kernel,
-                        value,
-                        value_type_id,
-                        10,
-                        module_symbols,
-                        value_id=store_record.second,
+                zero_value = store_record.second < 0 and _scalar_access_bytes(value_type_header) > 0 and value_type_header.first in (TYPE_KIND_INT, TYPE_KIND_PTR) and value in (
+                    "0", "null", "false", "zeroinitializer",
+                )
+                base_register = -1
+                if store_record.second >= 0 or zero_value:
+                    base_register = allocated_scalar_register_indexed(
+                        indexed_kernel, pointer_ref, pointer_type,
                     )
-                )
+                lines = []
+                base_name = "x9"
+                if base_register >= 0:
+                    base_name = reg_name_indexed(indexed_kernel, pointer_type, base_register)
+                else:
+                    lines.extend(materialize_scalar_value_indexed(
+                        func, indexed_kernel, ptr_name, pointer_type, 9,
+                        module_symbols, value_id=pointer_ref,
+                    ))
+                value_name = reg_name_indexed(indexed_kernel, value_type_id, 10)
+                if zero_value:
+                    value_name = "xzr" if value_type_header.first == TYPE_KIND_PTR or value_type_header.second > 32 else "wzr"
+                elif value_register >= 0:
+                    value_name = reg_name_indexed(indexed_kernel, value_type_id, value_register)
+                else:
+                    lines.extend(materialize_scalar_value_indexed(
+                        func, indexed_kernel, value, value_type_id, 10,
+                        module_symbols, value_id=store_record.second,
+                    ))
+                memory_op = _indexed_scalar_mem_store_op(value_type_header)
+                access_bytes = _scalar_access_bytes(value_type_header)
+                if memory_offset < 0 or (access_bytes and memory_offset % access_bytes):
+                    memory_op = _indexed_scalar_stack_store_op(value_type_header)
                 lines.append(
                     emitted_memory_instruction_line(
-                        _indexed_scalar_mem_store_op(value_type_header),
-                        reg_name_indexed(indexed_kernel, value_type_id, 10),
-                        "x9",
+                        memory_op,
+                        value_name,
+                        base_name,
+                        memory_offset,
                     )
                 )
                 return lines
@@ -471,17 +562,26 @@ def emit_memory_instruction_by_id(
             value_type_header: CompilerInt4 = indexed_kernel.type_header(
                 value_type_id
             )
+            pointer_ref = load_record.third
+            pointer_type = load_record.second
+            if pointer_override_type >= 0:
+                pointer_ref = pointer_override_ref
+                pointer_type = pointer_override_type
             ptr_name = (
-                indexed_kernel.value_name(load_record.third)
-                if load_record.third >= 0
-                else indexed_kernel.call_texts[-load_record.third - 1]
+                indexed_kernel.value_name(pointer_ref)
+                if pointer_ref >= 0
+                else indexed_kernel.call_texts[-pointer_ref - 1]
             )
             if not indexed_dest_has_slot:
                 return []
             if _indexed_scalar_type(value_type_header):
+                result_register = allocated_scalar_register_indexed(
+                    indexed_kernel, indexed_dest_id, value_type_id,
+                )
+                load_register = result_register if result_register >= 0 else 10
                 alloca_type_id = (
                     indexed_kernel.alloca_type_id(load_record.third)
-                    if load_record.third >= 0
+                    if load_record.third >= 0 and pointer_override_type < 0
                     else -1
                 )
                 storage_matches = alloca_type_id == value_type_id
@@ -498,26 +598,38 @@ def emit_memory_instruction_by_id(
                         indexed_kernel,
                         value_type_id,
                         indexed_kernel.alloca_offset(load_record.third),
-                        10,
+                        load_register,
                         store=False,
                     )
                 else:
-                    lines = materialize_scalar_value_indexed(
-                        func,
-                        indexed_kernel,
-                        ptr_name,
-                        load_record.second,
-                        9,
-                        module_symbols,
-                        value_id=load_record.third,
+                    base_register = allocated_scalar_register_indexed(
+                        indexed_kernel, pointer_ref, pointer_type,
                     )
+                    lines = []
+                    base_name = "x9"
+                    if base_register >= 0:
+                        base_name = reg_name_indexed(indexed_kernel, pointer_type, base_register)
+                    else:
+                        lines.extend(materialize_scalar_value_indexed(
+                            func, indexed_kernel, ptr_name, pointer_type, 9,
+                            module_symbols, value_id=pointer_ref,
+                        ))
+                    memory_op = _indexed_scalar_mem_load_op(value_type_header)
+                    access_bytes = _scalar_access_bytes(value_type_header)
+                    if memory_offset < 0 or (access_bytes and memory_offset % access_bytes):
+                        memory_op = _indexed_scalar_stack_load_op(value_type_header)
                     lines.append(
                         emitted_memory_instruction_line(
-                            _indexed_scalar_mem_load_op(value_type_header),
-                            reg_name_indexed(indexed_kernel, value_type_id, 10),
-                            "x9",
+                            memory_op,
+                            reg_name_indexed(indexed_kernel, value_type_id, load_register),
+                            base_name,
+                            memory_offset,
                         )
                     )
+                if result_register >= 0:
+                    # LDRB/LDRH already perform the narrow zero extension;
+                    # the allocated value is ready without a move/mask chain.
+                    return lines
                 allocated_lines = commit_allocated_scalar_result_indexed(
                     func,
                     indexed_dest_id,

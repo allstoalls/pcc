@@ -347,6 +347,12 @@ def _populate_static_native_exports_0(out):
         "IR_SCAFFOLD_CHOICES": _string_tuple_global_export(),
         "DIAGNOSTIC_FORMAT_CHOICES": _string_tuple_global_export(),
         "DEFAULT_EMIT_LL": _str_constant_export("__PCC_DEFAULT_LL__"),
+        "DEFAULT_PUBLIC_BACKEND": _str_constant_export("self"),
+        "cli_input_path": _function_export(
+            ("str",),
+            (("list", ("str",)),),
+            (_export_arg("argv", ("list", ("str",))),),
+        ),
     }
     # ``cli_bootstrap.py`` consumes this self-host-safe package contract in
     # standalone as well as closed-world builds.  Keep the imported constants

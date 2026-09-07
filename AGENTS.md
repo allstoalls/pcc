@@ -74,6 +74,57 @@ The target OS's kernel/platform ABI is the execution boundary, not a license
 to rely on an external compiler or language runtime. This is the required
 end state, not a claim that every current implementation already meets it.
 
+## CPython library contract (maintainer directive, 2026-09-08)
+
+Priority: native pcc1 self-hosting and the five-GC program remain P0. CPython
+embedding, public tooling and ecosystem packages are P1 and must not displace
+or block that spine, change native execution ownership, or weaken GC contracts.
+
+`pcc` is also an executable capability library embedded in CPython. After
+`import pcc`, its public APIs must provide real compiler, native execution,
+artifact-inspection, binding-generation and accelerator capabilities. `pcc1`
+is the standalone entrypoint, not a prerequisite for calling every public
+library API. Upper-level packages that depend on pcc must be able to consume
+these working APIs from CPython as well.
+
+Operations requiring native code must compile/load/call the owned native
+implementation through a specified boundary. Import success, declaration
+stubs, metadata-only results and CPU test oracles are not proof that the public
+capability executes. Explicit Metal requests require real device execution or
+an explicit unavailable-capability error. Keep shared semantics and validate
+both CPython-callable and native-pcc1 entrypoints; neither proves the other.
+This is a required product contract, not a claim that the current implementation
+has completed every surface. The dependency ownership contract above still
+applies; do not implement the native entrypoint by delegating to CPython.
+
+## Public CLI parity contract (maintainer directive, 2026-09-08)
+
+`pcc`, `python -m pcc`, and `pcc1` must expose the same declared user-facing
+command semantics. The first two run the compiler driver under CPython; pcc1
+runs the native compiler. That implementation distinction must not change
+defaults, input interpretation, supported options, diagnostics or exit status.
+
+- The production default is the owned self backend.
+- C files and projects enter the full pcc-owned C compilation pipeline;
+  native C frontend gaps are unfinished capabilities, not permission to
+  delegate to host Python, cc or LLVM.
+- Python scripts and ordinary `-m` modules compile and execute native code.
+  Host `runpy` execution is not an equivalent implementation of that command.
+- Tool commands use the corresponding owned native tool execution path and
+  share argument, output and error contracts across the entrypoints.
+- Environment selection, install paths, cache behavior, program arguments and
+  `-o` behavior must agree. Internal bootstrap worker modes may remain private.
+
+Current differences in cli_core/cli_bootstrap and the legacy adapter are
+migration gaps, even where historical code calls them intentional divergences.
+This paragraph specifies the target, not current completion. The maintainer
+promoted entry convergence to P0 for immediate work on 2026-09-08. It runs
+alongside native pcc1 self-host and five-GC P0 work, without editing another
+session's performance optimization. Do not replace
+the bootstrap entry or alter defaults without the relevant execution/parity
+and source-frozen bootstrap gates. Reuse capability-parity issue #171 for the
+underlying native C owner rather than duplicating its implementation scope.
+
 ## Working agreement
 
 There is no single-file task queue and no goal-mode protocol. Work is tracked

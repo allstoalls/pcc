@@ -306,6 +306,11 @@ Lfwd:
 	lsrv	w8, w9, w10
 	ldrb	w8, [x9]
 	strb	w8, [x9]
+	ldrh	w30, [sp, #2]
+	strh	w0, [x1, #8190]
+	strh	wzr, [x9, #4]
+	ldurh	w2, [x3, #-256]
+	sturh	wzr, [x9, #255]
 	cnt	v10.8b, v10.8b
 	addv	b10, v10.8b
 	umov	w11, v10.b[0]
@@ -562,7 +567,7 @@ def test_fails_closed_outside_the_proven_subset():
     with pytest.raises(EncodeError):
         assemble_text("\tldur\tx0, [x1, #256]\n")  # 9-bit signed overflow
     with pytest.raises(EncodeError):
-        assemble_text("\tb\t_extern\n")  # extern b not proven (only bl)
+        assemble_text("\tb\tL_missing\n")  # unknown assembler-local label
     with pytest.raises(EncodeError):
         assemble_text("\tand\tx0, x1, #0\n")  # invalid bitmask immediate
     with pytest.raises(EncodeError):

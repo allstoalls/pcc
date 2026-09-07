@@ -16,6 +16,45 @@ PYTHON_LIBPYTHON_CHOICES = ("auto", "on", "off")
 IR_SCAFFOLD_CHOICES = ("auto", "on", "off")
 DIAGNOSTIC_FORMAT_CHOICES = ("text", "json", "sarif")
 DEFAULT_EMIT_LL = "__PCC_DEFAULT_LL__"
+DEFAULT_PUBLIC_BACKEND = "self"
+
+# Options consuming a following value before the source path. Used only for
+# dispatch; the owning parser still validates each option and its value.
+_INPUT_VALUE_OPTIONS = (
+    "-o", "--backend", "--python-libpython", "--ir-scaffold",
+    "--diagnostic-format", "--profile-json", "--pass", "--disable-pass",
+    "--gpu-backend", "--target", "--emit-obj", "--emit-asm", "--jobs",
+    "--cache-dir", "--sources-from-make", "--depends-on", "--cpp-arg",
+    "--link-arg", "--prepare-cmd", "--ensure-make-goal", "--include-dir",
+    "-I", "-D", "-U",
+)
+
+
+def cli_input_path(argv: list[str]) -> str:
+    """Locate the input without confusing option values/program arguments."""
+    index = 0
+    while index < len(argv):
+        arg = argv[index]
+        if arg == "--":
+            return argv[index + 1] if index + 1 < len(argv) else ""
+        if arg in _INPUT_VALUE_OPTIONS:
+            index += 2
+            continue
+        if arg == "--emit-llvm":
+            if index + 1 < len(argv):
+                candidate = argv[index + 1]
+                if not candidate.startswith("-") and (
+                    candidate.endswith(".ll") or candidate.endswith(".bc")
+                    or index + 2 < len(argv)
+                ):
+                    index += 2
+                    continue
+            index += 1
+            continue
+        if not arg.startswith("-"):
+            return arg
+        index += 1
+    return ""
 
 # (logical name, public flag, consuming surfaces)
 SHARED_CLI_OPTIONS = (
@@ -104,6 +143,8 @@ __all__ = [
     "ALL_CLI_SURFACES",
     "BACKEND_CHOICES",
     "DEFAULT_EMIT_LL",
+    "DEFAULT_PUBLIC_BACKEND",
+    "cli_input_path",
     "DIAGNOSTIC_FORMAT_CHOICES",
     "INTENDED_CLI_DIVERGENCES",
     "IR_SCAFFOLD_CHOICES",

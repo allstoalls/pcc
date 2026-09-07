@@ -467,11 +467,13 @@ class BuiltinTypeAttrLoweringMixin:
         if name == "bytes":
             if len(expr.args) == 1:
                 src = self._emit_as_object(expr.args[0])
-                return self.builder.call(
+                result = self.builder.call(
                     self.runtime["py_bytes_from_obj"],
                     [src],
                     name=self._fresh("bytes.from"),
                 )
+                self._emit_post_call_err_check(getattr(expr, "span", None))
+                return result
             if not expr.args:
                 return self.builder.call(
                     self.runtime["py_bytes_new"],
@@ -509,11 +511,13 @@ class BuiltinTypeAttrLoweringMixin:
                 )
         if name == "bytearray" and len(expr.args) == 1:
             src = self._emit_as_object(expr.args[0])
-            return self.builder.call(
+            result = self.builder.call(
                 self.runtime["py_bytearray_from_obj"],
                 [src],
                 name=self._fresh("bytearray.from"),
             )
+            self._emit_post_call_err_check(getattr(expr, "span", None))
+            return result
         if name == "bytearray" and not expr.args:
             # bytearray() -> empty bytearray, built from an empty bytes object
             # (mirrors the bytes() 0-arg path above). Without this the 0-arg

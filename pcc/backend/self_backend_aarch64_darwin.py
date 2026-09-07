@@ -44,6 +44,7 @@ from .self_backend_aarch64_darwin_flow import (
     plan_aarch64_canonical_error_fallthroughs,
 )
 from .self_backend_aarch64_darwin_memory import (
+    adjacent_gep_memory_address,
     emit_memory_instruction_by_id as _memory_emit_instruction,
 )
 from .self_backend_aarch64_darwin_mem import (
@@ -57,16 +58,22 @@ from .self_backend_aarch64_darwin_mem import (
 )
 from .self_backend_aarch64_darwin_symbols import (
     asm_symbol as _asm_symbol,
+    asm_symbol_prevalidated,
     block_label as _block_label,
 )
 from .self_backend_aarch64_darwin_prologue import (
     emit_function_prologue as _prologue_emit_function_prologue,
+)
+from .self_backend_aarch64_darwin_tail_calls import (
+    aarch64_tail_call_id_for_block,
+    plan_aarch64_tail_calls,
 )
 from .self_backend_aarch64_darwin_terminators import (
     emit_branch_terminator as _terms_emit_branch_terminator,
     emit_cond_branch_terminator as _terms_emit_cond_branch_terminator,
     emit_cond_branch_terminator_indexed as _terms_emit_cond_branch_terminator_indexed,
     emit_epilogue as _terms_emit_epilogue,
+    emit_tail_epilogue as _terms_emit_tail_epilogue,
     emit_inline_error_edge_indexed as _terms_emit_inline_error_edge_indexed,
     emit_inline_error_stub_indexed as _terms_emit_inline_error_stub_indexed,
     emit_switch_terminator as _terms_emit_switch_terminator,
@@ -117,6 +124,7 @@ from .self_backend_prepare import (
 from .self_backend_precise_stackmaps import (
     FunctionStackMapPlan,
     build_aarch64_stack_map_section,
+    build_function_stack_map_plan,
     build_stack_map_plans,
     render_aarch64_stack_map_section,
 )
@@ -635,6 +643,10 @@ def _emit_prepared_aarch64_darwin_lines_active(
         target=triple,
     )
     _MODULE_SYMBOLS = prepared.module_symbols
+    # Reused parsed modules must start from complete ordinary-call plans;
+    # eligibility is proved again for this target/optimization invocation.
+    for func in functions:
+        func.aarch64_tail_call_ids = []
     _emit_trace("stack map plans begin funcs=" + str(len(functions)))
     stack_map_plans = {
         plan.function_name: plan
@@ -663,6 +675,15 @@ def _emit_prepared_aarch64_darwin_lines_active(
             # allocator extends the delayed multiply operands through the
             # consumer and discards any plan whose stack fallback was reused.
             _emit_trace("func begin " + str(func.name))
+            plan_aarch64_tail_calls(func, stack_map_plans[func.name], enabled=optimize)
+            if func.aarch64_tail_call_ids:
+                previous_plan = stack_map_plans[func.name]
+                stack_map_plans[func.name] = build_function_stack_map_plan(
+                    func, globals_, target="aarch64-darwin",
+                    identity_name=_function_symbol(func.name),
+                )
+                if previous_plan.packed_records is not None:
+                    previous_plan.packed_records.close()
             plan_aarch64_madd_fusions(func, enabled=optimize)
             plan_aarch64_canonical_error_fallthroughs(
                 func,
@@ -731,13 +752,24 @@ def _emit_prepared_aarch64_darwin_lines_active(
         lines = _fold_forwarded_cset_branch(lines)
         lines = _fold_cset_zero_branch(lines)
         lines = _drop_dead_cset_branch_stores(lines)
-        lines = _thread_trampoline_branches(lines)
+        metadata_labels: set[str] = set()
+        for func in functions:
+            plan = stack_map_plans[func.name]
+            packed = plan.packed_records
+            if packed is not None:
+                exceptional_blocks = packed.exceptional_blocks
+            else:
+                exceptional_blocks = [record.exceptional_block for record in plan.records]
+            for exceptional_block in exceptional_blocks:
+                if exceptional_block:
+                    metadata_labels.add(_block_label(func.name, exceptional_block))
+        lines = _thread_trampoline_branches(lines, metadata_labels)
         lines = _fold_cond_branch_to_fallthrough(
             lines,
             cold_fallthrough_edges,
         )
         lines = _drop_fallthrough_uncond_branches(lines)
-        lines = _drop_unreferenced_empty_local_labels(lines)
+        lines = _drop_unreferenced_empty_local_labels(lines, metadata_labels)
     # Run after register allocation and every instruction-deleting peephole,
     # but before compact-unwind sizing.  Even with optimization disabled this
     # finalizer removes the source-semantics barrier pseudo-directives.
@@ -1752,7 +1784,9 @@ def _resolve_trampoline_target(
     return current
 
 
-def _thread_trampoline_branches(lines: list[str]) -> list[str]:
+def _thread_trampoline_branches(
+    lines: list[str], metadata_labels: set[str] | None = None,
+) -> list[str]:
     trampolines = _trampoline_targets(lines)
     if not trampolines:
         return lines
@@ -1799,6 +1833,8 @@ def _thread_trampoline_branches(lines: list[str]) -> list[str]:
         for target in [_branch_target(line)]
         if target is not None
     }
+    if metadata_labels is not None:
+        referenced.update(metadata_labels)
     out: list[str] = []
     index = 0
     while index < len(rewritten):
@@ -1928,13 +1964,17 @@ def _fold_cond_branch_to_fallthrough(
     return out
 
 
-def _drop_unreferenced_empty_local_labels(lines: list[str]) -> list[str]:
+def _drop_unreferenced_empty_local_labels(
+    lines: list[str], metadata_labels: set[str] | None = None,
+) -> list[str]:
     referenced = {
         target
         for line in lines
         for target in [_branch_target(line)]
         if target is not None
     }
+    if metadata_labels is not None:
+        referenced.update(metadata_labels)
     out: list[str] = []
     index = 0
     while index < len(lines):
@@ -2067,6 +2107,19 @@ def _emit_indexed_instruction_core(
     instruction_fact: CompilerInt4 = indexed_kernel.instruction_fact_by_id(
         instruction_id,
     )
+    pointer_override_ref = -1
+    pointer_override_type = -1
+    memory_offset = 0
+    if kind_id == PARSED_INSTRUCTION_KIND_GEP:
+        address: CompilerInt4 = adjacent_gep_memory_address(indexed_kernel, block_id, instruction_index)
+        if address.first >= 0:
+            return []
+    elif kind_id in (PARSED_INSTRUCTION_KIND_LOAD, PARSED_INSTRUCTION_KIND_STORE) and not is_volatile:
+        address: CompilerInt4 = adjacent_gep_memory_address(indexed_kernel, block_id, instruction_index - 1)
+        if address.first >= 0:
+            pointer_override_ref = address.second
+            pointer_override_type = address.third
+            memory_offset = address.fourth
     lines = _memory_emit_instruction(
         func,
         kind_id,
@@ -2076,6 +2129,9 @@ def _emit_indexed_instruction_core(
         block_id=block_id,
         instruction_index=instruction_index,
         indexed_dest_id=instruction_fact.first,
+        pointer_override_ref=pointer_override_ref,
+        pointer_override_type=pointer_override_type,
+        memory_offset=memory_offset,
     )
     if lines is None:
         lines = _compute_emit_instruction(
@@ -2275,6 +2331,13 @@ def _emit_indexed_terminator_core(
     header: CompilerInt4 = kernel.terminator_header(block_id)
     span: CompilerInt4 = kernel.terminator_span(block_id)
     kind_id = header.first
+    if kind_id in (PARSED_INSTRUCTION_KIND_RET, PARSED_INSTRUCTION_KIND_RET_VOID):
+        tail_call_id = aarch64_tail_call_id_for_block(func, block_id)
+        if tail_call_id >= 0:
+            tail_header: CompilerInt4 = kernel.call_header(tail_call_id)
+            return _terms_emit_tail_epilogue(
+                func, asm_symbol_prevalidated(kernel.call_texts[tail_header.second], _MODULE_SYMBOLS),
+            )
     if kind_id == PARSED_INSTRUCTION_KIND_RET:
         return _rets_emit_return_terminator_indexed(
             func,

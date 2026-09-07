@@ -10,7 +10,7 @@ work. **Read this page before proposing a fix**; if your idea is here,
 either cite new evidence that overturns the verdict or do not make the
 change. The linked investigation holds the measurement.
 
-629 verdicts across 129 investigations.
+634 verdicts across 133 investigations.
 
 ## [Investigation: backend-0 finalizer re-enters the tracked-object table lock](../investigations/backend0-finalizer-table-lock-reentrancy.md)
 
@@ -931,6 +931,15 @@ change. The linked investigation holds the measurement.
 - The first direct-method receiver patch regressed the raw per-module self-compile
 - The scalar valuebox object-boundary path regressed because the pcc-Python
 
+## [Investigation: self AArch64 spills block-local integer call results](../investigations/self-aarch64-call-result-spills.md)
+
+- No.1 allocate bounded integer call-result intervals [DENIED as a default]
+- DENIED as a default performance change — The initial candidate passed allocation tests but failed real application
+
+## [Investigation: self memory selection copies already allocated registers](../investigations/self-aarch64-memory-register-copies.md)
+
+- The first 42-run timing packet is **DENIED as throughput evidence**: another
+
 ## [Investigation: HEAD ad60403d drops the entry module's trailing `main()` call — every self-backend program ending in `main()` silently does nothing (exit 0, no output)](../investigations/self-backend-entry-main-call-dropped-exitcode-regression.md)
 
 - touched 2026-07-22 / 2026-08-01), so something recent regressed them.
@@ -947,6 +956,14 @@ change. The linked investigation holds the measurement.
 
 - No.2 Increase the 600-second per-stage timeout [DENIED]
 - DENIED — The isolated cold chain completes inside the existing limits. Raising the
+
+## [Investigation: native aggregate literal masks erase 64-bit vector lanes](../investigations/self-native-aggregate-literal-masks.md)
+
+- Update 2026-09-07 — mask hypothesis DENIED; integer-count constructors — The actual native serializer driver agrees with host pcc on individual i64
+
+## [Investigation: native trampoline threading corrupts retained branch strings](../investigations/self-native-trampoline-string-lifetime.md)
+
+- history was read end-to-end and its denied runtime guesses remain denied.
 
 ## [Investigation: sorted()/min()/max() ignore a custom __lt__ (no-libpython)](../investigations/sorted-min-max-custom-lt-not-used-no-libpython.md)
 

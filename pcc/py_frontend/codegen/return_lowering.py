@@ -98,6 +98,39 @@ class ReturnLoweringMixin:
     ) -> ir.Value:
         if getattr(self, "_suppress_borrowed_return_retain", False):
             return value
+        expr = stmt.value
+        if (
+            isinstance(value.type, ir.PointerType)
+            and value not in getattr(self, "_cpy_values", ())
+            and not self._value_is_owned_object(value)
+            and isinstance(expr, Name)
+            and not self._expr_returns_unsafe_raw_pointer(expr)
+            and expr.ident in getattr(self, "_owned_local_names", set())
+        ):
+            slot = self.env.get(expr.ident)
+            flag = None if slot is None else self._owned_local_flag_for(expr.ident, slot[0])
+            if flag is not None:
+                # A local may initially borrow a parameter and acquire an
+                # owner only on a conditional/loop path. Static membership
+                # in _owned_local_names does not prove this path owns it.
+                is_owned = self.builder.load(flag, name=self._fresh("ret.local.owned"))
+                owned_end = self.builder.block
+                retain_bb = self.current_function.append_basic_block(name=self._fresh("ret.local.borrowed"))
+                merge_bb = self.current_function.append_basic_block(name=self._fresh("ret.local.ready"))
+                self.builder.cbranch(is_owned, merge_bb, retain_bb)
+                self.builder.position_at_end(retain_bb)
+                retained = self._gc_retain(value, name=self._fresh("ret.local.retain"))
+                retained_end = self.builder.block
+                self.builder.branch(merge_bb)
+                self.builder.position_at_end(merge_bb)
+                result = self.builder.phi(value.type, name=self._fresh("ret.local.value"))
+                result.add_incoming(value, owned_end)
+                result.add_incoming(retained, retained_end)
+                self._note_owned_object_value(result)
+                return result
+            # A same-name local with different storage has no ownership
+            # proof from an old slot's flag. Treat its load as borrowed.
+            return self._gc_retain(value, name=self._fresh("ret.retain"))
         if not self._return_value_needs_retain(value, stmt):
             return value
         return self._gc_retain(value, name=self._fresh("ret.retain"))

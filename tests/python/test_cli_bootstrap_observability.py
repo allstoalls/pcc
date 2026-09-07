@@ -386,32 +386,21 @@ def test_bootstrap_cli_pytest_mode_honors_literal_skipif(monkeypatch, tmp_path):
     assert "test_skipped])" not in text
 
 
-def test_bootstrap_cli_c_delegation_uses_host_python_full_cli(monkeypatch):
+def test_bootstrap_cli_c_dispatch_uses_full_cli_in_process(monkeypatch):
     import pcc.cli_bootstrap as cli
+    import pcc.cli_core as core
 
     calls = []
 
-    def fake_run(cmd, *, check, timeout=None):
-        calls.append((cmd, check))
-        return subprocess.CompletedProcess(cmd, 0)
-
-    monkeypatch.delenv("PCC_HOST_PCC", raising=False)
-    monkeypatch.setenv("PCC_HOST_PYTHON", "/usr/bin/python3")
-    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+    monkeypatch.delenv("PCC_BACKEND", raising=False)
+    monkeypatch.setenv("PCC_HOST_PCC", "/usr/bin/false")
+    monkeypatch.setenv("PCC_HOST_PYTHON", "/usr/bin/false")
+    monkeypatch.setattr(core, "cli_main", lambda argv: calls.append(argv) or 0)
 
     status = cli.bootstrap_cli_main(["hello.c", "--cpp-arg=-DTEST=1"])
 
     assert status == 0
-    assert calls == [(
-        [
-            "/usr/bin/python3",
-            "-m",
-            "pcc.pcc",
-            "hello.c",
-            "--cpp-arg=-DTEST=1",
-        ],
-        True,
-    )]
+    assert calls == [["--backend", "self", "hello.c", "--cpp-arg=-DTEST=1"]]
 
 
 def test_bootstrap_cli_capi_symbol_tables_match_representative_symbols():

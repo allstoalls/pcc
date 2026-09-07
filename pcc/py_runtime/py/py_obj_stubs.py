@@ -51,6 +51,7 @@ from pcc.unsafe import (
     load_i64,
     load_f64,
     load_ptr,
+    memset,
     null,
     ptr_add,
     ptr_eq,
@@ -1447,10 +1448,49 @@ def py_bytes_partition(src, sep):
     return t
 
 
+def _bytes_from_integer_count(o, mutable: int):
+    count: int = 0
+    if _type_of(o) == PY_TYPE_BOOL:
+        if ptr_eq(o, global_load_ptr("py_True")) != 0:
+            count = 1
+    else:
+        overflow = stack_alloc(4)
+        store_i32(overflow, 0, 0)
+        count = py_int_to_i64(o, overflow)
+        if load_i32(overflow, 0) != 0:
+            py_raise_owned(py_exc_new(15, cstr("byte count does not fit in an index-sized integer")))
+            return null()
+    if count < 0:
+        py_raise_owned(py_exc_new(2, cstr("negative count")))
+        return null()
+    # Both byte layouts have a 24-byte header plus one trailing NUL. Do not
+    # let allocation-size arithmetic wrap before entering the allocator.
+    if count > 9223372036854775782:
+        error: int = 15
+        if mutable != 0:
+            error = 19
+        py_raise_owned(py_exc_new(error, cstr("byte count is too large")))
+        return null()
+    result = null()
+    if mutable != 0:
+        result = _bytearray_new_raw(null(), count)
+    else:
+        result = py_bytes_new(null(), count)
+    if ptr_is_null(result) != 0:
+        if py_err_occurred() == 0:
+            py_raise_owned(py_exc_new(19, cstr("byte allocation failed")))
+        return null()
+    if count > 0:
+        memset(ptr_add(result, 24), 0, count)
+    return result
+
+
 @c_abi_export("py_bytearray_from_obj")
 def py_bytearray_from_obj(o):
     if ptr_is_null(o):
         return _bytearray_new_raw(null(), 0)
+    if _type_of(o) == PY_TYPE_INT or _type_of(o) == PY_TYPE_BOOL:
+        return _bytes_from_integer_count(o, 1)
     if _type_of(o) == PY_TYPE_LIST or _type_of(o) == PY_TYPE_TUPLE:
         out = _bytes_from_int_sequence(o, 1)
         if not ptr_is_null(out):
@@ -1462,6 +1502,8 @@ def py_bytearray_from_obj(o):
 def py_bytes_from_obj(o):
     if ptr_is_null(o):
         return py_bytes_new(null(), 0)
+    if _type_of(o) == PY_TYPE_INT or _type_of(o) == PY_TYPE_BOOL:
+        return _bytes_from_integer_count(o, 0)
     if _type_of(o) == PY_TYPE_LIST or _type_of(o) == PY_TYPE_TUPLE:
         out = _bytes_from_int_sequence(o, 0)
         if not ptr_is_null(out):
@@ -2333,9 +2375,13 @@ def py_bytearray_setitem(o, k, v) -> int:
     i: int = py_int_value_i64(k)
     byte: int = py_int_value_i64(v)
     n: int = load_i64(o, 16)
+    if i < 0:
+        i = i + n
     if i < 0 or i >= n:
+        py_raise_owned(py_exc_new(5, cstr("bytearray index out of range")))
         return -1
     if byte < 0 or byte > 255:
+        py_raise_owned(py_exc_new(2, cstr("byte must be in range(0, 256)")))
         return -1
     store_i8(o, 24 + i, byte)
     return 0

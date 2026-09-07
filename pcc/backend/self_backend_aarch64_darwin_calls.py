@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 from . import BackendUnavailable
 from .self_backend_analysis import is_local_value_ref
 from .self_backend_aarch64_darwin_abi import (
@@ -29,6 +30,8 @@ from .self_backend_aarch64_darwin_materialize import (
     store_large_aggregate_literal_to_address,
 )
 from .self_backend_aarch64_darwin_mem import (
+    aggregate_copy_chunks,
+    chunk_store_op,
     emitted_addsub_immediate_line,
     emitted_addsub_register_line,
     emitted_compare_immediate_line,
@@ -669,6 +672,25 @@ def emit_memset_intrinsic_call(
         return _emit_aligned_simd_block_zero(
             func, dst_value, simd_size, module_symbols
         )
+    constant_size = const_int_from_value(size_value)
+    if (
+        fill_value == 0
+        and value_type.width == 8
+        and isvolatile_value in ("0", "false")
+        and constant_size is not None
+        and 0 <= constant_size <= 128
+    ):
+        if constant_size == 0:
+            return []
+        # Small normal-memory stores support alignment 1 on AArch64. Exact
+        # chunking preserves the end boundary; the volatile path stays out.
+        lines = materialize_pointer(func, dst_value, 9, module_symbols)
+        for offset, chunk_size in aggregate_copy_chunks(constant_size):
+            lines.append(emitted_memory_instruction_line(
+                chunk_store_op(chunk_size, stack=False),
+                "xzr" if chunk_size == 8 else "wzr", "x9", offset,
+            ))
+        return lines
     lines = materialize_pointer(func, dst_value, 0, module_symbols)
     lines.extend(materialize_value(func, value, value_type, 1, module_symbols))
     lines.extend(materialize_value(func, size_value, size_type, 2, module_symbols))
@@ -2154,6 +2176,12 @@ def emit_call_instruction_indexed(
                         module_symbols,
                     )
                 )
+    if call_id in func.aarch64_tail_call_ids:
+        if is_indirect or is_vararg_call or stack_size or ret_is_aggregate:
+            raise BackendUnavailable("invalid ABI in planned AArch64 scalar tail call")
+        # The return terminator owns the frame restore and sibling transfer.
+        # This jump has no ordinary post-call return PC in the current frame.
+        return lines
     if is_indirect:
         callee_value_id = kernel.value_id(callee)
         lines.extend(

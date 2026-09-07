@@ -805,12 +805,16 @@ def encode_emitted_load_store_parts(
         "stur",
         "ldurb",
         "sturb",
+        "ldurh",
+        "sturh",
     )
     scaled = mnemonic in (
         "ldr",
         "str",
         "ldrb",
         "strb",
+        "ldrh",
+        "strh",
     )
     if not unscaled and not scaled:
         raise EncodeError("unsupported emitted load/store mnemonic " + mnemonic)
@@ -1075,12 +1079,18 @@ def append_emitted_direct_call_record(
     records: CompilerIntArena,
     symbol_ids: dict[str, int],
     symbol_names: list[str],
+    link: bool = True,
 ) -> None:
-    """Publish one direct call from a producer-owned target spelling."""
+    """Publish a direct B/BL using the same Mach-O atom/relocation rule."""
+
+    base_word = 0x94000000 if link else 0x14000000
 
     if label_offsets is None:
         symbol_id = _emitted_symbol_id(target, symbol_ids, symbol_names)
-        records.append4(line_index, 0x94000000, STRUCTURED_FIXUP_CALL, symbol_id)
+        records.append4(
+            line_index, base_word,
+            STRUCTURED_FIXUP_CALL if link else STRUCTURED_FIXUP_BRANCH26, symbol_id,
+        )
         return
     target_offset = label_offsets.get(target)
     inline_call = target_offset is not None and (
@@ -1097,7 +1107,7 @@ def append_emitted_direct_call_record(
             raise EncodeError("direct emitted call target is out of range")
         records.append4(
             line_index,
-            0x94000000 | bits,
+            base_word | bits,
             STRUCTURED_RELOCATION_NONE,
             -1,
         )
@@ -1109,7 +1119,7 @@ def append_emitted_direct_call_record(
     )
     records.append4(
         line_index,
-        0x94000000,
+        base_word,
         STRUCTURED_RELOCATION_BRANCH26,
         symbol_id,
     )
@@ -1364,6 +1374,15 @@ def append_emitted_instruction_record(
         return EMITTED_INSTRUCTION_SCALAR
     if branch_prefix:
         target = line[len(branch_prefix) :]
+        if not target.startswith("L"):
+            try:
+                append_emitted_direct_call_record(
+                    target, line_index, text_offset, current_atom_offset,
+                    label_offsets, records, symbol_ids, symbol_names, False,
+                )
+            except EncodeError:
+                return EMITTED_INSTRUCTION_FALLBACK
+            return EMITTED_INSTRUCTION_SCALAR
         if label_offsets is None:
             records.append4(
                 line_index, branch_base, STRUCTURED_FIXUP_BRANCH26,
@@ -1434,6 +1453,13 @@ def append_emitted_instruction_record(
     elif line.startswith("  strb "):
         load_store_prefix = "  strb "
         load_store_size = 0
+    elif line.startswith("  ldrh "):
+        load_store_prefix = "  ldrh "
+        load_store_size = 1
+        load_store_opc = 1
+    elif line.startswith("  strh "):
+        load_store_prefix = "  strh "
+        load_store_size = 1
     if load_store_prefix:
         register_start = len(load_store_prefix)
         register_end = line.find(", ", register_start)
@@ -2522,9 +2548,12 @@ def _encode_text_entries_active(
                         STRUCTURED_FIXUP_BRANCH26, STRUCTURED_FIXUP_BRANCH19,
                     ):
                         width = -relocation_kind
-                        bits = resolve_branch(symbol, width, code_len)
-                        payload_index |= bits if width == 26 else bits << 5
-                        relocation_kind = STRUCTURED_RELOCATION_NONE
+                        if width == 26 and not symbol.startswith("L") and not same_atom(symbol, code_len):
+                            relocation_kind = STRUCTURED_RELOCATION_BRANCH26
+                        else:
+                            bits = resolve_branch(symbol, width, code_len)
+                            payload_index |= bits if width == 26 else bits << 5
+                            relocation_kind = STRUCTURED_RELOCATION_NONE
                     elif relocation_kind == STRUCTURED_FIXUP_CALL:
                         if (
                             symbol.startswith("L") and symbol in labels
@@ -2738,13 +2767,17 @@ def _encode_one(line, at, labels, resolve_branch, relocations, undefined,
         # SIMD/FP unscaled load/store is the integer encoding with V=1.
         return _enc_ldst_unscaled(size, load, rt, base, imm) | (1 << 26)
 
-    if mn in ("ldur", "stur", "ldurb", "sturb"):
+    if mn in ("ldur", "stur", "ldurb", "sturb", "ldurh", "sturh"):
         rt, t64 = _reg(ops[0])
         base, imm, mode = _mem(ops[1])
         if mode:
             raise EncodeError(f"{mn} with writeback not in the proven subset")
         if mn.endswith("b"):
             size, opc = 0, (1 if mn == "ldurb" else 0)
+        elif mn.endswith("h"):
+            if t64:
+                raise EncodeError("halfword memory instructions require a w register")
+            size, opc = 1, (1 if mn == "ldurh" else 0)
         else:
             size, opc = (3 if t64 else 2), (1 if mn == "ldur" else 0)
         return _enc_ldst_unscaled(size, opc, rt, base, imm)
@@ -2802,7 +2835,7 @@ def _encode_one(line, at, labels, resolve_branch, relocations, undefined,
         # SIMD/FP unsigned-offset load/store is the integer encoding with V=1.
         return _enc_ldst_unsigned(size, load, rt, base, imm) | (1 << 26)
 
-    if mn in ("ldr", "str", "ldrb", "strb"):
+    if mn in ("ldr", "str", "ldrb", "strb", "ldrh", "strh"):
         rt, t64 = _reg(ops[0])
         memop = ops[1]
         if "@GOTPAGEOFF" in memop:
@@ -2821,6 +2854,10 @@ def _encode_one(line, at, labels, resolve_branch, relocations, undefined,
             raise EncodeError(f"{mn} with writeback not in the proven subset")
         if mn.endswith("b"):
             size, opc = 0, (1 if mn == "ldrb" else 0)
+        elif mn.endswith("h"):
+            if t64:
+                raise EncodeError("halfword memory instructions require a w register")
+            size, opc = 1, (1 if mn == "ldrh" else 0)
         else:
             size, opc = (3 if t64 else 2), (1 if mn == "ldr" else 0)
         return _enc_ldst_unsigned(size, opc, rt, base, imm)
@@ -2842,26 +2879,21 @@ def _encode_one(line, at, labels, resolve_branch, relocations, undefined,
             return _enc_ldstp(load, "pre", rt, rt2, base, imm, t64)
         return _enc_ldstp(load, "signed", rt, rt2, base, imm, t64)
 
-    if mn == "b":
+    if mn == "b" or mn == "bl":
         target = ops[0]
-        if _is_symbol(target) and target not in labels:
-            raise EncodeError(f"b to external symbol {target!r} not proven")
-        return 0x14000000 | resolve_branch(target, 26, at)
-
-    if mn == "bl":
-        target = ops[0]
-        # Only assembler-local (L-prefixed) labels resolve inline. A call to
-        # any real symbol gets a BRANCH26 relocation even when the target is
-        # defined in the same file: .subsections_via_symbols lets the linker
-        # reorder/dead-strip per-symbol subsections, so the offset cannot be
-        # baked in (verified against as(1) on a same-file bl).
+        base_word = 0x14000000 if mn == "b" else 0x94000000
+        # A transfer to another atom needs a relocation even when defined in
+        # this input; the linker can reorder symbol subsections. Local labels
+        # and self-recursion remain relative within their current atom.
         if (target.startswith("L") and target in labels) or same_atom(target, at):
-            return 0x94000000 | resolve_branch(target, 26, at)
+            return base_word | resolve_branch(target, 26, at)
+        if mn == "b" and target.startswith("L"):
+            return base_word | resolve_branch(target, 26, at)
         if target not in labels:
             undefined.add(target)
         relocations.append(Relocation(
             at, target, spec.ARM64_RELOC_BRANCH26, pcrel=True))
-        return 0x94000000
+        return base_word
 
     if mn.startswith("b.") and len(mn) == 4:
         return 0x54000000 | (resolve_branch(ops[0], 19, at) << 5) | _cond(mn[2:])

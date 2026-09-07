@@ -228,6 +228,34 @@ static int bytes_concat_operand(PyObject *o) {
     return tag == PY_TYPE_BYTES || tag == PY_TYPE_BYTEARRAY;
 }
 
+static PyObject *bytes_from_integer_count(PyObject *o, int mutable) {
+    int overflow = 0;
+    int64_t n = py_type_of(o) == PY_TYPE_BOOL
+        ? (o == py_True ? 1 : 0) : py_int_to_i64(o, &overflow);
+    if (overflow) {
+        py_raise_owned(py_exc_new(PY_EXC_OVERFLOWERROR,
+            "byte count does not fit in an index-sized integer"));
+        return NULL;
+    }
+    if (n < 0) {
+        py_raise_owned(py_exc_new(PY_EXC_VALUEERROR, "negative count"));
+        return NULL;
+    }
+    if (n > INT64_MAX - (int64_t)sizeof(PyBytesObject) - 1) {
+        py_raise_owned(py_exc_new(mutable ? PY_EXC_MEMORYERROR : PY_EXC_OVERFLOWERROR,
+            "byte count is too large"));
+        return NULL;
+    }
+    PyObject *result = mutable ? bytearray_new_raw(NULL, n) : py_bytes_new(NULL, n);
+    if (result == NULL) {
+        if (!py_err_occurred())
+            py_raise_owned(py_exc_new(PY_EXC_MEMORYERROR, "byte allocation failed"));
+        return NULL;
+    }
+    if (n > 0) memset(((PyBytesObject *)result)->data, 0, (size_t)n);
+    return result;
+}
+
 PyObject *py_bytearray_from_obj(PyObject *o) {
     if (o == NULL) {
         return bytearray_new_raw(NULL, 0);
@@ -235,6 +263,7 @@ PyObject *py_bytearray_from_obj(PyObject *o) {
     int64_t n = 0;
     const char *data = bytes_data(o, &n);
     int32_t tag = py_type_of(o);
+    if (tag == PY_TYPE_INT || tag == PY_TYPE_BOOL) return bytes_from_integer_count(o, 1);
     if (tag == PY_TYPE_LIST || tag == PY_TYPE_TUPLE) {
         return bytes_from_int_sequence(o, 1);
     }
@@ -248,6 +277,7 @@ PyObject *py_bytes_from_obj(PyObject *o) {
     int64_t n = 0;
     const char *data = bytes_data(o, &n);
     int32_t tag = py_type_of(o);
+    if (tag == PY_TYPE_INT || tag == PY_TYPE_BOOL) return bytes_from_integer_count(o, 0);
     if (tag == PY_TYPE_LIST || tag == PY_TYPE_TUPLE) {
         return bytes_from_int_sequence(o, 0);
     }
@@ -1443,7 +1473,15 @@ int64_t py_bytearray_setitem(PyObject *o, PyObject *k, PyObject *v) {
     int64_t i = as_index(k);
     int64_t byte = py_int_value_i64(v);
     PyByteArrayObject *b = (PyByteArrayObject *)o;
-    if (i < 0 || i >= b->byte_len || byte < 0 || byte > 255) return -1;
+    if (i < 0) i += b->byte_len;
+    if (i < 0 || i >= b->byte_len) {
+        py_raise_owned(py_exc_new(PY_EXC_INDEXERROR, "bytearray index out of range"));
+        return -1;
+    }
+    if (byte < 0 || byte > 255) {
+        py_raise_owned(py_exc_new(PY_EXC_VALUEERROR, "byte must be in range(0, 256)"));
+        return -1;
+    }
     b->data[i] = (char)(unsigned char)byte;
     return 0;
 }

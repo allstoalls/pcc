@@ -144,6 +144,76 @@ entry:
     assert "[x29, #-" in asm
 
 
+def test_aarch64_call_result_live_across_a_later_call_stays_spilled():
+    func = _prepared_function(_TRIPLE + '''
+declare i64 @opaque(i64)
+define i64 @two_calls(i64 %arg) {
+entry:
+  %first = call i64 @opaque(i64 %arg)
+  %second = call i64 @opaque(i64 7)
+  %result = add i64 %first, %second
+  ret i64 %result
+}
+''')
+    allocate_aarch64_block_registers(func)
+    assert _register_index(func, "first") is None
+    assert _register_index(func, "second") is None
+
+
+def test_aarch64_call_result_executes_through_indexed_emission(tmp_path):
+    import platform
+    import subprocess
+    import sys
+    import pytest
+    from pcc.backend.self_backend_aarch64_darwin import emit_aarch64_darwin_indexed_transport
+    from pcc.backend.self_backend_parse import parse_self_backend_module
+    from pcc.backend.native_object import NativeObject
+    from pcc.backend.macho_exec import link_executable
+    from pcc.backend.arm64_asm_driver import assemble_file
+
+    if sys.platform != "darwin" or platform.machine() != "arm64":
+        pytest.skip("AArch64 Darwin execution")
+    source = _TRIPLE + '''
+declare i64 @opaque(i64)
+define i64 @two_calls(i64 %arg) {
+entry:
+  %first = call i64 @opaque(i64 %arg)
+  %second = call i64 @opaque(i64 7)
+  %result = add i64 %first, %second
+  ret i64 %result
+}
+define i32 @main() {
+entry:
+  %actual = call i64 @two_calls(i64 11)
+  %bad = icmp ne i64 %actual, 66
+  %status = zext i1 %bad to i32
+  ret i32 %status
+}
+'''
+    # Force the callee's scratch register to disagree with its return value;
+    # two self-emitted functions could accidentally leave the result in x1.
+    helper_sections, helper_undefined = assemble_file('''
+.section __TEXT,__text,regular,pure_instructions
+.globl _opaque
+_opaque:
+  movz x1, #99
+  movz x0, #33
+  ret
+''')
+    helper = NativeObject.from_sections(helper_sections, undefined=helper_undefined)
+    for optimize in (False, True):
+        module = parse_self_backend_module(source)
+        transport = emit_aarch64_darwin_indexed_transport(module, optimize=optimize)
+        sections, undefined = transport.assemble_sections()
+        executable = tmp_path / ("call-results-" + str(optimize))
+        executable.write_bytes(link_executable([NativeObject.from_sections(sections, undefined=undefined), helper]))
+        executable.chmod(0o755)
+        if transport.encoded_line_records is not None:
+            transport.encoded_line_records.close()
+        result = subprocess.run([str(executable)], capture_output=True, timeout=10)
+        assert result.returncode == 0, result.stderr
+
+
 def test_aarch64_linear_scan_spills_farthest_interval_under_pressure():
     ir_text = _TRIPLE + """
 define i64 @pressure(i64 %arg) {

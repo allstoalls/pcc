@@ -31,6 +31,8 @@ Any arguments after PATH (or after --) are passed to the compiled program.
 Options:
   -h, --help                Show this help message and exit.
   env info [--json]         Inspect the selected pcc package environment.
+  inspect PATH [--json]     Inspect a native artifact without executing it.
+  bindgen HEADER [-o PATH]  Generate extern declarations from expanded C prototypes.
   -m MODULE [ARGS...]       Run a host Python module through pcc's safe module shim.
   --python-libpython MODE   off (default), auto, or on for Python fallback linkage.
   --python-library          For .py inputs, emit a library module without @main.
@@ -96,7 +98,7 @@ def _normalize_pass_names(values):
     return names
 
 
-_PY_RUN_CACHE_VERSION = "pcc-py-run-cache-v46"
+_PY_RUN_CACHE_VERSION = "pcc-py-run-cache-v47"
 
 
 def _path_list_sep() -> str:
@@ -183,29 +185,37 @@ def _python_run_cache_key(
     for link_arg in _copy_seq(link_args):
         h = _fnv1a_update_u64(h, "link-arg:" + str(link_arg))
         h = _fnv1a_update_u64(h, "\0")
-    seen = []
+    # Identity, not content -- kept in step with the pcc1 copy in
+    # cli_bootstrap.py by hand (the duplication is deliberate: importing the
+    # shared helper adds 47 libpython fallbacks to the bootstrap closure, see
+    # AUD-P2-CLI-SHARED-HELPER-DUPLICATION).  Hashing every byte of every
+    # ``.py`` file under every package-site root cost 29.3 s on CPython for a
+    # 13302-file / 236 MB root set and made compiled ``pcc1 app.py`` look
+    # hung.  A run cache only has to notice that a source changed, and an edit
+    # always moves ``st_mtime_ns``.
+    seen = {}
+    prefixes = []
+    for root2 in roots:
+        prefix = os.path.abspath(root2)
+        if not prefix.endswith(os.sep):
+            prefix += os.sep
+        prefixes.append(prefix)
     for root in roots:
         for path in _iter_py_sources_under(root):
             if path in seen:
                 continue
-            seen.append(path)
-            try:
-                with open(path, "rb") as f:
-                    content = f.read()
-            except OSError:
-                h = _fnv1a_update_u64(h, "missing:" + path)
-                continue
+            seen[path] = True
             rel = path
-            for root2 in roots:
-                prefix = os.path.abspath(root2)
-                if not prefix.endswith(os.sep):
-                    prefix += os.sep
+            for prefix in prefixes:
                 if path.startswith(prefix):
                     rel = path[len(prefix) :]
                     break
             h = _fnv1a_update_u64(h, rel)
-            h = _fnv1a_update_u64(h, str(len(content)))
-            h = _fnv1a_update_bytes_u64(h, content)
+            try:
+                h = _fnv1a_update_u64(h, str(os.path.getsize(path)))
+                h = _fnv1a_update_u64(h, str(os.path.getmtime(path)))
+            except OSError:
+                h = _fnv1a_update_u64(h, "missing")
             h = _fnv1a_update_u64(h, "\0")
     return format(h, "016x")
 
@@ -1491,6 +1501,14 @@ def execute_cli(
 
 def _cli_main_impl(argv=None) -> int:
     raw_argv = _normalized_sys_argv() if argv is None else _copy_seq(argv)
+    if raw_argv and raw_argv[0] == "inspect":
+        from pcc.artifact_inspect import main as inspect_main
+
+        return inspect_main(raw_argv[1:])
+    if raw_argv and raw_argv[0] == "bindgen":
+        from pcc.bindgen import main as bindgen_main
+
+        return bindgen_main(raw_argv[1:])
     if raw_argv and raw_argv[0] == "env":
         return _run_environment_request(raw_argv)
     if raw_argv and raw_argv[0] == "sync":

@@ -84,6 +84,41 @@ merge:
     )
 
 
+def _parallel_edge_phi(incoming: str, terminator: str) -> str:
+    return _TRIPLE + """
+define i64 @parallel_edges(i64 %tag) {
+entry:
+  """ + terminator + """
+fallback:
+  br label %merge
+merge:
+  %value = phi i64 """ + incoming + """
+  ret i64 %value
+}
+"""
+
+
+@pytest.mark.parametrize("terminator,incoming", [
+    ("switch i64 %tag, label %fallback [ i64 1, label %merge i64 2, label %merge ]",
+     "[ 0, %fallback ], [ 7, %entry ], [ 7, %entry ]"),
+    ("br i1 true, label %merge, label %merge",
+     "[ 0, %fallback ], [ 7, %entry ], [ 7, %entry ]"),
+])
+def test_self_ir_verifier_accepts_equal_phi_values_on_parallel_edges(terminator, incoming):
+    assert "_parallel_edges:" in emit_self_asm(_parallel_edge_phi(incoming, terminator))
+
+
+@pytest.mark.parametrize("incoming", [
+    "[ 0, %fallback ], [ 7, %entry ]",
+    "[ 0, %fallback ], [ 7, %entry ], [ 7, %entry ], [ 7, %entry ]",
+    "[ 0, %fallback ], [ 7, %entry ], [ 8, %entry ]",
+])
+def test_self_ir_verifier_rejects_parallel_edge_phi_count_or_value_mismatch(incoming):
+    terminator = "switch i64 %tag, label %fallback [ i64 1, label %merge i64 2, label %merge ]"
+    with pytest.raises(BackendUnavailable, match=r"self IR verifier \[phi-predecessors\]"):
+        emit_self_asm(_parallel_edge_phi(incoming, terminator))
+
+
 def test_self_ir_verifier_rejects_swapped_phi_value_edges():
     _rejects(
         """

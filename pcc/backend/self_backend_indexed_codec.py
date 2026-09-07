@@ -497,6 +497,7 @@ def _seed_from_wire(value) -> tuple[ParsedFunction, tuple[tuple[str, int], ...]]
         indexed_kernel=None,
         indexed_seed=seed,
         indexed_slot_projection=False,
+        aarch64_tail_call_ids=[],
     )
     return function, tuple(arena_inventory)
 

@@ -59,16 +59,17 @@ def emit_binop(op: str, value_type: TypeDesc) -> list[str]:
 
 
 def emit_binop_indexed(
-    kernel: IndexedFunctionKernel, op: str, type_id: int
+    kernel: IndexedFunctionKernel, op: str, type_id: int,
+    lhs_register: int = 9, rhs_register: int = 10, result_register: int = 11,
 ) -> list[str]:
     header: CompilerInt4 = kernel.type_header(type_id)
     if header.first != TYPE_KIND_INT:
         raise BackendUnavailable(
             f"self backend only supports integer binops, got type_id={type_id}"
         )
-    r9 = reg_name_indexed(kernel, type_id, 9)
-    r10 = reg_name_indexed(kernel, type_id, 10)
-    r11 = reg_name_indexed(kernel, type_id, 11)
+    r9 = reg_name_indexed(kernel, type_id, lhs_register)
+    r10 = reg_name_indexed(kernel, type_id, rhs_register)
+    r11 = reg_name_indexed(kernel, type_id, result_register)
     if op == "add" or op == "sub":
         return [emitted_addsub_register_line(op, r11, r9, r10)]
     mapping = {
@@ -82,15 +83,17 @@ def emit_binop_indexed(
         "lshr": f"  lsrv {r11}, {r9}, {r10}",
         "ashr": f"  asrv {r11}, {r9}, {r10}",
     }
+    # The quotient cannot overwrite either input before MSUB consumes it.
+    quotient = reg_name_indexed(kernel, type_id, 11)
     if op == "srem":
         return [
-            f"  sdiv {r11}, {r9}, {r10}",
-            f"  msub {r11}, {r11}, {r10}, {r9}",
+            f"  sdiv {quotient}, {r9}, {r10}",
+            f"  msub {r11}, {quotient}, {r10}, {r9}",
         ]
     if op == "urem":
         return [
-            f"  udiv {r11}, {r9}, {r10}",
-            f"  msub {r11}, {r11}, {r10}, {r9}",
+            f"  udiv {quotient}, {r9}, {r10}",
+            f"  msub {r11}, {quotient}, {r10}, {r9}",
         ]
     if op not in mapping:
         raise BackendUnavailable(f"self backend does not support binop {op!r}")

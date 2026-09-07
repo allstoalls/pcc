@@ -560,6 +560,26 @@ def allocate_aarch64_block_registers(func: ParsedFunction) -> None:
     ]
 
 
+def allocated_scalar_register_indexed(
+    kernel: IndexedFunctionKernel, value_id: int, type_id: int,
+) -> int:
+    """Return a type-checked existing scalar assignment, without projecting IR."""
+    if value_id < 0 or kernel.alloca_offset(value_id) >= 0:
+        return -1
+    header: CompilerInt4 = kernel.type_header(type_id)
+    if header.first != TYPE_KIND_PTR and not (
+        header.first == TYPE_KIND_INT and header.second in (1, 8, 16, 32, 64)
+    ):
+        return -1
+    register_index = kernel.value_register(value_id)
+    if register_index is None or register_index not in _REGISTER_POOL:
+        return -1
+    recorded_type_id = kernel.value_type_id(value_id)
+    if recorded_type_id < 0 or not _register_type_ids_match(kernel, recorded_type_id, type_id):
+        return -1
+    return register_index
+
+
 def allocated_register_name(
     func: ParsedFunction, value_name: str, value_type: TypeDesc
 ) -> str | None:
@@ -636,6 +656,7 @@ def commit_allocated_scalar_result_indexed(
 
 __all__ = [
     "allocate_aarch64_block_registers",
+    "allocated_scalar_register_indexed",
     "allocated_register_name",
     "commit_allocated_scalar_result",
     "commit_allocated_scalar_result_indexed",

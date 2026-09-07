@@ -55,6 +55,7 @@ def emit_indexed_module_file(
     sidecar_path: str,
     output_path: str,
     artifact_kind: str,
+    optimize: bool = False,
 ) -> None:
     """Decode one frozen pre-stackprep module and atomically publish its PCO."""
 
@@ -75,7 +76,7 @@ def emit_indexed_module_file(
     if artifact_kind == "ASM":
         assembly = emit_aarch64_darwin_indexed_module(
             module,
-            optimize=False,
+            optimize=optimize,
         )
         _debug_phase("assembly-complete")
         try:
@@ -92,7 +93,7 @@ def emit_indexed_module_file(
         return
     transport = emit_aarch64_darwin_indexed_transport(
         module,
-        optimize=False,
+        optimize=optimize,
         structured_instructions=True,
     )
     _debug_phase("transport-complete")

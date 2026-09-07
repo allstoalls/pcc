@@ -1335,6 +1335,8 @@ class ParsedFunction:
     # diagnostic shapes remain in the seed's explicit cold side table.
     indexed_seed: object | None = None
     indexed_slot_projection: bool = False
+    # Target-owned finite sibling-call plan; never serialized as an IR promise.
+    aarch64_tail_call_ids: list[int] = field(default_factory=list)
 
 
 def parsed_module_instruction_arena_profile(module: ParsedModule) -> dict[str, int]:

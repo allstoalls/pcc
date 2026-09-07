@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 import sys
 
@@ -1683,6 +1684,82 @@ entry:
     assert "lea r10, [rbp -" in asm_text
     assert "lea r11, [rbp -" in asm_text
     assert "mov QWORD PTR [r11 + 24], rax" in asm_text
+
+
+@pytest.mark.parametrize("size", [0, 1, 7, 8, 15, 24, 56, 128])
+def test_self_backend_aarch64_inlines_small_unaligned_zero_memset(size):
+    source = f'''
+target triple = "arm64-apple-darwin23.6.0"
+declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)
+define void @clear(ptr %dst) {{
+entry:
+  call void @llvm.memset.p0.i64(ptr align 1 %dst, i8 0, i64 {size}, i1 false)
+  ret void
+}}
+'''
+    assembly = emit_aarch64_darwin_asm(source, optimize=False)
+    assert "bl _memset" not in assembly
+
+
+@pytest.mark.parametrize("size,fill,volatile", [
+    (129, 0, "false"), (24, 1, "false"), (24, 0, "true"),
+])
+def test_self_backend_aarch64_keeps_non_small_zero_memset_fallback(size, fill, volatile):
+    source = f'''
+target triple = "arm64-apple-darwin23.6.0"
+declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)
+define void @clear(ptr %dst) {{
+entry:
+  call void @llvm.memset.p0.i64(ptr align 1 %dst, i8 {fill}, i64 {size}, i1 {volatile})
+  ret void
+}}
+'''
+    assert "bl _memset" in emit_aarch64_darwin_asm(source, optimize=False)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Darwin executable")
+@pytest.mark.parametrize("optimize", [False, True])
+def test_self_backend_small_zero_memset_preserves_every_byte_and_guards(tmp_path, optimize):
+    import platform
+    from pcc.backend.self_backend_aarch64_darwin import emit_aarch64_darwin_indexed_transport
+    from pcc.backend.native_object import NativeObject
+    from pcc.backend.macho_exec import link_executable
+
+    if platform.machine() != "arm64":
+        pytest.skip("AArch64 execution")
+    declarations = ['target triple = "arm64-apple-darwin23.6.0"',
+                    'declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)']
+    body = []
+    status = "false"
+    for size in (0, 1, 7, 8, 15, 24, 56, 128):
+        declarations.append(f'@buffer{size} = global [{size + 2} x i8] c"' + r'\FF' * (size + 2) + '", align 16')
+        body.extend([
+            f'  %start{size} = getelementptr i8, ptr @buffer{size}, i64 1',
+            f'  call void @llvm.memset.p0.i64(ptr align 1 %start{size}, i8 0, i64 {size}, i1 false)',
+        ])
+        for offset in range(size + 2):
+            name = f"s{size}b{offset}"
+            expected = -1 if offset in (0, size + 1) else 0
+            body.extend([
+                f'  %{name}.address = getelementptr i8, ptr @buffer{size}, i64 {offset}',
+                f'  %{name}.byte = load i8, ptr %{name}.address, align 1',
+                f'  %{name}.bad = icmp ne i8 %{name}.byte, {expected}',
+                f'  %{name}.status = or i1 {status}, %{name}.bad',
+            ])
+            status = f"%{name}.status"
+    body.extend([f'  %result = zext i1 {status} to i32', '  ret i32 %result'])
+    source = "\n".join(declarations + ['define i32 @main() {', 'entry:', *body, '}'])
+    transport = emit_aarch64_darwin_indexed_transport(parse_self_backend_module(source), optimize=optimize)
+    sections, undefined = transport.assemble_sections()
+    assert "_memset" not in undefined
+    image = link_executable([NativeObject.from_sections(sections, undefined=undefined)])
+    if transport.encoded_line_records is not None:
+        transport.encoded_line_records.close()
+    executable = tmp_path / "memset-boundaries"
+    executable.write_bytes(image)
+    executable.chmod(0o755)
+    result = subprocess.run([str(executable)], capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr
 
 
 def test_self_backend_x86_64_linux_lowers_constant_memset_intrinsic_subset():
@@ -6933,7 +7010,7 @@ def test_self_backend_emits_i32_arg_arithmetic_and_call(tmp_path):
 
     asm_text = asm_path.read_text(encoding="utf-8")
     assert "_add:" in asm_text
-    assert "add w11, w9, w10" in asm_text
+    assert re.search(r"add w\d+, w9, w10", asm_text)
     assert "bl _add" in asm_text
 
     run = _assemble_and_run(asm_path, tmp_path)

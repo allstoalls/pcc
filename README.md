@@ -210,6 +210,54 @@ NumPy compatibility; see their separate validation boundaries below.
 
 ## Quick Start
 
+### Python library and core inspection tools (P1, in progress)
+
+Native pcc1 self-hosting and five-GC correctness/performance remain P0.
+CPython-callable public APIs and ecosystem tooling are P1. The product contract
+is that CPython can use pcc's real capabilities through `import pcc`, including
+owned native execution where needed; importability alone is not execution proof.
+The complete embedding interface and prebuilt-wheel release coverage remain
+unfinished.
+
+The first core tools are usable from host CPython in this checkout:
+
+```python
+import pcc
+
+report = pcc.inspect_artifact("./app")
+bindings = pcc.generate_bindings(
+    "int abs(int value);",
+    target="arm64-apple-darwin",
+)
+```
+
+```bash
+pcc inspect ./app --json
+pcc bindgen expanded_api.h -o bindings.py --target arm64-apple-darwin
+```
+
+Inspection reads thin little-endian Mach-O64 files and the existing pcc
+ELF64 x86-64 object/static-executable subset without running platform tools or
+the inspected artifact. It reports declared load dependencies, not transitive
+dependencies, runtime `dlopen`, or build ownership. Build provenance is reported
+as unknown. Dynamic ELF/PIE and universal Mach-O are not yet supported.
+
+Binding generation uses the native C parser for expanded LP64 prototypes,
+scalar typedefs and raw pointers. It rejects preprocessing directives,
+aggregate values, callbacks, ambiguous prototypes and existing output files.
+Generated `pcc.extern` declarations are compiler inputs; their C functions are
+not automatically CPython-callable. Native loading and marshalling belong to
+the separate embedding interface.
+
+Matching `pcc1 inspect` / `pcc1 bindgen` dispatch is present in source and uses
+the native module runner, with no new host delegation. It is **not yet native
+qualified**: an actual `-o` inspection probe with the installed historical pcc1
+fails while compiling the imported ELF implementation (bytearray slice assignment).
+Do not treat emit-only success, dispatch tests, or host API tests as native
+completion. Track [inspect #195](https://github.com/allstoalls/pcc/issues/195),
+[bindgen #196](https://github.com/allstoalls/pcc/issues/196), and
+[embedding #197](https://github.com/allstoalls/pcc/issues/197).
+
 ### Compile C
 
 ```bash

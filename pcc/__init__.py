@@ -8,6 +8,8 @@ evaluator / llvmlite stack into the process.
 from __future__ import annotations
 
 __all__ = [
+    "inspect_artifact",
+    "generate_bindings",
     "module",
     "build",
     "BuildArtifact",
@@ -25,6 +27,14 @@ __all__ = [
 
 
 def __getattr__(name: str):
+    if name == "inspect_artifact":
+        from .artifact_inspect import inspect_artifact
+
+        return inspect_artifact
+    if name == "generate_bindings":
+        from .bindgen import generate_bindings
+
+        return generate_bindings
     if name == "i64" or name == "u64":
         # Public annotation markers for explicit fixed-width machine lanes.
         # They remain ordinary ``int`` at host-Python runtime; the pcc type
