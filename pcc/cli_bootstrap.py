@@ -10402,7 +10402,31 @@ def _should_delegate_to_host_cli(argv) -> bool:
 
 
 def _run_c_cli(argv) -> int:
-    from pcc.cli_core import cli_main
+    # The C driver lives in pcc.cli_core, and dispatch stays in-process so the
+    # three entrypoints keep one set of semantics.  The import is resolved by
+    # name rather than written as `from pcc.cli_core import ...` on purpose:
+    # pcc/__main__.py is both the `python -m pcc` entry and the module the
+    # bootstrap compiles into pcc1, so a static import here puts cli_core's
+    # whole transitive closure -- the C frontend, packaging and llvm_capi --
+    # into the pcc1 source closure.  Eight of those modules do not compile
+    # under the self backend today (ir.IRBuilder scaffold arity, iterable
+    # splat ordering, ByteArrayType slice assignment, ExternFn assignment,
+    # Path.read_text(errors=), a missing codegen argument, isinstance on a
+    # BinOp, and a missing diagnostics argument), so a static import fails
+    # stage1 outright.  Until they compile, a native stage reports an
+    # unimplemented capability instead of silently changing execution owner.
+    import importlib
+
+    try:
+        cli_core = importlib.import_module("pcc.cli_core")
+    except ImportError:
+        sys.stderr.write(
+            "Error: PCC-CPY-UNSUPPORTED-L3-TOOLING-C-DRIVER: the C compilation "
+            "driver is not compiled into this stage; run the same command with "
+            "the host pcc\n"
+        )
+        return 2
+    cli_main = cli_core.cli_main
 
     backend = os.environ.get("PCC_BACKEND", "") or DEFAULT_PUBLIC_BACKEND
     forwarded = ["--backend", backend]

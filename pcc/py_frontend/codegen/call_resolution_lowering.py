@@ -623,13 +623,29 @@ class CallResolutionLoweringMixin:
                     )
                     continue
                 if not formal.has_default:
+                    # Name the formals and which of them the callee signature
+                    # says carry defaults.  Without this the message says only
+                    # "missing required argument", which cannot distinguish a
+                    # genuine caller mistake from a signature that lost a
+                    # default on the way in (a dataclass
+                    # `field(default_factory=...)` crossing a module boundary
+                    # is the case this caught).
+                    shape = ",".join(
+                        (f.name or "?")
+                        + ("=" if f.has_default else "")
+                        + ("<" + type(f.default).__name__ + ">"
+                           if f.default is not None else "<none>")
+                        for f in formals
+                    )
+                    supplied = ",".join(str(k) for k, _ in kwargs_pairs)
                     raise L1CodegenError(
                         f"missing required argument {formal.name!r} "
                         f"(positional={len(positional)}, "
                         f"raw_positional={raw_positional_len}, "
                         f"raw_first={raw_first_kind}, "
                         f"kwargs={len(kwargs_pairs)}, "
-                        f"formals={len(formals)})"
+                        f"formals={len(formals)}; "
+                        f"signature={shape}; supplied={supplied})"
                     )
                 if formal.default is None:
                     resolved[i] = NoneLit(

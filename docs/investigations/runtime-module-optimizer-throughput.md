@@ -653,3 +653,100 @@ and recompiling reuses the cached objects, so the archive silently keeps the
 previous pass mode: the first attempt at the candidate arm "rebuilt" in 3
 seconds and produced the control's IR.  Wiping `build_py/*.o` was required.
 The pass mode belongs in the object identity alongside `codegen_checksum`.
+
+## Update: self versus LLVM on the gateway, one variable (2026-09-08)
+
+The earlier arms answered "does applying our pass beat applying nothing". They
+did not answer "has our optimizer caught up with LLVM's", because no arm was
+LLVM-optimized. This one is that comparison.
+
+Both arms start from the same `PCC_RUNTIME_PYTHON_IR_PASSES=off` snapshot and
+re-optimize the same five profiled modules from the same recorded `.ll` through
+`scripts/reoptimize_runtime_ir.py`; everything else in both archives is
+identical un-optimized IR, and both emit objects at optimization level 0. The
+only variable is which optimizer ran.
+
+IR, the five modules together:
+
+```
+                alloca    load   store
+baseline          1881    8047    3881
+LLVM default<O2>   185    2220    1247
+owned mem2reg,sroa 178    2139     918
+```
+
+Our pass removes *more* memory traffic than LLVM's whole O2 pipeline does.
+
+Gateway throughput, `runtime_ab.py`, concurrency 100, delay 0, 5 repeats of
+5000 requests, one host compiler, self backend on both arms:
+
+```
+arm                              QPS median   instructions/request
+LLVM O2 optimized runtime             29744                 410672
+owned pass optimized runtime          28138                 448583
+CPython asyncio                       83269                 226939
+```
+
+**Not caught up: 5.4% behind LLVM, with 9.2% more instructions per request.**
+And the reason is now located. It is not memory promotion, where we are ahead.
+It is the rest of O2 -- instcombine, GVN and friends -- reducing *executed*
+instructions on paths our pass leaves alone. That matches the five-module
+instruction-count table recorded in
+[owned-simplifycfg-value-namespace](owned-simplifycfg-value-namespace.md),
+where the owned four-pass set reaches or beats `default<O2>` on `py_list` and
+`py_gc_backend` but stays 15% behind on `py_obj` and 5% behind on `py_class`.
+
+These absolute numbers are lower than the full-archive arms above (38747 QPS)
+because only five modules are optimized here; the comparison is valid within
+this pair only. Do not compare QPS across runs at all: CPython asyncio measured
+77150, 83269 and 86058 in three runs of the same command today, so only
+same-run pairs carry a claim.
+
+### The three claims, kept separate
+
+1. mem2reg: caught up and slightly ahead of LLVM, on real emitted IR, in the
+   owned llvmlite-free implementation.
+2. Whole-runtime optimization: not caught up. 5.4% behind LLVM's O2 on gateway
+   QPS with one variable. The remaining gap is the passes we own but cannot yet
+   enable (`simplifycfg`, blocked on a name collision) plus the ones we have no
+   owned kernel for at all (75 of the 82 registered pass names).
+3. asyncio: not caught up. The best owned configuration measured today, the
+   full archive with `mem2reg,sroa,instsimplify,instcombine,dce`, reached 40981
+   QPS against asyncio's 86058 in the same run, so 2.10x behind. Before this
+   work the same comparison was 3.10x behind. The gap halved; asyncio still
+   leads by about 2x.
+
+## Update: LLVM O2 cannot optimize the whole runtime archive (2026-09-08)
+
+The "5.4% behind LLVM" figure above is a five-module result. The obvious next
+question is what the full-archive comparison looks like, so
+`scripts/reoptimize_runtime_ir.py` gained `--llvm-all-modules-unsafe` and the
+arm was built: LLVM `default<O2>` over all 170 archive members, from the same
+un-optimized snapshot, objects emitted at optimization level 0, exactly as the
+owned arm.
+
+**It does not produce a working runtime.** The gateway benchmark binary linked
+against it hangs; `benchmarks/runtime_ab.py` fails with a 60 s timeout on the
+control arm before any QPS is recorded. Sampling the hung process puts the
+program counter inside `_bzero`, in a ~170-byte window around `+0x2c`, at full
+CPU.
+
+What is *not* established: why. O2 omitted frame pointers, so `sample` reports
+the frame as a direct child of dyld's `start` and the real caller chain is not
+walkable. The IR does not show the obvious mechanism either: in the O2 arm
+`@memset` calls only `llvm.smin.i64` and `@bzero` calls `llvm.memset.p0.i64`,
+neither of which is a literal self-call, and `@bzero` already delegated to
+`@memset` in the baseline. So the recursion story the allowlist warns about is
+plausible but unproven, and is recorded here as a hypothesis, not a cause.
+
+Consequences for the comparison:
+
+- There is no valid full-archive LLVM O2 arm. The bounded five-module run is
+  the only LLVM comparison that exists, and its scope has to be stated with
+  its number.
+- The owned tier optimizes all 170 members and produces a working runtime at
+  38747 QPS. On that axis, breadth, LLVM O2 does not compete on this runtime
+  at all.
+- `scripts/reoptimize_runtime_ir.py`'s five-module allowlist was protecting
+  against exactly this. The new flag exists so the failure is reproducible and
+  named rather than folded into a comment; it stays off by default.

@@ -282,13 +282,14 @@ pcc1 hello.py -o hello
 ```
 
 `pcc1` defaults to `--backend self --python-libpython off --ir-scaffold on`.
-`pcc` is the host-Python command and keeps LLVM as its default backend:
+`pcc` is the host-Python command and defaults to the same owned self
+backend; LLVM is reachable only by asking for it explicitly:
 
 ```bash
 pcc hello.py                    # compile (strict no-libpython) and run
 pcc hello.py -o hello           # write the binary, don't run
 pcc hello.py --emit-llvm        # stop after IR generation
-pcc hello.py --backend self     # use the LLVM-free self backend
+pcc hello.py --backend llvm     # opt in to the LLVM oracle instead
 pcc hello.py --python-libpython=auto   # experimental CPython fallback bridge
 pcc kernels.py --gpu-backend=metal     # lower @gpu.kernel functions to Metal
 ```
@@ -303,7 +304,25 @@ Python inputs default to the strict no-libpython path
 | `--python-libpython=on` | Always allow/link the CPython fallback surface. |
 | `--ir-scaffold=on` | Default. Closed-world lowering used by the strict self-host work. |
 | `--ir-scaffold=off` | Compatibility escape hatch for the older Python lowering path. |
-| `--backend {llvm,llvm_capi,self}` | Host `pcc` defaults to `llvm`; native `pcc1` defaults to `self`. |
+| `--backend {llvm,llvm_capi,self}` | Both `pcc` and `pcc1` default to `self`. The other two are external reference oracles. |
+
+### Where LLVM still is
+
+"LLVM is an oracle, not a dependency" is the contract this repository is
+converging on, not a description of every current path. What is true today,
+verified rather than asserted:
+
+| Surface | Owner today | Status |
+|---|---|---|
+| Backend selection | Owned self backend, by default for `pcc` and `pcc1` | Done; `--backend llvm` is opt-in |
+| Default IR pass tier (`mem2reg,sroa`) | Owned, `pcc/native_ir/` | Done, no llvmlite; matches LLVM's own mem2reg on the runtime archive |
+| Higher pass tiers | `pcc/ir_passes/`, 66 of 69 modules import llvmlite | Migration debt. 7 are already thin shims over `pcc/native_ir/`; 75 of 82 registered pass names have no owned kernel yet. Host-only, and the self route refuses them rather than silently switching owner |
+| Runtime archive object emission | `pcc/tools/ir_to_obj.py`, which imports llvmlite | Live dependency on the default path |
+| Assembly and link | `pcc_link_macho.py` re-links, but a verbose self compile still shows `cc` invoked on the emitted `.s` | Live dependency on the default path |
+| C frontend | Historical LLVM/pycparser routes | Migration debt; see the dependency-ownership contract in `AGENTS.md` |
+
+Do not read a green benchmark or a passing gate as evidence that a row above
+moved. Each row moves when its own owned implementation executes the boundary.
 
 `ir-scaffold` names a lowering path, not a level of Python completeness, and
 for an ordinary application it changes nothing at all: its three effects are
@@ -417,7 +436,7 @@ remain gated on the new results.
 | Python frontend | Experimental. Typed code can lower to native IR; unsupported idioms fail by default and only route through the CPython bridge when `--python-libpython=auto/on` is explicit. |
 | Runtime | Active migration from C runtime sources to pcc-Python modules under `pcc/py_runtime/py/`, using `pcc.unsafe` and `pcc.extern` for low-level operations. |
 | Libc ownership | In progress. A host-pcc0, self-backend, no-libpython x86_64 Linux tracer is proven statically linked with no `PT_INTERP`, `DT_NEEDED`, undefined symbols, hand-written C startup, or libc object. This is not yet the full runtime/five-GC closure. Darwin intentionally retains an enumerated libSystem ABI boundary and is not a zero-libc target. |
-| Self backend | Experimental LLVM-free emission for AArch64 Darwin and x86_64 Linux subsets; used by bootstrap/build gates. Host `pcc` defaults to LLVM; native `pcc1` defaults to self. |
+| Self backend | Emission for AArch64 Darwin and x86_64 Linux subsets, and the default for both `pcc` and `pcc1`; used by bootstrap/build gates. Still experimental outside those subsets. |
 | Bootstrap | macOS arm64 three-stage `pcc1 → pcc2 → pcc3` completes in both the default and strict self-backend paths; strict-path `pcc2`/`pcc3` IR is byte-identical with 0 `py_cpy_*` calls and no `libpython`. Issue 1 closed 2026-05-01. |
 | GC | Five backends (0..4), with historical three-stage bootstrap evidence. Fresh matrix qualification is required for the release candidate. Backend #0 is the default/rollback reference. |
 | NumPy | Historical Python 3.11-target / NumPy 2.4.x gates cover owned acquisition/install and strict self/no-libpython import, construction and scalar addition across GC0..4. These are narrow gates; they do not qualify the newer artifacts selected for the 3.15 target, general resolver/build isolation, all ufuncs, reductions, dtypes or broadcasting. CPython-ABI artifacts remain rejected in pcc-native mode (`PCC-PKG-004`). |

@@ -629,6 +629,40 @@ def _normalise_export_annotation(ann):
     return _normalise_export_annotation_text(text)
 
 
+_DEFAULT_FACTORY_BUILTINS = ("list", "dict", "set", "tuple")
+
+
+def export_default_factory_name(default):
+    """Name the builtin factory behind ``field(default_factory=F)``.
+
+    A dataclass field default is an AST ``Call`` node.  Nothing downstream of
+    the export can rely on that node surviving: the class signature is rebuilt
+    from a plain dictionary, and a rebuild that cannot see the node recomputes
+    ``has_default`` from it and concludes the field is required.  The symptom
+    is a caller that omits the field being rejected with "missing required
+    argument", which is how this was found -- a whole runtime module failed to
+    self-host because one `field(default_factory=list)` slot could not be
+    omitted across a module boundary.
+
+    Returning a plain string keeps the fact transportable, so both the
+    ``has_default`` flag and the factory call can be reconstructed.
+    """
+    if default is None:
+        return None
+    func = _py_ast_field_value(default, "func", None)
+    if func is None:
+        return None
+    if str(_py_ast_field_value(func, "ident", "")) != "field":
+        return None
+    for key, value in _py_ast_field_value(default, "kwargs", ()) or ():
+        if str(key) != "default_factory":
+            continue
+        name = str(_py_ast_field_value(value, "ident", ""))
+        if name in _DEFAULT_FACTORY_BUILTINS:
+            return name
+    return None
+
+
 def _export_annotation_or_none(obj):
     return _normalise_export_annotation(_py_ast_field_value(obj, "annotation", None))
 
@@ -893,6 +927,10 @@ def _export_call_sig(args, owning_module=None, top_level_func_names=()):
             "default": default,
             "has_default": _py_ast_field_value(a, "has_default", False),
         }
+        factory = export_default_factory_name(default)
+        if factory is not None:
+            item["default_factory"] = factory
+            item["has_default"] = True
         default_native_func = _export_default_native_func_ref(
             default,
             owning_module,

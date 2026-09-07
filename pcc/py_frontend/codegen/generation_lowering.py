@@ -919,6 +919,7 @@ class GenerationLoweringMixin:
         if direct_only:
             out = ""
         else:
+            _mark_freestanding_no_builtins(self)
             out = str(self.module)
             out = postprocess_varargs_ir(out)
         if worker_timing:
@@ -931,3 +932,43 @@ class GenerationLoweringMixin:
             )
         _codegen_log(self, debug_codegen, "module str end " + str(len(out)))
         return out
+
+
+def _mark_freestanding_no_builtins(codegen) -> None:
+    """Tell any optimizer not to synthesize libc calls in the runtime.
+
+    A freestanding module or runtime port *is* the libc implementation: it
+    defines ``memset``, ``memcpy``, ``bzero`` and friends.  Without a marker,
+    an optimizer is entitled to recognize the byte-fill loop inside
+    ``@memset`` and rewrite it into a call to ``memset`` -- itself.  A real
+    compiler avoids that with ``-ffreestanding``/``-fno-builtin``; the IR
+    spelling is the ``"no-builtins"`` function attribute.
+
+    pcc emitted no function attributes at all, which is why this went
+    unnoticed: pcc's own pass tier does not perform that transform, so nothing
+    in the normal path exercised it.  LLVM's ``default<O2>`` does: applied to
+    all 170 runtime archive members it produced a runtime whose every program
+    hung at startup, spinning inside ``bzero``.  The gap is in pcc's emission,
+    not in the optimizer that found it, and it would bite the first owned pass
+    that learns to recognize a memset shape.
+
+    The attribute is rendered after the signature's closing paren, which the
+    self backend's function-header decoder ignores, so the self path is
+    unaffected.
+    """
+    if not (
+        getattr(codegen, "_freestanding_module", False)
+        or getattr(codegen, "_runtime_port_module", False)
+    ):
+        return
+    module = getattr(codegen, "module", None)
+    functions = getattr(module, "_functions", None) if module is not None else None
+    if not functions:
+        return
+    for fn in functions:
+        if fn.is_declaration:
+            continue
+        attributes = getattr(fn, "attributes", None)
+        if attributes is None:
+            continue
+        attributes.add('"no-builtins"')

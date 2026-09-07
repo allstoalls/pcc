@@ -164,6 +164,19 @@ def _classgen_extern_default_expr(arg: dict, span: SourceSpan):
                 ),
                 kwargs=(),
             )
+    factory = arg.get("default_factory")
+    if isinstance(factory, str) and factory:
+        # ``field(default_factory=list)`` and friends.  Rebuilding the call
+        # here is what lets the importing module omit the field: the formal
+        # keeps a default even though the original Call node did not survive
+        # the export dictionary.
+        return Call(
+            span=span,
+            ty=DynType(name="dyn"),
+            func=Name(span, DynType(name="dyn"), factory),
+            args=(),
+            kwargs=(),
+        )
     gref = arg.get("default_native_global")
     if isinstance(gref, dict):
         owning_module = gref.get("owning_module")
@@ -288,9 +301,12 @@ def _extern_class_decl_plan(
                         annotation=decode_type(arg.get("annotation")),
                         default=_classgen_extern_default_expr(arg, span),
                         kind=arg.get("kind", "pos"),
-                        has_default=arg.get(
-                            "has_default",
-                            arg.get("default") is not None,
+                        has_default=bool(
+                            arg.get("default_factory")
+                            or arg.get(
+                                "has_default",
+                                arg.get("default") is not None,
+                            )
                         ),
                     )
                 )

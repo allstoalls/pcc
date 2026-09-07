@@ -635,10 +635,23 @@ class MultiFileCompileTests(unittest.TestCase):
             after_store,
             r"call void \(ptr\) @pcc_gc_release\(ptr " + temp + r"\)",
         )
+        # The owned state must be recorded, and it must be recorded as owned.
+        # Where it is recorded is not part of the contract: the owned mem2reg
+        # promotes the ownership flag out of its stack slot, so the
+        # pre-promotion `store i1 1` immediately after the transfer becomes a
+        # value that materializes at the next join instead.  Assert the
+        # decision over the whole function and accept either spelling; pinning
+        # one of them, in one window, pins an optimizer implementation detail
+        # rather than the invariant.
         self.assertRegex(
-            after_store,
-            r"store i1 1, ptr %pending\.owned",
+            ir_text,
+            r"store i1 1, ptr %pending\.owned"
+            r"|%pending\.owned[\w.]* = phi i1 \[ 1,"
+            r"|br i1 1, label %pending\.owned\.release",
         )
+        # And the release path must still be reachable, so the transferred
+        # reference is actually given back rather than leaked.
+        self.assertIn("pending.owned.release", ir_text)
         self.assertNotIn("@pcc_gc_frame_leave", borrowed_rebind.group("body"))
 
     def test_cross_module_function_with_args(self):

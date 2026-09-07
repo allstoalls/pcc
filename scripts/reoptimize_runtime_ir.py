@@ -45,6 +45,11 @@ def main():
                         help="LLVM speed level; ignored by --optimizer owned")
     parser.add_argument("--optimizer", choices=("llvm", "owned"), default="llvm",
                         help="'owned' runs pcc's own mem2reg,sroa dispatcher")
+    parser.add_argument("--llvm-all-modules-unsafe", action="store_true",
+                        help="allow --optimizer llvm --modules all; a full LLVM "
+                             "pipeline can rewrite a libc implementation into a "
+                             "call to the symbol it implements, so the result "
+                             "must be executed before it is believed")
     parser.add_argument("--passes", default="mem2reg,sroa",
                         help="owned pass list to run")
     args = parser.parse_args()
@@ -66,10 +71,26 @@ def main():
     # archive no longer ships (16 pcc_gui_* members after the GUI moved to its
     # own repository), and selecting one of those fails with a bare KeyError
     # against the manifest instead of naming the real problem.
-    select_all = args.optimizer == "owned" and args.modules.strip() == "all"
+    select_all = args.modules.strip() == "all" and (
+        args.optimizer == "owned" or args.llvm_all_modules_unsafe
+    )
+    if (
+        args.modules.strip() == "all"
+        and args.optimizer == "llvm"
+        and not args.llvm_all_modules_unsafe
+    ):
+        parser.error(
+            "--optimizer llvm --modules all needs --llvm-all-modules-unsafe: a "
+            "full LLVM pipeline can turn a libc implementation into a call to "
+            "itself"
+        )
     if not select_all and not modules:
         parser.error("no modules selected")
-    if not select_all and args.optimizer != "owned" and not set(modules) <= allowed:
+    if (
+        not select_all
+        and args.optimizer != "owned"
+        and not set(modules) <= allowed
+    ):
         parser.error("select only the profiled runtime modules: " + ",".join(sorted(allowed)))
     archive_name = "libpy_runtime_pcc_py.a"
     baseline = source / archive_name
@@ -168,7 +189,14 @@ def main():
                 "members changed that were not selected: "
                 + repr(sorted(set(changed) - selected_members))
             )
-        if args.optimizer != "owned" and set(changed) != selected_members:
+        # A whole-archive run legitimately leaves some members untouched: a
+        # module with nothing to optimize is not a failure.  Only an explicit
+        # narrow selection has to change every member it named.
+        if (
+            not select_all
+            and args.optimizer != "owned"
+            and set(changed) != selected_members
+        ):
             raise RuntimeError("unexpected changed members: " + repr(changed))
         report["unchanged_members"] = sorted(selected_members - set(changed))
         if digest(baseline) != report["baseline_sha256"]:

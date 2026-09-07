@@ -44,6 +44,7 @@ from .pipeline_exports import (
     _class_is_valueclass,
     _closed_world_is_node,
     _export_annotation_or_none,
+    export_default_factory_name as _export_default_factory_name,
     _export_call_sig,
     _expand_local_valueclass_export_refs,
     _export_func_uses_unboxed_typed_int_abi,
@@ -834,6 +835,10 @@ def build_closed_world_context(
                             "has_default": field["has_default"],
                         }
                     )
+                    init_factory = _export_default_factory_name(field["default"])
+                    if init_factory is not None:
+                        init_sig[-1]["default_factory"] = init_factory
+                        init_sig[-1]["has_default"] = True
                     init_param_types.append(
                         encode_type(field_ann) if field_ann is not None else ("dyn",)
                     )
