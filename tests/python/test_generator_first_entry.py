@@ -82,7 +82,7 @@ print(next(g))
         resume = re.search(r"define[^\n]*worker__gen_resume[^\n]*\{\n(.*?)\n\}", ir, re.S)
         assert resume, "the test must emit the actual generator resume body"
         entry = resume.group(1).split("\ngen.dispatch:", 1)[0]
-        counts.append(len(re.findall(r"call[^\n]*@py_list_get\(", entry)))
+        counts.append(len(re.findall(r"call[^\n]*@py_list_get(?:_for_frame)?\(", entry)))
         if enabled == "1":
             assert "gen.restore.locals:" in resume.group(1)
-    assert counts == [3, 1], "only the argument needs a retaining read on first entry"
+    assert counts == [3, 1], "only the argument needs restoration on first entry"

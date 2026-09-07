@@ -1245,6 +1245,10 @@ class GeneratorLoweringMixin:
         first_entry_init = str(
             os.environ.get("PCC_GENERATOR_FIRST_ENTRY_INIT", "0") or "0"
         ).strip().lower() in ("1", "true", "yes", "on")
+        move_frame_owners = str(
+            os.environ.get("PCC_MOVE_GENERATOR_FRAME_OWNERS", "0") or "0"
+        ).strip().lower() in ("1", "true", "yes", "on")
+        frame_read_helper = "py_list_get_for_frame" if move_frame_owners else "py_list_get"
         argument_names = {arg.name for arg in fd.args if arg.name != ""}
         if len(frame_names) == len(argument_names):
             # No placeholders means there is no first-entry work to elide.
@@ -1267,7 +1271,7 @@ class GeneratorLoweringMixin:
                 item = self._emit_none_literal()
             else:
                 item = self.builder.call(
-                    self.runtime["py_list_get"],
+                    self.runtime[frame_read_helper],
                     [fn.args[1], ir.Constant(_I64, idx)],
                     name=self._fresh(f"gen.frame.{local_name}"),
                 )
@@ -1294,7 +1298,7 @@ class GeneratorLoweringMixin:
                 if local_name in argument_names:
                     continue
                 item = self.builder.call(
-                    self.runtime["py_list_get"],
+                    self.runtime[frame_read_helper],
                     [fn.args[1], ir.Constant(_I64, idx)],
                     name=self._fresh(f"gen.frame.{local_name}"),
                 )
@@ -1384,7 +1388,7 @@ class GeneratorLoweringMixin:
         # suspension before registering it here.
         skip_names = ctx.get("cpy_skip_save_names", ())
         transfer_owners = str(
-            os.environ.get("PCC_TRANSFER_GENERATOR_FRAME_OWNERS", "0") or "0"
+            os.environ.get("PCC_MOVE_GENERATOR_FRAME_OWNERS", "0") or "0"
         ).strip().lower() in ("1", "true", "yes", "on")
         for name, (idx, slot) in ctx["frame_slots"].items():
             if name in skip_names:

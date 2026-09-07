@@ -163,3 +163,28 @@ Verify frame slots hold their values while suspended, locals hold them while
 executing, source-visible identity survives, and finalizers/exception exits
 remain correct. Explicitly test collector transitions and completed generators
 held by callers. Benchmark only after these gates pass.
+
+## No.3 verdict [DENIED as a speed improvement]
+The round-trip runtime gate passes both mirrors and GC0–4, including GC0/GC1
+transitions (2 cases, 116.51 s). Generated protocol/finalizer/field/TCP checks
+pass (16 cases, 29.98 s); gateway cleanup passes (4.64 s).
+
+The 42-run full-workload A/B gives zero-wait/C100 medians 50,166.3 / 50,270.1 /
+90,444.4 QPS (control/candidate/asyncio). The native difference is +0.21%, with
+overlapping ranges; instructions/request fall 309,635 to 303,001 (2.14%) and
+user CPU remains 20 us. At 100 ms medians are 936.7 / 929.7 / 941.3.
+Report: gateway benchmarks/results/2026-09-07-frame-owner-roundtrip-ab.json.
+No accepted throughput gain. Withdraw application activation and keep the
+runtime contracts as diagnostic oracles. Three adjacent frame candidates
+have not improved throughput; stop tuning adjacent frame helpers.
+
+## Update: broaden the owner to runtime object-code optimization
+Source inspection identifies a different scale of work: runtime ir_to_obj
+verifies IR and emits target-machine objects but does not run LLVM's full
+module optimizer. Default frontend cleanup is mem2reg/sroa. The previous
+self/LLVM application comparison did not select Clang -O2; its 0.45% result
+cannot bound optimized-runtime potential. A follow-up application-only -O2
+comparison is also flat (51,647.0 / 51,338.8 QPS, 42 valid runs). The next
+pilot optimizes only py_obj/py_list/py_gen IR, preserving Python source,
+application code and all other archive members. This follows the measured
+runtime leaf/call-chain owner rather than revisiting frame slot dispatch.

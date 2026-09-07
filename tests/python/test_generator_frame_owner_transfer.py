@@ -44,7 +44,7 @@ print(sorted(events))
     source.write_text('from pcc.extern import extern, c_int64\n'
         'backend = extern("pcc_gc_backend", (), c_int64)\n'
         'print(backend())\n' + source.read_text())
-    monkeypatch.setenv("PCC_TRANSFER_GENERATOR_FRAME_OWNERS", enabled)
+    monkeypatch.setenv("PCC_MOVE_GENERATOR_FRAME_OWNERS", enabled)
     executable = tmp_path / "frame_finalizers"
     compile_python(str(source), str(executable), backend="self", libpython_mode="off",
                    ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
@@ -67,7 +67,7 @@ print(next(iterator))
 ''')
     counts = []
     for enabled in ("0", "1"):
-        monkeypatch.setenv("PCC_TRANSFER_GENERATOR_FRAME_OWNERS", enabled)
+        monkeypatch.setenv("PCC_MOVE_GENERATOR_FRAME_OWNERS", enabled)
         output = tmp_path / ("owner_" + enabled + ".ll")
         compile_python(str(source), str(output), emit_llvm_only=True,
                        backend="self", libpython_mode="off", ir_scaffold_mode="on")
@@ -78,7 +78,72 @@ print(next(iterator))
         if enabled == "1":
             assert "gen.save.addresses" not in body.group(1)
             assert all("owned" in call for call in calls)
+            assert re.search(r"call[^\n]*@py_list_get_for_frame\(", body.group(1))
     assert counts == [0, 2], "both persisted locals pass their actual ownership flag"
+
+
+@pytest.mark.parametrize("runtime_kind", ["c", "py"])
+def test_frame_restore_and_save_move_one_owner(tmp_path, request, runtime_kind):
+    archive = request.getfixturevalue("c_runtime_archive" if runtime_kind == "c" else "pcc_py_runtime_archive")
+    root = Path(__file__).resolve().parents[2]
+    source = tmp_path / "frame_roundtrip.c"
+    source.write_text('''#include "py_runtime.h"
+#include <stdio.h>
+#include <stdlib.h>
+int main(int argc, char **argv) {
+    if (argc != 2 || pcc_gc_set_backend(atoi(argv[1])) != 0) return 1;
+    int64_t baseline = py_gc_get_count(0);
+    PyObject *roots[2] = {py_gen_frame_new(1), py_list_new(0)};
+    int32_t map[1] = {2};
+    pcc_gc_frame_enter(map, roots);
+    PyObject *number = py_int_from_i64(42);
+    py_list_append(roots[1], number);
+    py_decref(number);
+    py_list_set(roots[0], 0, roots[1]);
+    pcc_gc_store_root(&roots[1], NULL);
+    for (int iteration = 0; iteration < 10; iteration++) {
+        roots[1] = py_list_get_for_frame(roots[0], 0);
+        PyObject *saved = py_list_get(roots[0], 0);
+        if ((pcc_gc_backend() == 0 && saved != py_None) ||
+            (pcc_gc_backend() != 0 && saved != roots[1])) return 2;
+        py_decref(saved);
+        py_gc_collect();
+        number = py_list_get(roots[1], 0);
+        int overflow = 0;
+        if (py_int_to_i64(number, &overflow) != 42 || overflow) return 3;
+        py_decref(number);
+        /* Switching between nonmoving collectors must not lose ownership. */
+        if (atoi(argv[1]) == 0 && iteration == 2 && pcc_gc_set_backend(1) != 0) return 4;
+        if (atoi(argv[1]) == 0 && iteration == 4 && pcc_gc_set_backend(0) != 0) return 5;
+        unsigned char owned = 1;
+        py_list_set_from_owned_root(roots[0], 0, &roots[1], &owned);
+        if (owned) pcc_gc_store_root(&roots[1], NULL);
+        else roots[1] = NULL;
+        py_gc_collect();
+    }
+    pcc_gc_store_root(&roots[0], NULL);
+    pcc_gc_frame_leave(roots);
+    py_gc_collect();
+    if (atoi(argv[1]) == 0 && py_gc_get_count(0) != baseline) return 6;
+    puts("frame-owner-roundtrip-ok");
+    return 0;
+}
+''')
+    executable = tmp_path / "frame_roundtrip"
+    command = ["clang", "-I" + str(root / "pcc/py_runtime/include"), str(source),
+               str(archive), "-pthread", "-o", str(executable)]
+    if runtime_kind == "c":
+        control = subprocess.run([*command, "-Dpy_list_get_for_frame=py_list_get"],
+                                 capture_output=True, text=True, timeout=30)
+        assert control.returncode == 0, control.stderr
+        ran = subprocess.run([str(executable), "0"], capture_output=True, text=True, timeout=15)
+        assert ran.returncode == 2, "the ordinary retaining getter must leave the frame slot occupied"
+    built = subprocess.run(command, capture_output=True, text=True, timeout=30)
+    assert built.returncode == 0, built.stdout + built.stderr
+    for backend in range(5):
+        ran = subprocess.run([str(executable), str(backend)], capture_output=True, text=True, timeout=15)
+        assert ran.returncode == 0, f"GC{backend}: " + ran.stdout + ran.stderr
+        assert ran.stdout.strip() == "frame-owner-roundtrip-ok"
 
 
 @pytest.mark.parametrize("runtime_kind", ["c", "py"])

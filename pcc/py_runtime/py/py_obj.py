@@ -766,6 +766,17 @@ def pcc_gc_try_store_ptr_take(owner, slot, value) -> int:
     return 1
 
 
+@c_abi_export("pcc_gc_try_take_ptr")
+def pcc_gc_try_take_ptr(owner, slot):
+    if ptr_is_null(slot) != 0 or _gc_backend_fast() != 0:
+        return null()
+    if load_i32(global_addr("pcc_runtime_log_fast_state"), 0) != 0:
+        pcc_runtime_log_event_code(2, 3, 0, 0, owner)
+    value = load_ptr(slot, 0)
+    store_ptr(slot, 0, global_load_ptr("py_None"))
+    return value
+
+
 @c_abi_export("pcc_gc_frame_enter")
 def pcc_gc_frame_enter(frame_map, slots) -> None:
     pcc_gc_note_frame_enter(frame_map, slots)

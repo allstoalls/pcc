@@ -887,6 +887,14 @@ int64_t pcc_gc_try_store_ptr_take(PyObject *owner, PyObject **slot, PyObject *va
     return 1;
 }
 
+PyObject *pcc_gc_try_take_ptr(PyObject *owner, PyObject **slot) {
+    if (slot == NULL || pcc_gc_backend() != PCC_GC_KIND_REFCOUNT_CYCLE) return NULL;
+    pcc_obj_runtime_log_event_code(2, 3, PCC_GC_KIND_REFCOUNT_CYCLE, 0, owner);
+    PyObject *value = *slot;
+    *slot = py_None;
+    return value;
+}
+
 void pcc_gc_frame_enter(const void *frame_map, PyObject **slots) {
     pcc_gc_note_frame_enter(frame_map, slots);
 }

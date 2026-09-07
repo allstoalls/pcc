@@ -82,6 +82,7 @@ py_err_occurred = extern("py_err_occurred", (), c_int64)
 py_gc_track = extern("py_gc_track", (c_ptr,), c_void)
 pcc_gc_store_ptr = extern("pcc_gc_store_ptr", (c_ptr, c_ptr, c_ptr), c_void)
 pcc_gc_try_store_ptr_take = extern("pcc_gc_try_store_ptr_take", (c_ptr, c_ptr, c_ptr), c_int64)
+pcc_gc_try_take_ptr = extern("pcc_gc_try_take_ptr", (c_ptr, c_ptr), c_ptr)
 pcc_gc_store_ptr_fresh_native_instance = extern(
     "pcc_gc_store_ptr_fresh_native_instance",
     (c_ptr, c_ptr, c_ptr),
@@ -747,6 +748,19 @@ def py_list_set(lst, i: int, item) -> None:
     # frames) index within bounds by construction. User-visible subscript
     # stores go through py_list_setitem below.
     _list_set_item_transaction(lst, i, item)
+
+
+@c_abi_export("py_list_get_for_frame")
+def py_list_get_for_frame(lst, i: int):
+    if pcc_gc_backend() == 0:
+        if not _list_is_sane(lst, -103):
+            return null()
+        index: int = _normalize_index(i, load_i64(lst, PYLISTOBJECT_LENGTH_OFFSET), 0)
+        if index < 0:
+            return null()
+        items = load_ptr(lst, PYLISTOBJECT_ITEMS_OFFSET)
+        return pcc_gc_try_take_ptr(lst, ptr_add(items, index * 8))
+    return py_list_get(lst, i)
 
 
 @c_abi_export("py_list_set_from_owned_root")

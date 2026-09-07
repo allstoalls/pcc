@@ -735,6 +735,16 @@ void py_list_set(PyObject *lst, int64_t i, PyObject *item) {
     (void)list_set_item_transaction(lst, i, item);
 }
 
+PyObject *py_list_get_for_frame(PyObject *lst, int64_t i) {
+    if (lst != NULL && pcc_gc_backend() == PCC_GC_KIND_REFCOUNT_CYCLE) {
+        PyListObject *list = (PyListObject *)lst;
+        int64_t index = normalize_index(i, list->length, 0);
+        if (index < 0) return NULL;
+        return pcc_gc_try_take_ptr(lst, &list->items[index]);
+    }
+    return py_list_get(lst, i);
+}
+
 void py_list_set_from_owned_root(PyObject *lst, int64_t i, void *source_slot, void *owned_flag) {
     if (source_slot == NULL || owned_flag == NULL) return;
     PyObject **source = (PyObject **)source_slot;
