@@ -190,6 +190,18 @@ class OwnershipLoweringMixin:
         return self.builder.load(entry[0], name=self._fresh("gc.reload"))
 
     def _gc_release(self, obj: ir.Value, label: Optional[str] = None, known_object: bool = False) -> None:
+        if getattr(self, "_freestanding_module", False):
+            # A freestanding module has no allocator, no GC service and no
+            # managed object, so a release here is not merely unnecessary: the
+            # emitted-IR verification rejects any managed-runtime reference in
+            # such a module, which is how this surfaced. `bzero` discards the
+            # `c_ptr` that `memset` returns; the discarded pointer was
+            # classified as an owned object, and the release it emitted made
+            # `freestanding_mem_str.py` -- and therefore every from-scratch
+            # runtime rebuild -- fail to compile. Not emitting the call makes
+            # that error impossible by construction rather than diagnosed
+            # after the fact.
+            return
         if self._value_is_never_gc_object(obj):
             # pcc_gc_release starts with `ptr_is_null(o) or is_tagged_int(o)`
             # and returns, so this call is a no-op for a tagged immediate.
@@ -216,6 +228,8 @@ class OwnershipLoweringMixin:
         self._owned_dynamic_call_values.add(value)
 
     def _value_is_owned_object(self, value: ir.Value) -> bool:
+        if getattr(self, "_freestanding_module", False):
+            return False
         return value in self._owned_dynamic_call_values
 
     def _note_owned_dynamic_call_value(self, value: ir.Value) -> None:
@@ -311,6 +325,18 @@ class OwnershipLoweringMixin:
         return False
 
     def _expr_returns_owned_object(self, expr: Expr) -> bool:
+        if getattr(self, "_freestanding_module", False):
+            # Every pointer in a freestanding module is raw: the module
+            # contract gives it no allocator, no GC service and no managed
+            # object, and the emitted-IR verification rejects any
+            # managed-runtime reference in one. Answering "owned" here is what
+            # made `found = pcc_strchrnul(...)` in `strchr` look like an owner
+            # and drove the whole owned-assignment sequence -- root frame,
+            # slot load, release -- into a module that cannot link any of it.
+            # `_UNSAFE_RAW_POINTER_RETURNS` below only names unsafe
+            # intrinsics, so it can never cover a module's own c_abi_exports;
+            # this is the one place that decides for all of them.
+            return False
         if self._expr_returns_unsafe_raw_pointer(expr):
             return False
         expr_ty = getattr(expr, "ty", None)
@@ -999,6 +1025,17 @@ class OwnershipLoweringMixin:
         ir_ty: ir.Type,
         frame_map: ir.Value | None = None,
     ) -> None:
+        if getattr(self, "_freestanding_module", False):
+            # Freestanding modules have no GC service, so there is nothing for
+            # a root frame to report to and every pointer in them is raw. The
+            # emitted-IR verification rejects any managed-runtime reference in
+            # such a module, and this is where that came from: a `c_ptr`
+            # returned by a sibling export and bound to a local (`found =
+            # pcc_strchrnul(...)` in `strchr`) looked like a managed object, so
+            # `pcc_gc_frame_enter` was emitted and `freestanding_mem_str.py`
+            # stopped compiling. `_UNSAFE_RAW_POINTER_RETURNS` only names
+            # unsafe intrinsics, so it cannot cover a module's own exports.
+            return
         if self.current_func_def is None:
             return
         if name in getattr(self, "_current_global_names", set()):

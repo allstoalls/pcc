@@ -200,8 +200,12 @@ def float_literal_pool(module: ir.Module) -> dict:
     return pool
 
 
-def _double_constant_value(value: ir.Value, value_ty) -> "float | None":
-    """The literal double behind *value*, or None when it is not a constant."""
+def _double_constant_value(value: ir.Value, value_ty):
+    """The literal double behind *value*, or None when it is not a constant.
+
+    Deliberately unannotated: pcc compiles its own frontend, and its inference
+    rejects returning a bare float against an optional return annotation.
+    """
     if not isinstance(value, ir.Constant) or not isinstance(value_ty, ir.DoubleType):
         return None
     raw = getattr(value, "value", None)
