@@ -1,5 +1,162 @@
 # Gateway memory/performance handoff — 2026-09-09
 
+
+## Per-request memory: two compiler ownership leaks fixed — 2026-09-10
+
+Peak RSS at 200k requests went **102.8 MiB -> 52.9 MiB** and the gateway now
+also beats asyncio on memory up to about 120k requests (28.7 MiB against 31.0
+at 100k). Native BASELINE memory was always better -- 6.9 MiB against asyncio's
+27.9 at 10k requests -- so the whole gap was per-request growth: 516 bytes per
+request against asyncio's 38, now 242.
+
+Diagnosis read the allocator's own accounting (`pcc_allocator_live_requested`,
+`live_usable`, `mapped`, `py_gc_tracked_count`) instead of RSS. `gc.collect()`
+freed nothing and `py_gc_tracked_count` stayed flat while live bytes grew, so
+the leaked objects were refcount-only and invisible to the tracing set -- which
+is why the existing live-object probe had reported no leak. A layer bisect then
+showed virtual thread spawn, TaskScope fork/join/close and dict/list results
+leaking ZERO bytes over 20,000 iterations each, and all of it at one line:
+`json.dumps(data, sort_keys=True).encode()`.
+
+Fixed, both in `pcc/py_frontend/codegen/`:
+
+- `native_text_modules.py`: `json.dumps`/`dumps_ex`/`loads`/`load` return NEW
+  references that were never released. `json.dumps` leaked its whole result
+  string, exactly `len + 41` bytes (86-char output 127 B, 971-char output
+  1012 B); `json.loads` leaked the parsed document, 907 B and two tracked
+  containers per call. This is the SAME defect class that
+  `_native_re_call_returns_owned_object` already documents for the re
+  lowerings. Fixed with `_note_owned_object_value` at emission, the mechanism
+  the same file already uses for `re.compile`/`re.sub`.
+- `native_modules.py`: the file contained NO `_note_owned_object_value` call at
+  all, so every module-level native function it lowers that builds a new object
+  leaked it. `time.perf_counter` (twice per request), `monotonic`, `time`,
+  `strftime` and `os.urandom` fixed.
+
+Measured: json.dumps 127 -> 0 B/call, json.loads 907 -> 0, perf_counter
+24 -> 0, gateway request path 127 -> 0. Throughput did NOT pay for the added
+releases -- it improved to the best arm measured, paired +6.54% against
+retained and +3.84% against asyncio over seven 200k-request repeats. GC0-4,
+structured failure cleanup and `test_known_object_refcounts.py` with
+VERIFY_CHECKS=1 all pass on the final state, 60 runs.
+
+Receipt: gateway `benchmarks/results/2026-09-10-ownership-leaks/` (README,
+comparisons.json, both patches, gate report, and the two reusable probes).
+
+**Three defects located, reproduced and NOT fixed.** Each has an exact phase in
+that receipt's `probes/leak_app.py`.
+
+1. **Float literal boxing, the largest remaining memory lever.** Every
+   evaluation of a float literal as an operand of a DynType operation leaks 24
+   bytes: `y = x - 0.5` leaks one float per iteration, `(x - 0.5) * 1000.0`
+   leaks two. The IR shows `py_float_from_f64` for the literal emitted INSIDE
+   the loop body (`while.body.8`, `%m.flt_box`) and never released. Cause:
+   `marshal.marshal_to_object` returns either the incoming pointer unchanged
+   (borrowed) or a fresh `py_int_from_i64`/`py_float_from_f64`/`py_bool_from_bit`
+   box (owned) and the caller cannot tell which; it has 262 call sites. The
+   `BinOp` rule in `_expr_returns_owned_object` covers the operation's result,
+   not its operand boxes. Preferred fix: emit each distinct float literal as a
+   module-level immortal box created once, which also removes an allocation
+   from every dynamic float op and should be a throughput win. Alternative:
+   return an owned flag from `marshal_to_object` and release where a box was
+   created, starting with `binary_op_lowering`. Left alone deliberately: a
+   shared-codegen ownership change over 262 sites needs its own design pass and
+   gate run.
+2. `for kid in scope.children: samples.append(scope.result(kid))` leaks ~1226
+   bytes and 6 tracked objects per loop execution; `benchmark_native.batch()`
+   uses exactly that shape. Isolate with phase `list_collect` against
+   `child_float`. Not yet bisected to one owner.
+3. A container literal passed DIRECTLY as a call argument leaks it:
+   `json.dumps({"a": 1})` leaks ~430 bytes and one tracked object per call
+   beyond the json defect, while binding the dict to a name first leaks
+   nothing. Compare phase `dumps_small` against `dict_results`. Not on the
+   gateway path.
+
+## Object-start inlining promoted — 2026-09-10 (supersedes the section below)
+
+The section below ends with "no implementation candidate was promoted". That
+is no longer current. A successor session finished the object-start split that
+had failed to build there, extended it twice and promoted the result to the
+core worktree (uncommitted).
+
+`pcc/py_runtime/py/freestanding_allocator.py`: the exact-cache hit stays in
+`pcc_gc_granule_is_object_start` and the descriptor/radix validation moves to
+`_granule_object_start_uncached`, so `inline-defined` can place the hit path in
+its callers; `pcc_gc_granule_object_publish` seeds the exact positive cache
+where `_granule_object_slot` has just proved the cell; and that cache grows
+from 256 to 8192 entries. The build failure was only a missing
+`@c_abi_export` on the outlined private function.
+
+Measured against the same retained control, 200k requests x 7 repeats,
+C100/0ms: paired **+5.62% handler QPS (7/7, worst +4.80%)** and **-2.08%
+instructions (7/7)**, and paired **+4.01% against CPython asyncio (7/7,
+worst +1.68%)**. Median QPS 86,264 against asyncio 83,945. The split's own
+gain was in cycles (-5.0%) rather than instructions (-0.20%), which is the
+removed call, frame and root bookkeeping; the IR went from 130 predicate calls
+to 84 plus 47 outlined miss calls, inlining the probe into 46 further sites.
+65536 cache entries were DENIED: more instructions saved, but cycles regressed
+because a 512 KiB table is not data-cache resident.
+
+Correctness was **not** waived: GC0-4, structured failure cleanup and core's
+weakref/resurrection/refcount regression ran on the promoted candidate through
+`benchmarks/combined_runtime.py`, 60 runs, all passed.
+
+Canonical receipt: gateway
+`benchmarks/results/2026-09-10-object-start-inline/` (README, comparisons.json,
+runtime.patch, gate reports, both profiles).
+
+Memory was then taken on in the same session and is no longer unchanged; see
+the next section. The runtime still executes ~20% more instructions than
+asyncio for the same requests, and `py_decref`/`py_incref` are together ~18%
+of leaf samples, so they remain the next throughput owner.
+
+New pre-existing defect found, independent of this work:
+`py/freestanding_mem_str.py` does not compile from unmodified `23dec4e9` --
+"freestanding module emitted managed-runtime reference in define external void
+@bzero(...): call void @pcc_gc_release". It blocks every from-scratch runtime
+rebuild, which is why the focused granule pytest gates (their fixture rebuilds
+the shared runtime) could not run. Reproduce from `pcc/py_runtime`:
+`pcc --python-library --emit-llvm=/tmp/x.ll py/freestanding_mem_str.py`.
+
+## Latest continuation — 2026-09-10, user waived further checks
+
+The user resumed after the historical 5% checkpoint and explicitly requested
+continuation without further checking. No subsequent quota polling or new
+correctness suite ran. Benchmark workload/output checks remained enabled.
+Core `23dec4e9` and gateway `8e0e72f` remain the retained implementation;
+no further source optimization, installation, commit or push occurred.
+
+New canonical receipt in gateway:
+`benchmarks/results/2026-09-10-refcount-followup/README.md`, with exact
+candidate patches, build/watchdog receipts and `comparisons.json`.
+The original `checkpoint.json` records the earlier stop, not current authority.
+
+The retained runtime's fresh 1M-request profile has 2,516 samples:
+`py_decref` 10.53%, `py_incref` 7.35%, object-start validation 9.70%.
+Three independent 100k-request, 5-repeat, C100/0ms comparisons found only
+small gains: direct terminal values paired QPS +0.14% / instructions -0.19%;
+immortal-guard reordering +0.74% / -0.54%; exact-cache 256->1024 entries
++0.60% / -0.73%. None was promoted. The last two candidate QPS medians
+(82,039 and 80,829) did not beat their same-run asyncio medians
+(85,148 and 83,730). Preserve the earlier accepted cache/owned-pass gains.
+Do not compare absolute QPS across these different runs as a causal gain.
+
+Actual retained post-inline IR was also processed with existing owned
+mem2reg, sroa and instsimplify: all three were no-ops. Another simplifycfg
+sweep removed only 54 loads, 18 stores, 6 calls and 58 branches. Its artifact
+was emitted, not executed or benchmarked; third-round throughput had already
+shown little reliable benefit in the earlier receipt. Avoid repeating these
+small experiments. The measured reference/provenance paths remain the owner
+to investigate for larger reductions in repeated work.
+
+Private root: gateway `benchmarks/build/2026-09-09-runtime-followup`.
+`runtime-ab`, `immortal-ab`, `cache1024-ab`, and `cleanup-ab` preserve candidate
+binaries and IR. No new GC0–4/failure, non-HTTP, native bootstrap, live HTTP or
+HTTPS qualification ran, per the user's instruction. Full compiler memory and
+the native-direct worker Bus error remain unresolved. Keep this history out
+of the product README, which retains the longer measured result, memory and
+public reproduction command.
+
 ## Latest continuation: user extended stop to 10% remaining
 
 **STOPPED at 10% remaining**, observed 2026-09-09T13:59:53.054Z. Resume only
