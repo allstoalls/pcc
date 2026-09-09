@@ -103,6 +103,13 @@ class LiteralLoweringMixin:
         register = self.runtime["pcc_gc_pointer_register"]
         for gv in self._str_obj_pool.values():
             builder.call(register, [builder.bitcast(gv, _CSTR)])
+        # Static float literals are the same kind of object as static string
+        # literals -- immortal, in the data segment, pointed at rather than
+        # allocated -- so they take the same one-shot registration. The pool
+        # lives on the module because `marshal.marshal_to_object` fills it and
+        # is a free function without access to this host.
+        for gv in marshal.float_literal_pool(self.module).values():
+            builder.call(register, [builder.bitcast(gv, _CSTR)])
         builder.branch(done_bb)
         builder.position_at_end(done_bb)
         builder.ret_void()

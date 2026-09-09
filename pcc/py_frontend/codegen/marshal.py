@@ -17,8 +17,10 @@ These helpers operate in terms of:
 * the target type description (either "PyObject*" for to_object, or a
   destination :class:`Type` for from_object).
 
-They never mutate the IR module — all declarations are expected to have
-been set up by :func:`declare_runtime` beforehand.
+They expect runtime declarations to have been set up by
+:func:`declare_runtime` beforehand. The one module mutation they make is the
+float-literal pool below: a constant needs an object to point at, and the
+alternative is allocating one on every evaluation.
 
 Mirrors the ABI documented in Section 3 of
 ``docs/plans/python-frontend-interfaces.md``.
@@ -26,6 +28,7 @@ Mirrors the ABI documented in Section 3 of
 
 from __future__ import annotations
 
+import struct
 from typing import Mapping
 
 from pcc.llvm_capi.compat import ir
@@ -178,6 +181,75 @@ def is_native_type(ty: Type) -> bool:
     return isinstance(ty, (IntType, FloatType, BoolType))
 
 
+# PyFloatObject is {i64 refcount, i32 type_tag, i32 flags, double value};
+# PY_TYPE_FLOAT is 3 and PY_FLAG_IMMORTAL is 1.
+_PY_TYPE_FLOAT = 3
+_PY_FLAG_IMMORTAL = 1
+
+
+def float_literal_pool(module: ir.Module) -> dict:
+    """The module's `bits -> GlobalVariable` pool of static float literals.
+
+    Exposed so the static-literal initializer can register these objects with
+    the same one-shot pass it already runs over the string literal pool.
+    """
+    pool = getattr(module, "_pcc_float_literal_pool", None)
+    if pool is None:
+        pool = {}
+        module._pcc_float_literal_pool = pool
+    return pool
+
+
+def _double_constant_value(value: ir.Value, value_ty) -> "float | None":
+    """The literal double behind *value*, or None when it is not a constant."""
+    if not isinstance(value, ir.Constant) or not isinstance(value_ty, ir.DoubleType):
+        return None
+    raw = getattr(value, "value", None)
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None
+    return float(raw)
+
+
+def _float_literal_object(module: ir.Module, value: float) -> ir.Value:
+    """Return a statically initialized immortal float object for *value*.
+
+    Boxing a float literal through `py_float_from_f64` allocates on every
+    evaluation, and `marshal_to_object` cannot tell its callers whether it
+    returned a fresh box or passed a pointer through, so nothing released
+    them: `y = x - 0.5` leaked 24 bytes per iteration and
+    `(x - 0.5) * 1000.0` leaked 48, with the box emitted inside the loop body.
+
+    A literal has a constant value, so it does not need a fresh object. This
+    mirrors `_emit_str_literal`: one immortal object per distinct value in the
+    data segment, pooled, registered once with the collector. Refcount
+    operations on an immortal are no-ops, so the ownership ambiguity that
+    caused the leak becomes harmless rather than merely fixed at one caller,
+    and every evaluation now costs a pointer instead of an allocation.
+    """
+    bits = struct.unpack("<q", struct.pack("<d", value))[0]
+    pool = float_literal_pool(module)
+    existing = pool.get(bits)
+    if existing is not None:
+        return existing
+    obj_ty = ir.LiteralStructType([_I64, _I32, _I32, ir.DoubleType()])
+    gv = ir.GlobalVariable(
+        module, obj_ty, name=".pyfloat.obj." + str(len(pool))
+    )
+    gv.linkage = "internal"
+    gv.global_constant = False
+    gv.initializer = ir.Constant(
+        obj_ty,
+        [
+            ir.Constant(_I64, 1),
+            ir.Constant(_I32, _PY_TYPE_FLOAT),
+            ir.Constant(_I32, _PY_FLAG_IMMORTAL),
+            ir.Constant(ir.DoubleType(), value),
+        ],
+    )
+    pool[bits] = gv
+    return gv
+
+
 def marshal_to_object(
     builder: ir.IRBuilder,
     module: ir.Module,
@@ -239,6 +311,9 @@ def marshal_to_object(
         # the object form.
         if _ir_is_pointer_type(value_ty):
             return value
+        literal = _double_constant_value(value, value_ty)
+        if literal is not None:
+            return _float_literal_object(module, literal)
         return builder.call(runtime["py_float_from_f64"], [value], name="m.flt_box")
     if isinstance(ty, BoolType) or ty_name == "bool":
         # py_bool_from_bit takes i32.
