@@ -429,6 +429,18 @@ class NativeTextModulesLoweringMixin:
                 name=self._fresh("json.load"),
             )
             self._emit_post_call_err_check(getattr(expr, "span", None))
+            # `py_file_read_all` returns a new string that nothing else owns
+            # and `py_json_loads` borrows it, so this frame has to release it.
+            # Pin the parsed result first: a moving backend can collect inside
+            # the release and relocate it. Mirrors the re.sub lowering.
+            self._gc_pin(result)
+            self._gc_release(text_obj, "json.load.text")
+            self._gc_unpin(result)
+            # Both json ABIs return a NEW reference. Record the owner at
+            # emission: the shape classifier sees only a DynType Call for a
+            # module-level function and answers "not owned", so no release was
+            # ever emitted and every parsed document leaked whole.
+            self._note_owned_object_value(result)
             return result
         # Native strings are emitted as UTF-8, so literal
         # `ensure_ascii=False` selects the existing native behavior. Literal
@@ -454,24 +466,41 @@ class NativeTextModulesLoweringMixin:
             if key != "sort_keys" and key != "ensure_ascii":
                 return None
             return None
+        # Every py_json_* ABI below returns a NEW reference. The shape
+        # classifier sees only a DynType Call on a module-level function and
+        # answers "not owned", so no release was ever emitted: `json.dumps`
+        # leaked its whole result string on every call (measured at length + 41
+        # bytes per call, so a 200k-request gateway run leaked ~25 MB), and
+        # `json.loads` leaked the whole parsed document (907 bytes and two
+        # tracked containers per call on a small object). This is the same
+        # class of defect `_native_re_call_returns_owned_object` documents for
+        # the re lowerings; recording the owner at emission is exact, because
+        # only this emitter knows whether its keyword gates fired or the call
+        # fell through to generic dispatch.
         if attr.name == "loads":
-            return self.builder.call(
+            result = self.builder.call(
                 self.runtime["py_json_loads"],
                 [self._emit_as_object(expr.args[0])],
                 name=self._fresh("json.loads"),
             )
+            self._note_owned_object_value(result)
+            return result
         if attr.name == "dumps":
             if sort_keys:
-                return self.builder.call(
+                result = self.builder.call(
                     self.runtime["py_json_dumps_ex"],
                     [self._emit_as_object(expr.args[0]), ir.Constant(_I64, 1)],
                     name=self._fresh("json.dumps"),
                 )
-            return self.builder.call(
+                self._note_owned_object_value(result)
+                return result
+            result = self.builder.call(
                 self.runtime["py_json_dumps"],
                 [self._emit_as_object(expr.args[0])],
                 name=self._fresh("json.dumps"),
             )
+            self._note_owned_object_value(result)
+            return result
         return None
 
     @staticmethod

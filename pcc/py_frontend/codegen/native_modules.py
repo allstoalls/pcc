@@ -968,6 +968,8 @@ class NativeModuleAliasMixin:
                 name=self._fresh(result_name),
             )
             self._emit_post_call_err_check(args[0].span)
+            # `py_time_strftime` returns a new string; see the note below.
+            self._note_owned_object_value(result)
             return result
         if len(args) > 0 or len(kwargs) > 0:
             return None
@@ -978,11 +980,21 @@ class NativeModuleAliasMixin:
         }.get(builtin_value)
         if runtime_name is None:
             return None
-        return self.builder.call(
+        result = self.builder.call(
             self.runtime[runtime_name],
             [],
             name=self._fresh(result_name),
         )
+        # All three build their result with `py_float_from_f64`, so this is a
+        # NEW reference. The shape classifier sees only a DynType Call on a
+        # module-level function and answers "not owned", so no release was
+        # ever emitted and every clock read leaked its float -- two per
+        # request in the gateway handler benchmark. Recording the owner at
+        # emission is exact: only this emitter knows its argument gates fired
+        # instead of falling through to generic dispatch. Same class of defect
+        # as `_native_re_call_returns_owned_object` documents for re.
+        self._note_owned_object_value(result)
+        return result
 
     def _emit_native_os_urandom_call(
         self,
@@ -997,6 +1009,8 @@ class NativeModuleAliasMixin:
             name=self._fresh("os.urandom"),
         )
         self._emit_post_call_err_check(args[0].span)
+        # `py_os_urandom` returns new bytes; see the clock note above.
+        self._note_owned_object_value(result)
         return result
 
     def _emit_native_traceback_exc_call(
