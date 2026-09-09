@@ -1,13 +1,15 @@
 # Gateway memory/performance handoff — 2026-09-09
 
 
-## Per-request memory: two compiler ownership leaks fixed — 2026-09-10
+## Per-request memory: three compiler ownership leaks fixed — 2026-09-10
 
-Peak RSS at 200k requests went **102.8 MiB -> 52.9 MiB** and the gateway now
-also beats asyncio on memory up to about 120k requests (28.7 MiB against 31.0
-at 100k). Native BASELINE memory was always better -- 6.9 MiB against asyncio's
-27.9 at 10k requests -- so the whole gap was per-request growth: 516 bytes per
-request against asyncio's 38, now 242.
+Peak RSS at 200k requests went **102.8 MiB -> 37.1 MiB against asyncio's 34.7,
+which is 1.06x from 2.96x**, and the gateway beats asyncio on memory up to about
+215k requests (20.9 MiB against 31.1 at 100k). Native BASELINE memory was always
+better -- 6.0 MiB against asyncio's 28.0 at 10k requests -- so the whole gap was
+per-request growth: 516 bytes per request against asyncio's 38, now 164.
+Real-workload retention went 203 -> 73.6 -> 49.1 -> 24.65 bytes per request
+across the three fixes.
 
 Diagnosis read the allocator's own accounting (`pcc_allocator_live_requested`,
 `live_usable`, `mapped`, `py_gc_tracked_count`) instead of RSS. `gc.collect()`
@@ -32,45 +34,57 @@ Fixed, both in `pcc/py_frontend/codegen/`:
   all, so every module-level native function it lowers that builds a new object
   leaked it. `time.perf_counter` (twice per request), `monotonic`, `time`,
   `strftime` and `os.urandom` fixed.
+- `marshal.py` + `literal_lowering.py`: every evaluation of a float literal as
+  an operand of a DynType operation allocated a box and leaked it -- 24 bytes
+  for `y = x - 0.5`, 48 for `(x - 0.5) * 1000.0`, with `py_float_from_f64`
+  emitted inside the loop body. `marshal_to_object` returns either the incoming
+  pointer (borrowed) or a fresh box (owned) and its 262 callers cannot tell
+  which. Rather than teach 262 sites the difference, a literal no longer needs
+  an object of its own: each distinct float literal is a statically initialized
+  immortal PyFloatObject in the data segment, pooled by value and registered by
+  the same static-literal initializer that already handles string literals.
+  That makes the ambiguity HARMLESS rather than fixed at one caller -- refcount
+  ops on an immortal are no-ops -- so no call site changed, and every
+  evaluation now costs a pointer instead of an allocation.
 
 Measured: json.dumps 127 -> 0 B/call, json.loads 907 -> 0, perf_counter
-24 -> 0, gateway request path 127 -> 0. Throughput did NOT pay for the added
-releases -- it improved to the best arm measured, paired +6.54% against
-retained and +3.84% against asyncio over seven 200k-request repeats. GC0-4,
-structured failure cleanup and `test_known_object_refcounts.py` with
-VERIFY_CHECKS=1 all pass on the final state, 60 runs.
+24 -> 0, `x - 0.5` 24 -> 0, `(x - 0.5) * 1000.0` 48 -> 0, gateway request path
+127 -> 0. Throughput did NOT pay for the added releases: the first two fixes
+improved it, and the literal fix is neutral against that state (-0.17% paired,
+3/7) while lowering instructions in all seven repeats, because what it removes
+is an allocation rather than instructions. Against the retained runtime the
+session totals paired +6.24% QPS (6/7) and -1.29% instructions (7/7) over seven
+200k-request repeats. GC0-4, structured failure cleanup and
+`test_known_object_refcounts.py` with VERIFY_CHECKS=1 all pass, 60 runs, re-run
+after the literal change because it touches the shared marshal helper.
 
 Receipt: gateway `benchmarks/results/2026-09-10-ownership-leaks/` (README,
 comparisons.json, both patches, gate report, and the two reusable probes).
 
-**Three defects located, reproduced and NOT fixed.** Each has an exact phase in
-that receipt's `probes/leak_app.py`.
+**What remains is one family with two symptoms**, both reproduced by a phase
+in that receipt's `probes/leak_app.py`. An owned temporary consumed in operand
+or argument position is not released: `(time.perf_counter() - started) * 1000.0`
+still leaks its COMPUTED intermediate (the literal box is gone; this is worth
+about 24 bytes per request on the gateway path), and `json.dumps({"a": 1})`
+leaks a dict passed directly as an argument while binding it to a name first
+leaks nothing. Separately, `for kid in scope.children:
+samples.append(scope.result(kid))` leaks ~1226 bytes and 6 tracked objects per
+loop execution; the six tracked objects are the outlier and it is not yet
+bisected to one owner, so it may or may not be the same family.
 
-1. **Float literal boxing, the largest remaining memory lever.** Every
-   evaluation of a float literal as an operand of a DynType operation leaks 24
-   bytes: `y = x - 0.5` leaks one float per iteration, `(x - 0.5) * 1000.0`
-   leaks two. The IR shows `py_float_from_f64` for the literal emitted INSIDE
-   the loop body (`while.body.8`, `%m.flt_box`) and never released. Cause:
-   `marshal.marshal_to_object` returns either the incoming pointer unchanged
-   (borrowed) or a fresh `py_int_from_i64`/`py_float_from_f64`/`py_bool_from_bit`
-   box (owned) and the caller cannot tell which; it has 262 call sites. The
-   `BinOp` rule in `_expr_returns_owned_object` covers the operation's result,
-   not its operand boxes. Preferred fix: emit each distinct float literal as a
-   module-level immortal box created once, which also removes an allocation
-   from every dynamic float op and should be a throughput win. Alternative:
-   return an owned flag from `marshal_to_object` and release where a box was
-   created, starting with `binary_op_lowering`. Left alone deliberately: a
-   shared-codegen ownership change over 262 sites needs its own design pass and
-   gate run.
-2. `for kid in scope.children: samples.append(scope.result(kid))` leaks ~1226
-   bytes and 6 tracked objects per loop execution; `benchmark_native.batch()`
-   uses exactly that shape. Isolate with phase `list_collect` against
-   `child_float`. Not yet bisected to one owner.
-3. A container literal passed DIRECTLY as a call argument leaks it:
-   `json.dumps({"a": 1})` leaks ~430 bytes and one tracked object per call
-   beyond the json defect, while binding the dict to a name first leaks
-   nothing. Compare phase `dumps_small` against `dict_results`. Not on the
-   gateway path.
+`marshal_to_object`'s borrowed-or-owned ambiguity across 262 call sites is
+still there in principle but no longer leaks for literals, which were its only
+measured victim: int literals that fit are tagged immediates and bools resolve
+to singletons, so neither allocates.
+
+The remaining structural memory cost is the object model, not a leak. Every
+heap object carries a 48-byte metadata prefix (the lifecycle word lives at
+`ptr - 48`), so a 24-byte float occupies an 80-byte cell -- measured at 94.5
+bytes of mapped memory per retained float against 34.5 bytes of accounted live
+bytes. Two of the six prefix slots (`-32`, `-24`) are written as zero by
+`pcc_allocator_initialize_small` and unused on that path. Shrinking the prefix
+is the largest remaining memory lever and a wide ABI change: the size is
+hard-coded in the hot predicate, the slab carve arithmetic and the GC backends.
 
 ## Object-start inlining promoted — 2026-09-10 (supersedes the section below)
 
