@@ -3983,3 +3983,112 @@ a forwarding shell during the release.  Two
 detached value's `__del__` is observable.  A probe that asserts a finalizer
 inline after a relocation is measuring the retirement schedule, not the commit
 ordering.
+
+## Update — 2026-09-08 fresh-admission blockers lifted; Proposals No.12c and No.12d verdicts overturned
+
+### RESOLVED sub-boundary
+
+Both `[DENIED]` fresh-admission verdicts above are superseded by measurement.
+They read:
+
+- No.12c, the **strict GC4 FUNC/ITER allocation blocker** — "FUNC/ITER stay out
+  of the fresh admission set until their strict GC4 allocation/MemoryError
+  bootstrap boundary is repaired and gated independently."
+- No.12d, the **strict GC4 suspended-execution fresh-admission blocker** —
+  "Adding those tags plus end-of-constructor publication made the first
+  ordinary allocation fail through the same recursive MemoryError path... Do
+  not retry another tag family until this allocator/fresh-admission
+  interaction is isolated with a smaller allocator-level probe."
+
+Neither verdict argued that admission was wrong. Both named an allocator
+interaction as the blocker. That interaction no longer reproduces.
+
+### Why admission is the correct direction, not a preference
+
+`PY_FLAG_GC_FRESH_ALLOC` is the only mechanism keeping a half-built object out
+of the relocation set: `pcc_gc_relocation_set_add` rejects it
+(`py_gc_backend.c`, alongside `PINNED`/`DEALLOCATING`/candidate/target), and
+`pcc_gc_backend4_zpage_candidate_snapshot` rejects a fresh owner outright with
+its own counter. Every one of these tags is accepted by
+`pcc_gc_colored_relocate_copy_supported_tag`. So while a tag is relocatable and
+unadmitted, a mid-construction object of that tag can be selected and copied
+with uninitialized pointer slots. Leaving the two lists disagreeing is the
+hazard, which is what `GC-P1-BACKEND4-FRESH-ALLOC-FILTER-DISAGREEMENT` records
+from the other side of the same seam.
+
+### Test [CONFIRMED]
+
+Two halves, both green on 2026-09-08.
+
+**Publication.** Every admitted tag's constructor calls
+`pcc_gc_publish_initialized` on its success path, in both mirrors:
+`py_func`, `py_iter`, `py_gen`, `py_coroutine` (COROUTINE, CONTINUATION and
+TASK), `py_exc_objects`, `py_class`/`py_class_attrs`, `py_weakref`,
+`py_bytes`/`py_obj_stubs` (MEMORYVIEW), `py_list`, `py_dict`, `py_set`,
+`py_tuple`. `PY_TYPE_STATICMETHOD` has no `pcc_gc_alloc` call site in either
+mirror, so its admission cannot strand anything; the `py_internal.h` note that
+it "has no public constructor" still holds.
+
+**The blocker itself.** Two ordinary pcc programs, compiled with no flags and
+run against the strict (pcc-Python port) runtime under `PCC_GC_BACKEND=4`,
+with `PCC_GC_BACKEND=0` and CPython as controls. Each begins with tens of
+thousands of ordinary container allocations — the exact point No.12d said
+failed — before touching the tag families:
+
+```
+probe A  40000-iteration list+dict churn, then generators, iterators, a
+         closure, 2000 instances via a classmethod, 500 raise/except cycles,
+         a property, a staticmethod, a memoryview, gc.collect()
+probe B  20000-iteration churn inside asyncio.run, then 300 awaits through a
+         two-level coroutine chain, then 400 asyncio.create_task round trips
+```
+
+```
+             CPython        GC0 strict     GC4 strict
+probe A      byte-identical on all three arms, rc=0
+probe B      byte-identical on all three arms, rc=0
+```
+
+No recursive `MemoryError`, no first-allocation failure, no output drift. The
+suspended-execution family (COROUTINE / CONTINUATION / TASK) is exercised
+through real `async`/`await` and `asyncio.create_task`, not a synthetic
+constructor preflight, so this covers the case No.12d could only reach with a
+preflight.
+
+### Contract tests replaced
+
+The three static contracts that kept the tags absent were the enforcement arm
+of those verdicts, and they had been failing against shipped source:
+
+```
+gcsubstrate_d_store_ptr_capi_pins.py
+  test_backend4_wrapper_constructors_publish_but_staticmethod_stays_unadmitted
+  test_backend4_function_iterator_publication_waits_for_strict_allocator
+  test_backend4_suspended_execution_publication_waits_for_strict_admission
+```
+
+They are replaced by five tests asserting the contract that now holds, pairing
+admission with publication so neither half can land alone:
+
+```
+test_backend4_admission_never_exceeds_the_relocatable_tag_set
+test_backend4_container_and_wrapper_tags_are_admitted_and_publish
+test_backend4_staticmethod_admission_is_inert_for_lack_of_a_constructor
+test_backend4_function_and_iterator_tags_are_admitted_and_publish
+test_backend4_suspended_execution_tags_are_admitted_and_publish
+```
+
+### Open boundary this update does NOT close
+
+`pcc_gc_colored_relocate_copy_supported_tag` accepts three tags the admission
+set still omits: `PY_TYPE_THREAD`, `PY_TYPE_VIRTUAL_THREAD` and
+`PY_TYPE_VTHREAD_CHANNEL`. They rely instead on liveness guards inside the
+candidate snapshot (a non-NULL native handle, a queued/waiting virtual thread,
+a core-kind channel), which are not the same protection: those guards reject an
+object that is *in use*, not one that is *half built*. So a mid-construction
+thread wrapper whose guard fields are still zero remains selectable. That is
+the same defect class this update resolves for the other families and it is
+the next candidate here. The new
+`test_backend4_admission_never_exceeds_the_relocatable_tag_set` asserts only
+the direction that holds today (admission is a subset), deliberately, so the
+remaining gap stays visible rather than being frozen as intended.

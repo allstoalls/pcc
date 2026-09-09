@@ -85,7 +85,8 @@ declare i64 @callee(i64)
 define i64 @caller(i64 %value) {
 entry:
   %result = call i64 @callee(i64 %value)
-  ret i64 %result
+  %adjusted = add i64 %result, 1
+  ret i64 %adjusted
 }
 """.strip()
 

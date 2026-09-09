@@ -2151,13 +2151,17 @@ class UnsafeIntrinsicMixin:
             )
         if intrinsic == "ptr_diff":
             self._unsafe_expect_arity(intrinsic, expr, 2)
+            # These are addresses, like ptr_add's base. Untyped application
+            # parameters can carry them as tagged integers; subtract the
+            # decoded addresses rather than their object representation.
+            # Runtime-port pointer lanes remain unchanged by this helper.
             lhs_i = self.builder.ptrtoint(
-                self._unsafe_ptr_arg(expr.args[0]),
+                self._unsafe_address_arg(expr.args[0]),
                 _I64,
                 name=self._fresh("unsafe.ptr.diff.l"),
             )
             rhs_i = self.builder.ptrtoint(
-                self._unsafe_ptr_arg(expr.args[1]),
+                self._unsafe_address_arg(expr.args[1]),
                 _I64,
                 name=self._fresh("unsafe.ptr.diff.r"),
             )

@@ -360,7 +360,8 @@ def _mem2reg_single_block_function(lines: list[str]) -> list[str]:
 def _sroa_function(lines: list[str]) -> list[str]:
     block_ids = _block_ids(lines)
     blocked = _control_flow_blocks(lines, block_ids)
-    taken_names = _all_defined_ssa_names(lines)
+    taken_names: set[str] = set()
+    names_scanned = False
     candidates: dict[str, dict[str, object]] = {}
     for index, line in enumerate(lines):
         parsed = _parse_alloca(line)
@@ -370,6 +371,9 @@ def _sroa_function(lines: list[str]) -> list[str]:
         fields = _literal_struct_fields(ty)
         if fields is None or len(fields) < 2 or len(fields) > 4:
             continue
+        if not names_scanned:
+            taken_names = _all_defined_ssa_names(lines)
+            names_scanned = True
         slot_names: list[str] = []
         field_index = 0
         while field_index < len(fields):
@@ -482,6 +486,11 @@ def _sroa_function(lines: list[str]) -> list[str]:
 
 
 def _parse_alloca(line: str):
+    # Reject unrelated opcodes before allocating assignment pieces. Every
+    # accepted spelling below contains this token; false positives still pass
+    # through the original parser and its fail-closed checks.
+    if "alloca " not in line:
+        return None
     assignment = _split_assignment(line)
     if assignment is None:
         return None
@@ -498,6 +507,8 @@ def _parse_alloca(line: str):
 
 
 def _parse_store(line: str):
+    if "store " not in line:
+        return None
     stripped = line.strip()
     if not stripped.startswith("store "):
         return None
@@ -521,6 +532,8 @@ def _parse_store(line: str):
 
 
 def _parse_load(line: str):
+    if "load " not in line:
+        return None
     assignment = _split_assignment(line)
     if assignment is None:
         return None
@@ -542,6 +555,8 @@ def _parse_load(line: str):
 
 
 def _parse_struct_gep(line: str):
+    if "getelementptr " not in line:
+        return None
     assignment = _split_assignment(line)
     if assignment is None:
         return None

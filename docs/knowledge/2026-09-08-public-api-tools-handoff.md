@@ -1,5 +1,10 @@
 # Public API and core tools — P1 work in progress
 
+> Historical session snapshot, not current task instructions. HEAD, dirty state,
+> blockers and artifact paths below describe the recorded session. Check current
+> source, `git status` and execution before reusing them; later user instructions
+> take precedence. Search relevant sections instead of loading this whole file.
+
 ## Priority and current instruction
 
 The maintainer reconfirmed native pcc1 self-hosting and the five-GC program as

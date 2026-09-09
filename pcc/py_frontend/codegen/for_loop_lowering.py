@@ -781,6 +781,7 @@ class ForLoopLoweringMixin:
         stmt: For,
         iter_val: ir.Value,
         iter_ty: Type,
+        source_owned: Optional[bool] = None,
     ) -> None:
         """Lower ``for <name> in <list|tuple>:`` via index + length.
 
@@ -797,6 +798,19 @@ class ForLoopLoweringMixin:
             iter_val,
             iter_ty,
         )
+        if source_owned is None:
+            source_owned = self._owned_release_needed(iter_val, stmt.iter)
+        if not source_owned:
+            iter_obj = self._gc_retain(iter_obj, name=self._fresh("for.lst.retain"))
+        # The indexed loop needs the same independent, updateable owner as
+        # an iterator. Field reads arrive owned; local reads need a retain so
+        # rebinding the source in the body cannot destroy the active list.
+        source_name = self._fresh("for.lst.source")
+        source_slot = _for_prepare_owned_object_target(self, source_name, iter_ty)
+        _for_store_owned_target(self, source_name, source_slot, iter_obj)
+        outer_err = getattr(self, "_try_err_block", None)
+        source_err = fn.append_basic_block(name=self._fresh("for.lst.error"))
+        self._try_err_block = source_err
         if isinstance(iter_ty, ListType):
             len_helper = "py_list_len"
             get_helper = "py_list_get"
@@ -878,6 +892,11 @@ class ForLoopLoweringMixin:
         self.builder.cbranch(cond, body_bb, end_bb)
 
         self.builder.position_at_end(body_bb)
+        iter_obj = self.builder.call(
+            self.runtime["pcc_gc_load_ptr"],
+            [ir.Constant(_CSTR, None), self._as_gc_ptr(source_slot[0])],
+            name=self._fresh("for.lst.current"),
+        )
         target_alloca, target_ir_ty, _ = slot
         if (
             isinstance(iter_ty, ListType)
@@ -967,7 +986,22 @@ class ForLoopLoweringMixin:
         self._emit_thread_safepoint()
         self.builder.branch(cond_bb)
 
+        self._try_err_block = outer_err
+        self.builder.position_at_end(source_err)
+        self.builder.call(
+            self.runtime["pcc_gc_store_root"],
+            [self._as_gc_ptr(source_slot[0]), ir.Constant(_CSTR, None)],
+        )
+        source_flag = self._ensure_owned_local_flag(source_name, source_slot[0])
+        self.builder.store(ir.Constant(_I1, 0), source_flag)
+        self.builder.branch(outer_err if outer_err is not None else self._ensure_fn_err_exit())
+
         self.builder.position_at_end(end_bb)
+        self.builder.call(
+            self.runtime["pcc_gc_store_root"],
+            [self._as_gc_ptr(source_slot[0]), ir.Constant(_CSTR, None)],
+        )
+        self.builder.store(ir.Constant(_I1, 0), source_flag)
 
     def _ensure_object_for_target(self, target_ident: str):
         return _for_prepare_owned_object_target(
@@ -1898,11 +1932,13 @@ class ForLoopLoweringMixin:
                     [iter_val],
                     name=self._fresh("for.dict.keys"),
                 )
+                self._gc_release_if_owned(iter_val, stmt.iter)
                 synthetic_ty = ListType(name="list", elem=iter_ty.key)
                 return self._emit_for_list_index(
                     stmt,
                     keys_val,
                     synthetic_ty,
+                    source_owned=True,
                 )
             # StrType: ``for ch in s:`` iterates codepoints. Slice each
             # index into a 1-char str — keeps the whole loop libpython-

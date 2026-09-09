@@ -26,6 +26,7 @@ from .freestanding_abi_constants import PY_TYPE_SET
 
 _I1 = ir.IntType(1)
 _I64 = ir.IntType(64)
+_CSTR = ir.IntType(8).as_pointer()
 
 _DYN_SET_METHOD_NATIVE = frozenset(
     {
@@ -423,60 +424,51 @@ class SetLoweringMixin:
                 ir.Constant(_I64, 0),
                 name=self._fresh("set.isdisjoint.i1"),
             )
-        item = self._emit_expr_as_pcc_object(expr.args[0])
+        recv_owned = self._owned_release_needed(recv, attr.obj)
+        recv_root = self._enter_container_temp_root(recv, self._fresh("set.receiver"))
+        item = self._emit_expr_with_cpy_operand_cleanup(
+            expr.args[0], (), as_pcc_object=True,
+            rooted_pcc_lifetimes=((recv_root, recv_owned),),
+        )
+        item_owned = self._owned_release_needed(item, expr.args[0])
+        item_root = self._enter_container_temp_root(item, self._fresh("set.item"))
+        recv = self.builder.call(self.runtime["pcc_gc_load_ptr"],
+            [ir.Constant(_CSTR, None), self._as_gc_ptr(recv_root)])
+        item = self.builder.call(self.runtime["pcc_gc_load_ptr"],
+            [ir.Constant(_CSTR, None), self._as_gc_ptr(item_root)])
         if name == "add":
             self.builder.call(self.runtime["py_set_add"], [recv, item])
-            # The void helper reports an unhashable item through the pending
-            # exception channel.  Do not let ``set.add`` appear successful.
-            self._emit_post_call_err_check(expr.span)
-            return self._emit_none_literal()
-        removed = self.builder.call(
-            self.runtime["py_set_remove"],
-            [recv, item],
-            name=self._fresh("set.remove"),
+        else:
+            removed = self.builder.call(self.runtime["py_set_remove"], [recv, item],
+                                        name=self._fresh("set.remove"))
+            if name == "remove":
+                # Preserve a hash/equality failure. Only absence without a
+                # pending exception creates KeyError, carrying the actual key.
+                pending = self.builder.call(self.runtime["py_err_occurred"], [])
+                missing = self.builder.and_(
+                    self.builder.icmp_signed("<", removed, ir.Constant(_I64, 0)),
+                    self.builder.icmp_signed("==", pending, ir.Constant(_I64, 0)),
+                )
+                miss_bb = self.current_function.append_basic_block(self._fresh("set.remove.miss"))
+                end_bb = self.current_function.append_basic_block(self._fresh("set.remove.end"))
+                self.builder.cbranch(missing, miss_bb, end_bb)
+                self.builder.position_at_end(miss_bb)
+                key = self.builder.call(self.runtime["pcc_gc_load_ptr"],
+                    [ir.Constant(_CSTR, None), self._as_gc_ptr(item_root)])
+                exc = self.builder.call(self.runtime["py_exc_new_with_value"],
+                    [ir.Constant(_I64, 4), key], name=self._fresh("set.remove.exc"))
+                self.builder.call(self.runtime["py_raise"], [exc])
+                self._gc_release(exc)
+                self.builder.branch(end_bb)
+                self.builder.position_at_end(end_bb)
+        # Reload through the rooted slots before releasing: a hash/equality
+        # callback may collect, move objects or replace their original binding.
+        self._release_rooted_pcc_lifetimes(
+            ((recv_root, recv_owned), (item_root, item_owned)),
         )
-        # ``-1`` means either an absent item or a hash failure.  Preserve a
-        # pending hash exception before discard ignores absence or remove
-        # synthesizes KeyError for the ordinary missing-item case.
         self._emit_post_call_err_check(expr.span)
-        if name == "discard":
-            return self._emit_none_literal()
-        missing = self.builder.icmp_signed(
-            "<",
-            removed,
-            ir.Constant(_I64, 0),
-            name=self._fresh("set.remove.missing"),
-        )
-        ok_bb = self.current_function.append_basic_block(
-            name=self._fresh("set.remove.ok"),
-        )
-        miss_bb = self.current_function.append_basic_block(
-            name=self._fresh("set.remove.miss"),
-        )
-        end_bb = self.current_function.append_basic_block(
-            name=self._fresh("set.remove.end"),
-        )
-        self.builder.cbranch(missing, miss_bb, ok_bb)
-        self.builder.position_at_end(miss_bb)
-        exc = self.builder.call(
-            self.runtime["py_exc_new"],
-            [
-                ir.Constant(_I64, 12),
-                self._ptr_to_cstr(
-                    self._cstr_global(
-                        "set.remove(x): x not in set",
-                        ".err.set.remove",
-                    )
-                ),
-            ],
-            name=self._fresh("set.remove.exc"),
-        )
-        self.builder.call(self.runtime["py_raise"], [exc])
-        self.builder.branch(end_bb)
-        self.builder.position_at_end(ok_bb)
-        self.builder.branch(end_bb)
-        self.builder.position_at_end(end_bb)
         return self._emit_none_literal()
+
     def _maybe_emit_set_builtin(self, expr: Call) -> Optional[ir.Value]:
         """``set()`` / ``set([a, b])`` / ``set((a, b, c))`` / ``set(iterable)``.
 
@@ -508,25 +500,31 @@ class SetLoweringMixin:
             return new_set
         arg = expr.args[0]
         if isinstance(arg, (ListExpr, TupleExpr)):
-            for el in arg.elems:
-                if (
-                    isinstance(el, Call)
-                    and isinstance(el.func, Name)
-                    and el.func.ident in ("*", "__starred__")
-                    and len(el.args) == 1
-                ):
-                    # ``{x, *iterable}`` — spread iterable into the
-                    # new set by iterating py_obj_len / py_obj_getitem
-                    # and adding each element. Matches the list-literal
-                    # splat ergonomics.
-                    self._spread_into_set(new_set, el.args[0])
-                    continue
-                v_obj = self._emit_expr_as_pcc_object(el)
-                self.builder.call(
-                    self.runtime["py_set_add"],
-                    [new_set, v_obj],
-                )
-                self._emit_post_call_err_check(getattr(el, "span", expr.span))
+            root = self._enter_container_temp_root(new_set, self._fresh("set.literal"))
+            old_err = self._current_try_err_block()
+            old_cpy_err = getattr(self, "_cpy_operand_cleanup_block", None)
+            target = old_err if old_err is not None else self._ensure_fn_err_exit()
+            self._try_err_block = self._make_cpy_operand_cleanup_block(
+                (), (), target, "set.literal.error", rooted_pcc_lifetimes=((root, True),),
+            )
+            self._cpy_operand_cleanup_block = self._try_err_block
+            try:
+                for el in arg.elems:
+                    if (
+                        isinstance(el, Call)
+                        and isinstance(el.func, Name)
+                        and el.func.ident in ("*", "__starred__")
+                        and len(el.args) == 1
+                    ):
+                        self._spread_into_set(new_set, el.args[0])
+                        continue
+                    # The same retaining-insertion contract as a set
+                    # comprehension, including operand/error cleanup.
+                    self._emit_comprehension_innermost("set", new_set, el, None, None)
+            finally:
+                self._try_err_block = old_err
+                self._cpy_operand_cleanup_block = old_cpy_err
+            self._leave_container_temp_root(root)
             return new_set
         arg_ty = arg.ty
         if isinstance(arg_ty, SetType):

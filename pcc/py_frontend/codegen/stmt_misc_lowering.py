@@ -16,6 +16,8 @@ from ..py_ast import (
 )
 from .errors import L1CodegenError
 from .freestanding_abi_constants import PY_TYPE_BYTEARRAY, PY_TYPE_LIST
+from .for_loop_lowering import _for_prepare_owned_object_target, _for_store_owned_target
+from .method_call_lowering import _method_pointer_provenance
 
 _I64 = ir.IntType(64)
 
@@ -329,6 +331,16 @@ class StmtMiscLoweringMixin:
             if exact_value is not None
             else self._emit_expr(value_expr)
         )
+        provenance = _method_pointer_provenance(
+            self, value, value_expr.ty, source_expr=value_expr,
+            newly_owned=self._owned_release_needed(value, value_expr),
+        )
+        if provenance[1]:
+            # The expression result and each target binding have independent
+            # lifetimes. Normalize the result to NEW, including borrowed RHSs.
+            if not provenance[3]:
+                value = self._gc_retain(value, name=self._fresh("walrus.result"))
+            self._note_owned_object_value(value)
         if isinstance(target, Call) and self._is_walrus_sentinel(target):
             self._store_walrus_chain_target(target, value, value_expr.ty)
             return value
@@ -337,16 +349,7 @@ class StmtMiscLoweringMixin:
                 "walrus target must be a plain Name, Attr, or Subscript"
             )
         if isinstance(target, Name):
-            self._store_value_at_name(
-                target,
-                value,
-                value_expr.ty,
-                # A walrus target and the surrounding expression both own the
-                # value.  Store as borrowed so the binding takes an
-                # independent ref; preserve the original result for the
-                # enclosing assignment/expression consumer.
-                value_is_owned=False,
-            )
+            self._store_walrus_single_target(target, value, value_expr.ty)
         else:
             if isinstance(target, Attr):
                 self._emit_attr_store_value(target, value, value_expr.ty)
@@ -390,6 +393,21 @@ class StmtMiscLoweringMixin:
 
     def _store_walrus_single_target(self, target, value: ir.Value, value_ty) -> None:
         if isinstance(target, Name):
+            if (
+                self.current_func_def is not None
+                and target.ident not in getattr(self, "_current_global_names", set())
+                and target.ident not in getattr(self, "_planned_exact_int_local_names", set())
+                and self._value_is_owned_object(value)
+            ):
+                # A plain pointer store does not retain or register a local.
+                # Use the shared replaceable-owner slot protocol so consuming
+                # the surrounding truth test cannot destroy this binding.
+                self._gc_pin(value)
+                slot = _for_prepare_owned_object_target(self, target.ident, value_ty)
+                binding = self._gc_retain(value, name=self._fresh("walrus.binding"))
+                _for_store_owned_target(self, target.ident, slot, binding)
+                self._gc_unpin(value)
+                return
             self._store_value_at_name(
                 target,
                 value,

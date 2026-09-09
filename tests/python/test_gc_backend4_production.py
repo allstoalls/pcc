@@ -180,6 +180,8 @@ def _reseed_authoritative_evacuation_pages_source() -> str:
             pcc_gc_store_root(&small_root, small);
             pcc_gc_store_root(&medium_root, medium);
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)small);
+            pcc_gc_publish_initialized((PyObject *)medium);
             if (pcc_gc_select_relocation_set(32) != 2) return 4;
 
             for (int round = 0; round < 2; round++) {
@@ -253,6 +255,7 @@ def _concurrent_reset_reseed_plan_source() -> str:
                 PyObject *obj = pcc_gc_alloc(128, PY_TYPE_LIST, 0);
                 if (obj == 0) return 3;
                 pcc_gc_store_root(&roots[i], obj);
+                pcc_gc_publish_initialized(obj);
             }
             if (pcc_gc_select_relocation_set(OBJECTS) != OBJECTS) return 4;
 
@@ -335,6 +338,8 @@ def _forced_reseed_plan_paths_source() -> str:
             roots[0] = pcc_gc_alloc(128, PY_TYPE_LIST, 0);
             roots[1] = pcc_gc_alloc(8192, PY_TYPE_LIST, 0);
             if (roots[0] == 0 || roots[1] == 0) return 3;
+            pcc_gc_publish_initialized(roots[0]);
+            pcc_gc_publish_initialized(roots[1]);
             if (pcc_gc_select_relocation_set(1) != 1) return 4;
 
             pcc_gc_backend4_reseed_plan_probe_config(1, -1);
@@ -411,6 +416,7 @@ def _many_page_reseed_source() -> str:
                 pcc_gc_scheduler_root_register(&roots[i]);
                 roots[i] = pcc_gc_alloc(OBJECT_SIZE, PY_TYPE_LIST, 0);
                 if (roots[i] == 0) return 3;
+                pcc_gc_publish_initialized(roots[i]);
             }
             if (pcc_gc_select_relocation_set(OBJECTS) != OBJECTS) return 4;
             pcc_gc_telemetry_reset();
@@ -465,6 +471,7 @@ def _forced_reseed_count_unlink_source() -> str:
                 pcc_gc_scheduler_root_register(&roots[i]);
                 roots[i] = pcc_gc_alloc(OBJECT_SIZE, PY_TYPE_LIST, 0);
                 if (roots[i] == 0) return 3;
+                pcc_gc_publish_initialized(roots[i]);
             }
             if (pcc_gc_select_relocation_set(OBJECTS) != OBJECTS) return 4;
             pcc_gc_backend4_reseed_plan_probe_config(1, -1);
@@ -550,6 +557,7 @@ def _deallocating_relocation_quarantine_source() -> str:
             obj->length = 0;
             obj->capacity = 0;
             obj->items = 0;
+            pcc_gc_publish_initialized((PyObject *)obj);
             return obj;
         }
 
@@ -558,12 +566,24 @@ def _deallocating_relocation_quarantine_source() -> str:
                     PCC_GC_KIND_COLORED_RELOCATING
                 ) != 0) return 2;
 
+            /* pcc_gc_alloc hands back a half-initialized object carrying
+             * PY_FLAG_GC_FRESH_ALLOC, and the selector refuses a fresh owner
+             * outright, so new_list publishes the way a real constructor
+             * does.  Without that, BOTH halves of this probe passed for the
+             * wrong reason: nothing was ever selectable, so the DEALLOCATING
+             * quarantine below was never the flag that decided anything.  Selection is also per page and budget 1 takes one
+             * object from the best-scoring page, which need not be this
+             * object's page -- so ask for room and assert containment. */
             ProbeListObject *before_select = new_list();
             if (before_select == 0) return 3;
             py_header_flags_or(
                 &before_select->h, PY_FLAG_GC_DEALLOCATING
             );
-            if (pcc_gc_select_relocation_set(1) != 0) return 4;
+            pcc_gc_reset_relocation_set();
+            (void)pcc_gc_select_relocation_set(1000);
+            if (
+                pcc_gc_relocation_set_contains((PyObject *)before_select) != 0
+            ) return 4;
             py_header_flags_and(
                 &before_select->h, ~PY_FLAG_GC_DEALLOCATING
             );
@@ -571,7 +591,11 @@ def _deallocating_relocation_quarantine_source() -> str:
 
             ProbeListObject *after_select = new_list();
             if (after_select == 0) return 5;
-            if (pcc_gc_select_relocation_set(1) != 1) return 6;
+            pcc_gc_reset_relocation_set();
+            (void)pcc_gc_select_relocation_set(1000);
+            if (
+                pcc_gc_relocation_set_contains((PyObject *)after_select) != 1
+            ) return 6;
             py_header_flags_or(
                 &after_select->h, PY_FLAG_GC_DEALLOCATING
             );
@@ -631,6 +655,7 @@ def _relocation_slot_retain_balance_source() -> str:
             py_decref(child);
             if (refcount_of(child) != 1) return 5;
 
+            pcc_gc_publish_initialized((PyObject *)owner);
             pcc_gc_reset_relocation_set();
             if (pcc_gc_select_relocation_set(1) != 1) return 6;
             PyObject *moved_raw = pcc_gc_relocate_copy(
@@ -702,6 +727,7 @@ def _relocation_type_specific_raw_payload_source() -> str:
             exc->traceback[1].source_line = "x1";
             exc->traceback[1].line = 29;
             PyFrameRecord *old_traceback = exc->traceback;
+            pcc_gc_publish_initialized((PyObject *)exc);
             if (!select_for_relocation((PyObject *)exc)) return 12;
             if (pcc_gc_relocate_copy((PyObject *)exc, 16) != 0) return 15;
             if (pcc_gc_relocation_set_contains((PyObject *)exc) != 1) return 16;
@@ -799,6 +825,7 @@ def _relocation_type_specific_raw_payload_source() -> str:
             cls->attrs = 0;
             cls->metaclass = 0;
             if (cls->bases == 0 || cls->mro == 0 || cls->methods == 0) return 71;
+            pcc_gc_publish_initialized((PyObject *)cls);
             if (!select_for_relocation((PyObject *)cls)) return 72;
             PyObject *moved_raw = pcc_gc_relocate_copy(
                 (PyObject *)cls, (int64_t)sizeof(PyClassObject)
@@ -1081,7 +1108,19 @@ def test_backend4_deallocating_objects_are_quarantined_from_add_score_and_copy_s
     strict_add = strict_backend.split("def _relocation_set_add(", 1)[1].split(
         '@c_abi_export("pcc_gc_backend4_relocation_set_remove")', 1
     )[0]
-    assert "if (flags & (8192 | 524288)) != 0:\n        return 0" in strict_add
+    # Match the bits this contract is about, not the exact literal mask: the
+    # guard has since grown the fresh-alloc and pinned bits, which does not
+    # weaken the quarantine but did make an exact-string assertion fail while
+    # the property it names still held.
+    strict_guard = strict_add.split("flags & (", 1)[1].split(")", 1)[0]
+    strict_guard_bits = {term.strip() for term in strict_guard.split("|")}
+    assert {"8192", "524288"} <= strict_guard_bits, strict_guard
+    strict_after_guard = strict_add.split(
+        "flags & (" + strict_guard + ")", 1
+    )[1]
+    assert strict_after_guard.startswith(") != 0:\n        return 0"), (
+        strict_after_guard[:60]
+    )
     assert strict_add.index("524288") < strict_add.index("node = malloc(16)")
     assert strict_add.index("524288") < strict_add.index(
         "store_i32(obj, 12, flags | 2048)"
@@ -2939,6 +2978,9 @@ def test_backend4_relocation_preserves_descriptor_slots(tmp_path):
             pcc_gc_store_root(&sm_root, (PyObject *)sm);
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)prop);
+            pcc_gc_publish_initialized((PyObject *)cm);
+            pcc_gc_publish_initialized((PyObject *)sm);
             if (pcc_gc_select_relocation_set(64) <= 0) return 5;
             if (pcc_gc_relocation_set_contains((PyObject *)prop) != 1) return 6;
             if (pcc_gc_relocation_set_contains((PyObject *)cm) != 1) return 7;
@@ -3006,6 +3048,7 @@ def test_backend4_relocation_preserves_memoryview_base(tmp_path):
             pcc_gc_store_root(&root, (PyObject *)mv);
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)mv);
             if (pcc_gc_select_relocation_set(64) <= 0) return 5;
             if (pcc_gc_relocation_set_contains((PyObject *)mv) != 1) return 6;
             if (pcc_gc_relocate_copy((PyObject *)mv, (int64_t)sizeof(ProbeMemoryViewObject)) == 0) return 7;
@@ -3455,6 +3498,7 @@ def test_backend4_relocation_preserves_iter_sequence_and_index(tmp_path):
             pcc_gc_release(seq);
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)it);
             if (pcc_gc_select_relocation_set(64) <= 0) return 5;
             if (pcc_gc_relocation_set_contains(root) != 1) return 6;
             PyObject *moved_raw = pcc_gc_relocate_copy(
@@ -3624,6 +3668,7 @@ def test_backend4_relocation_preserves_generator_state_and_slots(tmp_path):
             pcc_gc_release(send_value);
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)gen);
             if (pcc_gc_select_relocation_set(64) <= 0) return 5;
             if (pcc_gc_relocation_set_contains(root) != 1) return 6;
             PyObject *moved_raw = pcc_gc_relocate_copy(
@@ -3726,6 +3771,7 @@ def test_backend4_relocation_preserves_coroutine_shell_state(tmp_path):
             pcc_gc_release(result);
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)coro);
             if (pcc_gc_select_relocation_set(64) <= 0) return 5;
             if (pcc_gc_relocation_set_contains(root) != 1) return 6;
             PyObject *moved_raw = pcc_gc_relocate_copy(
@@ -3821,6 +3867,7 @@ def test_backend4_relocation_preserves_task_slots_and_done(tmp_path):
             pcc_gc_release(waiter);
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)task);
             if (pcc_gc_select_relocation_set(64) <= 0) return 5;
             if (pcc_gc_relocation_set_contains(root) != 1) return 6;
             PyObject *moved_raw = pcc_gc_relocate_copy(
@@ -3922,6 +3969,7 @@ def test_backend4_relocation_preserves_exception_slots_and_traceback(tmp_path):
             pcc_gc_release(context);
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)exc);
             if (pcc_gc_select_relocation_set(64) <= 0) return 6;
             if (pcc_gc_relocation_set_contains(root) != 1) return 7;
             PyObject *moved_raw = pcc_gc_relocate_copy(
@@ -4438,6 +4486,7 @@ def test_backend4_relocation_retargets_class_attrs_side_table(tmp_path):
             pcc_gc_release(value);
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)cls);
             if (pcc_gc_select_relocation_set(64) <= 0) return 7;
             if (pcc_gc_relocation_set_contains(root) != 1) return 8;
             if (pcc_gc_relocation_set_contains(old_attrs) != 1) return 20;
@@ -4631,6 +4680,7 @@ def test_backend4_class_relocation_loads_forwarded_attrs_slot(tmp_path):
             pcc_gc_release(value);
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)cls);
             if (pcc_gc_select_relocation_set(64) <= 0) return 7;
             if (pcc_gc_relocation_set_contains(root) != 1) return 8;
             if (pcc_gc_relocation_set_contains(old_attrs) != 1) return 9;
@@ -4730,6 +4780,7 @@ def test_backend4_class_attrs_api_resolves_forwarded_class_argument(tmp_path):
             cls->attrs = 0;
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)cls);
             if (pcc_gc_select_relocation_set(64) <= 0) return 4;
             if (pcc_gc_relocation_set_contains((PyObject *)cls) != 1) return 5;
             PyObject *moved_cls_raw = pcc_gc_relocate_copy(
@@ -4821,6 +4872,7 @@ def test_backend4_class_relocation_loads_forwarded_metadata_slots(tmp_path):
             cls->type_tag_alloc = tag;
             cls->del_method = 0;
             cls->attrs = 0;
+            pcc_gc_publish_initialized((PyObject *)cls);
             return cls;
         }
 
@@ -4978,6 +5030,7 @@ def test_backend4_class_lookup_loads_forwarded_method_slot(tmp_path):
                reload/heal the function slot through the relocation barrier. */
             if (py_class_lookup(cls, "method") != func) return 13;
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)cls);
             if (pcc_gc_select_relocation_set(64) <= 0) return 5;
             if (pcc_gc_relocation_set_contains(func) != 1) return 6;
             PyObject *moved_func_raw = pcc_gc_relocate_copy(
@@ -5137,6 +5190,8 @@ def test_backend4_isinstance_resolves_forwarded_class_argument(tmp_path):
             inst->cls = cls;
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)cls);
+            pcc_gc_publish_initialized((PyObject *)inst);
             if (pcc_gc_select_relocation_set(64) <= 0) return 5;
             if (pcc_gc_relocation_set_contains((PyObject *)cls) != 1) return 6;
             PyObject *moved_cls_raw = pcc_gc_relocate_copy(
@@ -5233,6 +5288,8 @@ def test_backend4_instance_get_field_loads_forwarded_slot(tmp_path):
             int64_t value_id = pcc_gc_object_id(value);
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)cls);
+            pcc_gc_publish_initialized((PyObject *)inst);
             if (pcc_gc_select_relocation_set(64) <= 0) return 4;
             if (pcc_gc_relocation_set_contains(value) != 1) return 5;
             PyObject *moved_value_raw = pcc_gc_relocate_copy(
@@ -5326,6 +5383,8 @@ def test_backend4_instance_get_field_resolves_forwarded_class_slot(tmp_path):
             int64_t cls_id = pcc_gc_object_id((PyObject *)cls);
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)cls);
+            pcc_gc_publish_initialized((PyObject *)inst);
             if (pcc_gc_select_relocation_set(64) <= 0) return 4;
             if (pcc_gc_relocation_set_contains((PyObject *)cls) != 1) return 5;
             PyObject *moved_cls_raw = pcc_gc_relocate_copy(
@@ -5407,6 +5466,7 @@ def test_backend4_instance_new_resolves_forwarded_class_argument(tmp_path):
             int64_t cls_id = pcc_gc_object_id((PyObject *)cls);
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)cls);
             if (pcc_gc_select_relocation_set(64) <= 0) return 4;
             if (pcc_gc_relocation_set_contains((PyObject *)cls) != 1) return 5;
             PyObject *moved_cls_raw = pcc_gc_relocate_copy(
@@ -5492,6 +5552,8 @@ def test_backend4_class_add_method_resolves_forwarded_class_argument(tmp_path):
             int64_t cls_id = pcc_gc_object_id((PyObject *)cls);
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)cls);
+            pcc_gc_publish_initialized((PyObject *)func);
             if (pcc_gc_select_relocation_set(64) <= 0) return 5;
             if (pcc_gc_relocation_set_contains((PyObject *)cls) != 1) return 6;
             PyObject *moved_cls_raw = pcc_gc_relocate_copy(
@@ -5705,6 +5767,7 @@ def test_backend4_exception_match_loads_forwarded_mro_entry(tmp_path):
             cls->del_method = 0;
             cls->attrs = 0;
             cls->metaclass = 0;
+            pcc_gc_publish_initialized((PyObject *)cls);
             return cls;
         }
 
@@ -5835,6 +5898,8 @@ def test_backend4_dunder_lookup_loads_forwarded_instance_class_slot(tmp_path):
             pcc_gc_release((PyObject *)cls);
             pcc_gc_release((PyObject *)inst);
 
+            pcc_gc_publish_initialized((PyObject *)cls);
+            pcc_gc_publish_initialized((PyObject *)inst);
             if (pcc_gc_select_relocation_set(256) <= 0) return 4;
             if (pcc_gc_relocation_set_contains(cls_root) != 1) return 5;
             PyObject *moved_cls_raw = pcc_gc_relocate_copy(
@@ -6425,6 +6490,7 @@ def test_backend4_relocation_skips_thread_wrapper_with_native_handle(tmp_path):
             pcc_gc_store_root(&root, (PyObject *)thread);
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)thread);
             if (pcc_gc_select_relocation_set(64) != 0) return 4;
             if (pcc_gc_relocation_set_contains((PyObject *)thread) != 0) return 5;
             if (pcc_gc_relocate_copy((PyObject *)thread, (int64_t)sizeof(ProbeThreadObject)) != 0) return 6;
@@ -6517,6 +6583,12 @@ def test_backend4_relocation_skips_native_handle_wrappers(tmp_path):
             sem->value = 1;
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)file);
+            pcc_gc_publish_initialized((PyObject *)lock);
+            pcc_gc_publish_initialized((PyObject *)rlock);
+            pcc_gc_publish_initialized((PyObject *)event);
+            pcc_gc_publish_initialized((PyObject *)cond);
+            pcc_gc_publish_initialized((PyObject *)sem);
             if (pcc_gc_select_relocation_set(64) != 0) return 4;
             if (pcc_gc_relocation_set_contains((PyObject *)file) != 0) return 5;
             if (pcc_gc_relocation_set_contains((PyObject *)lock) != 0) return 6;
@@ -6682,6 +6754,7 @@ def test_backend4_genzgc_page_policy_records_candidates_and_evacuated_bytes(tmp_
             cls->del_method = 0;
             cls->attrs = 0;
             cls->metaclass = 0;
+            pcc_gc_publish_initialized((PyObject *)cls);
             return (PyObject *)cls;
         }
 
@@ -6822,6 +6895,7 @@ def test_backend4_genzgc_reset_relocation_set_clears_page_policy_shape(tmp_path)
             cls->del_method = 0;
             cls->attrs = 0;
             cls->metaclass = 0;
+            pcc_gc_publish_initialized((PyObject *)cls);
             return (PyObject *)cls;
         }
 
@@ -6902,6 +6976,7 @@ def test_backend4_genzgc_store_barrier_remembers_old_to_young_slot(tmp_path):
             obj->length = 0;
             obj->capacity = 0;
             obj->items = 0;
+            pcc_gc_publish_initialized((PyObject *)obj);
             return (PyObject *)obj;
         }
 
@@ -6940,6 +7015,7 @@ def test_backend4_genzgc_store_barrier_remembers_old_to_young_slot(tmp_path):
             if (pcc_gc_backend4_store_buffer_owner_fanout_high_water() != 2) return 31;
             if (pcc_gc_telemetry(PCC_GC_COUNTER_GENZGC_STORE_BUFFER_OWNER_FANOUT_HIGH_WATER) != 2) return 32;
 
+            pcc_gc_publish_initialized((PyObject *)owner);
             if (pcc_gc_step(1) < 1) return 9;
             if ((owner->h.flags & PY_FLAG_GC_REMEMBERED) == 0) return 10;
             if (pcc_gc_backend4_store_buffer_entries() != 1) return 14;
@@ -7008,6 +7084,7 @@ def test_backend4_genzgc_store_buffer_owner_count_high_water(tmp_path):
             owner->capacity = 1;
             owner->items = (PyObject **)calloc(1, sizeof(PyObject *));
             if (owner->items == 0) return 0;
+            pcc_gc_publish_initialized((PyObject *)owner);
             return owner;
         }
 
@@ -7021,6 +7098,7 @@ def test_backend4_genzgc_store_buffer_owner_count_high_water(tmp_path):
             obj->length = 0;
             obj->capacity = 0;
             obj->items = 0;
+            pcc_gc_publish_initialized((PyObject *)obj);
             return (PyObject *)obj;
         }
 
@@ -7094,6 +7172,7 @@ def test_backend4_genzgc_store_buffer_drains_in_bounded_batches(tmp_path):
             obj->length = 0;
             obj->capacity = 0;
             obj->items = 0;
+            pcc_gc_publish_initialized((PyObject *)obj);
             return (PyObject *)obj;
         }
 
@@ -7123,6 +7202,7 @@ def test_backend4_genzgc_store_buffer_drains_in_bounded_batches(tmp_path):
             if (pcc_gc_backend4_store_buffer_batch_capacity() != 8) return 7;
             if (pcc_gc_telemetry(PCC_GC_COUNTER_GENZGC_STORE_BUFFER_BATCH_CAPACITY) != 8) return 8;
 
+            pcc_gc_publish_initialized((PyObject *)owner);
             if (pcc_gc_step(10) < 8) return 9;
             if (pcc_gc_backend4_store_buffer_entries() != 2) return 10;
             if (pcc_gc_backend4_store_buffer_drain_batches() != 1) return 11;
@@ -7207,6 +7287,7 @@ def test_backend4_genzgc_store_buffer_uses_medium_path_before_global_flush(tmp_p
             if (pcc_gc_backend4_store_buffer_medium_full_flushes() != 1) return 11;
             if (pcc_gc_telemetry(PCC_GC_COUNTER_GENZGC_STORE_BUFFER_MEDIUM_PENDING) != 1) return 12;
 
+            pcc_gc_publish_initialized((PyObject *)owner);
             if (pcc_gc_step(8) < 8) return 13;
             if (pcc_gc_backend4_store_buffer_medium_pending() != 0) return 14;
             if (pcc_gc_backend4_store_buffer_medium_flushes() != 2) return 15;
@@ -7670,6 +7751,7 @@ def test_backend4_genzgc_telemetry_reset_reseeds_pending_store_buffer_shape(tmp_
             if (pcc_gc_backend4_store_buffer_duplicate_skips() != 0) return 14;
             if (pcc_gc_backend4_store_buffer_drain_batches() != 0) return 15;
 
+            pcc_gc_publish_initialized((PyObject *)owner);
             if (pcc_gc_step(2) < 2) return 16;
             if (pcc_gc_backend4_store_buffer_entries() != 0) return 17;
 
@@ -7797,6 +7879,7 @@ def test_backend4_genzgc_store_buffer_keeps_value_snapshot_until_drain(tmp_path)
             if (pcc_gc_backend4_store_buffer_entries() != 2) return 8;
             if (owner->items[0] != 0) return 9;
 
+            pcc_gc_publish_initialized((PyObject *)owner);
             if (pcc_gc_step(1) < 1) return 10;
             if ((owner->h.flags & PY_FLAG_GC_REMEMBERED) == 0) return 11;
             if (pcc_gc_backend4_store_buffer_entries() != 1) return 12;
@@ -7857,6 +7940,8 @@ def test_backend4_genzgc_allocations_default_young_and_age_to_old(tmp_path):
             if (pcc_gc_telemetry(PCC_GC_COUNTER_GENZGC_YOUNG_BYTES) != 64) return 20;
             if (pcc_gc_telemetry(PCC_GC_COUNTER_GENZGC_OLD_BYTES) != 64) return 21;
 
+            pcc_gc_publish_initialized((PyObject *)young);
+            pcc_gc_publish_initialized((PyObject *)explicit_old);
             if (pcc_gc_step(1) < 1) return 9;
             if ((((PyObjectHeader *)young)->flags & PY_FLAG_GC_OLD) == 0) return 10;
             if ((((PyObjectHeader *)young)->flags & PY_FLAG_GC_YOUNG) != 0) return 11;
@@ -8266,6 +8351,7 @@ def test_backend4_genzgc_step_evacuates_fragmented_large_zpage(tmp_path):
             if (pcc_gc_backend4_zpage_allocated_bytes() - allocated0 != 70000) return 9;
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)large);
             if (pcc_gc_step(1) != 1) return 10;
             if (pcc_gc_backend4_evacuated_bytes() != 70000) return 11;
             if (pcc_gc_telemetry(PCC_GC_COUNTER_GENZGC_EVACUATED_BYTES) != 70000) return 12;
@@ -8409,6 +8495,8 @@ def test_backend4_genzgc_candidate_zpage_bytes_count_shared_page_once(tmp_path):
             int64_t free0 = pcc_gc_backend4_zpage_free_pages();
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)a);
+            pcc_gc_publish_initialized((PyObject *)b);
             if (pcc_gc_select_relocation_set(2) != 2) return 5;
             if (pcc_gc_relocation_set_contains(a) != 1) return 6;
             if (pcc_gc_relocation_set_contains(b) != 1) return 7;
@@ -8473,6 +8561,8 @@ def test_backend4_genzgc_relocation_targets_use_non_evacuation_zpage(tmp_path):
 
             int64_t pages0 = pcc_gc_backend4_zpage_count();
             int64_t free0 = pcc_gc_backend4_zpage_free_pages();
+            pcc_gc_publish_initialized((PyObject *)a);
+            pcc_gc_publish_initialized((PyObject *)b);
             if (pcc_gc_select_relocation_set(2) != 2) return 5;
 
             PyObject *moved_a = pcc_gc_relocate_copy(a, 128);
@@ -9955,6 +10045,7 @@ def test_backend4_genzgc_relocation_retargets_remembered_list_slots(tmp_path):
             if (pcc_gc_backend4_zpage_remembered_cards() - cards0 != 1) return 8;
             if (pcc_gc_backend4_zpage_dirty_pages() - dirty0 != 1) return 9;
 
+            pcc_gc_publish_initialized((PyObject *)owner);
             if (pcc_gc_select_relocation_set(8) <= 0) return 10;
             if (pcc_gc_relocation_set_contains((PyObject *)owner) != 1) return 11;
             PyObject *moved_raw = pcc_gc_relocate_copy(
@@ -10034,6 +10125,7 @@ def test_backend4_genzgc_relocation_retargets_inline_tuple_slots(tmp_path):
             if (pcc_gc_backend4_remembered_page_contains_slot(old_slot) != 1) return 5;
             if (pcc_gc_backend4_zpage_remembered_slots() - slots0 != 1) return 6;
 
+            pcc_gc_publish_initialized((PyObject *)owner);
             if (pcc_gc_select_relocation_set(8) <= 0) return 7;
             if (pcc_gc_relocation_set_contains((PyObject *)owner) != 1) return 8;
             PyObject *moved_raw = pcc_gc_relocate_copy(
@@ -10102,6 +10194,7 @@ def test_backend4_genzgc_selector_uses_zpage_remembered_pressure(tmp_path):
             owner->capacity = 1;
             owner->items = (PyObject **)calloc(1, sizeof(PyObject *));
             if (owner->items == 0) return 0;
+            pcc_gc_publish_initialized((PyObject *)owner);
             return owner;
         }
 
@@ -10120,6 +10213,7 @@ def test_backend4_genzgc_selector_uses_zpage_remembered_pressure(tmp_path):
 
             pcc_gc_store_ptr((PyObject *)dirty, &dirty->items[0], young);
             if (pcc_gc_backend4_zpage_remembered_slots() < 1) return 4;
+            pcc_gc_publish_initialized((PyObject *)young);
             if (pcc_gc_select_relocation_set(1) != 1) return 5;
             if (pcc_gc_relocation_set_contains((PyObject *)dirty) != 1) return 6;
             if (pcc_gc_relocation_set_contains((PyObject *)clean) != 0) return 7;
@@ -10295,6 +10389,8 @@ def test_backend4_genzgc_evacuation_incomplete_batches_track_budget_backlog(tmp_
             pcc_gc_store_root(&medium_root, medium);
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)small);
+            pcc_gc_publish_initialized((PyObject *)medium);
             if (pcc_gc_select_relocation_set(32) != 2) return 4;
             if (pcc_gc_relocation_set_size() != 2) return 5;
             if (pcc_gc_step(1) < 1) return 6;
@@ -10337,6 +10433,8 @@ def test_backend4_genzgc_evacuation_drain_preserves_page_handoff_until_empty(tmp
             if (a == 0 || b == 0) return 3;
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)a);
+            pcc_gc_publish_initialized((PyObject *)b);
             if (pcc_gc_select_relocation_set(8) != 2) return 4;
             if (pcc_gc_relocation_set_size() != 2) return 5;
             if (pcc_gc_backend4_evacuation_page_candidate_score() != 1) return 6;
@@ -10396,6 +10494,7 @@ def test_backend4_genzgc_evacuation_page_handoff_reports_current_pressure(tmp_pa
             owner->capacity = 1;
             owner->items = (PyObject **)calloc(1, sizeof(PyObject *));
             if (owner->items == 0) return 0;
+            pcc_gc_publish_initialized((PyObject *)owner);
             return owner;
         }
 
@@ -10413,6 +10512,7 @@ def test_backend4_genzgc_evacuation_page_handoff_reports_current_pressure(tmp_pa
 
             pcc_gc_store_ptr((PyObject *)dirty, &dirty->items[0], young);
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)young);
             if (pcc_gc_select_relocation_set(8) != 2) return 4;
             if (pcc_gc_backend4_evacuation_page_candidate_score() != 1) return 5;
             if (pcc_gc_backend4_evacuation_page_candidate_bytes() != 256) return 6;
@@ -10455,6 +10555,8 @@ def test_backend4_genzgc_evacuation_page_drain_moves_whole_selected_page(tmp_pat
             if (a == 0 || b == 0) return 3;
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)a);
+            pcc_gc_publish_initialized((PyObject *)b);
             if (pcc_gc_select_relocation_set(8) != 2) return 4;
             if (pcc_gc_relocation_set_size() != 2) return 5;
             if (pcc_gc_backend4_evacuation_page_candidate_score() != 1) return 6;
@@ -10497,6 +10599,8 @@ def test_backend4_genzgc_step_drains_selected_zpage_as_page_budget(tmp_path):
             if (pcc_gc_backend4_zpage_owner_offset_bytes(b) != 128) return 5;
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)a);
+            pcc_gc_publish_initialized((PyObject *)b);
             if (pcc_gc_select_relocation_set(8) != 2) return 6;
             if (pcc_gc_relocation_set_size() != 2) return 7;
             if (pcc_gc_backend4_evacuation_page_candidate_score() != 1) return 8;
@@ -10559,6 +10663,8 @@ def test_backend4_genzgc_step_selects_and_drains_whole_zpage(tmp_path):
             /* Clearing YOUNG deliberately leaves two stale generation-aging
              * worklist entries.  Consume that earlier GC4 phase first so the
              * one-unit step below measures page selection/drain itself. */
+            pcc_gc_publish_initialized((PyObject *)a);
+            pcc_gc_publish_initialized((PyObject *)b);
             if (pcc_gc_step(2) != 2) return 19;
             if (pcc_gc_relocation_set_size() != 0) return 20;
             pcc_gc_telemetry_reset();
@@ -10634,6 +10740,8 @@ def test_backend4_genzgc_page_drain_retires_source_zpage_without_reusing_retaine
             if (!offsets_are_one_page_pair(a, b)) return 5;
 
             pcc_gc_telemetry_reset();
+            pcc_gc_publish_initialized((PyObject *)a);
+            pcc_gc_publish_initialized((PyObject *)b);
             if (pcc_gc_select_relocation_set(8) != 2) return 6;
             if (pcc_gc_backend4_evacuation_page_candidate_score() != 1) return 7;
             if (pcc_gc_backend4_evacuation_page_drain(1) != 2) return 8;
@@ -10696,6 +10804,7 @@ def test_backend4_dict_get_loads_forwarded_key_and_value_slots(tmp_path):
             if (tuple == 0) return 0;
             tuple->len = 1;
             pcc_gc_store_ptr((PyObject *)tuple, &tuple->items[0], py_None);
+            pcc_gc_publish_initialized((PyObject *)tuple);
             return (PyObject *)tuple;
         }
 
@@ -10709,6 +10818,7 @@ def test_backend4_dict_get_loads_forwarded_key_and_value_slots(tmp_path):
             list->length = 0;
             list->capacity = 0;
             list->items = 0;
+            pcc_gc_publish_initialized((PyObject *)list);
             return (PyObject *)list;
         }
 
@@ -10800,6 +10910,7 @@ def test_backend4_dict_traversal_loads_forwarded_key_and_value_slots(tmp_path):
             if (tuple == 0) return 0;
             tuple->len = 1;
             pcc_gc_store_ptr((PyObject *)tuple, &tuple->items[0], py_None);
+            pcc_gc_publish_initialized((PyObject *)tuple);
             return (PyObject *)tuple;
         }
 
@@ -10813,6 +10924,7 @@ def test_backend4_dict_traversal_loads_forwarded_key_and_value_slots(tmp_path):
             list->length = 0;
             list->capacity = 0;
             list->items = 0;
+            pcc_gc_publish_initialized((PyObject *)list);
             return (PyObject *)list;
         }
 
@@ -10898,6 +11010,7 @@ def test_backend4_set_contains_loads_forwarded_key_slot(tmp_path):
             if (tuple == 0) return 0;
             tuple->len = 1;
             pcc_gc_store_ptr((PyObject *)tuple, &tuple->items[0], py_None);
+            pcc_gc_publish_initialized((PyObject *)tuple);
             return (PyObject *)tuple;
         }
 
@@ -10970,6 +11083,7 @@ def test_backend4_obj_compare_loads_forwarded_container_slots(tmp_path):
             if (tuple == 0) return 0;
             tuple->len = 1;
             pcc_gc_store_ptr((PyObject *)tuple, &tuple->items[0], py_None);
+            pcc_gc_publish_initialized((PyObject *)tuple);
             return (PyObject *)tuple;
         }
 
@@ -10983,6 +11097,7 @@ def test_backend4_obj_compare_loads_forwarded_container_slots(tmp_path):
             list->length = 0;
             list->capacity = 0;
             list->items = 0;
+            pcc_gc_publish_initialized((PyObject *)list);
             return (PyObject *)list;
         }
 
@@ -11105,6 +11220,7 @@ def test_backend4_json_dumps_loads_forwarded_container_slots(tmp_path):
             list->length = 0;
             list->capacity = 0;
             list->items = 0;
+            pcc_gc_publish_initialized((PyObject *)list);
             return (PyObject *)list;
         }
 
@@ -11185,6 +11301,7 @@ def test_backend4_print_format_loads_forwarded_sequence_slots(tmp_path):
             list->length = 0;
             list->capacity = 0;
             list->items = 0;
+            pcc_gc_publish_initialized((PyObject *)list);
             return (PyObject *)list;
         }
 

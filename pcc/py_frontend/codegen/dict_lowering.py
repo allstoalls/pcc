@@ -203,6 +203,52 @@ class DictLoweringMixin:
         result.add_incoming(generic_result, generic_exit)
         return result
 
+    def _emit_owned_dict_get(self, expr: Call, recv: ir.Value) -> ir.Value:
+        # Reserve the result root below operand roots. This preserves strict
+        # LIFO cleanup and keeps an aliased default/result live while earlier
+        # operands (including user keys with finalizers) are released.
+        result_root = self._enter_container_temp_root(
+            ir.Constant(_CSTR, None), self._fresh("dict.get.result"),
+        )
+        roots = [(result_root, False)]
+        recv_root = self._enter_container_temp_root(recv, self._fresh("dict.get.recv"))
+        roots.append((recv_root, self._owned_release_needed(recv, expr.func.obj)))
+        operands = [recv]
+        for arg in expr.args:
+            value = self._emit_expr_with_cpy_operand_cleanup(
+                arg, (), as_pcc_object=True, rooted_pcc_lifetimes=tuple(roots),
+            )
+            if self._pcc_pointer_source_needs_pin(arg) and not self._value_is_never_gc_object(value):
+                root = self._enter_container_temp_root(value, self._fresh("dict.get.arg"))
+                owned = self._owned_release_needed(value, arg) or self._pcc_pointer_source_is_owned(arg)
+                roots.append((root, owned))
+            operands.append(value)
+        if len(operands) == 2:
+            operands.append(self._emit_none_literal())
+        old_err = self._current_try_err_block()
+        target = old_err if old_err is not None else self._ensure_fn_err_exit()
+        self._try_err_block = self._make_cpy_operand_cleanup_block(
+            (), (), target, "dict.get.error.cleanup", rooted_pcc_lifetimes=tuple(roots),
+        )
+        try:
+            result = self.builder.call(
+                self.runtime["py_dict_get_default"], operands, name=self._fresh("dict.get"),
+            )
+            self._emit_post_call_err_check(expr.span)
+        finally:
+            self._try_err_block = old_err
+        self._gc_pin(result)
+        self.builder.call(self.runtime["pcc_gc_store_root"], [self._as_gc_ptr(result_root), result])
+        self._release_rooted_pcc_lifetimes(tuple(roots[1:]))
+        result = self.builder.call(
+            self.runtime["pcc_gc_load_ptr"],
+            [ir.Constant(_CSTR, None), self._as_gc_ptr(result_root)],
+            name=self._fresh("dict.get.current"),
+        )
+        self._leave_container_temp_root(result_root)
+        self._note_owned_object_value(result)
+        return result
+
     def _maybe_emit_dict_method(
         self,
         expr: Call,
@@ -233,27 +279,8 @@ class DictLoweringMixin:
             )
 
         if name == "get":
-            if len(expr.args) == 1:
-                default = self._emit_none_literal()
-                result = self.builder.call(
-                    self.runtime["py_dict_get_default"],
-                    [recv, _dict_method_box(self, expr.args[0]), default],
-                    name=self._fresh("dict.get"),
-                )
-                self._emit_post_call_err_check(expr.span)
-                return result
-            if len(expr.args) == 2:
-                result = self.builder.call(
-                    self.runtime["py_dict_get_default"],
-                    [
-                        recv,
-                        _dict_method_box(self, expr.args[0]),
-                        _dict_method_box(self, expr.args[1]),
-                    ],
-                    name=self._fresh("dict.get.dflt"),
-                )
-                self._emit_post_call_err_check(expr.span)
-                return result
+            if len(expr.args) in (1, 2):
+                return self._emit_owned_dict_get(expr, recv)
             return None
         if name == "keys":
             if expr.args:

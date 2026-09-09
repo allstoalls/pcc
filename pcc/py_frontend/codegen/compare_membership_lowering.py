@@ -516,19 +516,7 @@ class CompareMembershipLoweringMixin:
             and isinstance(rhs_ty, StrType)
             and expr.op in ("==", "!=")
         ):
-            lhs = self._emit_expr(expr.lhs)
-            rhs = self._emit_expr(expr.rhs)
-            eq = self.builder.call(
-                self.runtime["py_str_eq"],
-                [lhs, rhs],
-                name=self._fresh("str.eq"),
-            )
-            eq_i1 = self.builder.icmp_signed(
-                "!=", eq, ir.Constant(_I32, 0), name=self._fresh("str.eq.i1")
-            )
-            if expr.op == "!=":
-                return self.builder.not_(eq_i1, name=self._fresh("str.ne"))
-            return eq_i1
+            return self._emit_owned_string_predicate(expr, False)
 
         if expr.op in ("==", "!=") and (
             isinstance(lhs_ty, StrType) or isinstance(rhs_ty, StrType)
@@ -573,9 +561,7 @@ class CompareMembershipLoweringMixin:
         if self._is_object(lhs_ty) and self._is_object(rhs_ty):
             # direct valueclass constructors must project to boxed
             # valueboxes here (value equality), not identity instances
-            lhs = self._emit_expr_as_pcc_object(expr.lhs)
-            rhs = self._emit_expr_as_pcc_object(expr.rhs)
-            return self._emit_runtime_object_compare(expr, lhs, rhs, "obj")
+            return self._emit_owned_string_predicate(expr, False, object_compare=True)
 
         lhs = self._emit_expr(expr.lhs)
         rhs = self._emit_expr(expr.rhs)
@@ -619,6 +605,53 @@ class CompareMembershipLoweringMixin:
             )
         return self.builder.icmp_signed(expr.op, lv, rv, name=self._fresh("icmp"))
 
+    def _emit_owned_string_predicate(self, expr: Compare, contains: bool, object_compare: bool = False) -> ir.Value:
+        """Consume transient strings and preserve the LHS through RHS effects."""
+        lhs = self._emit_expr_as_pcc_object(expr.lhs) if object_compare else self._emit_expr(expr.lhs)
+        if not self._owned_release_needed(lhs, expr.lhs):
+            # A borrowed global/field may lose its original owner when the
+            # RHS runs. A pin prevents movement, but does not replace a ref.
+            lhs = self._gc_retain(lhs, name=self._fresh("str.lhs.retain"))
+        self._gc_pin(lhs)
+        rhs = self._emit_expr_with_cpy_operand_cleanup(
+            expr.rhs, (), pinned_pcc=((lhs, True),), as_pcc_object=object_compare,
+        )
+        rhs_owned = self._owned_release_needed(rhs, expr.rhs)
+        if object_compare and not rhs_owned:
+            rhs = self._gc_retain(rhs, name=self._fresh("str.rhs.retain"))
+            rhs_owned = True
+        if rhs_owned:
+            self._gc_pin(rhs)
+        operands = [rhs, lhs] if contains else [lhs, rhs]
+        symbol = "py_str_contains" if contains else "py_str_eq"
+        if object_compare:
+            symbol = {
+                "==": "py_obj_eq_value", "!=": "py_obj_eq_value",
+                "<": "py_obj_lt", "<=": "py_obj_le",
+                ">": "py_obj_gt", ">=": "py_obj_ge",
+            }[expr.op]
+        status = self.builder.call(
+            self.runtime[symbol], operands, name=self._fresh("str.predicate"),
+        )
+        if contains or object_compare:
+            cleanup = ((lhs, True),)
+            if rhs_owned:
+                cleanup = ((lhs, True), (rhs, True))
+            self._emit_post_call_err_check(
+                getattr(expr, "span", None), pinned_release_on_error=cleanup,
+            )
+        result = self.builder.icmp_signed(
+            "!=", status, ir.Constant(status.type, 0), name=self._fresh("str.predicate.i1"),
+        )
+        self._gc_unpin(lhs)
+        self._gc_release(lhs)
+        if rhs_owned:
+            self._gc_unpin(rhs)
+            self._gc_release(rhs)
+        if expr.op in ("!=", "not in"):
+            result = self.builder.not_(result, name=self._fresh("str.predicate.not"))
+        return result
+
     def _emit_dyn_str_equality(self, expr: Compare) -> Optional[ir.Value]:
         if expr.op not in ("==", "!="):
             return None
@@ -633,66 +666,10 @@ class CompareMembershipLoweringMixin:
         else:
             return None
 
-        dyn_val = self._emit_expr(dyn_expr)
-        str_val = self._emit_expr(str_expr)
-        dyn_obj = marshal.marshal_to_object(
-            self.builder,
-            self.module,
-            self.runtime,
-            dyn_val,
-            dyn_expr.ty,
-        )
-        str_obj = marshal.marshal_to_object(
-            self.builder,
-            self.module,
-            self.runtime,
-            str_val,
-            str_expr.ty,
-        )
-        dyn_tag = self.builder.call(
-            self.runtime["py_obj_type_tag"],
-            [dyn_obj],
-            name=self._fresh("dyn.str.tag"),
-        )
-        is_str = self.builder.icmp_signed(
-            "==",
-            dyn_tag,
-            ir.Constant(_I64, PY_TYPE_STR),
-            name=self._fresh("dyn.str.is_str"),
-        )
-
-        fn = self.current_function
-        str_bb = fn.append_basic_block(name=self._fresh("dyn.str.eq"))
-        not_str_bb = fn.append_basic_block(name=self._fresh("dyn.str.not_str"))
-        done_bb = fn.append_basic_block(name=self._fresh("dyn.str.done"))
-        self.builder.cbranch(is_str, str_bb, not_str_bb)
-
-        self.builder.position_at_end(str_bb)
-        eq_i64 = self.builder.call(
-            self.runtime["py_str_eq"],
-            [dyn_obj, str_obj],
-            name=self._fresh("dyn.str.eq.call"),
-        )
-        eq_i1 = self.builder.icmp_signed(
-            "!=",
-            eq_i64,
-            ir.Constant(_I64, 0),
-            name=self._fresh("dyn.str.eq.i1"),
-        )
-        self.builder.branch(done_bb)
-        str_end_bb = self.builder.block
-
-        self.builder.position_at_end(not_str_bb)
-        self.builder.branch(done_bb)
-        not_str_end_bb = self.builder.block
-
-        self.builder.position_at_end(done_bb)
-        result = self.builder.phi(_I1, name=self._fresh("dyn.str.result"))
-        result.add_incoming(eq_i1, str_end_bb)
-        result.add_incoming(ir.Constant(_I1, 0), not_str_end_bb)
-        if expr.op == "!=":
-            return self.builder.not_(result, name=self._fresh("dyn.str.ne"))
-        return result
+        # Keep source evaluation order and both operand owners through
+        # callbacks. The generic equality contract also permits a non-string
+        # dynamic object to implement __eq__ against the string.
+        return self._emit_owned_string_predicate(expr, False, object_compare=True)
 
     def _emit_complex_ordering_typeerror(self, expr: Compare) -> Optional[ir.Value]:
         """Raise ``TypeError`` for ``<``/``<=``/``>``/``>=`` on a complex operand.
@@ -1104,6 +1081,12 @@ class CompareMembershipLoweringMixin:
                 )
             return contains
         container_ty = expr.rhs.ty
+        if (
+            isinstance(container_ty, StrType)
+            and isinstance(expr.lhs.ty, StrType)
+            and not self._expr_looks_cpython(expr.lhs)
+        ):
+            return self._emit_owned_string_predicate(expr, True)
         weak_dict_kind = self._weak_dict_kind_for_expr(expr.rhs)
         rhs = self._emit_expr(expr.rhs)
         if rhs in getattr(self, "_cpy_values", ()):

@@ -10,11 +10,7 @@ import os
 
 from pcc.extern import c_int64, extern
 
-from pcc.native_ir.instsimplify import simplify_module_text
-from pcc.native_ir.simplifycfg import simplify_cfg_text
-from pcc.native_ir.instcombine import instcombine_text
-from pcc.native_ir.dce import dce_module_text
-from pcc.native_ir.inline import inline_module
+from pcc.py_frontend.compiled_owned_passes import owns_passes, run_owned_passes
 
 
 _heap_live_bytes = extern("pcc_os_heap_in_use_bytes", (), c_int64)
@@ -22,28 +18,30 @@ _heap_capacity_bytes = extern("pcc_os_heap_capacity_bytes", (), c_int64)
 
 
 def optimize_ir(text: str, passes: str) -> str:
-    for name in passes.split(","):
-        started = time.perf_counter()
-        if name == "instsimplify":
-            text, changed = simplify_module_text(text)
-        elif name == "simplifycfg":
-            text, changed = simplify_cfg_text(text)
-        elif name == "instcombine":
-            text, changed = instcombine_text(text)
-        elif name == "dce":
-            text, changed = dce_module_text(text)
-        elif name == "inline":
-            text, changed = inline_module(text)
-        elif name == "inline-defined":
-            text, changed = inline_module(text, include_definitions=True)
-        else:
+    names = passes.split(",")
+    index = 0
+    while index < len(names):
+        name = names[index]
+        selected = [name]
+        # Production composes full CFG promotion with the bounded memory
+        # cleanup for this pair. Keep that unit intact at the standalone entry.
+        if name == "mem2reg" and index + 1 < len(names) and names[index + 1] == "sroa":
+            selected.append("sroa")
+            index += 1
+        if not owns_passes(selected):
             raise ValueError("unsupported owned IR pass: " + name)
+        started = time.perf_counter()
+        previous = text
+        text = run_owned_passes(text, selected, False)
+        changed = text != previous
+        name = ",".join(selected)
         elapsed = time.perf_counter() - started
         sys.stderr.write(name + " changed=" + str(changed) + " seconds=" + str(elapsed) + "\n")
         if os.environ.get("PCC_OPT_PROFILE_MEMORY", "") == "1":
             live = _heap_live_bytes()
             capacity = _heap_capacity_bytes()
             sys.stderr.write(name + " heap_live=" + str(live) + " heap_capacity=" + str(capacity) + "\n")
+        index += 1
     return text
 
 

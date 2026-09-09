@@ -153,6 +153,74 @@ def _helper_sections() -> list[Section]:
     )]
 
 
+def test_final_link_streams_relocation_rows_without_materializing_tables(monkeypatch):
+    caller = NativeObject.from_sections(_caller_sections(), undefined=["_helper"])
+    helper = NativeObject.from_sections(_helper_sections())
+    expected = link_executable([caller, helper])
+
+    def forbid_materialized_rows(_section):
+        raise AssertionError("final linking must not retain a dictionary per relocation")
+
+    monkeypatch.setattr(native_object_module, "_raw_relocations", forbid_materialized_rows)
+    assert link_executable([caller, helper]) == expected
+
+
+def test_native_validation_streams_without_full_source_projection(monkeypatch):
+    def forbid_projection(_self):
+        raise AssertionError("validation must not reconstruct the full source object graph")
+
+    monkeypatch.setattr(NativeObject, "to_sections", forbid_projection)
+    native = NativeObject.from_sections(_caller_sections(), undefined=["_helper"])
+    encoded = encode_native_object(native)
+    assert decode_native_object(encoded) == native
+
+
+def test_final_image_allocation_does_not_retain_prepared_object(monkeypatch):
+    import weakref
+    from pcc.backend import macho_exec
+
+    original_prepare = macho_exec.prepare_executable_object
+    original_materialize = macho_exec.materialize_output
+    prepared_refs = []
+
+    def prepare(*args, **kwargs):
+        prepared = original_prepare(*args, **kwargs)
+        prepared_refs.append(weakref.ref(prepared))
+        return prepared
+
+    def materialize(*args, **kwargs):
+        assert prepared_refs and prepared_refs[-1]() is None
+        return original_materialize(*args, **kwargs)
+
+    monkeypatch.setattr(macho_exec, "prepare_executable_object", prepare)
+    monkeypatch.setattr(macho_exec, "materialize_output", materialize)
+    caller = NativeObject.from_sections(_caller_sections(), undefined=["_helper"])
+    helper = NativeObject.from_sections(_helper_sections())
+    assert link_executable([caller, helper])
+
+
+def test_streamed_validation_matches_packed_decoder_on_byte_mutations():
+    import random
+
+    encoded = encode_native_object(
+        NativeObject.from_sections(_caller_sections(), undefined=["_helper"])
+    )
+    randomizer = random.Random(20260909)
+    for _ in range(2000):
+        changed = bytearray(encoded)
+        changed[randomizer.randrange(len(changed))] ^= randomizer.randrange(1, 256)
+        payload = bytes(changed)
+        accepted = []
+        for decoder in (decode_native_object, decode_packed_native_object):
+            try:
+                decoder(payload)
+            except NativeObjectError:
+                accepted.append(False)
+            else:
+                accepted.append(True)
+        assert accepted[0] == accepted[1], payload.hex()
+
+
 def test_native_codec_stores_each_symbol_once_and_relocations_by_index() -> None:
     native = NativeObject.from_sections(
         _caller_sections(), undefined=["_helper"],

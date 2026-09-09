@@ -228,6 +228,7 @@ def function_sizing(func) -> dict:
 
 
 def main() -> int:
+    from pcc.backend.self_backend_kernel import get_indexed_function_kernel
     from pcc.backend.self_backend_parse import parse_self_backend_module
 
     if len(sys.argv) < 2:
@@ -240,6 +241,16 @@ def main() -> int:
         )
         totals = {"stores": 0, "single_def": 0, "elidable": 0}
         for func in module.functions:
+            # The parser stopped populating `blocks` when the indexed kernel
+            # landed: bodies live in the packed representation and a consumer
+            # asks for the legacy projection.  Without this the loop skipped
+            # every function of every real module and the tool reported
+            # store_root=0 for all of them -- it only ever ran on the
+            # hand-built ParsedFunctions in its own test.
+            if not func.blocks:
+                get_indexed_function_kernel(func).materialize_legacy_blocks(
+                    func
+                )
             if not func.blocks:
                 continue
             row = function_sizing(func)

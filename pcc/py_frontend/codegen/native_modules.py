@@ -3765,7 +3765,11 @@ class NativeModuleAliasMixin:
                 + str(len(expr.args))
                 + "\n"
             )
-        if module_name == "pcc.py_frontend.py_ast":
+        if (
+            module_name == "pcc.py_frontend.py_ast"
+            and len(expr.args) + len(expr.kwargs)
+            >= len(tuple(class_info.field_names))
+        ):
             inst = self._emit_no_init_field_instance(
                 class_info.name,
                 expr.args,

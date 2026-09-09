@@ -76,6 +76,9 @@ PyObject *pcc_gc_trace_cext_pending_obj = NULL;
 int64_t pcc_gc_trace_cext_pending_epoch = 0;
 int64_t pcc_gc_trace_cext_pending_backend = -1;
 int32_t pcc_gc_backend4_remap_active = 0;
+/* Not static: py_obj.c's refcount prepare paths are the only writers, and the
+ * pcc-Python mirror reaches the same symbol through global_addr(). */
+int64_t pcc_gc_unmanaged_refcount_ops = 0;
 int64_t pcc_gc_backend4_remap_epoch = 0;
 PyObject *pcc_gc_backend4_remap_pending_obj = NULL;
 static int32_t pcc_gc_config_initialized = 0;
@@ -146,7 +149,20 @@ typedef struct PccGcContinuationRootNode {
     int64_t root_count;
     int32_t borrowed;
     PyObject **stable_values;
+    /* Last on purpose: the pcc-Python mirror in
+     * freestanding_gc_root_registry.py addresses this node by literal offset
+     * and expects prev at [48] with the slot storage starting at [56]. */
+    struct PccGcContinuationRootNode *prev;
 } PccGcContinuationRootNode;
+
+_Static_assert(
+    sizeof(PccGcContinuationRootNode) == 56,
+    "PccGcContinuationRootNode ABI drift against the pcc-Python mirror"
+);
+_Static_assert(
+    offsetof(PccGcContinuationRootNode, prev) == 48,
+    "PccGcContinuationRootNode.prev ABI drift"
+);
 
 typedef struct PccGcSchedulerRootNode {
     PyObject **slot;
@@ -9781,6 +9797,11 @@ int64_t pcc_gc_telemetry(int64_t metric) {
     if (metric == PCC_GC_COUNTER_GENZGC_STORE_BUFFER_CROSS_THREAD_MEDIUM_FLUSHES) {
         return pcc_gc_backend4_store_buffer_cross_thread_medium_flushes();
     }
+    if (metric == PCC_GC_COUNTER_UNMANAGED_REFCOUNT_OPS) {
+        return __atomic_load_n(
+            &pcc_gc_unmanaged_refcount_ops, __ATOMIC_RELAXED
+        );
+    }
     if (metric == PCC_GC_COUNTER_GENZGC_STORE_BUFFER_CROSS_THREAD_MEDIUM_FLUSHED_ENTRIES) {
         return pcc_gc_backend4_store_buffer_cross_thread_medium_flushed_entries();
     }
@@ -10144,6 +10165,7 @@ void pcc_gc_telemetry_reset(void) {
     for (int i = 0; i <= PCC_GC_COUNTER_WORK_STEPS; i++) {
         __atomic_store_n(&pcc_gc_metrics[i], 0, __ATOMIC_RELAXED);
     }
+    __atomic_store_n(&pcc_gc_unmanaged_refcount_ops, 0, __ATOMIC_RELAXED);
     __atomic_store_n(&pcc_gc_max_pause_us, 0, __ATOMIC_RELAXED);
     __atomic_store_n(&pcc_gc_pause_count, 0, __ATOMIC_RELAXED);
     __atomic_store_n(&pcc_gc_pause_sum_us, 0, __ATOMIC_RELAXED);
@@ -14413,6 +14435,19 @@ static int64_t pcc_gc_step_colored_generation_aging(int64_t budget) {
     return examined;
 }
 
+/* Public mirror of the pcc-Python port's @c_abi_export of the same name in
+ * freestanding_gc_generational_scheduler.py.  The C runtime reached this phase
+ * only through pcc_gc_step, whose backend-4 path runs the colored
+ * remembered-roots phase first and legitimately parks at that phase's own
+ * safepoint -- so a caller wanting to exercise generation aging on its own had
+ * no equivalent entry point in C, and the two mirrors could not be compared.
+ * That asymmetry is what made the C arm of
+ * test_colored_generation_aging_polls_only_after_releasing_graph_lock measure
+ * a different phase than its port arm. */
+int64_t pcc_gc_backend4_step_generation_aging(int64_t budget) {
+    return pcc_gc_step_colored_generation_aging(budget);
+}
+
 int64_t pcc_gc_step(int64_t budget) {
     pcc_gc_init_config();
     if (budget <= 0) return 0;
@@ -15953,19 +15988,19 @@ int64_t pcc_gc_slot_is_runtime_root(PyObject **slot) {
     return 0;
 }
 
-void pcc_gc_register_continuation_root(
+void *pcc_gc_register_continuation_root_node(
     const void *frame_map,
     PyObject **slots
 ) {
     pcc_gc_init_config();
-    if (frame_map == NULL || slots == NULL) return;
+    if (frame_map == NULL || slots == NULL) return NULL;
     int64_t n_slots = pcc_gc_root_slot_count_from_map((const int32_t *)frame_map);
-    if (n_slots <= 0) return;
+    if (n_slots <= 0) return NULL;
     size_t stable_bytes = (size_t)n_slots * sizeof(PyObject *);
     PccGcContinuationRootNode *n = (
         PccGcContinuationRootNode *
     )calloc(1, sizeof(PccGcContinuationRootNode) + stable_bytes);
-    if (n == NULL) return;
+    if (n == NULL) return NULL;
     n->frame_map = (const int32_t *)frame_map;
     n->slots = slots;
     n->root_count = n_slots;
@@ -15977,10 +16012,60 @@ void pcc_gc_register_continuation_root(
     );
     pcc_gc_graph_lock();
     n->next = pcc_gc_continuation_roots;
+    n->prev = NULL;
+    if (pcc_gc_continuation_roots != NULL) {
+        pcc_gc_continuation_roots->prev = n;
+    }
     pcc_gc_continuation_roots = n;
     pcc_gc_root_registry_revision_advance_unlocked();
     pcc_gc_cycle_requested_store(1);
     pcc_gc_graph_unlock();
+    return n;
+}
+
+void pcc_gc_register_continuation_root(
+    const void *frame_map,
+    PyObject **slots
+) {
+    (void)pcc_gc_register_continuation_root_node(frame_map, slots);
+}
+
+/* Caller holds the graph lock.  Mirrors
+ * pcc_gc_continuation_root_unlink_locked in the pcc-Python registry. */
+static void pcc_gc_continuation_root_unlink_locked(
+    PccGcContinuationRootNode *dead
+) {
+    if (pcc_gc_backend3_continuation_root_scan_cursor == dead) {
+        pcc_gc_backend3_continuation_root_scan_cursor = dead->next;
+        pcc_gc_backend3_frame_root_scan_slot = 0;
+    }
+    if (pcc_gc_runtime_root_snapshot_continuation_cursor == dead) {
+        pcc_gc_runtime_root_snapshot_continuation_cursor = dead->next;
+        pcc_gc_runtime_root_snapshot_slot = 0;
+    }
+    if (dead->prev == NULL) {
+        pcc_gc_continuation_roots = dead->next;
+    } else {
+        dead->prev->next = dead->next;
+    }
+    if (dead->next != NULL) {
+        dead->next->prev = dead->prev;
+    }
+    pcc_gc_root_registry_revision_advance_unlocked();
+    pcc_gc_cycle_requested_store(1);
+}
+
+/* O(1) removal for a caller that kept the node.  The caller must clear its
+ * stored pointer first: the node is freed here. */
+void pcc_gc_unregister_continuation_root_node(void *node) {
+    pcc_gc_init_config();
+    if (node == NULL) return;
+    pcc_gc_graph_lock();
+    pcc_gc_continuation_root_unlink_locked(
+        (PccGcContinuationRootNode *)node
+    );
+    pcc_gc_graph_unlock();
+    free(node);
 }
 
 void pcc_gc_unregister_continuation_root(PyObject **slots) {
@@ -15988,26 +16073,16 @@ void pcc_gc_unregister_continuation_root(PyObject **slots) {
     if (slots == NULL) return;
     PccGcContinuationRootNode *dead = NULL;
     pcc_gc_graph_lock();
-    PccGcContinuationRootNode **cur = &pcc_gc_continuation_roots;
-    while (*cur != NULL) {
-        if ((*cur)->slots == slots) {
-            dead = *cur;
-            if (
-                pcc_gc_backend3_continuation_root_scan_cursor == dead
-            ) {
-                pcc_gc_backend3_continuation_root_scan_cursor = dead->next;
-                pcc_gc_backend3_frame_root_scan_slot = 0;
-            }
-            if (pcc_gc_runtime_root_snapshot_continuation_cursor == dead) {
-                pcc_gc_runtime_root_snapshot_continuation_cursor = dead->next;
-                pcc_gc_runtime_root_snapshot_slot = 0;
-            }
-            *cur = dead->next;
-            pcc_gc_root_registry_revision_advance_unlocked();
-            pcc_gc_cycle_requested_store(1);
+    for (
+        PccGcContinuationRootNode *cur = pcc_gc_continuation_roots;
+        cur != NULL;
+        cur = cur->next
+    ) {
+        if (cur->slots == slots) {
+            dead = cur;
+            pcc_gc_continuation_root_unlink_locked(dead);
             break;
         }
-        cur = &(*cur)->next;
     }
     pcc_gc_graph_unlock();
     free(dead);

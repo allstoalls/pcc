@@ -163,7 +163,7 @@ class CpyCallLoweringMixin:
             )
             self._leave_container_temp_root(root_slot)
             if release_owned:
-                self._gc_release(rooted_value)
+                self._gc_release(rooted_value, known_object=True)
 
     def _emit_expr_with_cpy_operand_cleanup(
         self,

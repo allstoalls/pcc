@@ -9,6 +9,7 @@ from pcc.llvm_capi.compat import ir
 from ..py_ast import (
     Attr,
     BoolLit,
+    NoneLit,
     ByteArrayType,
     BytesType,
     Call,
@@ -193,6 +194,62 @@ class StringMethodLoweringMixin:
                 return True
         return None
 
+    def _emit_str_method_with_receiver(self, expr: Call, recv: ir.Value, dynamic: bool):
+        receiver_expr = expr.func.obj
+        owned = self._owned_release_needed(recv, receiver_expr)
+        # Borrowed locals need an independent owner when a later argument can
+        # run user code and replace the original binding.
+        if not owned and any(
+            not isinstance(arg, (StrLit, IntLit, BoolLit, NoneLit))
+            for arg in expr.args
+        ):
+            recv = self._gc_retain(recv, name=self._fresh("str.receiver.retain"))
+            owned = True
+        if not self._pcc_pointer_source_needs_pin(receiver_expr):
+            owned = False
+        old_pcc = self._current_try_err_block()
+        old_cpy = getattr(self, "_cpy_operand_cleanup_block", None)
+        if owned:
+            self._gc_pin(recv)
+            pcc_target = old_pcc if old_pcc is not None else self._ensure_fn_err_exit()
+            cpy_target = old_cpy if old_cpy is not None else self._ensure_fn_err_exit()
+            pcc_cleanup = self._make_cpy_operand_cleanup_block(
+                (), (), pcc_target, "str.receiver.pcc.cleanup", ((recv, True),),
+            )
+            cpy_cleanup = pcc_cleanup
+            if cpy_target is not pcc_target:
+                cpy_cleanup = self._make_cpy_operand_cleanup_block(
+                    (), (), cpy_target, "str.receiver.cpy.cleanup", ((recv, True),),
+                )
+            self._try_err_block = pcc_cleanup
+            self._cpy_operand_cleanup_block = cpy_cleanup
+        try:
+            if dynamic:
+                result = self._emit_dyn_str_method_body(expr, recv)
+            else:
+                result = self._emit_str_method_body(expr, recv)
+        finally:
+            self._try_err_block = old_pcc
+            self._cpy_operand_cleanup_block = old_cpy
+        result_is_object = result is not None and isinstance(result.type, ir.PointerType)
+        root = None
+        if result_is_object:
+            self._note_owned_object_value(result)
+            if owned:
+                root = self._enter_container_temp_root(result, self._fresh("str.result"))
+        if owned:
+            self._gc_unpin(recv)
+            self._gc_release(recv)
+        if root is not None:
+            result = self.builder.call(
+                self.runtime["pcc_gc_load_ptr"],
+                [ir.Constant(_CSTR, None), self._as_gc_ptr(root)],
+                name=self._fresh("str.result.current"),
+            )
+            self._leave_container_temp_root(root)
+            self._note_owned_object_value(result)
+        return result
+
     def _maybe_emit_str_method_via_dyn(
         self,
         expr: Call,
@@ -237,6 +294,7 @@ class StringMethodLoweringMixin:
                 [recv],
                 name=self._fresh(f"cpy.str.{name}.recv"),
             )
+            self._note_owned_object_value(recv)
         # Guard against a native-scalar Dyn payload (i1 from a short-
         # circuit ``or``, i64 from an unboxed attribute read, etc.).
         # Box to PyObject* before passing to the py_str_* helpers
@@ -250,6 +308,11 @@ class StringMethodLoweringMixin:
                 attr.obj.ty,
             )
 
+        return self._emit_str_method_with_receiver(expr, recv, True)
+
+    def _emit_dyn_str_method_body(self, expr: Call, recv: ir.Value):
+        attr = expr.func
+        name = attr.name
         if (
             name
             in (
@@ -794,6 +857,7 @@ class StringMethodLoweringMixin:
                 [recv],
                 name=self._fresh(f"cpy.str.{name}.recv"),
             )
+            self._note_owned_object_value(recv)
         # Receiver may be a non-pointer when it came from an ``or``
         # / ``and`` phi that ended at i1 / i64. Box to PyObject* so
         # the py_str_* runtime sees a proper pcc string.
@@ -806,6 +870,11 @@ class StringMethodLoweringMixin:
                 attr.obj.ty,
             )
 
+        return self._emit_str_method_with_receiver(expr, recv, False)
+
+    def _emit_str_method_body(self, expr: Call, recv: ir.Value):
+        attr = expr.func
+        name = attr.name
         if name == "format":
             return self._maybe_emit_literal_str_format(expr)
         if name == "format_map":

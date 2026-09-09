@@ -1483,6 +1483,7 @@ def _link_self_backend_ir_texts_run(
     extra_link_args: tuple[str, ...] = (),
     tmp: str,
     profile,
+    consume_ir_texts: bool = False,
 ) -> None:
     try:
         _pipeline_self_backend_link.link_ir_texts_run(
@@ -1496,6 +1497,7 @@ def _link_self_backend_ir_texts_run(
             extra_link_args=extra_link_args,
             tmp=tmp,
             profile=profile,
+            consume_ir_texts=consume_ir_texts,
             resolve_self_link_mode=_resolve_self_link_mode,
             validate_pcc_self_link_surface=_validate_pcc_self_link_surface,
             profile_begin=_profile_begin,
@@ -1695,6 +1697,7 @@ def _link_with_self_backend_ir_texts(
     extra_link_args: tuple[str, ...] = (),
     tmp_dir: Optional[str] = None,
     profile: Optional[dict] = None,
+    consume_ir_texts: bool = False,
 ) -> None:
     _pipeline_self_backend_link.link_ir_texts(
         ir_texts,
@@ -1707,6 +1710,7 @@ def _link_with_self_backend_ir_texts(
         extra_link_args=extra_link_args,
         tmp_dir=tmp_dir,
         profile=profile,
+        consume_ir_texts=consume_ir_texts,
         link_run=_link_self_backend_ir_texts_run,
     )
 
@@ -3430,6 +3434,10 @@ def compile_python_multi(
                 total_ir_bytes_before_passes,
                 libpython_modules,
             ) = parallel_codegen_result
+        # The pass driver returns a new batch even when passes are disabled.
+        # Once unpacked, this transport result must not retain the original
+        # IR batch through emission and the memory-intensive final link.
+        parallel_codegen_result = None
     else:
         # Pre-pass: build the closed-world context shared by real multi-file
         # compiles and contextual per-module probes.
@@ -3886,6 +3894,11 @@ def compile_python_multi(
         self_backend_texts = []
         for _mod_name, text in module_ir_texts:
             self_backend_texts.append(text)
+        # This branch returns after linking. Transfer the IR owners to the
+        # emitter so their storage can be released before the linker starts.
+        module_ir_texts.clear()
+        text = ""
+        ir_text = ""
         t = _profile_begin(profile)
         _link_with_self_backend_ir_texts(
             self_backend_texts,
@@ -3896,6 +3909,7 @@ def compile_python_multi(
             needs_native_extension_exports=any_needs_native_extension_exports,
             extra_link_args=tuple(link_args),
             profile=profile,
+            consume_ir_texts=True,
         )
         _profile_end(profile, "link_self_backend_ir_texts", t)
         if verbose:

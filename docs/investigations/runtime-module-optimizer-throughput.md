@@ -828,3 +828,286 @@ Stage1 then completed: `rc=0`, 553.7 s, a 226 MB `pcc1` that compiles and runs
 a program containing a `def`, and that compiles the gateway benchmark package.
 553.7 s is above the 311-434 s envelope recorded for a cold stage1, so stage1
 cost is an open regression question, not a settled number.
+
+## Update: the asyncio gap is the refcount provenance protocol (2026-09-08)
+
+The remaining gateway gap is asyncio being 1.73x ahead at concurrency 100.
+Its shape says the cause is instruction count, not stalls: 373890 instructions
+per request against asyncio's 227080, a 1.65x ratio that tracks the 1.73x QPS
+ratio.
+
+Sampling the pcc1-compiled `benchmark_native.py` at concurrency 100 for six
+seconds, 5094 samples, self time by function:
+
+```
+12.9%  pcc_gc_granule_is_object_start      1.8%  py_decref
+ 6.7%  py_obj._py_decref_prepare           1.7%  py_obj._ptr_can_have_header
+ 4.8%  py_obj._py_incref_prepare           1.5%  pcc_py_gc_minor_graph_lock
+ 4.7%  pcc_gc_pointer_is_managed           1.4%  py_gc_backend.object_graph_lock
+ 2.7%  pcc_py_gc_minor_graph_unlock        1.4%  pcc_gc_index_py_remove
+ 2.7%  py_obj._py_decref_finish            1.3%  pcc_gc_store_ptr
+ 2.3%  pcc_gc_load_ptr                     1.3%  py_incref
+```
+
+The refcount and provenance cluster is about **48% of self time**. asyncio's
+comparable work is one non-atomic integer increment.
+
+The single hottest function explains itself in its own docstring: it is "the
+hot provenance predicate: `pcc_gc_pointer_is_managed` asks it before touching
+the graph lock, so every barrier, class check, dunder dispatch and container
+operation reaches it". Each call walks a four-level radix tree with an acquire
+atomic load per level, then checks object kind, validated carve count, 4 KiB
+base alignment, slab bounds, exact cell alignment and the LIVE lifecycle word.
+`py_incref` reaches it through `_ptr_can_have_header` on every single call,
+after a 56-byte `stack_alloc` and a read of the selected GC backend global.
+
+### The obvious fix is already denied, and its prerequisite is the real work
+
+Removing that probe is Phase B in
+[pcc1-stage2-emit-throughput-and-memory](pcc1-stage2-emit-throughput-and-memory.md)
+(line 7230). It was written, measured and **DENIED**: dropping it on GC0..2
+made pcc1 crash in Stage2, and a C-runtime diagnostic build counted, per tiny
+compile, 213 refcount operations on pointers that are not managed objects --
+22 on the one-byte `py_set_dummy` tombstone reached through
+`pcc_gc_store_ptr`, and about 190 `pcc_gc_release` calls from pcc's own
+compiled ownership-cleanup code landing on libmalloc addresses whose
+`malloc_size` is 0. The probe is masking real over-releases.
+
+That also rules out the narrower variant worth considering here, which was to
+have codegen emit a provenance-free refcount where the frontend statically
+proves the operand is a managed object. The denial's own evidence is that the
+frontend's belief is the unreliable part: those ~190 stray releases come from
+generated ownership cleanup that already thinks it holds an object.
+
+So the next step for this gap is not an optimization, it is the recorded
+prerequisite:
+
+1. Immortal-header sentinels for runtime statics such as `py_set_dummy`, so a
+   barrier reaching them is legal rather than merely tolerated.
+2. Fix the ~190 stray `pcc_gc_release` calls emitted by compiled ownership
+   cleanup.
+
+Only then can the probe be narrowed or removed, and only then does the 48%
+become addressable. Anyone attacking the asyncio gap by making
+`granule_is_object_start` faster is optimizing a predicate that should not be
+on the path at all; anyone removing it without steps 1 and 2 reproduces a
+measured Stage2 crash.
+
+### The prerequisite may already be mostly closed, and must be re-measured first
+
+Tracing where a refcount operation on a non-managed pointer can still come
+from, against the current tree rather than the tree the denial was measured on:
+
+- A pointer intrinsic's result is projected to an **i64 integer** in any module
+  that is not in the pointer lane (`call_expression_lowering`, the
+  `ptrtoint` right after `_emit_unsafe_intrinsic_call`). A `pcc_gc_release`
+  cannot even be emitted on it -- the operand is not a pointer.
+- `c_ptr` / `c_str` extern *returns* are rejected outright in application
+  modules; a caller must declare `c_obj` or `c_rawptr`
+  (`test_raw_addresses_are_ints.py::test_ambiguous_pointer_extern_returns_are_rejected`).
+  That was the other way a libmalloc address reached ownership cleanup wearing
+  an object's type.
+
+Both landed with Phase A of the raw-pointer static typing work, which is
+*after* the 213-operation count was taken. So the prerequisite's size is
+unknown, not known to be 213, and the honest next step is to re-measure before
+writing any fix.
+
+That measurement needs a counter, and the counter is worth having permanently:
+"a refcount operation reached a pointer that is not a managed object" is
+exactly the ratchet that makes narrowing the probe a checkable claim rather
+than a hopeful one. It is not free to add. `pcc_gc_metric_add` is a `static`
+function in `py_gc_backend.c` with no pcc-Python port equivalent, and the
+runtime the gateway links is the port archive, so the telemetry mechanism has
+to be ported alongside the counter.
+
+Also note what `_note_never_gc_object` covers today, because it is the
+frontend-side half of the same idea and it is thinner than it looks: a
+manually populated identity set with **one** caller
+(`literal_lowering.py:206`, materialized tagged small ints). Its docstring
+also claims the immortal singletons, but nothing registers them. Widening it
+is cheap and removes barrier calls rather than making them faster -- the
+measured shape of the win, since `_gc_pin`, `_gc_unpin` and `_gc_release` all
+consult it before emitting anything.
+
+## Update: why the memory-promotion gap was missed (2026-09-08)
+
+The maintainer requested an evidence-based retrospective, not another tuning
+proposal. The historical source at `080c3cf7` and this investigation already
+identified the bounded default tier. The missing step was auditing its actual
+promotion effect and prioritizing that gap before local instruction tuning.
+`native_ir` still parses/serializes text; IR transport and memory optimization
+must not be conflated. The full historical evidence and corrective workflow
+are in [the pipeline audit](../knowledge/2026-09-08-optimizer-pipeline-audit.md).
+
+### Standalone memory-tier dispatch gap [CONFIRMED]
+
+Production dispatch now reaches the new owned mem2reg, but the standalone
+optimizer still rejects it. The loop/PHI regression
+`tests/python/test_owned_optimizer_driver_memory.py` fails with
+`ValueError: unsupported owned IR pass: mem2reg` (1 failed, 0.12 s; command and
+log in the audit). Gateway's standalone build manifest also omits the memory
+tier. This confirms the need to validate every measured entry, not just the
+library implementation. The regression is red; this update records the gap
+and AGENTS/knowledge changes, not a compiler fix or new performance result.
+
+## Update — 2026-09-08 the fresh-admission prerequisite splits in two, measured without a pcc1
+
+The recorded next step was to re-measure the 213 non-managed refcount
+operations, and that was believed to need a stage1 pcc1 because the 213 was
+counted on a pcc1 compile. It does not. The 213 was made of two named shapes,
+and both are shapes the frontend emits for **any** pcc-compiled program:
+
+```
+ 22  py_set_dummy tombstone reaching pcc_gc_store_ptr
+~190 pcc_gc_release from compiled ownership cleanup on libmalloc addresses
+```
+
+A single ~1 minute probe reproduces both classes directly, reading
+`PCC_GC_COUNTER_UNMANAGED_REFCOUNT_OPS` between phases. Default (port)
+runtime, no pcc1:
+
+```
+start                                          0
+set add/discard churn, 4000 iterations      5144
+owned locals + early return, 4000 calls     5144   (no change)
+raise/except with owned payload, 2000       5144   (no change)
+generator create/consume, 2000              5144   (no change)
+```
+
+### Item 2, the stray ownership-cleanup releases: no longer reproduces
+
+Owned-local early returns, exception cleanup and generator cleanup all add
+**zero**. That is consistent with the note above that Phase A landed fixes for
+two ways a libmalloc address reached ownership cleanup wearing an object's
+type. Full confidence still wants a pcc1 run, because pcc's own frontend has
+shapes this probe does not, but the cheap evidence says this class is closed
+and it is no longer the thing to fix first.
+
+### Item 1, py_set_dummy: alive, larger than recorded, and one site
+
+5144 operations from a 4000-iteration set churn — roughly one per `discard`,
+not 22 per compile. The mechanism is exact:
+`_pcc_gc_store_plan_commit_locked` (`py_obj.py:641`) begins with
+`_py_incref_prepare(value, plan)`, and `_py_incref_prepare`'s first act is the
+provenance probe. So every tombstone store pays
+`pcc_gc_granule_is_object_start` — the 11.5% predicate — to conclude that a
+sentinel is not an object.
+
+`py_set_dummy` is still a bare `define_global_ptr_null` with no immortal
+header and no granule registration, and exactly **one** of the 13 barrier
+sites in `py_set.py` stores it (`py_set.py:261`).
+
+`py_dict.py` already demonstrates the correct design: its tombstone is an
+**integer** sentinel (`PY_DICT_TOMBSTONE = -2`) in an i64 index array and never
+touches the refcount barrier at all. The set is the outlier, not the norm.
+
+### Proposal: a sentinel store that does not pretend to be a reference
+
+Not written. A tombstone is not a reference: incref-ing it is meaningless work
+and decref-ing it never happens. The commit path needs a variant that keeps
+the barrier's real duty — releasing the OLD value — while writing the new
+value without an incref:
+
+```
+    store_i32(plan, 124, 1)
+    backend = load_i64(plan, 112)
+    if backend != 0: pcc_gc_note_store()
+    # no relocation read: a sentinel is never a heap object
+    _py_refcount_prepared_reset(plan, sentinel)   # so plan finish stays inert
+    if backend != 0: pcc_gc_note_slot_write_barrier(owner, slot, sentinel)
+    old = load_ptr(slot, 0)
+    store_ptr(slot, 0, sentinel)
+    ... existing backend-4 known-object guard on old ...
+    _py_decref_prepare(old, ptr_add(plan, 56))
+```
+
+The write-barrier call keeps today's arguments, so generational and remembered
+behaviour is unchanged. What disappears is one provenance probe per tombstone
+store.
+
+### What this is and is not
+
+It closes fresh-admission prerequisite item 1, which is what gates emitting a
+provenance-free refcount on statically-proven operands — the change that can
+actually move the 21.7% provenance family and part of the 15.1% refcount
+family in
+[vthread-asyncio-throughput-gap](vthread-asyncio-throughput-gap.md).
+
+It is **not** gateway throughput work. The gateway's counter reads 0 across
+22,200 requests and its hot path does not use sets, so this fix cannot move the
+1.73x asyncio gap by itself. Recorded so nobody bills it as such.
+
+## Update — 2026-09-08 fresh-admission prerequisite item 1 closed: sentinel stores no longer refcount
+
+### Change
+
+One new runtime entry point, both mirrors:
+`pcc_gc_store_ptr_plan_commit_sentinel_aware_locked(plan, owner, slot, value,
+sentinel)`. It is the ordinary commit except that `sentinel` is treated as a
+non-reference in **both** directions:
+
+```
+value == sentinel   ->  no relocation read, no incref; the plan's new-value
+                        record is reset so its finish stays inert
+old   == sentinel   ->  mapped to NULL before decref prepare
+```
+
+Everything the barrier really owes is kept: the store note, the slot write
+barrier with today's arguments, the relocation read for a real value, the
+backend-4 known-object guard, and a real old value's release.
+
+Both `py_set` tombstone sites now use it — the discard path that writes the
+tombstone and the add path where a real element lands on one. `py_dict` needs
+none of this: its tombstone is an integer in an index array and never reaches
+the barrier, which is what made the set the outlier.
+
+### Test [CONFIRMED]
+
+Same probe as the previous update, default (port) runtime, reading
+`PCC_GC_COUNTER_UNMANAGED_REFCOUNT_OPS` between phases:
+
+```
+                              before   one direction   both directions
+start                              0               0                 0
+set churn, 4000 iterations      5144             572                 0
+owned locals + early return     5144             572                 0
+raise/except with payload       5144             572                 0
+generator create/consume        5144             572                 0
+```
+
+Every computed value is identical across all three builds (`tombstones 3429`,
+`early_return 16005599`, `raising 1503722`, `gen 2001000`).
+
+The intermediate 572 is worth recording because it is exactly 4000/7, the
+frequency of the probe's second discard, and it is what exposed the second
+direction: inserting a real element into a tombstoned slot decrefs the
+sentinel. Fixing only the write side leaves 11% of the class behind, and the
+residual's arithmetic is what pointed at the add path.
+
+### State of the two prerequisite items
+
+```
+item 1  py_set_dummy sentinel refcounting        CLOSED (0, measured)
+item 2  stray pcc_gc_release from compiled
+        ownership cleanup                        no longer reproduces on
+                                                 owned-local / exception /
+                                                 generator cleanup shapes
+```
+
+The counter now reads 0 on the gateway workload (22,200 requests) and 0 on
+this set/ownership-cleanup probe. That is the ratchet the counter was built
+for, and it is what "emit a provenance-free refcount where the frontend proves
+the operand is an object" was blocked on. It is not yet proof for pcc's own
+frontend shapes, which still wants a pcc1 run; but the two named sources of
+the original 213 are accounted for.
+
+### Gates
+
+```
+gcsubstrate_k_collect_during_containers.py + test_py_multi_file_compile.py
+                                                  98 passed
+test_fallback_baseline.py + test_ir_py_fallback_baseline.py
+                                                  45 passed (711 s)
+freestanding closure, py_obj.py and py_set.py     clean
+```

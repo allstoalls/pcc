@@ -390,7 +390,13 @@ int64_t py_continuation_mount(PyObject *cont, PyObject **slots_out) {
     PyObject **slots = continuation_chunk_slots(c);
     int64_t n_slots = c->stack_chunk->slot_count;
     if (c->mounted == 0) {
-        pcc_gc_unregister_continuation_root(slots);
+        void *root_node = c->stack_chunk->root_node;
+        c->stack_chunk->root_node = NULL;
+        if (root_node == NULL) {
+            pcc_gc_unregister_continuation_root(slots);
+        } else {
+            pcc_gc_unregister_continuation_root_node(root_node);
+        }
     }
     if (slots_out != NULL) {
         for (int64_t i = 0; i < n_slots; i++) {
@@ -417,7 +423,9 @@ int64_t py_continuation_unmount(
     }
     c->resume_pc = resume_pc;
     if (c->mounted != 0) {
-        pcc_gc_register_continuation_root(continuation_chunk_frame_map(c), slots);
+        c->stack_chunk->root_node = pcc_gc_register_continuation_root_node(
+            continuation_chunk_frame_map(c), slots
+        );
     }
     c->mounted = 0;
     return 0;
@@ -602,7 +610,13 @@ void py_dealloc_continuation(PyObject *o) {
     PyContinuationStackChunk *stack_chunk = c->stack_chunk;
     if (stack_chunk != NULL) {
         if (c->mounted == 0) {
-            pcc_gc_unregister_continuation_root(stack_chunk->slots);
+            void *root_node = stack_chunk->root_node;
+            stack_chunk->root_node = NULL;
+            if (root_node == NULL) {
+                pcc_gc_unregister_continuation_root(stack_chunk->slots);
+            } else {
+                pcc_gc_unregister_continuation_root_node(root_node);
+            }
         }
         if (stack_chunk->slots != NULL) {
             for (int64_t i = 0; i < stack_chunk->slot_count; i++) {

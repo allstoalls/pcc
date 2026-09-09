@@ -46,6 +46,7 @@ L1_CODEGEN_HOST_ATTRS = (
     "_current_entry_block",
     "_current_param_names",
     "_debug_release_checks",
+    "_known_object_refcounts",
     "_di_compile_unit",
     "_di_file",
     "_di_scope",

@@ -202,6 +202,7 @@ class ListMethodLoweringMixin:
                 expr.args[0],
                 expr.args[0].ty,
                 False,
+                item,
             ):
                 self._gc_release(item_after_append)
             self._leave_container_temp_root(item_root)
@@ -596,6 +597,7 @@ class ListMethodLoweringMixin:
                 expr.args[0],
                 expr.args[0].ty,
                 False,
+                item,
             )
             if (
                 isinstance(item.type, ir.PointerType)

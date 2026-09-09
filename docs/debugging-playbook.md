@@ -1,9 +1,10 @@
 # Debugging Playbook
 
-Moved out of `AGENTS.md` to keep the always-loaded startup file under the
-context threshold. This is on-demand procedure: read it when you hit a bug,
-not every session. Section numbers (`§1`..`§12`) are stable and referenced
-from `AGENTS.md` and from `docs/investigations/*`.
+On-demand techniques: use the section relevant to the failure after locating
+its current code path. Source, effective configuration and matching execution
+are first-hand evidence; historical investigations locate hypotheses and prior
+experiments. Check their revisions and later corrections before reusing them.
+Section numbers (`§1`..`§12`) stay stable for investigation links.
 
 ### 1. Make the failure deterministic first
 
@@ -24,6 +25,10 @@ This separates "the program is odd" from "the compiler/runtime lowered it wrong"
 | Bootstrap stage divergence | the JSON baselines (`tests/bootstrap_gate_baseline.json`, `tests/fallback_baseline.json`) |
 
 ### 3. Use `llvmlite` as an oracle for `llvm_capi` parity
+
+This section applies only to an explicitly labeled external reference test.
+LLVM/llvmlite cannot execute a compiler product step or satisfy pcc1 ownership;
+see the [dependency contract](compiler-contract.md#dependency-ownership-contract-maintainer-directive-2026-09-07).
 
 If the failure looks like a codegen / IR-builder regression in
 `pcc/llvm_capi/`, do not guess. Re-run the same minimized repro under
@@ -78,7 +83,7 @@ the repo (see §9).
   the *current* harness before debugging `pcc`. Manifests drift.
 - **Parser cache (mandatory):** after changing parser grammar or lexer token
   sets, **bump the default PLY cache version** in
-  [`pcc/parse/c_parser.py`](pcc/parse/c_parser.py). Otherwise the repo silently
+  [`pcc/parse/c_parser.py`](../pcc/parse/c_parser.py). Otherwise the repo silently
   keeps the old `yacctab`/`lextab` and the parser looks "still broken" after the
   source fix. Then run a focused parser regression first, then one representative
   compile/runtime case — not a large project suite.
@@ -95,7 +100,7 @@ When a compiled stage binary segfaults, LLDB should answer two questions:
 
 ```bash
 # Run + backtrace on crash. Always with a hard timeout.
-env -u LC_ALL -u LC_CTYPE perl -e 'alarm shift; exec @ARGV' 120 \
+gtimeout 120s env -u LC_ALL -u LC_CTYPE \
   lldb -b \
     -o 'run --ir-scaffold=on --python-libpython=off --backend self pcc/__main__.py -o /tmp/out' \
     -k 'bt all' \

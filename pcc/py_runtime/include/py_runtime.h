@@ -114,6 +114,17 @@ typedef struct PyContinuationObject {
  * for the refcount-shaped runtime helpers and should not be treated as the
  * foundational ABI for new code. */
 PyObject *pcc_gc_alloc(int64_t size, int32_t type_tag, int32_t flags);
+/* The other half of pcc_gc_alloc, and part of the same public contract.
+ * pcc_gc_alloc hands back an object still marked PY_FLAG_GC_FRESH_ALLOC,
+ * which is what keeps a half-built object out of the relocating backend's
+ * evacuation set: pcc_gc_relocation_set_add and the zpage candidate scan both
+ * refuse a fresh owner.  Call this once the object's pointer slots are
+ * initialized.  Skipping it is silent -- the object simply never relocates,
+ * for the life of the process -- so an allocator that cannot reach this
+ * declaration cannot use pcc_gc_alloc correctly.  That is why it lives here
+ * and not only in py_internal.h.  Backends other than the relocating one
+ * ignore the call. */
+void pcc_gc_publish_initialized(PyObject *obj);
 /* Exact object provenance.  These functions compare pointer values through
  * runtime-owned indexes and never inspect an unproven candidate header. */
 int64_t pcc_gc_pointer_is_managed(PyObject *obj);
@@ -142,6 +153,13 @@ int64_t pcc_gc_granule_s2_candidate_positive(PyObject *obj);
 int64_t pcc_gc_pointer_unregister(PyObject *obj);
 PyObject *pcc_gc_retain(PyObject *o);
 void      pcc_gc_release(PyObject *o);
+/* Compiler-proven initialized object references only (also NULL/tagged/immortal).
+ * Foreign/raw pointers must use the checked APIs above. GC1-4 retain their
+ * existing path. Enable verification before a diagnostic workload to audit
+ * the proof via PCC_GC_COUNTER_UNMANAGED_REFCOUNT_OPS. */
+PyObject *pcc_gc_retain_known(PyObject *o);
+void      pcc_gc_release_known(PyObject *o);
+void      pcc_gc_set_known_ref_checks(int64_t enabled);
 extern int32_t pcc_thread_stop_requested;
 void      pcc_debug_check_release(const char *name, void *obj);
 void      pcc_debug_bad_str_concat(void *a, void *b,
@@ -167,6 +185,11 @@ void      pcc_gc_scheduler_root_unregister_handle(void *handle);
 void      pcc_gc_scheduler_root_register(PyObject **slot);
 void      pcc_gc_scheduler_root_unregister(PyObject **slot);
 void      pcc_gc_register_continuation_root(const void *frame_map, PyObject **slots);
+/* Same registration, returning the node.  A caller that keeps it can remove
+ * the root in O(1) through pcc_gc_unregister_continuation_root_node instead of
+ * having the runtime search the root list for a matching slots pointer. */
+void     *pcc_gc_register_continuation_root_node(const void *frame_map, PyObject **slots);
+void      pcc_gc_unregister_continuation_root_node(void *node);
 void      pcc_gc_unregister_continuation_root(PyObject **slots);
 int64_t   pcc_gc_trace_continuation_roots(void);
 int64_t   pcc_gc_rewrite_continuation_roots(void);
@@ -429,7 +452,19 @@ enum {
     PCC_GC_COUNTER_GENZGC_EVACUATION_CANDIDATE_ZPAGE_BYTES = 112,
     PCC_GC_COUNTER_GENZGC_SMALL_PAGE_CANDIDATE_ZPAGE_BYTES = 113,
     PCC_GC_COUNTER_GENZGC_MEDIUM_PAGE_CANDIDATE_ZPAGE_BYTES = 114,
-    PCC_GC_COUNTER_GENZGC_EVACUATION_PAGE_CANDIDATES = 115
+    PCC_GC_COUNTER_GENZGC_EVACUATION_PAGE_CANDIDATES = 115,
+    /* A refcount operation reached a pointer that is not a managed object.
+     *
+     * py_incref/py_decref probe provenance before touching a header, and that
+     * probe is the largest single share of self time on the virtual-thread
+     * gateway workload.  Removing it was measured and DENIED: the probe is
+     * masking real over-releases from compiled ownership cleanup, so the
+     * prerequisite is to drive this counter to zero, not to drop the check.
+     * See docs/investigations/vthread-asyncio-throughput-gap.md and the
+     * Phase A/B record in runtime-module-optimizer-throughput.md.  Non-zero
+     * means some caller is refcounting a non-object; it is a correctness
+     * ratchet first and an optimization prerequisite second. */
+    PCC_GC_COUNTER_UNMANAGED_REFCOUNT_OPS = 116
 };
 
 int64_t   pcc_gc_backend(void);
@@ -1156,6 +1191,11 @@ int64_t   py_obj_is_slice(PyObject *o);
 
 /* ---- Native generator objects ------------------------------------------ */
 PyObject *py_gen_frame_new(int64_t slot_count); /* fixed-size, None-filled list frame */
+/* Compiler-private fixed-size frames: caller owns the frame, every slot is
+ * a managed object, tagged value or NULL. Get returns NEW; set retains.
+ * GC1-4 use the ordinary list operations and their existing barriers. */
+PyObject *py_gen_frame_get(PyObject *frame, int64_t index);
+void      py_gen_frame_set(PyObject *frame, int64_t index, PyObject *value);
 /* Save compiler-owned, rooted local slots. Returns 0 without mutation when
  * the collector/frame is not eligible; callers retain their ordinary path. */
 int64_t py_gen_frame_save(PyObject *frame, void *slot_addresses, int64_t slot_count);

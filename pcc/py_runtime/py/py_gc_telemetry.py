@@ -11,7 +11,13 @@ it reseeds backend4 epoch state and clears deferred object flags.
 
 from pcc import i64
 from pcc.extern import c_abi_export, c_int64, extern
-from pcc.unsafe import atomic_load_i32, gc_backend_current, global_addr, load_i32
+from pcc.unsafe import (
+    atomic_load_i32,
+    gc_backend_current,
+    global_addr,
+    load_i32,
+    load_i64,
+)
 
 
 __pcc_freestanding__ = True
@@ -255,6 +261,8 @@ pcc_gc_backend4_zpage_free_capacity_bytes = extern(
 @c_abi_export("pcc_gc_telemetry")
 def pcc_gc_telemetry(metric: i64) -> i64:
     gc_backend_current()
+    if metric == 116:
+        return load_i64(global_addr("pcc_gc_unmanaged_refcount_ops"), 0)
     if metric == 6:
         return load_i32(global_addr("pcc_gc_debt_bytes"), 0)
     if metric == 7:

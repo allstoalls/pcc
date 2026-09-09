@@ -185,8 +185,8 @@ class TupleZipLoweringMixin:
                     [tup, ir.Constant(_I64, i), v_obj],
                 )
             return tup
-        # DynType / ListType / generic iterable: get the length,
-        # allocate a tuple of that size, fill via py_obj_getitem.
+        # The runtime preserves list/tuple fast paths and consumes other
+        # supported objects through their iterator protocol.
         # DictType iterates keys (matching ``tuple(dict)`` semantics);
         # we materialise the keys as a list first then build the tuple
         # over that list.
@@ -247,78 +247,7 @@ class TupleZipLoweringMixin:
             self.builder.branch(cond_bb)
             self.builder.position_at_end(end_bb)
             return tup
-        if isinstance(arg_ty, ClassType):
-            # A user-class instance (custom __iter__/__next__, no __len__):
-            # build a list via the iterator protocol, then convert to a tuple.
-            # Matches CPython tuple(x) which iterates via iter(x). Without this,
-            # tuple(<custom iterator>) forced the libpython fallback.
-            src_val = self._emit_expr(arg)
-            src_obj = marshal.marshal_to_object(
-                self.builder,
-                self.module,
-                self.runtime,
-                src_val,
-                arg_ty,
-            )
-            tmp_list = self.builder.call(
-                self.runtime["py_list_new"],
-                [ir.Constant(_I64, 0)],
-                name=self._fresh("tuple.iter.list"),
-            )
-            self._emit_list_append_via_iter(
-                tmp_list,
-                src_obj,
-                getattr(arg, "span", None),
-            )
-            fn = self.current_function
-            n_val = self.builder.call(
-                self.runtime["py_list_len"],
-                [tmp_list],
-                name=self._fresh("tuple.iter.len"),
-            )
-            tup = self.builder.call(
-                self.runtime["py_tuple_new"],
-                [n_val],
-                name=self._fresh("tuple.iter.new"),
-            )
-            idx_slot = self._alloca_in_entry(_I64, name="tuple.iter.idx.addr")
-            self.builder.store(ir.Constant(_I64, 0), idx_slot)
-            cond_bb = fn.append_basic_block(name=self._fresh("tuple.iter.cond"))
-            body_bb = fn.append_basic_block(name=self._fresh("tuple.iter.body"))
-            step_bb = fn.append_basic_block(name=self._fresh("tuple.iter.step"))
-            end_bb = fn.append_basic_block(name=self._fresh("tuple.iter.end"))
-            self.builder.branch(cond_bb)
-            self.builder.position_at_end(cond_bb)
-            cur = self.builder.load(idx_slot, name=self._fresh("tuple.iter.i"))
-            cond = self.builder.icmp_signed(
-                "<",
-                cur,
-                n_val,
-                name=self._fresh("tuple.iter.i1"),
-            )
-            self.builder.cbranch(cond, body_bb, end_bb)
-            self.builder.position_at_end(body_bb)
-            elem = self.builder.call(
-                self.runtime["py_list_get"],
-                [tmp_list, cur],
-                name=self._fresh("tuple.iter.elem"),
-            )
-            self.builder.call(
-                self.runtime["py_tuple_set_item"],
-                [tup, cur, elem],
-            )
-            self.builder.branch(step_bb)
-            self.builder.position_at_end(step_bb)
-            nxt = self.builder.add(
-                cur,
-                ir.Constant(_I64, 1),
-                name=self._fresh("tuple.iter.next"),
-            )
-            self.builder.store(nxt, idx_slot)
-            self.builder.branch(cond_bb)
-            self.builder.position_at_end(end_bb)
-            return tup
-        if isinstance(arg_ty, (ListType, TupleType, DynType)) or _type_name(arg_ty) in (
+        if isinstance(arg_ty, (ListType, TupleType, DynType, ClassType)) or _type_name(arg_ty) in (
             "list",
             "tuple",
             "tuple_variadic",
@@ -332,11 +261,21 @@ class TupleZipLoweringMixin:
                 src_val,
                 arg_ty,
             )
-            return self.builder.call(
+            # The runtime owns iteration, rooting and failure cleanup for
+            # both generators and custom iterators. Keep caller temporaries
+            # alive across the call, and propagate exceptions before use.
+            self._gc_pin(src_obj)
+            result = self.builder.call(
                 self.runtime["py_tuple_from_splat"],
                 [src_obj],
                 name=self._fresh("tuple.from.splat"),
             )
+            self._gc_pin(result)
+            self._gc_unpin(src_obj)
+            self._gc_release_if_owned(src_obj, arg)
+            self._gc_unpin(result)
+            self._emit_post_call_err_check(getattr(expr, "span", None))
+            return result
         return None
 
     def _maybe_emit_zip_builtin(self, expr: Call) -> Optional[ir.Value]:

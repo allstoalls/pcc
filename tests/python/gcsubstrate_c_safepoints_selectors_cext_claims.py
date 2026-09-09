@@ -455,10 +455,18 @@ def test_colored_generation_aging_polls_only_after_releasing_graph_lock(
             }
         '''
     if kind == "c":
+        # Both arms must call the same phase.  Routing the C arm through
+        # pcc_gc_step instead measured the colored remembered-roots phase that
+        # runs ahead of aging in a backend-4 step: the worker cooperatively
+        # parked at that phase's safepoint, so by the time the world was
+        # stopped it had aged nothing and the probe reported
+        # "mid-stop promotions=0 aged=0".
         source_text = source_text.replace(
-            "PCC_TEST_AGING_DECL", ""
+            "PCC_TEST_AGING_DECL",
+            "extern int64_t pcc_gc_backend4_step_generation_aging(int64_t);",
         ).replace(
-            "PCC_TEST_AGING_STEP", "pcc_gc_step"
+            "PCC_TEST_AGING_STEP",
+            "pcc_gc_backend4_step_generation_aging",
         ).replace(
             "PCC_TEST_GRAPH_LOCK()", "pcc_gc_root_slot_lock()"
         ).replace(

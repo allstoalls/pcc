@@ -152,6 +152,8 @@ def _pointer_operand_name(text: str):
 
 def _parse_alloca(text: str):
     """``%name = alloca ty[, ...]`` -> ``(name, ty)``, or None."""
+    if "alloca " not in text:
+        return None
     assignment = _split_assignment(text)
     if assignment is None:
         return None
@@ -173,6 +175,8 @@ def _parse_store(text: str):
     ``store atomic`` and ``store volatile`` fall out on their own: the type
     token becomes ``atomic``/``volatile``, which is not a scalar type.
     """
+    if "store " not in text:
+        return None
     stripped = text.strip()
     if not stripped.startswith("store "):
         return None
@@ -193,6 +197,8 @@ def _parse_store(text: str):
 
 def _parse_load(text: str):
     """``%r = load ty, ptr %p[, ...]`` -> ``(r, ty, p)``, or None."""
+    if "load " not in text:
+        return None
     assignment = _split_assignment(text)
     if assignment is None:
         return None
@@ -608,8 +614,37 @@ def _dominator_children(order: list, idom: dict, entry: str) -> dict[str, list]:
     return children
 
 
-def _phi_blocks(store_blocks: list, frontiers: dict, reachable: set) -> list:
-    """Iterated dominance frontier of the defining blocks (Cytron)."""
+def _live_in_blocks(slot_uses: dict, predecessors: dict, reachable: set) -> set:
+    """Find incoming values that can reach a load before a replacement store.
+
+    Like PromoteMemoryToRegister's live-in filter, walk backward from upward
+    exposed loads, stopping at definitions. A block with both operations
+    needs its incoming value only when a load precedes its first store.
+    """
+    first_store: dict[str, int] = {}
+    for block, index, _value in slot_uses["stores"]:
+        if block not in first_store or index < first_store[block]:
+            first_store[block] = index
+    work = []
+    for block, index, _result in slot_uses["loads"]:
+        if block not in first_store or index < first_store[block]:
+            work.append(block)
+    live_in = set()
+    while work:
+        block = work.pop()
+        if block not in reachable or block in live_in:
+            continue
+        live_in.add(block)
+        for predecessor in predecessors.get(block, []):
+            if predecessor not in first_store and predecessor not in live_in:
+                work.append(predecessor)
+    return live_in
+
+
+def _phi_blocks(store_blocks: list, frontiers: dict, reachable: set, live_in: set) -> list:
+    """Pruned iterated dominance frontier of the defining blocks."""
+    if not live_in:
+        return []
     defining = set()
     work = []
     for block in store_blocks:
@@ -623,7 +658,7 @@ def _phi_blocks(store_blocks: list, frontiers: dict, reachable: set) -> list:
         block = work.pop()
         queued.discard(block)
         for target in frontiers.get(block, []):
-            if target in placed_set:
+            if target not in live_in or target in placed_set:
                 continue
             placed_set.add(target)
             placed.append(target)
@@ -662,7 +697,8 @@ def _rename(
         store_blocks = []
         for block_name, _index, _value in uses[name]["stores"]:
             store_blocks.append(block_name)
-        for block_name in _phi_blocks(store_blocks, frontiers, reachable):
+        live_in = _live_in_blocks(uses[name], predecessors, reachable)
+        for block_name in _phi_blocks(store_blocks, frontiers, reachable, live_in):
             slot = phi_for.get(block_name)
             if slot is None:
                 slot = {}

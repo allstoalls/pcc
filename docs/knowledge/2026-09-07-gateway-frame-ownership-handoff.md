@@ -1,5 +1,10 @@
 # Gateway throughput and frame ownership checkpoint (2026-09-07)
 
+> Historical session snapshot, not current task instructions. HEAD, dirty state,
+> blockers and artifact paths below describe the recorded session. Check current
+> source, `git status` and execution before reusing them; later user instructions
+> take precedence. Search relevant sections instead of loading this whole file.
+
 The user requires reproducible pcc/pcc1/CPython 3.15.0rc1 comparisons and
 continued profile-based optimization toward exceeding asyncio. Changes belong
 in ~/my/pcc or ~/my/pcc-gateway as appropriate; verified progress is authorized

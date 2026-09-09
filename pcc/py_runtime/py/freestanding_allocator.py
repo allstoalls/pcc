@@ -18,12 +18,15 @@ from pcc.unsafe import (
     atomic_rmw_i64,
     atomic_test_and_set,
     define_global_i8,
+    define_global_i32,
     define_global_i64,
+    define_global_i64_array,
     define_global_ptr_null,
     global_addr,
     global_load_ptr,
     global_store_ptr,
     load_i8,
+    load_i32,
     load_i64,
     load_ptr,
     mul_overflow_i64,
@@ -35,6 +38,7 @@ from pcc.unsafe import (
     ptr_is_null,
     store_i64,
     store_i8,
+    store_i32,
     store_ptr,
     wrapping_mul_i64,
 )
@@ -44,6 +48,70 @@ __pcc_freestanding__ = True
 
 define_global_i8("pcc_allocator_lock", 0)
 define_global_i64("pcc_allocator_mapped", 0)
+# Direct-mapped span cache in front of the granule radix.
+#
+# pcc_gc_granule_is_object_start is the hot provenance predicate and its radix
+# walk is five SERIALLY DEPENDENT acquire loads (root -> L2 -> L3 -> leaf ->
+# span): each level's address comes from the previous load, so the whole chain
+# is exposed latency.  On the virtual-thread gateway workload the predicate is
+# 11.5% of self time and the family around it 21.7%, and the
+# PCC_GC_COUNTER_UNMANAGED_REFCOUNT_OPS counter reads zero there -- every probe
+# answers "yes".  See docs/investigations/vthread-asyncio-throughput-gap.md.
+#
+# Why caching a span pointer is safe here, with no key array and no 16-byte
+# atomic: a key's span binding is permanent (there is no unregister/unbind path
+# in this file) and span arenas are immortal allocator metadata, so an entry
+# can never point at freed memory.  A stale or wrong entry is rejected by
+# checking ptr against the SPAN'S OWN base, and every other property -- kind,
+# stride, count, base alignment, exact cell alignment, the LIVE lifecycle word
+# -- is still verified downstream in its original order.  An 8-byte aligned
+# slot cannot tear, and correctness does not depend on any second field.
+#
+# Indexed by the 64 KiB region of the pointer.  A slab is 64 KiB but only page
+# aligned, so it can straddle two regions and occupy two slots; both then hold
+# the same span.  Two hot slabs sharing a slot just thrash, which costs a miss.
+define_global_i64_array(
+    "pcc_allocator_granule_span_cache",
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+)
+# Cache immutable cell geometry. Kind-1 spans cannot be
+# rebound/reclaimed; each hit still acquire-loads the LIVE lifecycle marker.
+# Future object-slab reclamation must retire/synchronize this cache first.
+define_global_i64_array(
+    "pcc_allocator_exact_object_cache",
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+)
+define_global_i32("pcc_allocator_granule_span_cache_fill", 1)
 define_global_i64("pcc_allocator_metadata_mapped", 0)
 define_global_i64("pcc_allocator_live_requested", 0)
 define_global_i64("pcc_allocator_live_usable", 0)
@@ -1246,40 +1314,61 @@ def pcc_gc_granule_is_object_start(ptr) -> i64:
     """
     if ptr_is_null(ptr) != 0:
         return -1
+    object_bits: i64 = ptr_diff(ptr, null())
+    object_slot: i64 = ((logical_shift_right_i64(object_bits, 4) ^ logical_shift_right_i64(object_bits, 12)) & 255) * 8
+    object_cache = global_addr("pcc_allocator_exact_object_cache")
+    if atomic_load_i64(object_cache, object_slot, "relaxed") == object_bits:
+        if atomic_load_i64(ptr, -48, "acquire") == 5783538902897647428:
+            return 1
+        return -1
     key: i64 = logical_shift_right_i64(ptr_diff(ptr, null()), 12)
     if key <= 0 or logical_shift_right_i64(key, 48) != 0:
         return -1
-    root_bits: i64 = atomic_load_i64(
-        global_addr("pcc_allocator_granule_radix_root"), 0, "acquire"
-    )
-    if root_bits == 0:
-        return -1
-    level2_bits: i64 = atomic_load_i64(
-        ptr_add(null(), root_bits),
-        (logical_shift_right_i64(key, 36) & 4095) * 8,
-        "acquire",
-    )
-    if level2_bits == 0:
-        return -1
-    level3_bits: i64 = atomic_load_i64(
-        ptr_add(null(), level2_bits),
-        (logical_shift_right_i64(key, 24) & 4095) * 8,
-        "acquire",
-    )
-    if level3_bits == 0:
-        return -1
-    leaf_bits: i64 = atomic_load_i64(
-        ptr_add(null(), level3_bits),
-        (logical_shift_right_i64(key, 12) & 4095) * 8,
-        "acquire",
-    )
-    if leaf_bits == 0:
-        return -1
-    span_bits: i64 = atomic_load_i64(
-        ptr_add(null(), leaf_bits), (key & 4095) * 8, "acquire"
-    )
+    cache_slot: i64 = (
+        logical_shift_right_i64(ptr_diff(ptr, null()), 16) & 255
+    ) * 8
+    cache = global_addr("pcc_allocator_granule_span_cache")
+    span_bits: i64 = 0
+    cached_bits: i64 = load_i64(cache, cache_slot)
+    if cached_bits != 0:
+        cached_base = load_ptr(ptr_add(null(), cached_bits), 16)
+        cached_offset: i64 = ptr_diff(ptr, cached_base)
+        if cached_offset >= 48 and cached_offset < 65536:
+            span_bits = cached_bits
     if span_bits == 0:
-        return -1
+        root_bits: i64 = atomic_load_i64(
+            global_addr("pcc_allocator_granule_radix_root"), 0, "acquire"
+        )
+        if root_bits == 0:
+            return -1
+        level2_bits: i64 = atomic_load_i64(
+            ptr_add(null(), root_bits),
+            (logical_shift_right_i64(key, 36) & 4095) * 8,
+            "acquire",
+        )
+        if level2_bits == 0:
+            return -1
+        level3_bits: i64 = atomic_load_i64(
+            ptr_add(null(), level2_bits),
+            (logical_shift_right_i64(key, 24) & 4095) * 8,
+            "acquire",
+        )
+        if level3_bits == 0:
+            return -1
+        leaf_bits: i64 = atomic_load_i64(
+            ptr_add(null(), level3_bits),
+            (logical_shift_right_i64(key, 12) & 4095) * 8,
+            "acquire",
+        )
+        if leaf_bits == 0:
+            return -1
+        span_bits = atomic_load_i64(
+            ptr_add(null(), leaf_bits), (key & 4095) * 8, "acquire"
+        )
+        if span_bits == 0:
+            return -1
+        if load_i32(global_addr("pcc_allocator_granule_span_cache_fill"), 0) != 0:
+            store_i64(cache, cache_slot, span_bits)
     span = ptr_add(null(), span_bits)
     if load_i64(span, 0) != 1:
         return -1
@@ -1303,6 +1392,29 @@ def pcc_gc_granule_is_object_start(ptr) -> i64:
         return -1
     if atomic_load_i64(ptr, -48, "acquire") != 5783538902897647428:
         return -1
+    atomic_store_i64(object_cache, object_slot, object_bits, "relaxed")
+    return 1
+
+
+@c_abi_export("pcc_allocator_granule_span_cache_set_fill")
+def pcc_allocator_granule_span_cache_set_fill(enabled: i64) -> i64:
+    """Measurement control for the span cache: clear it and stop filling.
+
+    With filling off every probe misses and runs the radix walk, which is the
+    behaviour before the cache existed.  One archive, one binary, two arms
+    differing in exactly this.  The residual cost in the control arm is one
+    load of a zero slot and one compare, which biases against the cache rather
+    than for it.
+    """
+    cache = global_addr("pcc_allocator_granule_span_cache")
+    index: i64 = 0
+    while index < 256:
+        store_i64(cache, index * 8, 0)
+        index = index + 1
+    value: i32 = 0
+    if enabled != 0:
+        value = 1
+    store_i32(global_addr("pcc_allocator_granule_span_cache_fill"), 0, value)
     return 1
 
 

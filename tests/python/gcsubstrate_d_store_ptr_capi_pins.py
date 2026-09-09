@@ -5,6 +5,8 @@ that facade so pytest node ids stay stable.
 """
 from _gc_substrate_common import *  # noqa: F401,F403
 
+import re
+
 
 
 
@@ -188,7 +190,32 @@ def test_backend4_container_constructors_use_fresh_then_publish_contract():
     assert "if complete != 0:\n        pcc_gc_publish_initialized(tuple_ptr)" in py_tuple
 
 
-def test_backend4_wrapper_constructors_publish_but_staticmethod_stays_unadmitted():
+# ---------------------------------------------------------------------------
+# Backend-4 fresh-allocation admission.
+#
+# PY_FLAG_GC_FRESH_ALLOC is the only thing that keeps a half-built object out
+# of the relocation set: pcc_gc_relocation_set_add refuses it, and the zpage
+# candidate snapshot refuses a fresh owner outright.  So any tag that
+# pcc_gc_colored_relocate_copy_supported_tag accepts must also be admitted at
+# pcc_gc_alloc, or a mid-construction object of that tag can be copied with
+# uninitialized pointer slots.  Admission alone is not enough either: a tag
+# admitted whose constructor never publishes would stay fresh forever and
+# could never relocate, which is why each test below pairs the two halves.
+#
+# These three tests previously asserted the OPPOSITE -- that FUNC/ITER,
+# GEN/COROUTINE/CONTINUATION/TASK and STATICMETHOD stay out of the admission
+# set.  That was the static contract for two [DENIED] verdicts in
+# docs/investigations/gc-backend4-relocation-mutator-quiescence.md, whose
+# reason was an implementation blocker ("the first ordinary allocation fail[s]
+# through the same recursive MemoryError path"), not an argument against
+# admission.  The blocker is gone: see that investigation's 2026-09-08 update
+# for the strict-GC4 execution evidence that overturned both verdicts.
+# ---------------------------------------------------------------------------
+
+
+def _backend4_fresh_admission_sources() -> tuple[str, str]:
+    """The admission condition in both mirrors of pcc_gc_alloc."""
+
     c_obj = PY_OBJ_C.read_text(encoding="utf-8")
     c_alloc = c_obj.split("PyObject *pcc_gc_alloc(", 1)[1].split(
         "void pcc_gc_publish_initialized", 1
@@ -197,18 +224,97 @@ def test_backend4_wrapper_constructors_publish_but_staticmethod_stays_unadmitted
     py_alloc = py_obj.split("def pcc_gc_alloc(", 1)[1].split(
         '@c_abi_export("pcc_gc_publish_initialized")', 1
     )[0]
-    for tag in ("PY_TYPE_PROPERTY", "PY_TYPE_CLASSMETHOD", "PY_TYPE_WEAKREF"):
-        assert tag in c_alloc
-        assert tag in py_alloc
-    assert "PY_TYPE_STATICMETHOD" not in c_alloc
-    assert "PY_TYPE_STATICMETHOD" not in py_alloc
+    return c_alloc, py_alloc
 
-    for c_name in ("py_class_attrs.c", "py_weakref.c"):
-        source = (RUNTIME_DIR / "src" / c_name).read_text(encoding="utf-8")
-        assert "pcc_gc_publish_initialized(" in source
-    for py_name in ("py_class.py", "py_weakref.py"):
-        source = (RUNTIME_DIR / "py" / py_name).read_text(encoding="utf-8")
-        assert "pcc_gc_publish_initialized(" in source
+
+def _publishes(*relative_paths: str) -> None:
+    for relative in relative_paths:
+        source = (RUNTIME_DIR / relative).read_text(encoding="utf-8")
+        assert "pcc_gc_publish_initialized(" in source, relative
+
+
+def test_backend4_admission_never_exceeds_the_relocatable_tag_set():
+    """The mechanical half, so neither list can drift alone.
+
+    A tag admitted but not relocatable would be pinned fresh for nothing; the
+    reverse gap is the dangerous one and is named in the investigation as an
+    open boundary (THREAD / VIRTUAL_THREAD / VTHREAD_CHANNEL are relocatable
+    but not admitted, and rely on their own liveness guards instead).
+    """
+
+    c_alloc, py_alloc = _backend4_fresh_admission_sources()
+    backend_c = PY_GC_BACKEND_C.read_text(encoding="utf-8")
+    supported = backend_c.split(
+        "static int pcc_gc_colored_relocate_copy_supported_tag(", 1
+    )[1].split("\n}", 1)[0]
+    supported_tags = set(re.findall(r"PY_TYPE_[A-Z_]+", supported))
+    assert supported_tags, supported[:200]
+    for source in (c_alloc, py_alloc):
+        admitted = set(re.findall(r"PY_TYPE_[A-Z_]+", source))
+        assert admitted, source[:200]
+        assert admitted <= supported_tags, sorted(admitted - supported_tags)
+
+
+def test_backend4_container_and_wrapper_tags_are_admitted_and_publish():
+    c_alloc, py_alloc = _backend4_fresh_admission_sources()
+    for tag in (
+        "PY_TYPE_LIST",
+        "PY_TYPE_TUPLE",
+        "PY_TYPE_DICT",
+        "PY_TYPE_SET",
+        "PY_TYPE_PROPERTY",
+        "PY_TYPE_CLASSMETHOD",
+        "PY_TYPE_WEAKREF",
+        "PY_TYPE_MEMORYVIEW",
+    ):
+        assert tag in c_alloc, tag
+        assert tag in py_alloc, tag
+    _publishes(
+        "src/py_list.c",
+        "src/py_dict.c",
+        "src/py_set.c",
+        "src/py_class_attrs.c",
+        "src/py_weakref.c",
+        "src/py_bytes.c",
+        "py/py_list.py",
+        "py/py_dict.py",
+        "py/py_set.py",
+        "py/py_class.py",
+        "py/py_weakref.py",
+        "py/py_obj_stubs.py",
+    )
+    c_tuple = (RUNTIME_DIR / "src" / "py_tuple.c").read_text(encoding="utf-8")
+    assert "if (complete) pcc_gc_publish_initialized(tuple)" in c_tuple
+    py_tuple = (RUNTIME_DIR / "py" / "py_tuple.py").read_text(encoding="utf-8")
+    assert (
+        "if complete != 0:\n        pcc_gc_publish_initialized(tuple_ptr)"
+        in py_tuple
+    )
+
+
+def test_backend4_staticmethod_admission_is_inert_for_lack_of_a_constructor():
+    """STATICMETHOD is admitted, and that admission can strand nothing.
+
+    The tag is relocate-copy supported, so leaving it out would be the only
+    inconsistency in the list; but static methods lower directly to their
+    wrapped callable, so no constructor allocates one and no object can be
+    left stuck fresh by admitting it.  If a constructor is ever added it must
+    publish, and this test is where that shows up.
+    """
+
+    c_alloc, py_alloc = _backend4_fresh_admission_sources()
+    assert "PY_TYPE_STATICMETHOD" in c_alloc
+    assert "PY_TYPE_STATICMETHOD" in py_alloc
+
+    allocations = []
+    for directory, suffix in (("src", ".c"), ("py", ".py")):
+        for path in sorted((RUNTIME_DIR / directory).glob("*" + suffix)):
+            text = path.read_text(encoding="utf-8")
+            for line in text.splitlines():
+                if "pcc_gc_alloc(" in line and "PY_TYPE_STATICMETHOD" in line:
+                    allocations.append(path.name + ": " + line.strip())
+    assert allocations == [], allocations
+
     internal = (
         RUNTIME_DIR / "src" / "py_internal.h"
     ).read_text(encoding="utf-8")
@@ -218,48 +324,41 @@ def test_backend4_wrapper_constructors_publish_but_staticmethod_stays_unadmitted
     assert "has\n * no public constructor" in internal
 
 
-def test_backend4_function_iterator_publication_waits_for_strict_allocator():
-    c_obj = PY_OBJ_C.read_text(encoding="utf-8")
-    c_alloc = c_obj.split("PyObject *pcc_gc_alloc(", 1)[1].split(
-        "void pcc_gc_publish_initialized", 1
-    )[0]
-    py_obj = PY_OBJ_PORT.read_text(encoding="utf-8")
-    py_alloc = py_obj.split("def pcc_gc_alloc(", 1)[1].split(
-        '@c_abi_export("pcc_gc_publish_initialized")', 1
-    )[0]
-    assert "PY_TYPE_ITER" not in c_alloc
-    assert "PY_TYPE_ITER" not in py_alloc
-    assert "PY_TYPE_FUNC" not in c_alloc
-    assert "PY_TYPE_FUNC" not in py_alloc
-
-    investigation = (
-        REPO_ROOT
-        / "docs"
-        / "investigations"
-        / "gc-backend4-relocation-mutator-quiescence.md"
-    ).read_text(encoding="utf-8")
-    assert "strict GC4 FUNC/ITER allocation blocker" in investigation
+def test_backend4_function_and_iterator_tags_are_admitted_and_publish():
+    c_alloc, py_alloc = _backend4_fresh_admission_sources()
+    for tag in ("PY_TYPE_FUNC", "PY_TYPE_ITER"):
+        assert tag in c_alloc, tag
+        assert tag in py_alloc, tag
+    _publishes(
+        "src/py_func.c",
+        "src/py_iter.c",
+        "py/py_func.py",
+        "py/py_iter.py",
+    )
 
 
-def test_backend4_suspended_execution_publication_waits_for_strict_admission():
-    c_obj = PY_OBJ_C.read_text(encoding="utf-8")
-    c_alloc = c_obj.split("PyObject *pcc_gc_alloc(", 1)[1].split(
-        "void pcc_gc_publish_initialized", 1
-    )[0]
-    py_obj = PY_OBJ_PORT.read_text(encoding="utf-8")
-    py_alloc = py_obj.split("def pcc_gc_alloc(", 1)[1].split(
-        '@c_abi_export("pcc_gc_publish_initialized")', 1
-    )[0]
+def test_backend4_suspended_execution_tags_are_admitted_and_publish():
+    c_alloc, py_alloc = _backend4_fresh_admission_sources()
     for tag in (
-        "PY_TYPE_GEN", "PY_TYPE_COROUTINE", "PY_TYPE_CONTINUATION", "PY_TYPE_TASK"
+        "PY_TYPE_GEN",
+        "PY_TYPE_COROUTINE",
+        "PY_TYPE_CONTINUATION",
+        "PY_TYPE_TASK",
+        "PY_TYPE_EXC",
+        "PY_TYPE_CLASS",
     ):
-        assert tag not in c_alloc
-        assert tag not in py_alloc
-    investigation = (
-        REPO_ROOT / "docs" / "investigations"
-        / "gc-backend4-relocation-mutator-quiescence.md"
-    ).read_text(encoding="utf-8")
-    assert "GC4 suspended-execution fresh-admission blocker" in investigation
+        assert tag in c_alloc, tag
+        assert tag in py_alloc, tag
+    _publishes(
+        "src/py_gen.c",
+        "src/py_coroutine.c",
+        "src/py_exc_objects.c",
+        "src/py_class.c",
+        "py/py_gen.py",
+        "py/py_coroutine.py",
+        "py/py_exc_objects.py",
+        "py/py_class.py",
+    )
 
 
 def test_capi_borrowed_container_items_pin_but_getitemref_stays_owned():

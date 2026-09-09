@@ -88,6 +88,40 @@ def test_process_tree_sampler_records_child_rss_and_completion(tmp_path: Path):
     )
 
 
+def test_parent_exit_cleans_an_orphaned_child_process_group(tmp_path: Path):
+    result = tmp_path / "result.json"
+    stdout = tmp_path / "target.stdout"
+    code = (
+        "import subprocess,sys; "
+        "p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)'],"
+        "process_group=0,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); "
+        "print(p.pid,flush=True)"
+    )
+    child_pid = 0
+    try:
+        run = subprocess.run(
+            [sys.executable, str(TOOL), "--result", str(result),
+             "--samples", str(tmp_path / "samples.tsv"), "--stdout", str(stdout),
+             "--stderr", str(tmp_path / "target.stderr"), "--cwd", str(ROOT),
+             "--timeout", "5", "--interval", "0.02", "--no-performance-lock",
+             "--", sys.executable, "-c", code],
+            capture_output=True, text=True, timeout=10,
+        )
+        child_pid = int(stdout.read_text().strip())
+        assert run.returncode == 0, run.stdout + run.stderr
+        receipt = json.loads(result.read_text())
+        assert child_pid in receipt["post_exit_cleanup_pids"]
+        state = subprocess.run(["ps", "-p", str(child_pid), "-o", "stat="],
+                               capture_output=True, text=True, timeout=2).stdout.strip()
+        assert not state or state.startswith("Z"), state
+    finally:
+        if child_pid:
+            try:
+                os.kill(child_pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+
+
 def test_process_tree_sampler_double_sigint_cleans_target_and_writes_receipt(
     tmp_path: Path,
 ):

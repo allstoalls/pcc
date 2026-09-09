@@ -582,6 +582,26 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
                         break
                     returncode = process.poll()
                     if returncode is not None:
+                        # A wrapper can exit while one of its children keeps
+                        # running in a different process group. Only select
+                        # recorded PIDs still in our private session; this
+                        # excludes reused PIDs and unrelated sessions.
+                        after_exit, retries = _process_table(
+                            timeouts_s=process_table_timeouts,
+                            include_command=False,
+                        )
+                        process_table_retry_count += retries
+                        remaining = set()
+                        for pid in after_exit:
+                            if pid == process.pid:
+                                continue
+                            with contextlib.suppress(ProcessLookupError):
+                                if os.getsid(pid) == process.pid:
+                                    remaining.add(pid)
+                        if remaining:
+                            known_pids.update(remaining)
+                            payload["post_exit_cleanup_pids"] = sorted(remaining)
+                            _terminate_owned_processes(process, remaining)
                         break
                     if _INTERRUPT_REQUESTED:
                         interrupted = True

@@ -222,3 +222,49 @@ def test_unknown_terminator_vetoes_instead_of_dropping_paths():
     ])
     row = _tool().function_sizing(func)
     assert row["elidable"] == 0
+
+
+def test_a_parsed_module_reaches_function_sizing_at_all(tmp_path):
+    """The tool must see real bodies, not silently report zero.
+
+    Every test above hands `function_sizing` a hand-built ParsedFunction, so
+    none of them exercised the path from IR text to sizing.  The parser stopped
+    populating `ParsedFunction.blocks` when the indexed kernel landed -- bodies
+    live in the packed representation and a consumer asks for the legacy
+    projection through `materialize_legacy_blocks`.  The tool's
+    `if not func.blocks: continue` therefore skipped every function of every
+    real module and printed `store_root=0` for all of them, which reads as "no
+    opportunity" rather than "not measured".
+
+    This asserts the end-to-end path finds the store_root sites that are
+    plainly in the text.
+    """
+    from pcc.backend.self_backend_kernel import get_indexed_function_kernel
+    from pcc.backend.self_backend_parse import parse_self_backend_module
+
+    source = """
+target triple = "arm64-apple-macosx15.0.0"
+
+define void @probe(ptr %owner, ptr %v) {
+entry:
+  %slot = alloca ptr, align 8
+  call void @pcc_gc_store_root(ptr %slot, ptr %v)
+  %r = call ptr @pcc_gc_load_ptr(ptr %owner, ptr %slot)
+  ret void
+}
+
+declare void @pcc_gc_store_root(ptr, ptr)
+declare ptr @pcc_gc_load_ptr(ptr, ptr)
+"""
+    path = tmp_path / "probe.ll"
+    path.write_text(source.lstrip(), encoding="utf-8")
+    module = parse_self_backend_module(path.read_text(encoding="utf-8"))
+    functions = [f for f in module.functions if f.name == "probe"]
+    assert len(functions) == 1, [f.name for f in module.functions]
+    func = functions[0]
+    # The defect: a freshly parsed function carries no legacy blocks.
+    assert not func.blocks
+    get_indexed_function_kernel(func).materialize_legacy_blocks(func)
+    assert func.blocks, "materialize_legacy_blocks must project the body"
+    row = _tool().function_sizing(func)
+    assert row["stores"] == 1, row

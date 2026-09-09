@@ -18,6 +18,7 @@ from pcc.unsafe import (
     call_ptr2,
     cstr,
     global_load_ptr,
+    global_addr,
     function_addr,
     is_tagged_int,
     load_i32,
@@ -72,6 +73,49 @@ pcc_gc_backend4_zpage_register_owner_payload_span = extern(
     "pcc_gc_backend4_zpage_register_owner_payload_span",
     (c_ptr, c_ptr, c_int64), c_int64,
 )
+
+py_list_get = extern("py_list_get", (c_ptr, c_int64), c_ptr)
+py_list_set = extern("py_list_set", (c_ptr, c_int64, c_ptr), c_void)
+pcc_gc_retain_known = extern("pcc_gc_retain_known", (c_ptr,), c_ptr)
+pcc_gc_release_known = extern("pcc_gc_release_known", (c_ptr,), c_void)
+pcc_runtime_log_event_code = extern("pcc_runtime_log_event_code", (c_int32, c_int32, c_int64, c_int64, c_ptr), c_void)
+
+
+@c_abi_export("py_gen_frame_get")
+def py_gen_frame_get(frame, index: int):
+    """NEW ref from a compiler-private, fixed-size managed-object frame."""
+    if pcc_gc_backend() != 0 or ptr_is_null(frame) != 0:
+        return py_list_get(frame, index)
+    if index < 0 or index >= load_i64(frame, PYLISTOBJECT_LENGTH_OFFSET):
+        return py_list_get(frame, index)
+    items = load_ptr(frame, PYLISTOBJECT_ITEMS_OFFSET)
+    return pcc_gc_retain_known(load_ptr(items, index * C_POINTER_SIZE))
+
+
+@c_abi_export("py_gen_frame_set")
+def py_gen_frame_set(frame, index: int, value) -> None:
+    """Retaining frame store; caller keeps the private frame alive.
+
+    Its slots contain only Python objects, tagged values or NULL. GC0 needs
+    no tracing barrier; moving/tracing collectors use the original setter.
+    Publication precedes old-value finalization exactly as in py_list_set.
+    """
+    if pcc_gc_backend() != 0 or ptr_is_null(frame) != 0:
+        py_list_set(frame, index, value)
+        return
+    if index < 0 or index >= load_i64(frame, PYLISTOBJECT_LENGTH_OFFSET):
+        py_list_set(frame, index, value)
+        return
+    if load_i32(global_addr("pcc_runtime_log_fast_state"), 0) != 0:
+        pcc_runtime_log_event_code(2, 3, 0, 0, frame)
+    items = load_ptr(frame, PYLISTOBJECT_ITEMS_OFFSET)
+    slot = ptr_add(items, index * C_POINTER_SIZE)
+    old = load_ptr(slot, 0)
+    if ptr_eq(old, value) != 0:
+        return
+    pcc_gc_retain_known(value)
+    store_ptr(slot, 0, value)
+    pcc_gc_release_known(old)
 
 
 def _require_result(result, helper_name, message):

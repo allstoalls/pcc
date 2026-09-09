@@ -58,6 +58,9 @@ from pcc.py_runtime.py.py_abi_constants import (
 )
 from pcc.unsafe import (
     cstr,
+    define_global_i32,
+    atomic_load_i32,
+    atomic_store_i32,
     global_addr,
     global_load_ptr,
     global_store_ptr,
@@ -268,6 +271,16 @@ pcc_gc_pointer_is_managed = extern(
 
 def _ptr_can_have_header(o) -> bool:
     return pcc_gc_pointer_is_managed(o) != 0
+
+
+def _note_unmanaged_refcount_op() -> None:
+    """Mirror of py_obj.c's pcc_gc_unmanaged_refcount_ops increment.
+
+    PCC_GC_COUNTER_UNMANAGED_REFCOUNT_OPS (116).  Read the enum comment in
+    py_runtime.h for why this is a ratchet and not just telemetry.
+    """
+    slot = global_addr("pcc_gc_unmanaged_refcount_ops")
+    store_i64(slot, 0, load_i64(slot, 0) + 1)
 
 
 def _gc_relocation_candidate(o) -> int:
@@ -628,6 +641,18 @@ def pcc_gc_store_ptr_plan_init(plan, owner, backend: int) -> None:
         pcc_runtime_log_event_code(2, 3, backend, 0, owner)
 
 
+def _gc4_old_slot_is_releasable(value) -> int:
+    if pcc_gc_object_is_known_no_lock(value) != 0:
+        return 1
+    # Graph leaves intentionally have no tracing-index node. Allocation
+    # provenance still proves their header is live; their slot owner must
+    # reach the ordinary decref checks just like a tracked object's owner.
+    # Keep unknown/stale pointers and unregistered graph objects excluded.
+    if pcc_gc_pointer_is_managed(value) == 0:
+        return 0
+    return _gc_graph_leaf_tag(load_i32(value, PYOBJECTHEADER_TYPE_TAG_OFFSET))
+
+
 def _pcc_gc_store_plan_commit_locked(plan, owner, slot, value) -> int:
     if ptr_is_null(plan) != 0 or ptr_is_null(slot) != 0:
         return 0
@@ -648,11 +673,78 @@ def _pcc_gc_store_plan_commit_locked(plan, owner, slot, value) -> int:
     old = load_ptr(slot, 0)
     store_ptr(slot, 0, load_ptr(plan, 0))
     if ptr_is_null(old) == 0 and is_tagged_int(old) == 0:
-        if backend == 4 and pcc_gc_object_is_known_no_lock(old) == 0:
+        if backend == 4 and _gc4_old_slot_is_releasable(old) == 0:
             old = null()
     _py_decref_prepare(old, ptr_add(plan, 56))
     store_i32(plan, 124, 3)
     return 1
+
+
+def _pcc_gc_store_plan_commit_sentinel_aware_locked(
+    plan, owner, slot, value, sentinel
+) -> int:
+    """Ordinary slot store, except that ``sentinel`` is not a reference.
+
+    A container tombstone is not a reference: nothing ever decrefs it, so
+    refcounting it is pure work -- and refcount prepare's first act is the
+    provenance probe, so tombstone traffic paid
+    ``pcc_gc_granule_is_object_start`` to conclude that a sentinel is not an
+    object.  Measured through PCC_GC_COUNTER_UNMANAGED_REFCOUNT_OPS at 5144
+    such operations in a 4000-iteration set churn, and it happens in BOTH
+    directions: storing the tombstone increfs it, and storing a real element
+    over a tombstone decrefs it.  One entry point covers both, because both
+    are the same statement -- this value is a sentinel, not a reference.
+
+    py_dict needs none of this: its tombstone is an integer in an index array
+    and never reaches the barrier.  py_set uses a pointer sentinel.  See the
+    2026-09-08 update in
+    docs/investigations/runtime-module-optimizer-throughput.md.
+
+    Everything the barrier really owes is kept: the store note, the slot write
+    barrier with today's arguments, the relocation read for a real value, the
+    backend-4 known-object guard, and a real old value's release.
+    """
+    if ptr_is_null(plan) != 0 or ptr_is_null(slot) != 0:
+        return 0
+    if load_i32(plan, 124) != 0:
+        return 0
+    store_i32(plan, 124, 1)
+    backend: int = load_i64(plan, 112)
+    if backend == 1 or backend == 2 or backend == 3 or backend == 4:
+        pcc_gc_note_store()
+    if ptr_eq(value, sentinel) != 0:
+        # A sentinel carries no forwarding entry and needs no incref.  The
+        # reset keeps the plan's finish inert.
+        _py_refcount_prepared_reset(plan, value)
+    else:
+        if backend == 3 or backend == 4:
+            if (
+                _gc_forwarding_population() > 0
+                and _gc_relocation_candidate(value) != 0
+            ):
+                value = pcc_gc_note_relocation_read(value)
+        _py_incref_prepare(value, plan)
+    if backend == 1 or backend == 2 or backend == 3 or backend == 4:
+        pcc_gc_note_slot_write_barrier(owner, slot, load_ptr(plan, 0))
+    old = load_ptr(slot, 0)
+    store_ptr(slot, 0, load_ptr(plan, 0))
+    if ptr_eq(old, sentinel) != 0:
+        old = null()
+    if ptr_is_null(old) == 0 and is_tagged_int(old) == 0:
+        if backend == 4 and _gc4_old_slot_is_releasable(old) == 0:
+            old = null()
+    _py_decref_prepare(old, ptr_add(plan, 56))
+    store_i32(plan, 124, 3)
+    return 1
+
+
+@c_abi_export("pcc_gc_store_ptr_plan_commit_sentinel_aware_locked")
+def pcc_gc_store_ptr_plan_commit_sentinel_aware_locked(
+    plan, owner, slot, value, sentinel
+) -> int:
+    return _pcc_gc_store_plan_commit_sentinel_aware_locked(
+        plan, owner, slot, value, sentinel
+    )
 
 
 @c_abi_export("pcc_gc_store_root_plan_commit_locked")
@@ -1064,6 +1156,7 @@ def _py_incref_prepare(o, prepared) -> None:
     else:
         backend = load_i32(global_addr("pcc_gc_backend_selected"), 0)
     if not _ptr_can_have_header(o):
+        _note_unmanaged_refcount_op()
         return
     tag: int = load_i32(o, PYOBJECTHEADER_TYPE_TAG_OFFSET)
     if (
@@ -1144,9 +1237,31 @@ def pcc_gc_retain_plan_finish(plan) -> None:
 
 @c_abi_export("py_incref")
 def py_incref(o) -> None:
-    prepared = stack_alloc(56)
-    _py_incref_prepare(o, prepared)
-    _py_incref_finish(prepared)
+    if ptr_is_null(o) != 0 or is_tagged_int(o) != 0:
+        return
+    # Standalone GC0 operations need no prepare record on the nonterminal
+    # path. Keep provenance/type checks and share terminal finish with plans.
+    if _gc_backend_fast() != 0:
+        prepared = stack_alloc(56)
+        _py_incref_prepare(o, prepared)
+        _py_incref_finish(prepared)
+        return
+    if not _ptr_can_have_header(o):
+        _note_unmanaged_refcount_op()
+        return
+    tag: int = load_i32(o, PYOBJECTHEADER_TYPE_TAG_OFFSET)
+    if tag < PY_TYPE_NONE or (tag > PY_TYPE_CPY_HANDLE and tag < PY_TYPE_USER) or (tag > 500 and pcc_capi_is_cext_type_tag(tag) == 0):
+        return
+    flags: int = load_i32(o, PYOBJECTHEADER_FLAGS_OFFSET)
+    if (tag == PY_TYPE_CONTINUATION or tag == PY_TYPE_VIRTUAL_THREAD or tag == PY_TYPE_VTHREAD_CHANNEL) and (flags & PY_FLAG_GC_TRACKED) == 0 and pcc_gc_object_is_known(o) == 0:
+        return
+    if (flags & PY_FLAG_IMMORTAL) != 0:
+        return
+    if load_i64(o, PYOBJECTHEADER_REFCOUNT_OFFSET) < 0:
+        return
+    new_rc: int = pcc_refcount_incref(o)
+    if load_i32(global_addr("pcc_runtime_log_fast_state"), 0) != 0:
+        pcc_runtime_log_event_code(3, 1, new_rc, tag, o)
 
 
 def _py_decref_prepare(o, prepared) -> None:
@@ -1161,6 +1276,7 @@ def _py_decref_prepare(o, prepared) -> None:
     else:
         backend = load_i32(global_addr("pcc_gc_backend_selected"), 0)
     if not _ptr_can_have_header(o):
+        _note_unmanaged_refcount_op()
         return
     tag_dbg: int = load_i32(o, PYOBJECTHEADER_TYPE_TAG_OFFSET)
     if (
@@ -1272,6 +1388,109 @@ def _py_decref_finish(prepared) -> None:
 
 @c_abi_export("py_decref")
 def py_decref(o) -> None:
+    if ptr_is_null(o) != 0 or is_tagged_int(o) != 0:
+        return
+    # Standalone GC0 operations need no prepare record on the nonterminal
+    # path. Keep provenance/type checks and share terminal finish with plans.
+    if _gc_backend_fast() != 0:
+        prepared = stack_alloc(56)
+        _py_decref_prepare(o, prepared)
+        _py_decref_finish(prepared)
+        return
+    if not _ptr_can_have_header(o):
+        _note_unmanaged_refcount_op()
+        return
+    tag: int = load_i32(o, PYOBJECTHEADER_TYPE_TAG_OFFSET)
+    if tag < PY_TYPE_NONE or (tag > PY_TYPE_CPY_HANDLE and tag < PY_TYPE_USER) or (tag > 500 and pcc_capi_is_cext_type_tag(tag) == 0):
+        return
+    flags: int = load_i32(o, PYOBJECTHEADER_FLAGS_OFFSET)
+    if (tag == PY_TYPE_CONTINUATION or tag == PY_TYPE_VIRTUAL_THREAD or tag == PY_TYPE_VTHREAD_CHANNEL) and (flags & PY_FLAG_GC_TRACKED) == 0 and pcc_gc_object_is_known(o) == 0:
+        return
+    if (flags & PY_FLAG_IMMORTAL) != 0:
+        return
+    if load_i64(o, PYOBJECTHEADER_REFCOUNT_OFFSET) <= 0:
+        prepared = stack_alloc(56)
+        _py_decref_prepare(o, prepared)
+        _py_decref_finish(prepared)
+        return
+    new_rc: int = pcc_refcount_decref(o)
+    if new_rc > 0:
+        if load_i32(global_addr("pcc_runtime_log_fast_state"), 0) != 0:
+            pcc_runtime_log_event_code(3, 2, new_rc, tag, o)
+        return
+    if new_rc == 0:
+        store_i32(o, PYOBJECTHEADER_FLAGS_OFFSET, flags | 524288)
     prepared = stack_alloc(56)
-    _py_decref_prepare(o, prepared)
+    _py_refcount_prepared_reset(prepared, o)
+    store_i64(prepared, 8, tag)
+    store_i64(prepared, 16, flags)
+    store_i64(prepared, 24, 0)
+    store_i64(prepared, 32, new_rc)
+    store_i64(prepared, 40, 1)
+    _py_decref_finish(prepared)
+
+
+# Verification is a diagnostic control, set before exercising a workload.
+# The ordinary APIs always validate; only compiler-proven object lanes use it.
+define_global_i32("pcc_gc_known_ref_checks", 0)
+
+
+@c_abi_export("pcc_gc_set_known_ref_checks")
+def pcc_gc_set_known_ref_checks(enabled: int) -> None:
+    atomic_store_i32(global_addr("pcc_gc_known_ref_checks"), 0, 1 if enabled != 0 else 0, "release")
+
+
+@c_abi_export("pcc_gc_retain_known")
+def pcc_gc_retain_known(o):
+    """NEW ref for a proven initialized object, immortal, tagged value or NULL.
+
+    Verification and GC1-4 use the original checked path. GC0 shares the
+    refcount primitive; it needs no transaction record for a normal increment.
+    """
+    if ptr_is_null(o) != 0 or is_tagged_int(o) != 0:
+        return o
+    if _gc_backend_fast() != 0 or atomic_load_i32(global_addr("pcc_gc_known_ref_checks"), 0, "acquire") != 0:
+        return pcc_gc_retain(o)
+    flags: int = load_i32(o, PYOBJECTHEADER_FLAGS_OFFSET)
+    if (flags & PY_FLAG_IMMORTAL) != 0:
+        return o
+    if load_i64(o, PYOBJECTHEADER_REFCOUNT_OFFSET) < 0:
+        return o
+    new_rc: int = pcc_refcount_incref(o)
+    if load_i32(global_addr("pcc_runtime_log_fast_state"), 0) != 0:
+        pcc_runtime_log_event_code(3, 1, new_rc, load_i32(o, PYOBJECTHEADER_TYPE_TAG_OFFSET), o)
+    return o
+
+
+@c_abi_export("pcc_gc_release_known")
+def pcc_gc_release_known(o) -> None:
+    """Consume one proven owner; terminal release uses the existing finish."""
+    if ptr_is_null(o) != 0 or is_tagged_int(o) != 0:
+        return
+    if _gc_backend_fast() != 0 or atomic_load_i32(global_addr("pcc_gc_known_ref_checks"), 0, "acquire") != 0:
+        pcc_gc_release(o)
+        return
+    flags: int = load_i32(o, PYOBJECTHEADER_FLAGS_OFFSET)
+    if (flags & PY_FLAG_IMMORTAL) != 0:
+        return
+    if load_i64(o, PYOBJECTHEADER_REFCOUNT_OFFSET) <= 0:
+        # Keep the established underflow diagnostic and non-mutating failure.
+        pcc_gc_release(o)
+        return
+    new_rc: int = pcc_refcount_decref(o)
+    if new_rc > 0:
+        if load_i32(global_addr("pcc_runtime_log_fast_state"), 0) != 0:
+            pcc_runtime_log_event_code(3, 2, new_rc, load_i32(o, PYOBJECTHEADER_TYPE_TAG_OFFSET), o)
+        return
+    if new_rc == 0:
+        store_i32(o, PYOBJECTHEADER_FLAGS_OFFSET, flags | 524288)
+    # Weakrefs, resurrection, reentrant deallocation and the trash stack remain
+    # owned by the same finish routine as the checked API.
+    prepared = stack_alloc(56)
+    _py_refcount_prepared_reset(prepared, o)
+    store_i64(prepared, 8, load_i32(o, PYOBJECTHEADER_TYPE_TAG_OFFSET))
+    store_i64(prepared, 16, flags)
+    store_i64(prepared, 24, 0)
+    store_i64(prepared, 32, new_rc)
+    store_i64(prepared, 40, 1)
     _py_decref_finish(prepared)

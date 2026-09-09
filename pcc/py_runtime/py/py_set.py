@@ -95,6 +95,11 @@ pcc_gc_store_ptr_plan_commit_locked = extern(
     (c_ptr, c_ptr, c_ptr, c_ptr),
     c_int64,
 )
+pcc_gc_store_ptr_plan_commit_sentinel_aware_locked = extern(
+    "pcc_gc_store_ptr_plan_commit_sentinel_aware_locked",
+    (c_ptr, c_ptr, c_ptr, c_ptr, c_ptr),
+    c_int64,
+)
 pcc_gc_store_ptr_plan_finish = extern(
     "pcc_gc_store_ptr_plan_finish", (c_ptr,), c_void
 )
@@ -258,10 +263,16 @@ def _set_remove_rooted_slot(
             key = _entry_key(s, entries, slot_off)
             dummy = global_load_ptr("py_set_dummy")
             if ptr_is_null(key) == 0 and ptr_eq(key, dummy) == 0:
-                committed = pcc_gc_store_ptr_plan_commit_locked(
+                # The tombstone is a sentinel, not a reference.  Storing it
+                # through the ordinary commit path increfed it, and the incref
+                # begins with the provenance probe, so every discard paid
+                # pcc_gc_granule_is_object_start to learn that py_set_dummy is
+                # not an object.  The sentinel path still releases the old key.
+                committed = pcc_gc_store_ptr_plan_commit_sentinel_aware_locked(
                     plan,
                     s,
                     ptr_add(entries, slot_off + 8),
+                    dummy,
                     dummy,
                 )
                 if committed != 0:
@@ -302,11 +313,12 @@ def _set_add_rooted_slot(
             dummy = global_load_ptr("py_set_dummy")
             if ptr_is_null(old) != 0 or ptr_eq(old, dummy) != 0:
                 was_tombstone: int = ptr_eq(old, dummy)
-                committed = pcc_gc_store_ptr_plan_commit_locked(
+                committed = pcc_gc_store_ptr_plan_commit_sentinel_aware_locked(
                     plan,
                     s,
                     ptr_add(entries, slot_off + 8),
                     item,
+                    dummy,
                 )
                 if committed != 0:
                     store_i64(entries, slot_off, hash_val)

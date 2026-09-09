@@ -1128,7 +1128,7 @@ class GeneratorLoweringMixin:
                 )
             if bulk_frame_init:
                 self.builder.call(
-                    self.runtime["py_list_set"],
+                    self._generator_frame_helper("set"),
                     [frame, ir.Constant(_I64, frame_index), obj],
                 )
             else:
@@ -1267,7 +1267,7 @@ class GeneratorLoweringMixin:
                 item = self._emit_none_literal()
             else:
                 item = self.builder.call(
-                    self.runtime["py_list_get"],
+                    self._generator_frame_helper("get"),
                     [fn.args[1], ir.Constant(_I64, idx)],
                     name=self._fresh(f"gen.frame.{local_name}"),
                 )
@@ -1294,7 +1294,7 @@ class GeneratorLoweringMixin:
                 if local_name in argument_names:
                     continue
                 item = self.builder.call(
-                    self.runtime["py_list_get"],
+                    self._generator_frame_helper("get"),
                     [fn.args[1], ir.Constant(_I64, idx)],
                     name=self._fresh(f"gen.frame.{local_name}"),
                 )
@@ -1374,6 +1374,19 @@ class GeneratorLoweringMixin:
         ctx["switch"].add_case(ir.Constant(_I64, state_id), target)
         self.builder.position_at_end(cur)
 
+    def _generator_frame_helper(self, operation: str):
+        # Ordinary Python address values are boxed integers. Runtime/C-ABI
+        # generators can carry opaque native pointers, so retain their checked
+        # frame path instead of claiming a managed-object-only frame.
+        proven = (
+            self._known_object_refcounts
+            and not self._freestanding_module
+            and not self._runtime_port_module
+            and not self._module_has_c_abi_export
+        )
+        prefix = "py_gen_frame_" if proven else "py_list_"
+        return self.runtime[prefix + operation]
+
     def _emit_generator_save_frame(self) -> None:
         ctx = self._generator_ctx_stack[-1]
         frame = ctx["frame"]
@@ -1388,7 +1401,7 @@ class GeneratorLoweringMixin:
                 continue
             value = self.builder.load(slot, name=self._fresh("gen.save"))
             self.builder.call(
-                self.runtime["py_list_set"],
+                self._generator_frame_helper("set"),
                 [frame, ir.Constant(_I64, idx), value],
             )
 

@@ -117,6 +117,34 @@ def test_link_facade_has_no_second_file_path_owner():
     assert not hasattr(self_link, "link_ir_paths")
 
 
+@pytest.mark.parametrize("consume", [False, True])
+def test_owned_ir_is_released_after_emission_before_linking(monkeypatch, tmp_path, consume):
+    texts = ["first module", "second module"]
+    normalized = []
+    linked = []
+
+    def emit(values, *_args, **_kwargs):
+        assert values == texts == ["first module", "second module"]
+        normalized.append(values)
+        return [("self-aarch64-darwin-v0", str(tmp_path / "module.s"))]
+
+    def link(*_args, **_kwargs):
+        expected = [] if consume else ["first module", "second module"]
+        assert texts == normalized[0] == expected
+        linked.append(True)
+
+    monkeypatch.setattr(pipeline, "_emit_self_objects_many_via_host_python", emit)
+    monkeypatch.setattr(pipeline, "_run_self_link_command", link)
+    monkeypatch.setattr(pipeline, "_finish_self_backend_executable", lambda *_a, **_k: None)
+    monkeypatch.setattr(pipeline, "_macho_semantic_layout_enabled", lambda: False)
+    monkeypatch.setattr(pipeline, "_self_backend_split_large_modules_enabled", lambda: False)
+    pipeline._link_with_self_backend_ir_texts(
+        texts, str(tmp_path / "program"), None, False,
+        tmp_dir=str(tmp_path), consume_ir_texts=consume,
+    )
+    assert linked == [True]
+
+
 def test_semantic_layout_rejects_split_module_before_emission(
     monkeypatch,
     tmp_path,
@@ -239,3 +267,28 @@ def test_linux_pcc_link_route_uses_owned_elf_driver_and_internal_assembly(
         if value == "--object"
     ] == ["extra.o"]
     assert command[command.index("--archive") + 1] == "/runtime/libpcc.a"
+
+
+def test_parallel_codegen_container_does_not_retain_prepass_ir(monkeypatch, tmp_path):
+    import weakref
+    class TextBatch(list):
+        pass
+    references = []
+    def codegen(*_args, **_kwargs):
+        batch = TextBatch([("entry", "define i32 @main() { ret i32 0 }")])
+        references.append(weakref.ref(batch))
+        return batch, False, False, 38, []
+    def link(texts, *_args, **kwargs):
+        assert references[0]() is None, "parallel result still owns pre-pass IR"
+        assert len(texts) == 1
+        assert kwargs["consume_ir_texts"] is True
+    source = tmp_path / "entry.py"
+    source.write_text("print(1)\n")
+    runtime = tmp_path / "runtime.a"
+    runtime.touch()
+    monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
+    monkeypatch.setattr(pipeline, "_compile_python_multi_codegen_parallel", codegen)
+    monkeypatch.setattr(pipeline, "_link_with_self_backend_ir_texts", link)
+    pipeline.compile_python_multi([str(source)], str(tmp_path / "output"),
+        module_names=["entry"], backend="self", libpython_mode="off",
+        ir_scaffold_mode="on", runtime_archive=str(runtime))

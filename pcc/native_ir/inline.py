@@ -21,8 +21,10 @@ Subset implemented here (labelled ``subset``):
   ``%x`` → the actual argument value, and the final ``ret %val``
   becomes an assignment of ``%val`` to the call's result name.
 
-Full inlining (arbitrary call-site splitting, general multi-block CFG
-splicing, nested calls) is deferred to the full implementation.
+With include_definitions enabled, bounded alloca-free definitions also
+support ordinary call-site splitting, multiple returns and successor-PHI
+repair. Expansion uses immutable callee templates and does not recursively
+inline cloned call sites. Larger bodies and unsupported ABI shapes stay calls.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ from __future__ import annotations
 import re
 
 
-from .ir_mutator import MutableModule
+from .ir_mutator import BasicBlock, MutableModule
 from .instsimplify import simplify_module_text
 from .text_tokens import replace_local_names
 
@@ -53,6 +55,8 @@ def inline_module(
     module = MutableModule.parse(ir_text)
 
     attr_groups = _parse_attr_groups(ir_text)
+    semantic_interposition = "SemanticInterposition" in ir_text
+    addressed = set(re.findall(r"\bblockaddress\s*\(\s*@([\w.$-]+)\s*,", ir_text))
     # Find candidate internal single-block callees.
     candidates: dict[str, dict] = {}
     for fn in module.functions:
@@ -66,6 +70,8 @@ def inline_module(
         if group is not None:
             attributes += " " + attr_groups.get(group.group("id"), "")
         if "noinline" in attributes or "optnone" in attributes or "loader-replaceable" in attributes:
+            continue
+        if re.search(r"\b(?:\w+cc|cc\s+\d+)\b", header.split("@", 1)[0]):
             continue
         is_alwaysinline = _header_has_alwaysinline(header, attr_groups)
         if require_alwaysinline:
@@ -82,14 +88,19 @@ def inline_module(
                 "available_externally", "common", "appending", "dllimport",
             )):
                 continue
-            if "SemanticInterposition" in ir_text and "dso_local" not in header_words:
+            if semantic_interposition and "dso_local" not in header_words:
                 continue
         blocks = list(fn.blocks)
+        body_text = "".join(block.serialize() for block in blocks)
+        if fn.name in addressed or any(word in body_text for word in (
+            "indirectbr ", "callbr ", "invoke ", "landingpad ",
+            "catchswitch ", "catchpad ", "cleanuppad ", "blockaddress(",
+        )):
+            continue
         if include_definitions:
             instruction_count = sum(len(block.instructions) for block in blocks)
             if instruction_count > 32:
                 continue
-            body_text = "".join(block.serialize() for block in blocks)
             if any(word in body_text for word in (
                 "alloca ", "musttail ", "invoke ", "callbr ", "blockaddress(",
                 "@llvm.returnaddress", "@llvm.frameaddress", "@llvm.va_start",
@@ -97,6 +108,7 @@ def inline_module(
                 continue
 
         arg_names = []
+        arg_types = []
         ok_args = True
         for arg in fn.args:
             am = re.match(r"(\S+)\s+%([\w\.]+)", arg.serialize().strip())
@@ -104,6 +116,7 @@ def inline_module(
                 ok_args = False
                 break
             arg_names.append(am.group(2))
+            arg_types.append(am.group(1))
         if not ok_args:
             continue
 
@@ -131,10 +144,17 @@ def inline_module(
         else:
             total_non_terms = sum(max(len(list(b.instructions)) - 1, 0) for b in blocks)
             multi_ret_only = len(exit_blocks) == 2 and total_non_terms == 0 and len(blocks) == 3
-            if len(exit_blocks) != 1 and not multi_ret_only:
-                continue
-            if total_non_terms > 6:
-                continue
+            if include_definitions:
+                if not exit_blocks or any(
+                    not re.fullmatch(r"ret (?:void|\S+ \S+)", b.terminator.text.strip())
+                    for b in exit_blocks
+                ):
+                    continue
+            else:
+                if len(exit_blocks) != 1 and not multi_ret_only:
+                    continue
+                if total_non_terms > 6:
+                    continue
             if len(exit_blocks) == 1:
                 exit_term = list(exit_blocks[0].instructions)[-1]
                 term_text = exit_term.text.strip()
@@ -152,6 +172,8 @@ def inline_module(
                     continue
         candidates[fn.name] = {
             "args": arg_names,
+            "arg_types": arg_types,
+            "return_type": header.split("@", 1)[0].split()[-1],
             "body": body_lines,
             "ret_val": ret_val,
             "ret_void": ret_void,
@@ -164,7 +186,10 @@ def inline_module(
 
     # Iterate call sites and inline where the callee is a candidate.
     new_text = _inline_calls(ir_text, candidates)
-    new_text = _inline_multiblock_return_callers(new_text, candidates)
+    if include_definitions:
+        new_text = _inline_multiblock_call_sites(new_text, candidates)
+    else:
+        new_text = _inline_multiblock_return_callers(new_text, candidates)
     changed = new_text != ir_text
     if not changed:
         return ir_text, False
@@ -236,6 +261,24 @@ _VOID_CALL_RE = re.compile(_VOID_CALL_RE_TEMPLATE.format(callee=r"[\w.$]+"))
 _BARE_CALL_RE = re.compile(_BARE_CALL_RE_TEMPLATE.format(callee=r"[\w.$]+"))
 
 
+def _call_signature_matches(text: str, actuals_raw: list[str], info: dict) -> bool:
+    # Opaque-pointer IR can call a definition through a different signature.
+    # Such a call is an ABI boundary, not a valid SSA substitution. This
+    # subset also leaves calling-convention/return-attribute forms untouched.
+    if "musttail" in text or "notail" in text:
+        return False
+    signature = re.search(r"\bcall\s+(\S+)\s+@", text)
+    if signature is None or signature.group(1) != info["return_type"]:
+        return False
+    actual_types = []
+    for raw in actuals_raw:
+        parts = raw.split()
+        if len(parts) != 2:
+            return False
+        actual_types.append(parts[0])
+    return actual_types == info["arg_types"]
+
+
 def _inline_calls(ir_text: str, candidates: dict[str, dict]) -> str:
     chunks = _split_functions(ir_text)
     out: list[str] = []
@@ -292,6 +335,8 @@ def _inline_calls_in_function(
             if not m:
                 continue
             actuals_raw = [a.strip() for a in m.group("args").split(",") if a.strip()]
+            if not _call_signature_matches(stripped, actuals_raw, info):
+                continue
             actuals = []
             for raw in actuals_raw:
                 parts = raw.split()
@@ -348,6 +393,123 @@ def _inline_calls_in_function(
     return _apply_value_replacements("".join(out), value_replacements), counter
 
 
+def _inline_multiblock_call_sites(ir_text: str, candidates: dict[str, dict]) -> str:
+    """Splice bounded, alloca-free callees at ordinary direct call sites.
+
+    Keep immutable callee bodies so a traversal cannot recursively expand
+    already-inlined code. Return edges join in a new continuation; successor
+    PHIs must name that continuation after the caller block is split.
+    """
+    templates = MutableModule.parse(ir_text)
+    templates_by_name = {fn.name: fn for fn in templates.functions}
+    module = MutableModule.parse(ir_text)
+    changed = False
+    counter = 0
+    addressed = set(re.findall(r"\bblockaddress\s*\(\s*@([\w.$-]+)\s*,", ir_text))
+    for fn in module.functions:
+        if fn.name in addressed:
+            continue
+        if any(inst.opcode in ("invoke", "callbr", "indirectbr", "catchswitch", "catchpad", "cleanuppad") or "blockaddress(" in inst.text
+               for block in fn.blocks for inst in block.instructions):
+            continue
+        # Build namespace and predecessor-use indices once per function.
+        # Serializing/scanning the growing function at every call site made
+        # native optimization quadratic in its expanded instruction count.
+        occupied = fn.defined_names()
+        phi_users = {}
+        for block in fn.blocks:
+            occupied.add(block.name)
+            for inst in block.instructions:
+                if inst.opcode != "phi":
+                    continue
+                for predecessor in re.findall(r",\s*%([\w.$-]+)\s*\]", inst.text):
+                    users = phi_users.get(predecessor)
+                    if users is None:
+                        users = []
+                        phi_users[predecessor] = users
+                    users.append(inst)
+        reserved_prefixes = set()
+        for name in occupied:
+            if name.startswith("inl.cfg."):
+                parts = name.split(".", 3)
+                if len(parts) == 4 and parts[2].isdigit():
+                    reserved_prefixes.add(parts[2])
+        block_index = 0
+        while block_index < len(fn.blocks):
+            block = fn.blocks[block_index]
+            selected = None
+            for call_index, call in enumerate(block.instructions):
+                if call.opcode not in ("call", "tail"):
+                    continue
+                direct = _DIRECT_CALLEE_RE.search(call.text)
+                if direct is None:
+                    continue
+                name = direct.group("callee")
+                info = candidates.get(name)
+                if info is None or info["single_block"] or name == fn.name:
+                    continue
+                call_info = _match_call_instruction(call.text.strip(), name, info["ret_void"])
+                if call_info is None or not _call_signature_matches(call.text, call_info["actuals_raw"], info):
+                    continue
+                callee = templates_by_name.get(name)
+                if callee is None:
+                    continue
+                selected = (call_index, call, info, call_info, callee)
+                break
+            if selected is None:
+                block_index += 1
+                continue
+            call_index, call, info, call_info, callee = selected
+            counter += 1
+            prefix_number = str(counter)
+            while prefix_number in reserved_prefixes:
+                counter += 1
+                prefix_number = str(counter)
+            prefix = "inl.cfg." + prefix_number
+            cloned = module.clone_blocks(fn, callee.blocks, prefix)
+            continuation_name = prefix + ".continuation"
+            for clone in cloned:
+                occupied.add(clone.name)
+                for inst in clone.instructions:
+                    if inst.result_name:
+                        occupied.add(inst.result_name)
+            continuation_name = _fresh_inline_name(continuation_name, prefix, occupied)
+            remap = {arg: actual for arg, actual in zip(info["args"], call_info["actuals"], strict=True)}
+            incoming = []
+            for clone in cloned:
+                clone.instructions = [llvm_line(_apply_remap(inst.text, remap)) for inst in clone.instructions]
+                term = clone.terminator
+                if term.opcode == "ret":
+                    if info["return_type"] != "void":
+                        value = term.text.strip().split(None, 2)[2]
+                        incoming.append("[ " + value + ", %" + clone.name + " ]")
+                    clone.instructions[-1] = llvm_line("  br label %" + continuation_name + "\n")
+            tail = list(block.instructions[call_index + 1:])
+            if call_info["kind"] == "used":
+                tail.insert(0, llvm_line("  %" + call.result_name + " = phi "
+                    + info["return_type"] + " " + ", ".join(incoming) + "\n"))
+            continuation = BasicBlock(continuation_name, continuation_name + ":\n", tail)
+            # Every original outgoing edge now leaves the continuation. Only
+            # PHI predecessor labels change; values defined before the call
+            # continue to dominate their uses.
+            affected_phis = phi_users.pop(block.name, [])
+            for inst in affected_phis:
+                inst.text = replace_local_names(
+                    inst.text, {block.name: "%" + continuation_name}
+                )
+            if affected_phis:
+                phi_users[continuation_name] = affected_phis
+            block.instructions = list(block.instructions[:call_index]) + [
+                llvm_line("  br label %" + cloned[0].name + "\n")
+            ]
+            fn.blocks[block_index + 1:block_index + 1] = cloned + [continuation]
+            # Skip cloned calls this round, but process subsequent original
+            # calls that moved into the continuation.
+            block_index += len(cloned) + 1
+            changed = True
+    return module.serialize() if changed else ir_text
+
+
 def _inline_multiblock_return_callers(ir_text: str, candidates: dict[str, dict]) -> str:
     mut = MutableModule.parse(ir_text)
     changed = False
@@ -371,6 +533,8 @@ def _inline_multiblock_return_callers(ir_text: str, candidates: dict[str, dict])
                     continue
                 call_info = _match_call_instruction(call_inst.text.strip(), callee_name, info["ret_void"])
                 if call_info is None:
+                    continue
+                if not _call_signature_matches(call_inst.text, call_info["actuals_raw"], info):
                     continue
                 if len(call_info["actuals"]) != len(info["args"]):
                     continue
@@ -623,7 +787,7 @@ def _match_call_instruction(text: str, callee_name: str, ret_void: bool) -> dict
     for raw in actuals_raw:
         parts = raw.split()
         actuals.append(parts[-1] if len(parts) >= 2 else raw)
-    return {"kind": kind, "actuals": actuals}
+    return {"kind": kind, "actuals": actuals, "actuals_raw": actuals_raw}
 
 
 def _apply_remap(body_line: str, remap: dict[str, str]) -> str:

@@ -312,3 +312,113 @@ entry:
                          capture_output=True, text=True, timeout=15)
     assert run.returncode == 0, run.stderr
     assert output_path.read_text() == expected
+
+    # Use the same native driver for the memory tier, including a loop whose
+    # carried value requires a PHI. Host dispatch alone cannot qualify this.
+    from pcc.py_frontend.compiled_owned_passes import run_owned_passes
+
+    memory_ir = '''define i64 @count(i64 %limit) {
+entry:
+  %slot = alloca i64
+  store i64 0, ptr %slot
+  br label %head
+head:
+  %value = load i64, ptr %slot
+  %more = icmp slt i64 %value, %limit
+  br i1 %more, label %body, label %done
+body:
+  %next = add i64 %value, 1
+  store i64 %next, ptr %slot
+  br label %head
+done:
+  ret i64 %value
+}
+'''
+    input_path.write_text(memory_ir)
+    run = subprocess.run([str(binary), "mem2reg,sroa", str(input_path), str(output_path)],
+                         capture_output=True, text=True, timeout=15)
+    assert run.returncode == 0, run.stderr
+    promoted = output_path.read_text()
+    assert promoted == run_owned_passes(memory_ir, ["mem2reg", "sroa"], False)
+    assert "alloca" not in promoted
+    assert " = phi i64 " in promoted
+
+
+@pytest.mark.parametrize("chain", [False, True])
+def test_cfg_return_fold_preserves_third_predecessor(chain):
+    from llvmlite import binding as llvm
+    from pcc.native_ir.simplifycfg import simplify_cfg_text
+    source = '''define RESULT @choose(i1 %outer, i1 %inner, ptr %a, ptr %b) {
+entry:
+  br i1 %outer, label %diamond, label %bypass
+diamond:
+  br i1 %inner, label %left, label %right
+left:
+  br label %merge
+right:
+  br label %merge
+bypass:
+  br label %merge
+merge:
+  %result = phi ptr [null, %bypass], [%a, %left], [%b, %right]
+  RETURN_BODY
+}
+'''.replace('RESULT', 'i64' if chain else 'ptr').replace('RETURN_BODY',
+    '%converted = ptrtoint ptr %result to i64\n  ret i64 %converted' if chain else 'ret ptr %result')
+    llvm.parse_assembly(source).verify()
+    result, _ = simplify_cfg_text(source)
+    llvm.parse_assembly(result).verify()
+
+
+def test_label_rewrite_does_not_run_regex_on_unrelated_instructions(monkeypatch):
+    import re
+    from types import SimpleNamespace
+    from pcc.native_ir import simplifycfg
+    operations = []
+    class Pattern:
+        def __init__(self, pattern):
+            self.pattern = re.compile(pattern)
+        def sub(self, replacement, text):
+            operations.append(text)
+            return self.pattern.sub(replacement, text)
+        def search(self, text):
+            operations.append(text)
+            return self.pattern.search(text)
+    monkeypatch.setattr(simplifycfg, "re", SimpleNamespace(compile=Pattern, escape=re.escape))
+    unchanged = [f"  %v{i} = add i64 1, 2\n" for i in range(100)]
+    blocks = [simplifycfg._Block("entry", unchanged + ["  br label %old\n"])]
+    simplifycfg._rewrite_label_refs(blocks, "old", "new")
+    assert blocks[0].lines == unchanged + ["  br label %new\n"]
+    assert len(operations) == 2
+
+
+def test_phi_pruning_preserves_name_prefixes_and_literals():
+    from pcc.native_ir.simplifycfg import _Block, _prune_invalid_phi_incomings
+    blocks = [_Block("entry", ["  br label %join\n"]), _Block("join", [
+        "  %value = phi i64 [ 7, %entry ], [ 8, %dead ]\n",
+        "  %value.suffix = add i64 %value, 1\n",
+        '  call void @note(ptr c"%value") ; %value stays in comment\n',
+        "  ret i64 %value.suffix\n",
+    ])]
+    rewritten, changed = _prune_invalid_phi_incomings(blocks)
+    assert changed
+    text = "".join(rewritten[1].lines)
+    assert "%value.suffix = add i64 7, 1" in text
+    assert 'c"%value") ; %value stays in comment' in text
+    assert "ret i64 %value.suffix" in text
+
+
+def test_linear_merging_reuses_predecessor_counts(monkeypatch):
+    from pcc.native_ir import simplifycfg
+    calls = []
+    original = simplifycfg._predecessor_counts
+    def counted(blocks):
+        calls.append(len(blocks))
+        return original(blocks)
+    monkeypatch.setattr(simplifycfg, "_predecessor_counts", counted)
+    blocks = [simplifycfg._Block(f"b{i}", [f"  br label %b{i+1}\n"]) for i in range(100)]
+    blocks.append(simplifycfg._Block("b100", ["  ret i64 7\n"]))
+    result, changed = simplifycfg._merge_linear_successors(blocks)
+    assert changed and len(result) == 1
+    assert result[0].lines == ["  ret i64 7\n"]
+    assert calls == [101]

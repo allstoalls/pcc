@@ -1,5 +1,10 @@
 # Session handoff — 2026-09-06 (repo split, out-of-tree packages, governance)
 
+> Historical session snapshot, not current task instructions. HEAD, dirty state,
+> blockers and artifact paths below describe the recorded session. Check current
+> source, `git status` and execution before reusing them; later user instructions
+> take precedence. Search relevant sections instead of loading this whole file.
+
 Everything below is uncommitted in the core working tree unless it says
 otherwise; the human owns commits. The two extracted repositories are pushed.
 

@@ -195,10 +195,15 @@ int main(int argc, char **argv) {
 """ % {"workers": _WORKERS, "rounds": _ROUNDS}
 
 
-@pytest.fixture(scope="module")
-def _vthread_waiter_pool_exe(tmp_path_factory):
+@pytest.fixture(scope="module", params=["c", "py"])
+def _vthread_waiter_pool_exe(tmp_path_factory, request):
     tmp = tmp_path_factory.mktemp("gc_vthread_waiter_pool")
-    work_runtime = cached_c_runtime()
+    if request.param == "c":
+        work_runtime = cached_c_runtime()
+        archive = work_runtime / "libpy_runtime.a"
+    else:
+        archive = request.getfixturevalue("pcc_py_runtime_archive")
+        work_runtime = archive.parent
 
     src = tmp / "vthread_waiter_node_pool.c"
     src.write_text(textwrap.dedent(_SOURCE).lstrip(), encoding="utf-8")
@@ -211,7 +216,7 @@ def _vthread_waiter_pool_exe(tmp_path_factory):
             f"-I{work_runtime / 'include'}",
             f"-I{work_runtime / 'src'}",
             str(src),
-            str(work_runtime / "libpy_runtime.a"),
+            str(archive),
             "-lm",
             "-o",
             str(exe),

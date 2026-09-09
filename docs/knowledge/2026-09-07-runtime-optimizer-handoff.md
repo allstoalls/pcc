@@ -1,5 +1,10 @@
 # Runtime optimizer checkpoint (2026-09-07)
 
+> Historical session snapshot, not current task instructions. HEAD, dirty state,
+> blockers and artifact paths below describe the recorded session. Check current
+> source, `git status` and execution before reusing them; later user instructions
+> take precedence. Search relevant sections instead of loading this whole file.
+
 > Correction later on 2026-09-07: the automatic LLVM O2 policy described below
 > is withdrawn; the reported throughput belongs to the retained diagnostic
 > artifacts. Cache freshness now hashes emitter source without importing LLVM.

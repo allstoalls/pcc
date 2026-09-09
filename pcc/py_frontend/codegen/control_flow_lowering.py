@@ -4,8 +4,9 @@ from __future__ import annotations
 from pcc.llvm_capi.compat import ir
 from pcc.python_target import PYTHON_TARGET_VERSION_INFO
 
-from ..py_ast import Assign, Attr, BoolLit, BoolType, Break, Compare, If, IfExpr, IntLit, Name, NoneLit, NoneType, Try, TupleExpr, While
+from ..py_ast import Assign, Attr, BoolExpr, BoolLit, BoolType, Break, Compare, If, IfExpr, IntLit, Name, NoneLit, NoneType, Try, TupleExpr, While
 from . import marshal
+from .method_call_lowering import _method_pointer_provenance
 
 
 _CSTR = ir.IntType(8).as_pointer()
@@ -75,18 +76,59 @@ class ControlFlowLoweringMixin:
         return None
 
     def _emit_condition_value(self, cond_expr) -> ir.Value:
-        """Emit a condition expression for truthiness. A direct
-        valueclass constructor in condition position projects to a
-        payload (``_truthy``'s ClassType branch boxes it for
-        ``py_obj_truthy``) instead of allocating an identity
-        instance."""
-        payload = self._maybe_emit_valueclass_constructor_payload(
-            cond_expr.ty,
-            cond_expr,
-        )
+        """Evaluate one truth test, consuming its temporary object owner."""
+        if isinstance(cond_expr, BoolExpr):
+            left = self._emit_condition_value(cond_expr.left)
+            left_end = self.builder.block
+            right_bb = self.current_function.append_basic_block(self._fresh("cond.right"))
+            end_bb = self.current_function.append_basic_block(self._fresh("cond.end"))
+            if cond_expr.op == "and":
+                self.builder.cbranch(left, right_bb, end_bb)
+            else:
+                self.builder.cbranch(left, end_bb, right_bb)
+            self.builder.position_at_end(right_bb)
+            right = self._emit_condition_value(cond_expr.right)
+            right_end = self.builder.block
+            self.builder.branch(end_bb)
+            self.builder.position_at_end(end_bb)
+            result = self.builder.phi(ir.IntType(1), name=self._fresh("cond.result"))
+            result.add_incoming(left, left_end)
+            result.add_incoming(right, right_end)
+            return result
+        payload = self._maybe_emit_valueclass_constructor_payload(cond_expr.ty, cond_expr)
         if payload is not None:
-            return payload
-        return self._emit_expr(cond_expr)
+            return self._truthy(payload, cond_expr.ty)
+        value = self._emit_expr(cond_expr)
+        if value in getattr(self, "_cpy_values", ()):
+            if not self._cpy_value_is_owned(value):
+                self.builder.call(self.runtime["py_cpy_incref"], [value])
+                self._mark_owned_cpy_value(value)
+            result = self._truthy(value, cond_expr.ty)
+            self.builder.call(self.runtime["py_cpy_decref"], [value])
+            self._forget_owned_cpy_value(value)
+            return result
+        provenance = _method_pointer_provenance(
+            self, value, cond_expr.ty, source_expr=cond_expr,
+            newly_owned=self._owned_release_needed(value, cond_expr),
+        )
+        managed = provenance[1] and self._pcc_pointer_source_needs_pin(cond_expr)
+        if not managed:
+            return self._truthy(value, cond_expr.ty)
+        if not provenance[3]:
+            value = self._gc_retain(value, name=self._fresh("cond.retain"))
+        self._gc_pin(value)
+        old_pcc = self._current_try_err_block()
+        target = old_pcc if old_pcc is not None else self._ensure_fn_err_exit()
+        self._try_err_block = self._make_cpy_operand_cleanup_block(
+            (), (), target, "cond.error.cleanup", ((value, True),),
+        )
+        try:
+            result = self._truthy(value, cond_expr.ty)
+        finally:
+            self._try_err_block = old_pcc
+        self._gc_unpin(value)
+        self._gc_release(value)
+        return result
 
     def _emit_if(self, stmt: If) -> None:
         static_cond = self._static_bool_condition(stmt.cond)
@@ -97,8 +139,7 @@ class ControlFlowLoweringMixin:
                 self._emit_stmts(stmt.else_body)
             return
 
-        cond = self._emit_condition_value(stmt.cond)
-        cond_i1 = self._truthy(cond, stmt.cond.ty)
+        cond_i1 = self._emit_condition_value(stmt.cond)
         class_attr_state_before = dict(
             getattr(self, "_class_attr_runtime_state", {})
         )
@@ -175,14 +216,7 @@ class ControlFlowLoweringMixin:
             return coerced
 
         result_ty = expr.ty
-        cond_val = self._emit_condition_value(expr.cond)
-        cond_is_cpy = cond_val in getattr(self, "_cpy_values", ())
-        if cond_is_cpy:
-            self._guard_cpy_value_not_null(cond_val)
-        cond_b = self._truthy(cond_val, expr.cond.ty)
-        if cond_is_cpy and self._cpy_value_is_owned(cond_val):
-            self.builder.call(self.runtime["py_cpy_decref"], [cond_val])
-            self._forget_owned_cpy_value(cond_val)
+        cond_b = self._emit_condition_value(expr.cond)
 
         fn = self.current_function
         then_bb = fn.append_basic_block(name=self._fresh("ternary_true"))
@@ -315,8 +349,7 @@ class ControlFlowLoweringMixin:
             selected = expr.then_e if static_cond else expr.else_e
             return self._emit_expr_as_pcc_object(selected)
 
-        cond_val = self._emit_expr(expr.cond)
-        cond_b = self._truthy(cond_val, expr.cond.ty)
+        cond_b = self._emit_condition_value(expr.cond)
 
         fn = self.current_function
         then_bb = fn.append_basic_block(name=self._fresh("ternary_obj_true"))
@@ -477,8 +510,7 @@ class ControlFlowLoweringMixin:
 
         self.builder.branch(cond_bb)
         self.builder.position_at_end(cond_bb)
-        cond = self._emit_condition_value(stmt.cond)
-        cond_i1 = self._truthy(cond, stmt.cond.ty)
+        cond_i1 = self._emit_condition_value(stmt.cond)
         self.builder.cbranch(cond_i1, body_bb, end_bb)
 
         self.loop_stack.append((latch_bb, end_bb, self._loop_finally_base()))

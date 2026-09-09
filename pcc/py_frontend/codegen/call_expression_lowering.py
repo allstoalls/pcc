@@ -35,6 +35,7 @@ from ..py_ast import (
 )
 from .bootstrap_trace import bootstrap_trace_enabled
 from . import marshal
+from .method_call_lowering import _method_pointer_provenance
 from .builtin_exceptions import BUILTIN_EXC_TAG as _BUILTIN_EXC_TAG
 from .errors import L1CodegenError
 from .generator_lowering import emit_generator_may_park_call
@@ -567,45 +568,75 @@ class CallExpressionLoweringMixin:
 
     def _materialize_class_init_call_args(self, args: tuple) -> tuple:
         out = []
-        i = 0
-        while i < len(args):
-            arg = args[i]
-            if isinstance(arg, Call):
-                if isinstance(arg.ty, IntType):
-                    # Stage an `int` argument as an OBJECT, never as a raw i64.
-                    # `_emit_expr` unboxes an int-typed call, and an i64 staging
-                    # slot cannot hold a bignum: `Lit(int(text, 0))` silently
-                    # became `Lit(0)` above 2**63-1 while the same value through
-                    # a local was fine.  `int` is arbitrary-precision, so its
-                    # staging slot has to be the object projection.
-                    raw = self._emit_exact_int_operand_object(arg)
-                else:
-                    raw = self._emit_expr(arg)
-                base = "__pcc_ctor_arg_" + str(i) + "_" + str(len(self.env))
-                name = base
-                suffix = 0
-                while name in self.env:
-                    suffix += 1
-                    name = base + "_" + str(suffix)
-                init_null = isinstance(raw.type, ir.PointerType)
-                alloca = self._alloca_in_entry(
-                    raw.type,
-                    name=name + ".addr",
-                    init_null=init_null,
-                )
-                self.builder.store(raw, alloca)
-                self.env[name] = (alloca, raw.type, arg.ty)
-                out.append(
-                    Name(
-                        span=self._expr_span_or_none(arg),
-                        ty=arg.ty,
-                        ident=name,
-                    )
-                )
+        pinned = []
+        cpy_owned = []
+        for arg in args:
+            # Evaluate in source order through the normal expression emitter.
+            # The constructor's argument slots are borrows; their temporary
+            # owners must survive later arguments and __init__, then be freed.
+            raw = self._emit_expr_with_cpy_operand_cleanup(
+                arg, tuple(cpy_owned), pinned_pcc=tuple(pinned),
+                as_pcc_object=isinstance(arg.ty, IntType),
+            )
+            is_cpy = raw in getattr(self, "_cpy_values", ())
+            if is_cpy:
+                if not self._cpy_value_is_owned(raw):
+                    self.builder.call(self.runtime["py_cpy_incref"], [raw])
+                cpy_owned.append(raw)
             else:
-                out.append(arg)
-            i += 1
-        return tuple(out)
+                provenance = _method_pointer_provenance(
+                    self, raw, arg.ty, source_expr=arg,
+                    newly_owned=self._owned_release_needed(raw, arg),
+                )
+                if provenance[1]:
+                    if not provenance[3]:
+                        raw = self._gc_retain(raw, name=self._fresh("ctor.arg.retain"))
+                    self._gc_pin(raw)
+                    pinned.append((raw, True))
+            name = self._fresh("__pcc_ctor_arg")
+            alloca = self._alloca_in_entry(
+                raw.type, name=name + ".addr",
+                init_null=isinstance(raw.type, ir.PointerType),
+            )
+            self.builder.store(raw, alloca)
+            self.env[name] = (alloca, raw.type, arg.ty)
+            if is_cpy:
+                self._cpy_env_flags[name] = True
+            out.append(Name(span=self._expr_span_or_none(arg), ty=arg.ty, ident=name))
+        return tuple(out), tuple(pinned), tuple(cpy_owned)
+
+    def _emit_class_init_call(self, class_name: str, args: tuple):
+        args, pinned, cpy_owned = self._materialize_class_init_call_args(args)
+        old_pcc = self._current_try_err_block()
+        old_cpy = getattr(self, "_cpy_operand_cleanup_block", None)
+        pcc_target = old_pcc if old_pcc is not None else self._ensure_fn_err_exit()
+        cpy_target = old_cpy if old_cpy is not None else self._ensure_fn_err_exit()
+        pcc_cleanup = self._make_cpy_operand_cleanup_block(
+            cpy_owned, (), pcc_target, "ctor.args.pcc.cleanup", pinned,
+        )
+        cpy_cleanup = pcc_cleanup
+        if cpy_target is not pcc_target:
+            cpy_cleanup = self._make_cpy_operand_cleanup_block(
+                cpy_owned, (), cpy_target, "ctor.args.cpy.cleanup", pinned,
+            )
+        self._try_err_block = pcc_cleanup
+        self._cpy_operand_cleanup_block = cpy_cleanup
+        try:
+            result = self.class_lowering.emit_instantiate(class_name, args, self)
+        finally:
+            self._try_err_block = old_pcc
+            self._cpy_operand_cleanup_block = old_cpy
+        # Releasing an argument can run a finalizer that collects. The new
+        # instance has not reached its caller's rooted assignment yet.
+        self._gc_pin(result)
+        for value, _owned in reversed(pinned):
+            self._gc_unpin(value)
+            self._gc_release(value)
+        for value in reversed(cpy_owned):
+            self.builder.call(self.runtime["py_cpy_decref"], [value])
+            self._forget_owned_cpy_value(value)
+        self._gc_unpin(result)
+        return result
 
     def _maybe_emit_known_dunder_class_constructor(self, expr: Call):
         func = expr.func
@@ -1136,31 +1167,19 @@ class CallExpressionLoweringMixin:
             for k, v in expr.kwargs:
                 if k == "default_factory":
                     if isinstance(v, Name):
-                        # Known builtin factories.
-                        if v.ident == "list":
-                            return self.builder.call(
-                                self.runtime["py_list_new"],
-                                [ir.Constant(_I64, 0)],
-                                name=self._fresh("field.list"),
+                        # Known builtin factories return a new reference even
+                        # when field(...) itself has an imprecise Dyn type.
+                        if v.ident in ("list", "dict", "set", "tuple"):
+                            factory_args = []
+                            if v.ident in ("list", "tuple"):
+                                factory_args.append(ir.Constant(_I64, 0))
+                            value = self.builder.call(
+                                self.runtime["py_" + v.ident + "_new"],
+                                factory_args,
+                                name=self._fresh("field." + v.ident),
                             )
-                        if v.ident == "dict":
-                            return self.builder.call(
-                                self.runtime["py_dict_new"],
-                                [],
-                                name=self._fresh("field.dict"),
-                            )
-                        if v.ident == "set":
-                            return self.builder.call(
-                                self.runtime["py_set_new"],
-                                [],
-                                name=self._fresh("field.set"),
-                            )
-                        if v.ident == "tuple":
-                            return self.builder.call(
-                                self.runtime["py_tuple_new"],
-                                [ir.Constant(_I64, 0)],
-                                name=self._fresh("field.tuple"),
-                            )
+                            self._note_owned_object_value(value)
+                            return value
                     # Unknown factory — attempt to call it as a
                     # user function. Falls back to regular dispatch.
                     return self._emit_call(
@@ -2130,13 +2149,8 @@ class CallExpressionLoweringMixin:
                 )
                 if inst is not None:
                     return attach_hoisted_class_captures(inst)
-            resolved_args = self._materialize_class_init_call_args(resolved_args)
             return attach_hoisted_class_captures(
-                self.class_lowering.emit_instantiate(
-                    class_name,
-                    resolved_args,
-                    self,
-                )
+                self._emit_class_init_call(class_name, resolved_args)
             )
 
         # Callable instance via ``__call__`` — ``double(5)`` where

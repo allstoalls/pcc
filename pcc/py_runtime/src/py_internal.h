@@ -297,8 +297,14 @@ int64_t pcc_gc_store_ptr_plan_commit_locked(
     PyObject **slot,
     PyObject *value
 );
+int64_t pcc_gc_store_ptr_plan_commit_sentinel_aware_locked(
+    PccGcStoreRootPlan *plan,
+    PyObject *owner,
+    PyObject **slot,
+    PyObject *value,
+    PyObject *sentinel
+);
 void pcc_gc_store_ptr_plan_finish(PccGcStoreRootPlan *plan);
-void pcc_gc_publish_initialized(PyObject *obj);
 int64_t pcc_gc_backend4_retarget_mutator_payload_locked(
     PyObject *owner,
     void *old_base,
@@ -979,7 +985,23 @@ struct PyContinuationStackChunk {
     int32_t reserved;
     int64_t slot_count;
     PyObject **slots;
+    /* The continuation-root registration node, so unregistering is O(1)
+     * instead of a walk of the whole root list.  Appended: the leading bytes
+     * double as this continuation's frame map (see
+     * continuation_chunk_frame_map), so nothing may be inserted before
+     * ``slots``.  The pcc-Python mirror in py_coroutine.py calloc's 32 bytes
+     * and addresses this field at [24]. */
+    void *root_node;
 };
+
+_Static_assert(
+    sizeof(struct PyContinuationStackChunk) == 32,
+    "PyContinuationStackChunk ABI drift against the pcc-Python mirror"
+);
+_Static_assert(
+    offsetof(struct PyContinuationStackChunk, root_node) == 24,
+    "PyContinuationStackChunk.root_node ABI drift"
+);
 
 typedef struct {
     PyObjectHeader h;

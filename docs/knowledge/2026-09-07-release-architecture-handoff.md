@@ -1,5 +1,10 @@
 # Release qualification, numeric fixes and architecture review — 2026-09-07
 
+> Historical session snapshot, not current task instructions. HEAD, dirty state,
+> blockers and artifact paths below describe the recorded session. Check current
+> source, `git status` and execution before reusing them; later user instructions
+> take precedence. Search relevant sections instead of loading this whole file.
+
 ## User-requested checkpoint and pause
 
 The user explicitly requested a temporary commit of all pcc changes and a

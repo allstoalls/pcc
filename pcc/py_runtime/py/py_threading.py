@@ -116,7 +116,10 @@ def _waiter_pool_mutex():
 def _waiter_clear(node) -> None:
     if ptr_is_null(node):
         return
-    pcc_gc_store_root(node, null())
+    # Fresh malloc storage has no old reference to consume. Pooled nodes have
+    # already released/unregistered their root in _waiter_pop; enqueue failure
+    # recycles a still-empty node. Match the C mirror's raw initialization.
+    store_ptr(node, 0, null())
     store_ptr(node, 8, null())
     store_ptr(node, 16, null())
     store_i64(node, 24, 0)

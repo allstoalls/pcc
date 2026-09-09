@@ -1,4 +1,4 @@
-import argparse, time, re, asyncio, functools, base64, random, urllib.parse, socket, sys
+import argparse, time, re, asyncio, functools, base64, random, urllib.parse, socket, sys, signal
 from . import proto
 from . import admin
 
@@ -52,6 +52,12 @@ def link_channel_tasks(channels, writers):
         for task in tasks:
             if task is not done_task and not task.done():
                 task.cancel()
+        if all(task.done() for task in tasks):
+            for writer in writers:
+                try:
+                    ACTIVE_CHANNEL_WRITERS.remove(writer)
+                except ValueError:
+                    pass
     for task in tasks:
         task.add_done_callback(stop_peer)
     return tasks
@@ -125,6 +131,8 @@ def schedule(rserver, salgorithm, host_name, port):
         raise Exception('Unknown scheduling algorithm') #Unreachable
 
 async def stream_handler(reader, writer, unix, lbind, protos, rserver, cipher, sslserver, debug=0, authtime=86400*30, block=None, salgorithm='fa', verbose=DUMMY, modstat=lambda u,r,h:lambda i:DUMMY, **kwargs):
+    client_connected = None
+    writer_remote = None
     try:
         reader, writer = proto.sslwrap(reader, writer, sslserver, True, None, verbose)
         if unix:
@@ -138,8 +146,12 @@ async def stream_handler(reader, writer, unix, lbind, protos, rserver, cipher, s
         reader_cipher, _ = await prepare_ciphers(cipher, reader, writer, server_side=False)
         lproto, user, host_name, port, client_connected = await proto.accept(protos, reader=reader, writer=writer, authtable=AuthTable(remote_ip, authtime), reader_cipher=reader_cipher, sock=writer.get_extra_info('socket'), **kwargs)
         if host_name == 'echo':
+            if client_connected:
+                await client_connected(writer)
             link_channel_tasks((lproto.channel(reader, writer, DUMMY, DUMMY),), (writer,))
         elif host_name == 'empty':
+            if client_connected:
+                await client_connected(writer)
             link_channel_tasks((lproto.channel(reader, writer, None, DUMMY),), (writer,))
         elif block and block(host_name):
             raise Exception('BLOCK ' + host_name)
@@ -149,13 +161,13 @@ async def stream_handler(reader, writer, unix, lbind, protos, rserver, cipher, s
             try:
                 reader_remote, writer_remote = await roption.open_connection(host_name, port, local_addr, lbind)
             except asyncio.TimeoutError:
-                raise Exception(f'Connection timeout {roption.bind}')
+                raise asyncio.TimeoutError(f'Connection timeout {roption.bind}')
             try:
                 reader_remote, writer_remote = await roption.prepare_connection(reader_remote, writer_remote, host_name, port)
                 use_http = (await client_connected(writer_remote)) if client_connected else None
             except Exception:
                 writer_remote.close()
-                raise Exception('Unknown remote protocol')
+                raise
             m = modstat(user, remote_ip, host_name)
             lchannel = lproto.http_channel if use_http else lproto.channel
             link_channel_tasks(
@@ -165,11 +177,24 @@ async def stream_handler(reader, writer, unix, lbind, protos, rserver, cipher, s
                 ),
                 (writer, writer_remote),
             )
+    except asyncio.CancelledError:
+        # Handshake connections have not entered the channel registry yet.
+        writer.close()
+        if writer_remote is not None:
+            writer_remote.close()
+        raise
     except Exception as ex:
+        if hasattr(client_connected, 'failed'):
+            try:
+                await client_connected.failed(ex)
+            except Exception:
+                pass
         if not isinstance(ex, asyncio.TimeoutError) and not str(ex).startswith('Connection closed'):
             verbose(f'{str(ex) or "Unsupported protocol"} from {remote_ip}')
         try: writer.close()
         except Exception: pass
+        if writer_remote is not None:
+            writer_remote.close()
         if debug:
             raise
 
@@ -1063,18 +1088,34 @@ def main(args = None):
             args.sys = sysproxy.setup(args)
         if args.alived > 0 and args.rserver:
             asyncio.ensure_future(check_server_alive(args.alived, args.rserver, args.verbose if args.v else DUMMY))
+        interrupt_handlers = {}
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            handler = signal.getsignal(signum)
+            if callable(handler):
+                try:
+                    # Run Python signal handlers between callbacks, not in the
+                    # middle of creating/awaiting a connection coroutine.
+                    loop.add_signal_handler(signum, handler, signum, None)
+                    interrupt_handlers[signum] = handler
+                except (NotImplementedError, RuntimeError, ValueError):
+                    pass
         try:
             loop.run_forever()
         except KeyboardInterrupt:
             print('exit')
+        finally:
+            for signum, handler in interrupt_handlers.items():
+                loop.remove_signal_handler(signum)
+                signal.signal(signum, handler)
         if args.sys:
             args.sys.clear()
     for server in servers:
         server.close()
+    # New asyncio versions wait for accepted connections in wait_closed().
+    drain_pending_tasks(loop)
     for server in servers:
         if hasattr(server, 'wait_closed'):
             cleanup_run_until_complete(loop, server.wait_closed())
-    drain_pending_tasks(loop)
     cleanup_run_until_complete(loop, loop.shutdown_asyncgens())
     if admin.config.get('reload', False):
         admin.config['reload'] = False

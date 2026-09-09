@@ -2325,6 +2325,7 @@ def pcc_gc_telemetry_reset() -> None:
     while i <= 5:
         store_i32(_counter_global(i), 0, 0)
         i = i + 1
+    store_i64(global_addr("pcc_gc_unmanaged_refcount_ops"), 0, 0)
     store_i32(global_addr("pcc_gc_metric_max_pause_us"), 0, 0)
     store_i32(global_addr("pcc_gc_metric_pause_count"), 0, 0)
     store_i32(global_addr("pcc_gc_metric_pause_sum_us"), 0, 0)

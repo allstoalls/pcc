@@ -31,8 +31,10 @@ from pcc.unsafe import (
     call_ptr2,
     calloc,
     cstr,
+    define_global_i32,
     define_global_ptr_null,
     free,
+    global_addr,
     global_load_ptr,
     global_store_ptr,
     is_tagged_int,
@@ -88,6 +90,13 @@ pcc_gc_register_continuation_root = extern(
     "pcc_gc_register_continuation_root",
     (c_ptr, c_ptr),
     c_void,
+)
+pcc_platform_getenv = extern("pcc_platform_getenv", (c_ptr,), c_ptr)
+pcc_gc_register_continuation_root_node = extern(
+    "pcc_gc_register_continuation_root_node", (c_ptr, c_ptr), c_ptr
+)
+pcc_gc_unregister_continuation_root_node = extern(
+    "pcc_gc_unregister_continuation_root_node", (c_ptr,), c_void
 )
 pcc_gc_unregister_continuation_root = extern(
     "pcc_gc_unregister_continuation_root",
@@ -424,13 +433,16 @@ def _py_continuation_new_with_abi(frame_map, slots, resume_pc, resume_abi: int):
     if n_slots > 0 and ptr_is_null(slots):
         _raise_typeerror(cstr("continuation slots are null"))
         return null()
-    chunk = calloc(1, 24)
+    # 32, not 24: [24] holds the continuation-root registration node so
+    # unregistering is O(1) instead of a walk of the whole root list.
+    chunk = calloc(1, 32)
     if ptr_is_null(chunk):
         return null()
     store_i32(chunk, 0, n_slots)
     store_i32(chunk, 4, 0)
     store_i64(chunk, 8, n_slots)
     store_ptr(chunk, 16, null())
+    store_ptr(chunk, 24, null())
     chunk_slots = null()
     if n_slots > 0:
         chunk_slots = calloc(n_slots, 8)
@@ -479,6 +491,31 @@ def py_continuation_new_typed(frame_map, slots, resume_pc):
     return _py_continuation_new_with_abi(frame_map, slots, resume_pc, 1)
 
 
+define_global_i32("pcc_continuation_root_handle_cache", -1)
+
+
+def _continuation_root_handle_enabled() -> int:
+    """Keep the O(n) removal reachable as a measurement control arm.
+
+    ``PCC_CONTINUATION_ROOT_HANDLE=0`` makes unmount not retain the
+    registration node, so removal falls back to searching the root list -- the
+    behaviour before the handle existed.  One archive, one binary, two arms
+    differing in exactly this, which is what an A/B of this change needs.
+    Same cached-global idiom as pcc_debug_runtime_enabled.
+    """
+    slot = global_addr("pcc_continuation_root_handle_cache")
+    cached: int = load_i32(slot, 0)
+    if cached >= 0:
+        return cached
+    value: int = 1
+    setting = pcc_platform_getenv(cstr("PCC_CONTINUATION_ROOT_HANDLE"))
+    if ptr_is_null(setting) == 0:
+        if load_i32(setting, 0) & 255 == 48:
+            value = 0
+    store_i32(slot, 0, value)
+    return value
+
+
 @c_abi_export("py_continuation_mount")
 def py_continuation_mount(cont, slots_out) -> int:
     cont = _checked_continuation(cont)
@@ -490,7 +527,12 @@ def py_continuation_mount(cont, slots_out) -> int:
     slots = load_ptr(chunk, 16)
     n_slots: int = load_i64(chunk, 8)
     if load_i64(cont, 32) == 0:
-        pcc_gc_unregister_continuation_root(slots)
+        root_node = load_ptr(chunk, 24)
+        store_ptr(chunk, 24, null())
+        if ptr_is_null(root_node):
+            pcc_gc_unregister_continuation_root(slots)
+        else:
+            pcc_gc_unregister_continuation_root_node(root_node)
     if not ptr_is_null(slots_out):
         i: int = 0
         while i < n_slots:
@@ -519,7 +561,18 @@ def py_continuation_unmount(cont, slots_in, resume_pc) -> int:
             i = i + 1
     store_ptr(cont, 16, resume_pc)
     if load_i64(cont, 32) != 0:
-        pcc_gc_register_continuation_root(_continuation_frame_map(cont), slots)
+        if _continuation_root_handle_enabled() != 0:
+            store_ptr(
+                chunk,
+                24,
+                pcc_gc_register_continuation_root_node(
+                    _continuation_frame_map(cont), slots
+                ),
+            )
+        else:
+            pcc_gc_register_continuation_root(
+                _continuation_frame_map(cont), slots
+            )
     store_i64(cont, 32, 0)
     return 0
 
@@ -759,7 +812,12 @@ def py_dealloc_continuation(o) -> None:
     if not ptr_is_null(chunk):
         slots = load_ptr(chunk, 16)
         if load_i64(o, 32) == 0:
-            pcc_gc_unregister_continuation_root(slots)
+            root_node = load_ptr(chunk, 24)
+            store_ptr(chunk, 24, null())
+            if ptr_is_null(root_node):
+                pcc_gc_unregister_continuation_root(slots)
+            else:
+                pcc_gc_unregister_continuation_root_node(root_node)
         n_slots: int = load_i64(chunk, 8)
         if not ptr_is_null(slots):
             i: int = 0

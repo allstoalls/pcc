@@ -16,6 +16,7 @@ addresses, extern round trips) on the self backend without libpython.
 from __future__ import annotations
 
 import subprocess
+import os
 import textwrap
 from pathlib import Path
 
@@ -239,6 +240,37 @@ def test_raw_addresses_execute_as_ints_on_the_self_backend(tmp_path: Path) -> No
     done = subprocess.run([str(exe)], capture_output=True, text=True, timeout=120)
     assert done.returncode == 0, done.stderr
     assert done.stdout == _PROBE_EXPECTED
+
+
+@pytest.mark.parametrize("directive", ["", "__pcc_runtime_port__ = True\n"])
+def test_pointer_difference_decodes_dynamic_address_arguments(tmp_path, pcc_py_runtime_archive, directive):
+    src = tmp_path / "address_difference.py"
+    exe = tmp_path / "address_difference"
+    src.write_text(directive + '''from pcc.unsafe import malloc, free, ptr_add, ptr_diff, null
+def difference(left, right):
+    return ptr_diff(left, right)
+def aligned_4k(pointer):
+    address = ptr_diff(pointer, null())
+    return ptr_add(pointer, ((address + 4095) // 4096) * 4096 - address)
+def main():
+    base = malloc(8192)
+    interior = ptr_add(base, 3)
+    assert difference(interior, base) == 3
+    assert difference(base, interior) == -3
+    aligned = aligned_4k(base)
+    assert difference(aligned, null()) % 4096 == 0
+    assert 0 <= difference(aligned, base) < 4096
+    free(base)
+    print("ADDRESS_DIFFERENCE_OK")
+main()
+''')
+    compile_python(str(src), str(exe), libpython_mode="off", ir_scaffold_mode="on",
+                   backend="self", runtime_archive=str(pcc_py_runtime_archive))
+    for backend in range(5):
+        done = subprocess.run([str(exe)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
+                              capture_output=True, text=True, timeout=20)
+        assert done.returncode == 0, f"GC{backend}: {done.stdout}{done.stderr}"
+        assert done.stdout.strip() == "ADDRESS_DIFFERENCE_OK"
 
 
 def test_runtime_port_sibling_keeps_the_pointer_lane_when_compiled_in_a_closure(tmp_path: Path) -> None:

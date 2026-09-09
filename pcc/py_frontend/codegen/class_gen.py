@@ -6987,6 +6987,11 @@ def _classgen_unbox_into_scalar_slot(parent, value, expected_ir_ty, ty):
     ``fd: int`` as ``i64``), so integer slots are unboxed explicitly.
     """
     if isinstance(expected_ir_ty, ir.IntType):
+        if expected_ir_ty.width == 1:
+            # A boxed bool is a Python object, not an integer-address bit
+            # pattern. Integer unboxing followed by truncation turned True
+            # read through a dynamic attribute into False at constructor calls.
+            return parent._truthy(value, ty)
         as_i64 = parent._to_int64(value, ty)
         if expected_ir_ty.width == 64:
             return as_i64

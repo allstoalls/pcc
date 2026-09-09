@@ -107,6 +107,74 @@ PyObject *py_tuple_from_list(PyObject *lst) {
     return tup;
 }
 
+/* Generic iterables need the iterator protocol, not len()/getitem(). */
+static int tuple_collect_iterator(PyObject **slots) {
+    pcc_gc_store_root_take(&slots[1], py_obj_iter(pcc_gc_load_ptr(NULL, &slots[0])));
+    if (slots[1] == NULL) return 0;
+    pcc_gc_store_root_take(&slots[2], py_list_new(0));
+    if (slots[2] == NULL) goto no_memory;
+    for (;;) {
+        PyObject *item = py_obj_next(pcc_gc_load_ptr(NULL, &slots[1]));
+        if (item == NULL) {
+            if (py_err_occurred()) {
+                if (!py_exc_matches(py_current_exception(),
+                        (PyObject *)py_exc_builtin_class(PY_EXC_STOPITERATION))) return 0;
+                py_clear_exception();
+            }
+            break;
+        }
+        pcc_gc_store_root_take(&slots[3], item);
+        py_list_append(pcc_gc_load_ptr(NULL, &slots[2]), pcc_gc_load_ptr(NULL, &slots[3]));
+        if (py_err_occurred()) return 0;
+        pcc_gc_store_root(&slots[3], NULL);
+    }
+    int64_t n = py_list_len(pcc_gc_load_ptr(NULL, &slots[2]));
+    pcc_gc_store_root_take(&slots[4], py_tuple_new(n));
+    if (slots[4] == NULL) goto no_memory;
+    for (int64_t i = 0; i < n; ++i) {
+        pcc_gc_store_root_take(&slots[3], py_list_get(pcc_gc_load_ptr(NULL, &slots[2]), i));
+        py_tuple_set_item(pcc_gc_load_ptr(NULL, &slots[4]), i, pcc_gc_load_ptr(NULL, &slots[3]));
+        if (py_err_occurred()) return 0;
+        pcc_gc_store_root(&slots[3], NULL);
+    }
+    return 1;
+no_memory:
+    py_raise_owned(py_exc_new(PY_EXC_MEMORYERROR, "tuple: out of memory"));
+    return 0;
+}
+
+static PyObject *tuple_from_iterable(PyObject *seq) {
+    /* Root all owners across callbacks/collections; preserve errors on cleanup. */
+    PyObject *slots[6] = {0};
+    void *handles[6] = {0};
+    for (int count = 0; count < 6; ++count) {
+        handles[count] = pcc_gc_scheduler_root_register_handle(&slots[count]);
+        if (handles[count] == NULL) {
+            while (count > 0) pcc_gc_scheduler_root_unregister_handle(handles[--count]);
+            py_raise_owned(py_exc_new(PY_EXC_MEMORYERROR, "tuple: out of memory"));
+            return NULL;
+        }
+    }
+    pcc_gc_store_root(&slots[0], seq);
+    int success = tuple_collect_iterator(slots);
+    if (!success) {
+        pcc_gc_store_root(&slots[5], py_current_exception());
+        py_clear_exception();
+    }
+    for (int i = 0; i < 4; ++i) pcc_gc_store_root(&slots[i], NULL);
+    PyObject *result = NULL;
+    if (success) {
+        result = pcc_gc_load_ptr(NULL, &slots[4]);
+        py_incref(result);
+    } else {
+        py_raise(pcc_gc_load_ptr(NULL, &slots[5]));
+    }
+    pcc_gc_store_root(&slots[4], NULL);
+    pcc_gc_store_root(&slots[5], NULL);
+    for (int i = 0; i < 6; ++i) pcc_gc_scheduler_root_unregister_handle(handles[i]);
+    return result;
+}
+
 PyObject *py_tuple_from_splat(PyObject *seq) {
     if (seq == NULL) return NULL;
 
@@ -117,8 +185,7 @@ PyObject *py_tuple_from_splat(PyObject *seq) {
     } else if (tag == PY_TYPE_LIST) {
         n = py_list_len(seq);
     } else {
-        n = py_obj_len(seq);
-        if (py_err_occurred()) return NULL;
+        return tuple_from_iterable(seq);
     }
     if (n < 0) {
         py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "tuple() argument is not iterable"));
@@ -145,15 +212,6 @@ PyObject *py_tuple_from_splat(PyObject *seq) {
         return out;
     }
 
-    for (int64_t i = 0; i < n; i++) {
-        PyObject *item = py_obj_getitem_i64(seq, i);
-        if (item == NULL && py_err_occurred()) {
-            py_decref(out);
-            return NULL;
-        }
-        py_tuple_set_item(out, i, item);
-        if (item != NULL) py_decref(item);
-    }
     return out;
 }
 

@@ -89,7 +89,7 @@ class NativeSymbol:
     private_external: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NativeRelocation:
     offset: int
     # Indices below are zero-based indices into ``NativeObject.symbols``.
@@ -210,6 +210,40 @@ class NativeObject:
         return cls(tuple(native_sections), tuple(symbols))
 
     def to_sections(self) -> tuple[list[Section], list[str]]:
+        return self._source_sections(True)
+
+    def _source_relocations(self, section_index: int):
+        for native_relocation in self.sections[section_index].relocations:
+            target_section = None
+            symbol_name = ""
+            if native_relocation.target_section_index is not None:
+                target = self.sections[
+                    native_relocation.target_section_index - 1
+                ]
+                target_section = (target.segname, target.sectname)
+            else:
+                assert native_relocation.symbol_index is not None
+                symbol_name = self.symbols[
+                    native_relocation.symbol_index
+                ].name
+            minuend = None
+            if native_relocation.minuend_index is not None:
+                minuend = self.symbols[
+                    native_relocation.minuend_index
+                ].name
+            yield Relocation(
+                offset=native_relocation.offset,
+                symbol=symbol_name,
+                type=native_relocation.type,
+                pcrel=native_relocation.pcrel,
+                length=native_relocation.length,
+                addend=native_relocation.addend,
+                section=target_section,
+                minuend=minuend,
+                target_offset=native_relocation.target_offset,
+            )
+
+    def _source_sections(self, include_relocations: bool):
         symbols_by_section: list[list[TextSymbol]] = [
             [] for _section in self.sections
         ]
@@ -227,36 +261,10 @@ class NativeObject:
 
         sections: list[Section] = []
         for source_index, native_section in enumerate(self.sections):
-            relocations: list[Relocation] = []
-            for native_relocation in native_section.relocations:
-                target_section = None
-                symbol_name = ""
-                if native_relocation.target_section_index is not None:
-                    target = self.sections[
-                        native_relocation.target_section_index - 1
-                    ]
-                    target_section = (target.segname, target.sectname)
-                else:
-                    assert native_relocation.symbol_index is not None
-                    symbol_name = self.symbols[
-                        native_relocation.symbol_index
-                    ].name
-                minuend = None
-                if native_relocation.minuend_index is not None:
-                    minuend = self.symbols[
-                        native_relocation.minuend_index
-                    ].name
-                relocations.append(Relocation(
-                    offset=native_relocation.offset,
-                    symbol=symbol_name,
-                    type=native_relocation.type,
-                    pcrel=native_relocation.pcrel,
-                    length=native_relocation.length,
-                    addend=native_relocation.addend,
-                    section=target_section,
-                    minuend=minuend,
-                    target_offset=native_relocation.target_offset,
-                ))
+            relocations = (
+                tuple(self._source_relocations(source_index))
+                if include_relocations else ()
+            )
             sections.append(Section(
                 sectname=native_section.sectname,
                 segname=native_section.segname,
@@ -392,6 +400,9 @@ class PackedNativeObject:
 def _validate_source_sections(
     sections: tuple[Section, ...],
     undefined: tuple[str, ...],
+    *,
+    relocation_source=None,
+    relocation_counts=None,
 ) -> None:
     try:
         if not sections:
@@ -400,8 +411,15 @@ def _validate_source_sections(
             raise MachOEmitError("duplicate section names")
         seen: set[str] = set()
         seen_zerofill_segments: set[str] = set()
-        for section in sections:
-            _validate_section(section)
+        for section_index, section in enumerate(sections):
+            if relocation_source is None:
+                _validate_section(section)
+            else:
+                _validate_section(
+                    section,
+                    relocations=relocation_source(section_index),
+                    relocation_count=relocation_counts[section_index],
+                )
             if section.is_zerofill:
                 seen_zerofill_segments.add(section.segname)
             elif section.segname in seen_zerofill_segments:
@@ -436,9 +454,13 @@ def _validate_source_sections(
             for section in sections
         }
         known = {name: index for index, name in enumerate(seen)}
-        for section in sections:
+        for section_index, section in enumerate(sections):
             relocation_offsets: set[int] = set()
-            for relocation in section.relocations:
+            relocations = (
+                section.relocations if relocation_source is None
+                else relocation_source(section_index)
+            )
+            for relocation in relocations:
                 _validate_relocation(
                     section, relocation, known, section_by_name,
                 )
@@ -618,8 +640,14 @@ def _validate_native_object(obj: NativeObject) -> None:
                     "relocation minuend symbol",
                 )
 
-    sections, undefined = obj.to_sections()
-    _validate_source_sections(tuple(sections), tuple(undefined))
+    # The source-format validators remain authoritative, but their rows are
+    # generated on demand instead of retaining a second full relocation graph.
+    sections, undefined = obj._source_sections(False)
+    _validate_source_sections(
+        tuple(sections), tuple(undefined),
+        relocation_source=obj._source_relocations,
+        relocation_counts=tuple(len(section.relocations) for section in obj.sections),
+    )
 
 
 def _validate_index(
@@ -768,10 +796,10 @@ class NativeObjectView:
                 "n_value": n_value,
             })
 
-        self._relocations = [
-            _raw_relocations(section)
-            for section in native.sections
-        ]
+        # The public Mach-O-shaped API can still materialize a section table,
+        # but the executable linker only walks rows. Keep its two passes from
+        # retaining millions of dictionary projections beside native records.
+        self._relocations: dict[int, list[dict]] = {}
         self._data_in_code: list[dict] = []
         for index, section in enumerate(native.sections):
             for region in section.data_in_code:
@@ -794,10 +822,22 @@ class NativeObjectView:
         return self._symbols
 
     def relocations(self, section: dict) -> list[dict]:
-        index = section.get("_pcc_native_index")
-        if not isinstance(index, int) or not 0 <= index < len(self._relocations):
-            raise NativeObjectError("section does not belong to this native object")
+        index = self._relocation_section_index(section)
+        if index not in self._relocations:
+            self._relocations[index] = _raw_relocations(self.native.sections[index])
         return self._relocations[index]
+
+    def iter_relocations(self, section: dict):
+        index = self._relocation_section_index(section)
+        if index in self._relocations:
+            return iter(self._relocations[index])
+        return _iter_raw_relocations(self.native.sections[index])
+
+    def _relocation_section_index(self, section: dict) -> int:
+        index = section.get("_pcc_native_index")
+        if not isinstance(index, int) or not 0 <= index < len(self.native.sections):
+            raise NativeObjectError("section does not belong to this native object")
+        return index
 
     def data_in_code(self) -> list[dict]:
         return self._data_in_code
@@ -813,59 +853,61 @@ def _raw_relocation_count(section: NativeSection) -> int:
 
 
 def _raw_relocations(section: NativeSection) -> list[dict]:
-    entries: list[dict] = []
+    return list(_iter_raw_relocations(section))
+
+
+def _iter_raw_relocations(section: NativeSection):
     for relocation in sorted(
         section.relocations, key=lambda item: item.offset, reverse=True
     ):
         if relocation.addend:
-            entries.append({
+            yield {
                 "r_address": relocation.offset,
                 "r_symbolnum": relocation.addend,
                 "r_pcrel": 0,
                 "r_length": relocation.length,
                 "r_extern": 0,
                 "r_type": spec.ARM64_RELOC_ADDEND,
-            })
+            }
         if relocation.type == spec.ARM64_RELOC_SUBTRACTOR:
             assert relocation.symbol_index is not None
             assert relocation.minuend_index is not None
-            entries.append({
+            yield {
                 "r_address": relocation.offset,
                 "r_symbolnum": relocation.symbol_index,
                 "r_pcrel": 0,
                 "r_length": relocation.length,
                 "r_extern": 1,
                 "r_type": spec.ARM64_RELOC_SUBTRACTOR,
-            })
-            entries.append({
+            }
+            yield {
                 "r_address": relocation.offset,
                 "r_symbolnum": relocation.minuend_index,
                 "r_pcrel": 0,
                 "r_length": relocation.length,
                 "r_extern": 1,
                 "r_type": spec.ARM64_RELOC_UNSIGNED,
-            })
+            }
             continue
         if relocation.target_section_index is not None:
-            entries.append({
+            yield {
                 "r_address": relocation.offset,
                 "r_symbolnum": relocation.target_section_index,
                 "r_pcrel": 1 if relocation.pcrel else 0,
                 "r_length": relocation.length,
                 "r_extern": 0,
                 "r_type": relocation.type,
-            })
+            }
             continue
         assert relocation.symbol_index is not None
-        entries.append({
+        yield {
             "r_address": relocation.offset,
             "r_symbolnum": relocation.symbol_index,
             "r_pcrel": 1 if relocation.pcrel else 0,
             "r_length": relocation.length,
             "r_extern": 1,
             "r_type": relocation.type,
-        })
-    return entries
+        }
 
 
 def _pack_native_relocation_records(records: CompilerIntArena) -> bytes:

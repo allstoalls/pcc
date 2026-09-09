@@ -76,9 +76,12 @@ _UNSAFE_RAW_POINTER_RETURNS = frozenset(
 
 
 class OwnershipLoweringMixin:
-    def _gc_retain(self, obj: ir.Value, name: str = "") -> ir.Value:
+    def _gc_retain(self, obj: ir.Value, name: str = "", known_object: bool = False) -> ir.Value:
+        helper = "pcc_gc_retain"
+        if self._known_object_refcounts and (known_object or self._value_is_owned_object(obj)):
+            helper = "pcc_gc_retain_known"
         return self.builder.call(
-            self.runtime["pcc_gc_retain"],
+            self.runtime[helper],
             [obj],
             name=name or self._fresh("gc.retain"),
         )
@@ -186,7 +189,7 @@ class OwnershipLoweringMixin:
             return value
         return self.builder.load(entry[0], name=self._fresh("gc.reload"))
 
-    def _gc_release(self, obj: ir.Value, label: Optional[str] = None) -> None:
+    def _gc_release(self, obj: ir.Value, label: Optional[str] = None, known_object: bool = False) -> None:
         if self._value_is_never_gc_object(obj):
             # pcc_gc_release starts with `ptr_is_null(o) or is_tagged_int(o)`
             # and returns, so this call is a no-op for a tagged immediate.
@@ -195,7 +198,10 @@ class OwnershipLoweringMixin:
             obj,
             label or self._release_context_label("release"),
         )
-        self.builder.call(self.runtime["pcc_gc_release"], [obj])
+        helper = "pcc_gc_release"
+        if self._known_object_refcounts and (known_object or self._value_is_owned_object(obj)):
+            helper = "pcc_gc_release_known"
+        self.builder.call(self.runtime[helper], [obj])
 
     def _note_owned_object_value(self, value: ir.Value) -> None:
         """Record an emitted pcc object value that carries one owner.
@@ -612,8 +618,13 @@ class OwnershipLoweringMixin:
         expr: Expr,
         value_ty: Type,
         is_cpy: bool,
+        value: Optional[ir.Value] = None,
     ) -> bool:
         if is_cpy:
+            return True
+        # Native method dispatch may prove a NEW result even when inference
+        # leaves the expression dynamic. Preserve that fact at insertion.
+        if value is not None and self._value_is_owned_object(value):
             return True
         if isinstance(expr, (BoolLit, NoneLit, StrLit)):
             # Literal strings are internal immortal globals; bool and None
@@ -683,6 +694,11 @@ class OwnershipLoweringMixin:
         if not self._module_uses_raw_int_scaffold:
             return True
         if isinstance(expr, Call):
+            # The raw integer ABI does not turn Python regex results into
+            # borrowed pointers. Keep the same emitter-proven NEW-ref rule
+            # used below for ordinary modules (including immortal None).
+            if self._native_re_call_returns_owned_object(expr):
+                return True
             native_call = self._native_builtin_value_kind_for_expr(expr.func)
             if (
                 native_call == "os._pcc_sha256_file_hex"
@@ -1171,7 +1187,7 @@ class OwnershipLoweringMixin:
             ],
             name=self._fresh(f"{name}.release.current"),
         )
-        self._gc_release(old_value, self._release_context_label(f"local:{name}"))
+        self._gc_release(old_value, self._release_context_label(f"local:{name}"), True)
         self.builder.store(ir.Constant(_I1, 0), flag)
         self.builder.branch(cont_bb)
         self.builder.position_at_end(cont_bb)

@@ -166,6 +166,8 @@ static void pcc_gc_fire_callbacks(const char *phase) {
     pcc_gc_callbacks_firing--;
 }
 
+extern int64_t pcc_gc_unmanaged_refcount_ops;
+
 static int py_pointer_can_have_header(PyObject *o) {
     return pcc_gc_pointer_is_managed(o) != 0;
 }
@@ -260,6 +262,10 @@ static void pcc_incref_prepare(
     PyObject *o,
     int debug_runtime_mode,
     PccRefcountPrepared *prepared
+);
+static void pcc_refcount_prepared_reset(
+    PccRefcountPrepared *prepared,
+    PyObject *o
 );
 static void pcc_incref_finish(const PccRefcountPrepared *prepared);
 static void pcc_decref_prepare(
@@ -713,6 +719,14 @@ void pcc_gc_store_ptr_plan_init(
     pcc_obj_runtime_log_event_code(2, 3, backend, 0, owner);
 }
 
+static int pcc_gc4_old_slot_is_releasable(PyObject *value) {
+    if (pcc_gc_object_is_known_no_lock(value)) return 1;
+    /* Graph leaves omit tracing-index nodes, but retain ordinary ownership.
+     * Check allocation provenance before reading an unindexed header. */
+    if (!pcc_gc_pointer_is_managed(value)) return 0;
+    return pcc_alloc_graph_leaf_tag(py_header(value)->type_tag);
+}
+
 static int64_t pcc_gc_store_plan_commit_locked_impl(
     PccGcStoreRootPlan *plan,
     PyObject *owner,
@@ -770,7 +784,7 @@ static int64_t pcc_gc_store_plan_commit_locked_impl(
         old != NULL
         && !PY_IS_TAGGED_INT(old)
         && backend == PCC_GC_KIND_COLORED_RELOCATING
-        && pcc_gc_object_is_known_no_lock(old) == 0
+        && !pcc_gc4_old_slot_is_releasable(old)
     ) {
         old = NULL;
     }
@@ -802,6 +816,93 @@ int64_t pcc_gc_store_ptr_plan_commit_locked(
     return pcc_gc_store_plan_commit_locked_impl(
         plan, owner, slot, value
     );
+}
+
+/* Ordinary slot store, except that `sentinel` is not a reference.  Mirror of
+ * _pcc_gc_store_plan_commit_sentinel_aware_locked in the pcc-Python py_obj.
+ *
+ * A container tombstone is not a reference: nothing ever decrefs it, so
+ * refcounting it is pure work -- and refcount prepare begins with the
+ * provenance probe, so tombstone traffic paid
+ * pcc_gc_granule_is_object_start to conclude that py_set_dummy is not an
+ * object.  It happens in both directions: storing the tombstone increfs it,
+ * and storing a real element over a tombstone decrefs it.  py_dict needs none
+ * of this because its tombstone is an integer in an index array.
+ *
+ * Everything the barrier really owes is kept: the store note, the slot write
+ * barrier with today's arguments, the relocation read for a real value, the
+ * backend-4 known-object guard, and a real old value's release. */
+int64_t pcc_gc_store_ptr_plan_commit_sentinel_aware_locked(
+    PccGcStoreRootPlan *plan,
+    PyObject *owner,
+    PyObject **slot,
+    PyObject *value,
+    PyObject *sentinel
+) {
+    if (plan == NULL || slot == NULL) return 0;
+    PccGcStoreRootPlanImpl *impl = pcc_gc_store_root_plan_impl(plan);
+    if (impl->state != 0) return 0;
+    impl->state = PCC_GC_STORE_ROOT_PLAN_ATTEMPTED;
+    int64_t backend = impl->backend;
+    if (
+        backend == PCC_GC_KIND_INCREMENTAL_TRICOLOR
+        || backend == PCC_GC_KIND_CONCURRENT_MARK_SWEEP
+        || backend == PCC_GC_KIND_GENERATIONAL_MINOR_MAJOR
+        || backend == PCC_GC_KIND_COLORED_RELOCATING
+    ) {
+        pcc_gc_note_store();
+    }
+    if (value == sentinel) {
+        /* A sentinel carries no forwarding entry and needs no incref.  The
+         * reset keeps the plan's finish inert. */
+        pcc_refcount_prepared_reset(&impl->new_prepared, value);
+    } else {
+        PyObject *canonical_value = value;
+        if (
+            (
+                backend == PCC_GC_KIND_GENERATIONAL_MINOR_MAJOR
+                || backend == PCC_GC_KIND_COLORED_RELOCATING
+            )
+            && pcc_gc_forwarding_population_load() > 0
+            && py_gc_relocation_candidate(canonical_value)
+        ) {
+            canonical_value = pcc_gc_note_relocation_read(canonical_value);
+        }
+        pcc_incref_prepare(
+            canonical_value,
+            impl->debug_runtime_enabled,
+            &impl->new_prepared
+        );
+        if (impl->new_prepared.debug_bad) return 0;
+    }
+    if (
+        backend == PCC_GC_KIND_INCREMENTAL_TRICOLOR
+        || backend == PCC_GC_KIND_CONCURRENT_MARK_SWEEP
+        || backend == PCC_GC_KIND_GENERATIONAL_MINOR_MAJOR
+        || backend == PCC_GC_KIND_COLORED_RELOCATING
+    ) {
+        pcc_gc_note_slot_write_barrier(
+            owner, slot, impl->new_prepared.obj
+        );
+    }
+    PyObject *old = *slot;
+    *slot = impl->new_prepared.obj;
+    if (old == sentinel) old = NULL;
+    if (
+        old != NULL
+        && !PY_IS_TAGGED_INT(old)
+        && backend == PCC_GC_KIND_COLORED_RELOCATING
+        && !pcc_gc4_old_slot_is_releasable(old)
+    ) {
+        old = NULL;
+    }
+    pcc_decref_prepare(
+        old,
+        impl->debug_runtime_enabled,
+        &impl->old_prepared
+    );
+    impl->state |= PCC_GC_STORE_ROOT_PLAN_PUBLISHED;
+    return 1;
 }
 
 static void pcc_gc_store_plan_finish_impl(
@@ -1055,6 +1156,9 @@ static void pcc_incref_prepare(
     if (PY_IS_TAGGED_INT(o)) return;  /* tagged ints carry no refcount */
     int64_t backend = pcc_gc_backend();
     if (!py_pointer_can_have_header(o)) {
+        __atomic_add_fetch(
+            &pcc_gc_unmanaged_refcount_ops, 1, __ATOMIC_RELAXED
+        );
         pcc_refcount_prepare_debug_bad(prepared, -2, debug_runtime_mode);
         return;
     }
@@ -1279,6 +1383,9 @@ static void pcc_decref_prepare(
     if (PY_IS_TAGGED_INT(o)) return;
     int64_t backend = pcc_gc_backend();
     if (!py_pointer_can_have_header(o)) {
+        __atomic_add_fetch(
+            &pcc_gc_unmanaged_refcount_ops, 1, __ATOMIC_RELAXED
+        );
         pcc_refcount_prepare_debug_bad(prepared, -2, debug_runtime_mode);
         return;
     }
@@ -1438,5 +1545,47 @@ static void pcc_decref_finish(const PccRefcountPrepared *prepared) {
 void py_decref(PyObject *o) {
     PccRefcountPrepared prepared;
     pcc_decref_prepare(o, -1, &prepared);
+    pcc_decref_finish(&prepared);
+}
+
+
+static int32_t pcc_gc_known_ref_checks = 0;
+
+void pcc_gc_set_known_ref_checks(int64_t enabled) {
+    __atomic_store_n(&pcc_gc_known_ref_checks, enabled != 0, __ATOMIC_RELEASE);
+}
+
+PyObject *pcc_gc_retain_known(PyObject *o) {
+    if (o == NULL || PY_IS_TAGGED_INT(o)) return o;
+    if (pcc_gc_backend() != 0 || __atomic_load_n(&pcc_gc_known_ref_checks, __ATOMIC_ACQUIRE) != 0)
+        return pcc_gc_retain(o);
+    PyObjectHeader *h = py_header(o);
+    int32_t flags = py_header_flags_load(h);
+    if (flags & PY_FLAG_IMMORTAL) return o;
+    if (pcc_refcount_load(&h->refcount) < 0) return o;
+    int64_t count = pcc_refcount_incref(&h->refcount);
+    pcc_obj_runtime_log_event_code(3, 1, count, h->type_tag, o);
+    return o;
+}
+
+void pcc_gc_release_known(PyObject *o) {
+    if (o == NULL || PY_IS_TAGGED_INT(o)) return;
+    if (pcc_gc_backend() != 0 || __atomic_load_n(&pcc_gc_known_ref_checks, __ATOMIC_ACQUIRE) != 0) {
+        pcc_gc_release(o); return;
+    }
+    PyObjectHeader *h = py_header(o);
+    int32_t flags = py_header_flags_load(h);
+    if (flags & PY_FLAG_IMMORTAL) return;
+    if (pcc_refcount_load(&h->refcount) <= 0) { pcc_gc_release(o); return; }
+    int64_t count = pcc_refcount_decref(&h->refcount);
+    if (count > 0) { pcc_obj_runtime_log_event_code(3, 2, count, h->type_tag, o); return; }
+    if (count == 0) py_header_flags_or(h, PY_FLAG_GC_DEALLOCATING);
+    PccRefcountPrepared prepared;
+    pcc_refcount_prepared_reset(&prepared, o);
+    prepared.type_tag = h->type_tag;
+    prepared.flags = flags;
+    prepared.backend = 0;
+    prepared.new_refcount = count;
+    prepared.did_update = 1;
     pcc_decref_finish(&prepared);
 }

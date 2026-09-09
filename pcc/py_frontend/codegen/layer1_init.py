@@ -64,6 +64,7 @@ class Layer1InitMixin:
         self._codegen_current_stmt_kind: str = ""
         self._codegen_current_expr_kind: str = ""
         self._codegen_current_module_name: str = module.name or "<module>"
+        self._known_object_refcounts = str(os.environ.get("PCC_KNOWN_OBJECT_REFS", "0")).lower() in ("1", "true", "yes", "on")
         self._debug_release_checks = bool(
             os.environ.get("PCC_DEBUG_RELEASES", "").strip()
             or os.environ.get("PCC_DEBUG_RUNTIME", "").strip()

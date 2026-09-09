@@ -1570,6 +1570,7 @@ def test_colored_relocating_selects_unpinned_relocation_set(tmp_path):
         pcc_gc_select_relocation_set = extern("pcc_gc_select_relocation_set", (c_int64,), c_int64)
         pcc_gc_relocation_set_contains = extern("pcc_gc_relocation_set_contains", (c_ptr,), c_int64)
         pcc_gc_relocation_set_size = extern("pcc_gc_relocation_set_size", (), c_int64)
+        pcc_gc_publish_initialized = extern("pcc_gc_publish_initialized", (c_ptr,), c_void)
 
         def main() -> None:
             # The compiled runtime can own legitimate relocatable startup
@@ -1582,6 +1583,16 @@ def test_colored_relocating_selects_unpinned_relocation_set(tmp_path):
             a = pcc_gc_alloc(64, 5, 0)
             b = pcc_gc_alloc(64, 5, 0)
             c = pcc_gc_alloc(64, 5, 0)
+            # pcc_gc_alloc hands back a half-initialized object carrying
+            # PY_FLAG_GC_FRESH_ALLOC, and the selector refuses a fresh owner
+            # outright -- relocating a half-built object would copy garbage
+            # slots.  pcc_gc_publish_initialized is the contract's release
+            # valve; the C probes in this file already call it right after
+            # allocating.  Without it all three stay invisible to the
+            # relocation set and this probe measures the flag, not pinning.
+            pcc_gc_publish_initialized(a)
+            pcc_gc_publish_initialized(b)
+            pcc_gc_publish_initialized(c)
             pcc_gc_pin(b)
             pcc_gc_reset_relocation_set()
             print(pcc_gc_select_relocation_set(1000) - baseline)
@@ -1631,12 +1642,25 @@ def test_colored_relocating_copy_forwards_selected_payload_object(tmp_path):
         pcc_gc_reset_relocation_set = extern("pcc_gc_reset_relocation_set", (), c_void)
         pcc_gc_select_relocation_set = extern("pcc_gc_select_relocation_set", (c_int64,), c_int64)
         pcc_gc_relocate_copy = extern("pcc_gc_relocate_copy", (c_ptr, c_int64), c_obj)
+        pcc_gc_relocation_set_contains = extern("pcc_gc_relocation_set_contains", (c_ptr,), c_int64)
+        pcc_gc_publish_initialized = extern("pcc_gc_publish_initialized", (c_ptr,), c_void)
 
         def main() -> None:
             old = pcc_gc_alloc(64, 5, 0)
+            # A raw pcc_gc_alloc result carries PY_FLAG_GC_FRESH_ALLOC and the
+            # selector refuses a fresh owner outright: relocating a
+            # half-initialized object would copy garbage slots.  Publishing is
+            # the contract's release valve, and the C probes earlier in this
+            # file already call it right after allocating.
+            pcc_gc_publish_initialized(old)
             old_id = pcc_gc_object_id(old)
             pcc_gc_reset_relocation_set()
-            print(pcc_gc_select_relocation_set(1))
+            # Selection is per page, chosen by fragmentation score, so a
+            # budget of 1 selects one object from the best-scoring page --
+            # which need not be the page old landed on.  Give the budget room
+            # and assert containment directly.
+            pcc_gc_select_relocation_set(1000)
+            print(pcc_gc_relocation_set_contains(old))
             moved = pcc_gc_relocate_copy(old, 64)
             print(ptr_is_null(moved))
             print(ptr_eq(old, moved))
@@ -1681,11 +1705,18 @@ def test_colored_relocating_copy_consumes_relocation_entry(tmp_path):
         pcc_gc_select_relocation_set = extern("pcc_gc_select_relocation_set", (c_int64,), c_int64)
         pcc_gc_relocation_set_contains = extern("pcc_gc_relocation_set_contains", (c_ptr,), c_int64)
         pcc_gc_relocate_copy = extern("pcc_gc_relocate_copy", (c_ptr, c_int64), c_obj)
+        pcc_gc_publish_initialized = extern("pcc_gc_publish_initialized", (c_ptr,), c_void)
 
         def main() -> None:
             old = pcc_gc_alloc(64, 5, 0)
+            # A raw pcc_gc_alloc result carries PY_FLAG_GC_FRESH_ALLOC and the
+            # selector refuses a fresh owner outright: relocating a
+            # half-initialized object would copy garbage slots.  Publishing is
+            # the contract's release valve, and the C probes earlier in this
+            # file already call it right after allocating.
+            pcc_gc_publish_initialized(old)
             pcc_gc_reset_relocation_set()
-            pcc_gc_select_relocation_set(1)
+            pcc_gc_select_relocation_set(1000)
             moved = pcc_gc_relocate_copy(old, 64)
             print(ptr_is_null(moved))
             print(pcc_gc_relocation_set_contains(old))
@@ -1723,9 +1754,16 @@ def test_colored_relocating_step_forwards_selected_payload_object(tmp_path):
         pcc_gc_step = extern("pcc_gc_step", (c_int64,), c_int64)
         pcc_gc_telemetry = extern("pcc_gc_telemetry", (c_int64,), c_int64)
         pcc_gc_telemetry_reset = extern("pcc_gc_telemetry_reset", (), c_void)
+        pcc_gc_publish_initialized = extern("pcc_gc_publish_initialized", (c_ptr,), c_void)
 
         def main() -> None:
             old = pcc_gc_alloc(64, 5, 0)
+            # A raw pcc_gc_alloc result carries PY_FLAG_GC_FRESH_ALLOC and the
+            # selector refuses a fresh owner outright: relocating a
+            # half-initialized object would copy garbage slots.  Publishing is
+            # the contract's release valve, and the C probes earlier in this
+            # file already call it right after allocating.
+            pcc_gc_publish_initialized(old)
             old_id = pcc_gc_object_id(old)
             slot = malloc(8)
             store_ptr(slot, 0, null())

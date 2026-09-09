@@ -54,6 +54,9 @@ def _runtime_signatures_part_0():
     "pcc_gc_pointer_unregister": (_I64, [_PYOBJ], False),
     "pcc_gc_retain": (_PYOBJ, [_PYOBJ], False),
     "pcc_gc_release": (_VOID, [_PYOBJ], False),
+    "pcc_gc_retain_known": (_PYOBJ, [_PYOBJ], False),
+    "pcc_gc_release_known": (_VOID, [_PYOBJ], False),
+    "pcc_gc_set_known_ref_checks": (_VOID, [_I64], False),
     "pcc_debug_check_release": (_VOID, [_CSTR, _PYOBJ], False),
     "pcc_gc_load_ptr": (_PYOBJ, [_PYOBJ, _PTR], False),
     "pcc_gc_load_borrowed_ptr": (_PYOBJ, [_PYOBJ, _PTR], False),
@@ -67,6 +70,8 @@ def _runtime_signatures_part_0():
     "pcc_gc_scheduler_root_register": (_VOID, [_PTR], False),
     "pcc_gc_scheduler_root_unregister": (_VOID, [_PTR], False),
     "pcc_gc_register_continuation_root": (_VOID, [_PTR, _PTR], False),
+    "pcc_gc_register_continuation_root_node": (_PTR, [_PTR, _PTR], False),
+    "pcc_gc_unregister_continuation_root_node": (_VOID, [_PTR], False),
     "pcc_gc_unregister_continuation_root": (_VOID, [_PTR], False),
     "pcc_gc_trace_continuation_roots": (_I64, [], False),
     "pcc_gc_rewrite_continuation_roots": (_I64, [], False),
@@ -739,6 +744,8 @@ def _runtime_signatures_part_12():
     "py_functools_update_wrapper": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
     # ---- Native generator objects ----------------------------------
     "py_gen_frame_new": (_PYOBJ, [_I64], False),
+    "py_gen_frame_get": (_PYOBJ, [_PYOBJ, _I64], False),
+    "py_gen_frame_set": (_VOID, [_PYOBJ, _I64, _PYOBJ], False),
     "py_gen_frame_save": (_I64, [_PYOBJ, _PTR, _I64], False),
     "py_gen_new": (_PYOBJ, [_PTR, _PYOBJ], False),
     "py_gen_completed": (_PYOBJ, [_PYOBJ], False),
@@ -1396,6 +1403,9 @@ FREESTANDING_GC_I64_GLOBALS: frozenset[str] = frozenset(
         'pcc_gc_backend4_candidate_fresh_skips_g',
         'pcc_gc_backend4_relocation_add_refusals_g',
         'pcc_gc_backend4_remap_epoch',
+        # PCC_GC_COUNTER_UNMANAGED_REFCOUNT_OPS (py_runtime.h:116).  Written
+        # by both refcount-prepare mirrors, read by pcc_gc_telemetry.
+        'pcc_gc_unmanaged_refcount_ops',
         'pcc_gc_backend4_relocation_reset_owner',
         'pcc_gc_backend4_reseed_plan_probe_allocation_limit',
         'pcc_gc_backend4_reseed_plan_probe_pause',

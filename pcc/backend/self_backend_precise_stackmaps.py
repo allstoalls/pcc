@@ -2378,6 +2378,58 @@ def _frame_map_count(
     return abs(count), count > 0
 
 
+def _frame_map_is_registry_owned(
+    func: ParsedFunction,
+    aliases: dict[int, list[tuple[str, _PointerOrigin]]],
+    frame_map_value: str,
+) -> bool:
+    """Is this frame the runtime registry's rather than this stack map's?
+
+    Every frame map this compiler emits is an internal constant global -- see
+    ``ownership_lowering._gc_one_slot_frame_map`` and its siblings, which build
+    an ``ir.GlobalVariable`` and pass it directly.  A frame map computed at run
+    time therefore cannot be compiler-generated: it can only come from a
+    program that calls ``pcc_gc_frame_enter`` itself through ``pcc.extern``,
+    with a map it allocated.  Such a frame is owned by the runtime's root
+    registry, exactly like the global/heap/continuation slot arrays the group
+    builder below already declines to model, and this function's machine stack
+    map has nothing to say about it.
+
+    Keying the decision on the map rather than on the slots is deliberate: it
+    leaves every compiler-emitted frame on the unchanged fail-closed path, so
+    a slots pointer the alias resolver cannot trace back to its alloca still
+    stops the build instead of silently losing its roots.
+    """
+
+    origin = _resolve_pointer(func, aliases, frame_map_value)
+    return origin.offset != 0 or not origin.base.startswith("@")
+
+
+def _origin_is_registry_owned(
+    func: ParsedFunction,
+    origin: _PointerOrigin,
+) -> bool:
+    """Is this slots array outside this function's machine frame?
+
+    ``null``, a module global and a caller-supplied argument were already
+    recognized.  A slots array produced by a call inside this function -- a
+    ``malloc`` through ``pcc.unsafe``, say -- is just as much heap memory and
+    just as absent from the machine frame, but it used to reach the
+    fail-closed "leaves without an active enter" diagnostic instead.
+    """
+
+    if origin.base == "null" or origin.base.startswith("@"):
+        return True
+    for arg in func.args:
+        if arg.name == origin.base:
+            return True
+    kernel = get_indexed_function_kernel(func)
+    value_id = kernel.value_id(origin.base)
+    if value_id < 0:
+        return True
+    return kernel.alloca_offset(value_id) < 0
+
+
 def _root_group(
     func: ParsedFunction,
     globals_by_name: dict[str, GlobalDef],
@@ -2466,6 +2518,8 @@ def _apply_frame_protocol_parts(
     if callee in _FRAME_ENTER:
         if len(args) != 2:
             _fail(func, f"{callee} has the wrong argument count")
+        if _frame_map_is_registry_owned(func, aliases, args[0][1]):
+            return True
         group = _root_group(
             func,
             globals_by_name,
@@ -2494,11 +2548,7 @@ def _apply_frame_protocol_parts(
         if len(args) != 1:
             _fail(func, f"{callee} has the wrong argument count")
         origin = _resolve_pointer(func, aliases, args[0][1])
-        if (
-            origin.base == "null"
-            or origin.base.startswith("@")
-            or any(arg.name == origin.base for arg in func.args)
-        ):
+        if _origin_is_registry_owned(func, origin):
             return True
         key = f"{origin.base}@{origin.offset}"
         if key not in active:
@@ -2548,6 +2598,8 @@ def _apply_frame_protocol_indexed(
             if second.second >= 0
             else kernel.call_texts[second.third]
         )
+        if _frame_map_is_registry_owned(func, aliases, frame_map_value):
+            return True
         group = _root_group(
             func,
             globals_by_name,
@@ -2556,11 +2608,7 @@ def _apply_frame_protocol_indexed(
             slots_value,
         )
         slots_origin = _resolve_pointer(func, aliases, slots_value)
-        if (
-            slots_origin.base == "null"
-            or slots_origin.base.startswith("@")
-            or any(arg.name == slots_origin.base for arg in func.args)
-        ):
+        if _origin_is_registry_owned(func, slots_origin):
             return True
         if group.key in active:
             _fail(func, f"managed slot {group.key!r} is registered twice")
@@ -2579,11 +2627,7 @@ def _apply_frame_protocol_indexed(
                 else kernel.call_texts[first.third]
             ),
         )
-        if (
-            origin.base == "null"
-            or origin.base.startswith("@")
-            or any(arg.name == origin.base for arg in func.args)
-        ):
+        if _origin_is_registry_owned(func, origin):
             return True
         key = f"{origin.base}@{origin.offset}"
         if key not in active:
@@ -2745,6 +2789,8 @@ def _registered_stack_root_offsets(
                 if second.second >= 0
                 else kernel.call_texts[second.third]
             )
+            if _frame_map_is_registry_owned(func, aliases, frame_map_value):
+                continue
             count, _owned = _frame_map_count(
                 func, globals_by_name, aliases, frame_map_value
             )
@@ -3599,6 +3645,33 @@ def _native_ref_is_nonstack(
     return value_header.first == -2
 
 
+def _native_ref_is_registry_owned(
+    kernel: IndexedFunctionKernel,
+    base_ref: int,
+) -> bool:
+    """``_origin_is_registry_owned`` over the packed value plane."""
+
+    if _native_ref_is_nonstack(kernel, base_ref):
+        return True
+    if base_ref < 0 or base_ref >= len(kernel.value_names):
+        return True
+    return kernel.alloca_offset(base_ref) < 0
+
+
+def _native_frame_map_is_registry_owned(
+    aliases: PackedPointerAliases,
+    kernel: IndexedFunctionKernel,
+    value_ref: int,
+) -> bool:
+    """``_frame_map_is_registry_owned`` over the packed value plane."""
+
+    aliases.resolve(value_ref)
+    origin_base = aliases.result.get_unchecked(0)
+    origin_offset = aliases.result.get_unchecked(1)
+    text = _native_ref_text(kernel, origin_base)
+    return origin_offset != 0 or not text.startswith("@")
+
+
 def _native_frame_map_count(
     func: ParsedFunction,
     globals_by_name: dict[str, GlobalDef],
@@ -3688,6 +3761,12 @@ def _native_protocol_transition(
             _fail(func, f"{callee} has the wrong argument count")
         first: CompilerInt4 = kernel.call_arg(header.fourth)
         second: CompilerInt4 = kernel.call_arg(header.fourth + 1)
+        if _native_frame_map_is_registry_owned(
+            aliases,
+            kernel,
+            _native_call_arg_ref(first),
+        ):
+            return state_id
         group_id = _native_frame_group_id(
             func,
             globals_by_name,
@@ -3710,7 +3789,7 @@ def _native_protocol_transition(
         aliases.resolve(_native_call_arg_ref(first))
         origin_base = aliases.result.get_unchecked(0)
         origin_offset = aliases.result.get_unchecked(1)
-        if _native_ref_is_nonstack(kernel, origin_base):
+        if _native_ref_is_registry_owned(kernel, origin_base):
             return state_id
         group_id = roots.group_id(origin_base, origin_offset)
         leave_context = (

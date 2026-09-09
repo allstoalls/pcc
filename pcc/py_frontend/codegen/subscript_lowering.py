@@ -922,6 +922,7 @@ class SubscriptLoweringMixin:
                 [obj, idx_i64],
                 name=self._fresh("obj.subscript.i64"),
             )
+            self._note_owned_object_value(result)
             self._emit_post_call_err_check(
                 getattr(expr, "span", None),
                 release_on_error=release_on_error,
@@ -934,6 +935,7 @@ class SubscriptLoweringMixin:
             [obj, key_obj],
             name=self._fresh("obj.subscript"),
         )
+        self._note_owned_object_value(result)
         self._emit_post_call_err_check(
             getattr(expr, "span", None),
             release_on_error=release_on_error,

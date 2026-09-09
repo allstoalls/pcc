@@ -150,6 +150,12 @@ def main() -> int:
     )
     lines.append("")
     lines.append(
+        "Historical search index, not current implementation truth. Start with "
+        "source and execution; check a matching experiment's revision and later "
+        "corrections before adopting its conclusion."
+    )
+    lines.append("")
+    lines.append(
         "Regenerate with `env -u LC_ALL uv run python "
         "scripts/regen_investigations_index.py`."
     )

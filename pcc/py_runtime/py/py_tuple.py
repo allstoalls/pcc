@@ -98,6 +98,18 @@ _pcc_debug_bad_incref = extern("pcc_debug_bad_incref", (c_ptr, c_int32), c_void)
 getenv = extern("pcc_platform_getenv", (c_ptr,), c_ptr)
 
 
+py_list_new = extern("py_list_new", (c_int64,), c_ptr)
+py_list_append = extern("py_list_append", (c_ptr, c_ptr), c_void)
+py_obj_iter = extern("py_obj_iter", (c_ptr,), c_ptr)
+py_obj_next = extern("py_obj_next", (c_ptr,), c_ptr)
+py_current_exception = extern("py_current_exception", (), c_ptr)
+py_exc_builtin_class = extern("py_exc_builtin_class", (c_int64,), c_ptr)
+py_exc_matches = extern("py_exc_matches", (c_ptr, c_ptr), c_int64)
+py_clear_exception = extern("py_clear_exception", (), c_void)
+pcc_gc_store_root = extern("pcc_gc_store_root", (c_ptr, c_ptr), c_void)
+pcc_gc_store_root_take = extern("pcc_gc_store_root_take", (c_ptr, c_ptr), c_void)
+
+
 def _debug_bad_container(o, code: int) -> None:
     if ptr_is_null(getenv(cstr("PCC_DEBUG_RUNTIME"))) == 0:
         _pcc_debug_bad_incref(o, code)
@@ -207,6 +219,90 @@ def py_tuple_from_list(lst):
     return out
 
 
+def _tuple_collect_iterator(slots) -> int:
+    # Slots own source, iterator, accumulated list, current item and output.
+    pcc_gc_store_root_take(ptr_add(slots, 8), py_obj_iter(pcc_gc_load_ptr(null(), slots)))
+    if ptr_is_null(load_ptr(slots, 8)):
+        return 0
+    pcc_gc_store_root_take(ptr_add(slots, 16), py_list_new(0))
+    if ptr_is_null(load_ptr(slots, 16)):
+        py_raise_owned(py_exc_new(19, cstr("tuple: out of memory")))
+        return 0
+    while True:
+        item = py_obj_next(pcc_gc_load_ptr(null(), ptr_add(slots, 8)))
+        if ptr_is_null(item):
+            if py_err_occurred() != 0:
+                if py_exc_matches(py_current_exception(), py_exc_builtin_class(8)) == 0:
+                    return 0
+                py_clear_exception()
+            break
+        pcc_gc_store_root_take(ptr_add(slots, 24), item)
+        py_list_append(pcc_gc_load_ptr(null(), ptr_add(slots, 16)),
+                       pcc_gc_load_ptr(null(), ptr_add(slots, 24)))
+        if py_err_occurred() != 0:
+            return 0
+        pcc_gc_store_root(ptr_add(slots, 24), null())
+    n: int = py_list_len(pcc_gc_load_ptr(null(), ptr_add(slots, 16)))
+    pcc_gc_store_root_take(ptr_add(slots, 32), py_tuple_new(n))
+    if ptr_is_null(load_ptr(slots, 32)):
+        py_raise_owned(py_exc_new(19, cstr("tuple: out of memory")))
+        return 0
+    i: int = 0
+    while i < n:
+        pcc_gc_store_root_take(ptr_add(slots, 24),
+                               py_list_get(pcc_gc_load_ptr(null(), ptr_add(slots, 16)), i))
+        py_tuple_set_item(pcc_gc_load_ptr(null(), ptr_add(slots, 32)), i,
+                          pcc_gc_load_ptr(null(), ptr_add(slots, 24)))
+        if py_err_occurred() != 0:
+            return 0
+        pcc_gc_store_root(ptr_add(slots, 24), null())
+        i = i + 1
+    return 1
+
+
+def _tuple_from_iterable(seq):
+    # Explicit roots survive collections inside __iter__/__next__, including
+    # moving collectors. A sixth root preserves errors during owner cleanup.
+    slots = stack_alloc(48)
+    handles = stack_alloc(48)
+    memset(slots, 0, 48)
+    memset(handles, 0, 48)
+    count: int = 0
+    while count < 6:
+        handle = pcc_gc_scheduler_root_register_handle(ptr_add(slots, count * 8))
+        if ptr_is_null(handle):
+            while count > 0:
+                count = count - 1
+                pcc_gc_scheduler_root_unregister_handle(load_ptr(handles, count * 8))
+            py_raise_owned(py_exc_new(19, cstr("tuple: out of memory")))
+            return null()
+        store_ptr(handles, count * 8, handle)
+        count = count + 1
+    pcc_gc_store_root(slots, seq)
+    success: int = _tuple_collect_iterator(slots)
+    if success == 0:
+        pcc_gc_store_root(ptr_add(slots, 40), py_current_exception())
+        py_clear_exception()
+    # Release other owners while the result/error is still rooted.
+    i: int = 0
+    while i < 4:
+        pcc_gc_store_root(ptr_add(slots, i * 8), null())
+        i = i + 1
+    result = null()
+    if success != 0:
+        result = pcc_gc_load_ptr(null(), ptr_add(slots, 32))
+        py_incref(result)
+    else:
+        py_raise(pcc_gc_load_ptr(null(), ptr_add(slots, 40)))
+    pcc_gc_store_root(ptr_add(slots, 32), null())
+    pcc_gc_store_root(ptr_add(slots, 40), null())
+    i = 0
+    while i < 6:
+        pcc_gc_scheduler_root_unregister_handle(load_ptr(handles, i * 8))
+        i = i + 1
+    return result
+
+
 @c_abi_export("py_tuple_from_splat")
 def py_tuple_from_splat(seq):
     if ptr_is_null(seq):
@@ -221,9 +317,7 @@ def py_tuple_from_splat(seq):
     elif tag == PY_TYPE_LIST:
         n = py_list_len(seq)
     else:
-        n = py_obj_len(seq)
-        if py_err_occurred() != 0:
-            return null()
+        return _tuple_from_iterable(seq)
     if n < 0:
         py_raise_owned(py_exc_new(6, cstr("tuple() argument is not iterable")))  # PY_EXC_TYPEERROR
         return null()
@@ -247,15 +341,6 @@ def py_tuple_from_splat(seq):
             i = i + 1
         return out
 
-    while i < n:
-        v = py_obj_getitem_i64(seq, i)
-        if ptr_is_null(v) and py_err_occurred() != 0:
-            py_decref(out)
-            return null()
-        py_tuple_set_item(out, i, v)
-        if ptr_is_null(v) == 0:
-            py_decref(v)
-        i = i + 1
     return out
 
 

@@ -407,6 +407,7 @@ class LiteralLoweringMixin:
                 source_expr,
                 source_expr.ty,
                 False,
+                value_obj,
             )
             value_pinned = (
                 isinstance(value_obj.type, ir.PointerType)
@@ -535,6 +536,7 @@ class LiteralLoweringMixin:
                     el,
                     el.ty,
                     False,
+                    v_obj,
                 )
                 temp_pinned = (
                     isinstance(v_obj.type, ir.PointerType)
@@ -609,7 +611,7 @@ class LiteralLoweringMixin:
                     live_pinned_pcc.append(
                         (
                             inner,
-                            self._pcc_pointer_source_is_owned(el.args[0]),
+                            self._owned_release_needed(inner, el.args[0]) or self._pcc_pointer_source_is_owned(el.args[0]),
                         )
                     )
                 ops.append(
@@ -668,7 +670,7 @@ class LiteralLoweringMixin:
                 live_pinned_pcc.append(
                     (
                         v,
-                        self._pcc_pointer_source_is_owned(el),
+                        self._owned_release_needed(v, el) or self._pcc_pointer_source_is_owned(el),
                     )
                 )
             ops.append(("append", v, el.ty, is_cpy, el, pinned))
@@ -753,6 +755,7 @@ class LiteralLoweringMixin:
                 src_expr,
                 value_ty,
                 is_cpy,
+                v_obj,
             )
             self.builder.call(
                 self.runtime["py_list_append"],
@@ -809,6 +812,7 @@ class LiteralLoweringMixin:
                     v_expr,
                     v_expr.ty,
                     False,
+                    m_obj,
                 )
                 mapping_pinned = (
                     isinstance(m_obj.type, ir.PointerType)
@@ -850,6 +854,7 @@ class LiteralLoweringMixin:
                     k_expr,
                     k_expr.ty,
                     False,
+                    k_obj,
                 )
                 key_pinned = (
                     isinstance(k_obj.type, ir.PointerType)
@@ -877,6 +882,7 @@ class LiteralLoweringMixin:
                     v_expr,
                     v_expr.ty,
                     False,
+                    v_obj,
                 )
                 value_pinned = (
                     isinstance(v_obj.type, ir.PointerType)
@@ -970,6 +976,7 @@ class LiteralLoweringMixin:
                     k_expr,
                     k_expr.ty,
                     False,
+                    k_obj,
                 )
                 key_pinned = (
                     isinstance(k_obj.type, ir.PointerType)
@@ -999,6 +1006,7 @@ class LiteralLoweringMixin:
                     v_expr,
                     v_expr.ty,
                     False,
+                    v_obj,
                 )
                 value_pinned = (
                     isinstance(v_obj.type, ir.PointerType)
@@ -1104,7 +1112,7 @@ class LiteralLoweringMixin:
                 live_pinned_pcc.append(
                     (
                         k,
-                        self._pcc_pointer_source_is_owned(k_expr),
+                        self._owned_release_needed(k, k_expr) or self._pcc_pointer_source_is_owned(k_expr),
                     )
                 )
             v_payload = self._maybe_emit_valueclass_constructor_payload(
@@ -1152,7 +1160,7 @@ class LiteralLoweringMixin:
                 live_pinned_pcc.append(
                     (
                         v,
-                        self._pcc_pointer_source_is_owned(v_expr),
+                        self._owned_release_needed(v, v_expr) or self._pcc_pointer_source_is_owned(v_expr),
                     )
                 )
             items.append(
@@ -1289,6 +1297,7 @@ class LiteralLoweringMixin:
                 k_expr,
                 k_ty,
                 k_is_cpy,
+                k_obj,
             )
             key_release_on_error = ()
             if key_temp_needs_release and not (
@@ -1324,6 +1333,7 @@ class LiteralLoweringMixin:
                 v_expr,
                 v_ty,
                 v_is_cpy,
+                v_obj,
             )
             value_release_on_error = ()
             if value_temp_needs_release and not (
@@ -1781,6 +1791,7 @@ class LiteralLoweringMixin:
                         el,
                         el.ty,
                         v_obj in self._cpy_values,
+                        v_obj,
                     )
                     temp_pinned = (
                         isinstance(v_obj.type, ir.PointerType)
@@ -1853,7 +1864,7 @@ class LiteralLoweringMixin:
                     live_pinned_pcc.append(
                         (
                             v,
-                            self._pcc_pointer_source_is_owned(el),
+                            self._owned_release_needed(v, el) or self._pcc_pointer_source_is_owned(el),
                         )
                     )
                 ops.append(("append", v, el.ty, is_cpy, pinned, el))
@@ -1910,6 +1921,7 @@ class LiteralLoweringMixin:
                     src_expr,
                     value_ty,
                     is_cpy,
+                    v_obj,
                 )
                 release_on_error = ()
                 if temp_needs_release and not (
@@ -1983,7 +1995,7 @@ class LiteralLoweringMixin:
                     live_pinned_pcc.append(
                         (
                             inner,
-                            self._pcc_pointer_source_is_owned(el.args[0]),
+                            self._owned_release_needed(inner, el.args[0]) or self._pcc_pointer_source_is_owned(el.args[0]),
                         )
                     )
                 ops.append(
@@ -2026,7 +2038,7 @@ class LiteralLoweringMixin:
                 live_pinned_pcc.append(
                     (
                         v,
-                        self._pcc_pointer_source_is_owned(el),
+                        self._owned_release_needed(v, el) or self._pcc_pointer_source_is_owned(el),
                     )
                 )
             ops.append(("append", v, el.ty, is_cpy, pinned, el))
@@ -2098,6 +2110,7 @@ class LiteralLoweringMixin:
                 src_expr,
                 value_ty,
                 is_cpy,
+                v_obj,
             )
             release_on_error = ()
             if temp_needs_release and not (

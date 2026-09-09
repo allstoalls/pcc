@@ -322,13 +322,12 @@ def link_executable(
     # Preserve fail-closed option validation before parsing potentially large
     # inputs.  ``link_prepared_executable`` validates again for direct users.
     minos = _validate_minos(minos)
-    merged = prepare_executable_object(
-        objects,
-        archives=archives,
-        semantic_manifest=semantic_manifest,
-    )
     return link_prepared_executable(
-        merged,
+        prepare_executable_object(
+            objects,
+            archives=archives,
+            semantic_manifest=semantic_manifest,
+        ),
         entry=entry,
         minos=minos,
         identifier=identifier,
@@ -354,6 +353,7 @@ def link_prepared_executable(
     if not isinstance(merged, NativeObject):
         raise LinkError("prepared executable input must be a NativeObject")
     obj = merged.link_view()
+    del merged
 
     sections = obj.sections()
     symbols = obj.symbols()
@@ -400,7 +400,7 @@ def link_prepared_executable(
     names_all = [s["name"] for s in symbols]
     imports_set = set(imports)
     for sec in sections:
-        for r in obj.relocations(sec):
+        for r in obj.iter_relocations(sec):
             if not r["r_extern"]:
                 continue
             nm = names_all[r["r_symbolnum"]]
@@ -632,7 +632,7 @@ def link_prepared_executable(
             continue  # a dropped unwind section carries no live relocations
         out, sec_addr = mapping
         pending_addend = 0
-        for entry_r in obj.relocations(sec):
+        for entry_r in obj.iter_relocations(sec):
             if entry_r["r_type"] == spec.ARM64_RELOC_ADDEND:
                 pending_addend = entry_r["r_symbolnum"]
                 continue
@@ -780,6 +780,11 @@ def link_prepared_executable(
                                  | (rn << 5) | rt)
             else:
                 raise LinkError(f"relocation type {rtype} not applied")
+
+    # All addresses now live in the output sections and fixup tables. Release
+    # the indexed input records and its contiguous view before allocating
+    # stack-map validation scratch, chained fixups and the final image.
+    del obj
 
     # The relocatable linker rebuilds stack-map tables semantically.  Check
     # the resolved table once more after native address relocations, before

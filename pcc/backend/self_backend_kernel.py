@@ -121,6 +121,14 @@ def _new_text_id_index(size: int) -> tuple[CompilerIntArena, int]:
     return index, capacity
 
 
+def _text_id_index_start_slot(key: int, capacity: int) -> int:
+    # Numeric suffix keys are dense, and different mem2reg PHI bases may
+    # share an ordinal. Spread adjacent keys before linear probing so those
+    # collisions do not scan a contiguous run of ordinary SSA names. The
+    # odd multiplier permutes power-of-two slots; keys/equality stay intact.
+    return (key * 131) & (capacity - 1)
+
+
 def _text_id_index_lookup(
     index: CompilerIntArena,
     capacity: int,
@@ -128,7 +136,7 @@ def _text_id_index_lookup(
     name: str,
 ) -> int:
     key = _stable_text_bucket_key(name)
-    slot = key & (capacity - 1)
+    slot = _text_id_index_start_slot(key, capacity)
     probes = 0
     while probes < capacity:
         entry: CompilerInt2 = index.get2_unchecked(slot)
@@ -150,7 +158,7 @@ def _text_id_index_insert(
 ) -> None:
     name = names[name_id]
     key = _stable_text_bucket_key(name)
-    slot = key & (capacity - 1)
+    slot = _text_id_index_start_slot(key, capacity)
     probes = 0
     while probes < capacity:
         entry: CompilerInt2 = index.get2_unchecked(slot)
@@ -2726,7 +2734,7 @@ class IndexedFunctionKernel:
         name_id = 0
         while name_id < len(self.block_names):
             key = _stable_text_bucket_key(self.block_names[name_id])
-            slot = key & (capacity - 1)
+            slot = _text_id_index_start_slot(key, capacity)
             while True:
                 entry: CompilerInt2 = index.get2_unchecked(slot)
                 if entry.second == 0:
@@ -2750,7 +2758,7 @@ class IndexedFunctionKernel:
         name_id = 0
         while name_id < len(self.value_names):
             key = _stable_text_bucket_key(self.value_names[name_id])
-            slot = key & (capacity - 1)
+            slot = _text_id_index_start_slot(key, capacity)
             while True:
                 entry: CompilerInt2 = index.get2_unchecked(slot)
                 if entry.second == 0:
@@ -2766,7 +2774,7 @@ class IndexedFunctionKernel:
         from .self_backend_analysis import _stable_text_bucket_key
 
         key = _stable_text_bucket_key(name)
-        slot = key & (self.block_name_index_capacity - 1)
+        slot = _text_id_index_start_slot(key, self.block_name_index_capacity)
         while True:
             entry: CompilerInt2 = self.block_name_index.get2_unchecked(slot)
             if entry.second == 0:
@@ -2782,7 +2790,7 @@ class IndexedFunctionKernel:
         from .self_backend_analysis import _stable_text_bucket_key
 
         key = _stable_text_bucket_key(name)
-        slot = key & (self.value_name_index_capacity - 1)
+        slot = _text_id_index_start_slot(key, self.value_name_index_capacity)
         while True:
             entry: CompilerInt2 = self.value_name_index.get2_unchecked(slot)
             if entry.second == 0:

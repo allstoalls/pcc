@@ -21,6 +21,28 @@ static PyObject *gen_require_result(
 }
 
 
+/* Only compiler-created fixed-size PyList frames with managed object slots.
+ * The running generator owns the frame across each access. */
+PyObject *py_gen_frame_get(PyObject *frame, int64_t index) {
+    if (pcc_gc_backend() != 0 || frame == NULL) return py_list_get(frame, index);
+    PyListObject *list = (PyListObject *)frame;
+    if (index < 0 || index >= list->length) return py_list_get(frame, index);
+    return pcc_gc_retain_known(list->items[index]);
+}
+
+void py_gen_frame_set(PyObject *frame, int64_t index, PyObject *value) {
+    if (pcc_gc_backend() != 0 || frame == NULL) { py_list_set(frame, index, value); return; }
+    PyListObject *list = (PyListObject *)frame;
+    if (index < 0 || index >= list->length) { py_list_set(frame, index, value); return; }
+    if (__atomic_load_n(&pcc_runtime_log_fast_state, __ATOMIC_RELAXED) != 0)
+        pcc_runtime_log_event_code(2, 3, 0, 0, frame);
+    PyObject *old = list->items[index];
+    if (old == value) return;
+    pcc_gc_retain_known(value);
+    list->items[index] = value;
+    pcc_gc_release_known(old);
+}
+
 PyObject *py_gen_frame_new(int64_t slot_count) {
     if (slot_count < 0 || slot_count > 134217728) {
         return gen_require_result(NULL, "py_gen_frame_new", "invalid generator frame size");

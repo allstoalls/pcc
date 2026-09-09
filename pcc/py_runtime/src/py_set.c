@@ -180,8 +180,13 @@ static int py_set_remove_rooted_slot(
             SetEntry *entry = &entries[slot];
             PyObject *key = py_set_entry_key(s, entry);
             if (key != NULL && key != py_set_dummy) {
-                committed = pcc_gc_store_ptr_plan_commit_locked(
-                    &plan, set, &entry->key, py_set_dummy
+                /* The tombstone is a sentinel, not a reference: the ordinary
+                 * commit increfed it, and incref prepare begins with the
+                 * provenance probe, so every discard paid
+                 * pcc_gc_granule_is_object_start to learn that py_set_dummy is
+                 * not an object.  The sentinel path still releases the key. */
+                committed = pcc_gc_store_ptr_plan_commit_sentinel_aware_locked(
+                    &plan, set, &entry->key, py_set_dummy, py_set_dummy
                 ) != 0;
                 if (committed) s->size--;
             }
@@ -224,8 +229,10 @@ static int py_set_add_rooted_slot(
             PyObject *old = py_set_entry_key(s, entry);
             if (old == NULL || old == py_set_dummy) {
                 int was_tombstone = old == py_set_dummy;
-                committed = pcc_gc_store_ptr_plan_commit_locked(
-                    &plan, set, &entry->key, item
+                /* A real element may land on a tombstone; releasing the
+                 * sentinel is the other half of the same class. */
+                committed = pcc_gc_store_ptr_plan_commit_sentinel_aware_locked(
+                    &plan, set, &entry->key, item, py_set_dummy
                 ) != 0;
                 if (committed) {
                     entry->hash = hash;

@@ -1,5 +1,10 @@
 # Native optimizer work in progress (2026-09-07)
 
+> Historical session snapshot, not current task instructions. HEAD, dirty state,
+> blockers and artifact paths below describe the recorded session. Check current
+> source, `git status` and execution before reusing them; later user instructions
+> take precedence. Search relevant sections instead of loading this whole file.
+
 ## Current user direction
 Do not commit or push either pcc or pcc-gateway. This overrides earlier
 authorization. Continue compiler work: independently perform the useful O2

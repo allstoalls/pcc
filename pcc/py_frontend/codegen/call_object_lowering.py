@@ -14,6 +14,8 @@ from ..py_ast import (
     SourceSpan,
     StrLit,
     StrType,
+    TupleExpr,
+    TupleType,
     Type,
 )
 from . import marshal
@@ -60,18 +62,14 @@ class CallObjectLoweringMixin:
         )
 
     def _emit_call_args_tuple(self, args: tuple[Expr, ...]) -> ir.Value:
-        tup = self.builder.call(
-            self.runtime["py_tuple_new"],
-            [ir.Constant(_I64, len(args))],
-            name=self._fresh("call.args"),
-        )
-        for i, arg in enumerate(args):
-            obj = self._emit_call_arg_object(arg)
-            self.builder.call(
-                self.runtime["py_tuple_set_item"],
-                [tup, ir.Constant(_I64, i), obj],
-            )
-        return tup
+        # Argument tuples have the same retaining slot contract as ordinary
+        # tuple literals. Reuse their marshalling, temporary-owner release,
+        # moving-GC protection and cleanup when a later argument raises.
+        return self._emit_tuple_literal(TupleExpr(
+            span=args[0].span if args else None,
+            ty=TupleType(name="tuple", elems=tuple(arg.ty for arg in args)),
+            elems=args,
+        ))
 
     def _emit_dynamic_call_args_tuple(self, args: tuple[Expr, ...]) -> ir.Value:
         """Materialize args for a pcc-native dynamic callable call.

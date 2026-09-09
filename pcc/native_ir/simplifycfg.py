@@ -31,6 +31,7 @@ from dataclasses import dataclass
 
 
 from .dce import dce_module_text, _collect_function_attrs
+from .text_tokens import replace_local_names
 
 
 _DEFINE_HEADER_RE = re.compile(
@@ -269,6 +270,7 @@ def _canonicalize_hoisted_chain(
 
 
 def _rewrite_label_refs(blocks: list[_Block], old: str, new: str) -> None:
+    needle = "%" + old
     branch_pattern = re.compile(r"label\s+%" + re.escape(old) + r"\b")
     phi_pattern = re.compile(
         r"(\[\s*[^,\]]+,\s*)%" + re.escape(old) + r"(\s*\])"
@@ -276,6 +278,12 @@ def _rewrite_label_refs(blocks: list[_Block], old: str, new: str) -> None:
     for block in blocks:
         new_lines: list[str] = []
         for line in block.lines:
+            # Most lines contain no reference to this merged block. Avoid
+            # two regex operations and their temporary objects for every
+            # instruction in the function on every block merge.
+            if needle not in line:
+                new_lines.append(line)
+                continue
             updated = branch_pattern.sub(f"label %{new}", line)
             # Rebuild only matched PHI predecessor spans. Native re.sub
             # currently owns literal replacements, not backreference
@@ -352,48 +360,55 @@ def _prune_invalid_phi_incomings(blocks: list[_Block]) -> tuple[list[_Block], bo
         block.lines = new_lines
     if not replacements:
         return blocks, changed
+    # Compose in reverse insertion order to preserve the former sequence
+    # of substitutions, without a regex pass for every (line, removed PHI).
+    # The shared lexer also preserves %name.suffix, strings and comments.
+    composed = {}
+    for old, new in reversed(list(replacements.items())):
+        composed[old] = replace_local_names(new, composed)
     for block in blocks:
-        rewritten: list[str] = []
-        for line in block.lines:
-            updated = line
-            for old, new in replacements.items():
-                updated = re.sub(r"%" + re.escape(old) + r"\b", new, updated)
-            rewritten.append(updated)
-        block.lines = rewritten
+        block.lines = [replace_local_names(line, composed) for line in block.lines]
     return blocks, changed
 
 
 def _merge_linear_successors(blocks: list[_Block]) -> tuple[list[_Block], bool]:
+    # A merge substitutes the predecessor's label for the successor's label;
+    # every outgoing edge keeps its multiplicity. Build predecessor counts
+    # once and visit only the PHIs reached by the removed block's terminator.
+    preds = _predecessor_counts(blocks)
+    block_map = {block.label: block for block in blocks}
+    phi_blocks = {block.label for block in blocks
+                  if any(" = phi " in line.split(";", 1)[0] for line in block.lines)}
+    removed = set()
     changed = False
-    while True:
-        preds = _predecessor_counts(blocks)
-        block_map = {block.label: block for block in blocks}
-        merged = False
-        for idx, block in enumerate(blocks):
+    for block in blocks:
+        if block.label in removed:
+            continue
+        while True:
             insts = block.inst_lines()
             if not insts:
-                continue
+                break
             branch = _BR_RE.match(insts[-1])
             if branch is None:
-                continue
+                break
             succ = block_map.get(branch.group("label"))
-            if succ is None or succ.label == blocks[0].label:
-                continue
+            if succ is None or succ.label == block.label or succ.label == blocks[0].label:
+                break
             if preds.get(succ.label, 0) != 1:
-                continue
-            if any(" = phi " in line.split(";", 1)[0] for line in succ.lines):
-                continue
-            succ_idx = next((i for i, b in enumerate(blocks) if b.label == succ.label), None)
-            if succ_idx is None:
-                continue
+                break
+            if succ.label in phi_blocks:
+                break
+            targets = _terminator_targets(succ)
             block.lines = _drop_raw_terminator_line(block.lines) + succ.lines
-            blocks.pop(succ_idx)
-            _rewrite_label_refs(blocks, succ.label, block.label)
+            removed.add(succ.label)
+            block_map.pop(succ.label)
+            for target in targets:
+                successor = block_map.get(target)
+                if successor is not None and successor.label in phi_blocks:
+                    _rewrite_label_refs([successor], succ.label, block.label)
             changed = True
-            merged = True
-            break
-        if not merged:
-            break
+    if changed:
+        blocks = [block for block in blocks if block.label not in removed]
     return blocks, changed
 
 
@@ -1420,6 +1435,10 @@ def _rewrite_simple_conditional_blocks(
                 )
                 return blocks, True
 
+        # Reusing a merge PHI's result for a select is valid only if this
+        # rewrite consumes every incoming edge. A third predecessor keeps
+        # the original PHI alive and would create two definitions of its SSA
+        # name (later pruning could even replace the new definition by null).
         for pure_label, merge_label in ((true_label, false_label), (false_label, true_label)):
             pure_block = block_map.get(pure_label)
             merge_block = block_map.get(merge_label)
@@ -1435,7 +1454,7 @@ def _rewrite_simple_conditional_blocks(
             phi_use = _phi_single_use_chain_ret(merge_block)
             if phi is not None:
                 phi_name, ty, incoming = phi
-                if pure_label not in incoming or block.label not in incoming:
+                if len(incoming) != 2 or pure_label not in incoming or block.label not in incoming:
                     continue
                 pure_ready = _entry_available_phi_value(
                     pure_label, merge_label, incoming[pure_label], block_map
@@ -1458,7 +1477,7 @@ def _rewrite_simple_conditional_blocks(
                 return blocks, True
             if phi_use is not None:
                 phi_name, use_ty, incoming, op_lines, ret_line = phi_use
-                if pure_label not in incoming or block.label not in incoming:
+                if len(incoming) != 2 or pure_label not in incoming or block.label not in incoming:
                     continue
                 pure_ready = _entry_available_phi_value(
                     pure_label, merge_label, incoming[pure_label], block_map
@@ -1491,7 +1510,7 @@ def _rewrite_simple_conditional_blocks(
         ):
             merge_label = true_direct.group("label")
             phi = _phi_ret(block_map.get(merge_label))
-            if phi is not None and true_label in phi[2] and false_label in phi[2]:
+            if phi is not None and len(phi[2]) == 2 and true_label in phi[2] and false_label in phi[2]:
                 phi_name, ty, incoming = phi
                 true_ready = _entry_available_phi_value(
                     true_label, merge_label, incoming[true_label], block_map
@@ -1516,7 +1535,7 @@ def _rewrite_simple_conditional_blocks(
                     block.lines = new_body_lines
                     return blocks, True
             phi_use = _phi_single_use_chain_ret(block_map.get(merge_label))
-            if phi_use is not None and true_label in phi_use[2] and false_label in phi_use[2]:
+            if phi_use is not None and len(phi_use[2]) == 2 and true_label in phi_use[2] and false_label in phi_use[2]:
                 phi_name, ty, incoming, op_lines, ret_line = phi_use
                 true_ready = _entry_available_phi_value(
                     true_label, merge_label, incoming[true_label], block_map
@@ -1545,7 +1564,7 @@ def _rewrite_simple_conditional_blocks(
 
         if true_resolved == false_resolved:
             phi = _phi_ret(block_map.get(true_resolved))
-            if phi is not None and true_label in phi[2] and false_label in phi[2]:
+            if phi is not None and len(phi[2]) == 2 and true_label in phi[2] and false_label in phi[2]:
                 phi_name, ty, incoming = phi
                 true_ready = _entry_available_phi_value(
                     true_label, true_resolved, incoming[true_label], block_map
@@ -1568,7 +1587,7 @@ def _rewrite_simple_conditional_blocks(
                     new_body_lines.append(f"  ret {ty} %{phi_name}\n")
             else:
                 phi_use = _phi_single_use_chain_ret(block_map.get(true_resolved))
-                if phi_use is not None and true_label in phi_use[2] and false_label in phi_use[2]:
+                if phi_use is not None and len(phi_use[2]) == 2 and true_label in phi_use[2] and false_label in phi_use[2]:
                     phi_name, ty, incoming, op_lines, ret_line = phi_use
                     true_val = incoming[true_label]
                     false_val = incoming[false_label]

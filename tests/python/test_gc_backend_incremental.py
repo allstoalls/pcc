@@ -36,13 +36,37 @@ def _compile_probe(
     return exe
 
 
+# PCC_GC_DEFAULT_DEBT_THRESHOLD in pcc/py_runtime/src/py_gc_backend.c.  The
+# tuned value below is 16x smaller, which is 16x more incremental steps for the
+# same allocation volume, because a step fires when debt reaches the threshold.
+_DEFAULT_DEBT_THRESHOLD = 65536
+_TUNED_DEBT_THRESHOLD = 4096
+
+
+def _assert_debt_paced_steps(steps: int, allocs: int) -> None:
+    """The collector must pace on debt, not on allocations.
+
+    Two bounds, because one alone does not say much.  The ratio is the
+    behavioural one: the failure worth catching is a step per allocation, which
+    makes ``steps`` approach ``allocs``.  The absolute bound is the original
+    ``steps < 500``, scaled by the threshold ratio -- it was written against
+    the 65536-byte default and commit e02ae2cc switched both churn probes to
+    the 4096-byte tuned threshold without recalibrating it, so it became
+    unsatisfiable arithmetic rather than a regression signal.
+    """
+    assert steps > 0
+    assert steps < allocs // 10, (steps, allocs)
+    scaled = 500 * (_DEFAULT_DEBT_THRESHOLD // _TUNED_DEBT_THRESHOLD)
+    assert steps < scaled, (steps, scaled)
+
+
 def _run_with_backend_one(exe, *, tuned: bool = True):
     env = os.environ.copy()
     env["PCC_GC_BACKEND"] = "1"
     if tuned:
         env.update(
             {
-                "PCC_GC_DEBT_THRESHOLD": "4096",
+                "PCC_GC_DEBT_THRESHOLD": str(_TUNED_DEBT_THRESHOLD),
                 "PCC_GC_PAUSE": "200",
                 "PCC_GC_STEPMUL": "200",
             }
@@ -186,7 +210,7 @@ def test_incremental_backend_collects_container_churn_under_pcc_python_runtime(
             print("backend", pcc_gc_backend())
             print("sum", churn(20000))
             print("collect", gc.collect() >= 0)
-            print("allocs", pcc_gc_telemetry(0) > 0)
+            print("allocs", pcc_gc_telemetry(0))
             print("steps", pcc_gc_telemetry(5))
             print("debt", pcc_gc_telemetry(6))
 
@@ -203,16 +227,16 @@ def test_incremental_backend_collects_container_churn_under_pcc_python_runtime(
         result.returncode == 0
     ), f"rc={result.returncode}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     lines = result.stdout.strip().splitlines()
-    assert lines[:4] == [
-        "backend 1",
-        "sum 199990000",
-        "collect True",
-        "allocs True",
-    ]
+    assert lines[:3] == ["backend 1", "sum 199990000", "collect True"]
+    allocs = int(lines[3].split()[1])
     steps = int(lines[4].split()[1])
     debt = int(lines[5].split()[1])
-    assert steps < 500
-    assert debt < 65536
+    # Two managed containers per iteration is the floor; boxed elements may or
+    # may not be counted here depending on the int lane, so this is a lower
+    # bound and not an equality.
+    assert allocs >= 2 * 20000, allocs
+    _assert_debt_paced_steps(steps, allocs)
+    assert debt < _DEFAULT_DEBT_THRESHOLD
 
 
 def test_incremental_backend_keeps_open_file_rooted_across_container_churn(tmp_path):
@@ -365,6 +389,7 @@ def test_incremental_backend_pcc_python_reports_pause_budget_under_churn(tmp_pat
             print("sum", churn(20000))
             print("steps", pcc_gc_telemetry(5))
             print("pause", pcc_gc_telemetry(7))
+            print("allocs", pcc_gc_telemetry(0))
 
         if __name__ == "__main__":
             main()
@@ -382,7 +407,9 @@ def test_incremental_backend_pcc_python_reports_pause_budget_under_churn(tmp_pat
     assert lines[:2] == ["backend 1", "sum 400040000"]
     steps = int(lines[2].split()[1])
     pause_us = int(lines[3].split()[1])
-    assert 0 < steps < 500
+    allocs = int(lines[4].split()[1])
+    assert allocs >= 2 * 20000, allocs
+    _assert_debt_paced_steps(steps, allocs)
     assert 0 <= pause_us < 50000
 
 

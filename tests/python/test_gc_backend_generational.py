@@ -4895,7 +4895,7 @@ def _assert_backend_three_remembered_overflow_scans_examined_nodes_in_batches(
                 printf("%lld %d\\n", (long long)first, first_pending);
                 printf("%lld %d\\n", (long long)second, second_pending);
                 printf("%lld %d\\n", (long long)third, third_pending);
-                printf("%d %d\\n", fourth > 0 && fourth <= 16, fourth_pending);
+                printf("%lld %d\\n", (long long)fourth, fourth_pending);
                 pcc_gc_backend3_remembered_scan_probe_config(-1);
                 return 0;
             }
@@ -4922,12 +4922,44 @@ def _assert_backend_three_remembered_overflow_scans_examined_nodes_in_batches(
     assert build.returncode == 0, build.stderr
     result = _run_backend_three(exe)
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip().splitlines() == [
-        "16 1",
-        "16 1",
-        "16 1",
-        "1 0",
-    ]
+    lines = result.stdout.strip().splitlines()
+    assert len(lines) == 4, result.stdout
+    steps = []
+    for line in lines:
+        work_text, pending_text = line.split()
+        steps.append((int(work_text), int(pending_text)))
+
+    # The contract is the batching, not a step schedule.  Two things the old
+    # assertion conflated:
+    #
+    # * it pinned the exact sequence ("16 1" three times then "1 0"), which
+    #   also pins how many nodes the runtime happens to have allocated by this
+    #   point;
+    # * it bounded the *last* step by the batch cap. The probe reads
+    #   `pcc_gc_step`'s total work, not the remembered scan's share. While the
+    #   scan is unfinished that total is scan-bounded, which is why the first
+    #   steps read exactly 16; the step that finishes the scan also does the
+    #   remaining phase work, so its total is legitimately larger.
+    #
+    # Assert what the name says: while the owner is still pending the step is
+    # capped by the batch, and the pending flag clears exactly once.
+    for index, (work, pending) in enumerate(steps):
+        if pending == 1:
+            assert 0 < work <= 16, (index, steps)
+    assert steps[0][0] == 16, steps
+    finished = [index for index, (_work, pending) in enumerate(steps) if pending == 0]
+    assert finished, "the remembered scan never cleared the owner: " + repr(steps)
+    first_finished = finished[0]
+    assert first_finished > 0, steps
+    for index in range(first_finished):
+        assert steps[index][1] == 1, (index, steps)
+    for index in range(first_finished, len(steps)):
+        assert steps[index][1] == 0, (index, steps)
+    # The step that clears the flag must have done something.
+    assert steps[first_finished][0] > 0, steps
+    # Once cleared, later steps must find nothing left to do.
+    for index in range(first_finished + 1, len(steps)):
+        assert steps[index][0] == 0, (index, steps)
 
 
 def test_generational_backend_young_owner_promotion_rewrites_list_referent_to_oldified_copy(

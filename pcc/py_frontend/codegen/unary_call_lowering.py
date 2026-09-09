@@ -50,6 +50,9 @@ _CPY_BUILTIN_TYPE_NAMES = frozenset(
 
 class UnaryCallLoweringMixin:
     def _emit_unary(self, expr: UnaryOp) -> ir.Value:
+        if expr.op == "not":
+            truth = self._emit_condition_value(expr.operand)
+            return self.builder.not_(truth, name=self._fresh("not"))
         ty = expr.operand.ty
         if (
             getattr(self, "_freestanding_module", False)
@@ -192,37 +195,7 @@ class UnaryCallLoweringMixin:
                 return result
             ival = self._to_int64(operand, ty)
             return self.builder.not_(ival, name=self._fresh("bnot"))
-        if expr.op == "not":
-            if operand_is_cpy:
-                self._guard_cpy_value_not_null(operand)
-            operand_pcc_owned = (
-                isinstance(operand.type, ir.PointerType)
-                and not operand_is_cpy
-                and self._pcc_pointer_source_is_owned(expr.operand)
-            )
-            operand_pcc_pinned = (
-                isinstance(operand.type, ir.PointerType)
-                and not operand_is_cpy
-            )
-            operand_cleanup = ()
-            if operand_pcc_pinned:
-                self._gc_pin(operand)
-                operand_cleanup = ((operand, operand_pcc_owned),)
-            b = self._truthy(operand, ty)
-            if operand_pcc_pinned:
-                self._emit_post_call_err_check(
-                    None,
-                    pinned_release_on_error=operand_cleanup,
-                )
-            result = self.builder.not_(b, name=self._fresh("not"))
-            if operand_is_cpy and self._cpy_value_is_owned(operand):
-                self.builder.call(self.runtime["py_cpy_decref"], [operand])
-                self._forget_owned_cpy_value(operand)
-            if operand_pcc_pinned:
-                self._gc_unpin(operand)
-            if operand_pcc_owned:
-                self._gc_release(operand)
-            return result
+
         raise NotImplementedError(f"Layer 1 unary {expr.op!r} not supported")
 
     # -- Compare -------------------------------------------------------
@@ -309,6 +282,13 @@ class UnaryCallLoweringMixin:
                 [root_ptr, ir.Constant(result.type, None)],
             )
             self._emit_gc_frame_leave_lifo_for_slot(root_slot)
+        if root_result and isinstance(result.type, ir.PointerType):
+            # The declared user-function ABI returns one object owner. The
+            # expression can still have an imprecise Dyn type, and a GC-root
+            # reload creates a different SSA value. Preserve the producer's
+            # ownership proof so assignments and borrowing consumers release
+            # that owner instead of treating this result as a raw pointer.
+            self._note_owned_object_value(result)
         return result
 
     def _emit_arg_for_abi_param(
@@ -333,7 +313,8 @@ class UnaryCallLoweringMixin:
                     )
                 if isinstance(raw.type, ir.PointerType):
                     self._last_call_arg_owned_temp = (
-                        self._pcc_pointer_source_is_owned(ast_arg)
+                        self._owned_release_needed(raw, ast_arg)
+                        or self._pcc_pointer_source_is_owned(ast_arg)
                     )
                     return raw
                 self._last_call_arg_owned_temp = True
@@ -428,7 +409,10 @@ class UnaryCallLoweringMixin:
                 # operands and must release it on both the success and
                 # exception edges.
                 self._last_call_arg_owned_temp = True
-            elif self._pcc_pointer_source_is_owned(ast_arg):
+            elif (
+                self._owned_release_needed(v, ast_arg)
+                or self._pcc_pointer_source_is_owned(ast_arg)
+            ):
                 # The argument expression itself produced a fresh reference --
                 # ``f(T())``, ``f([T()])``.  Nothing else owns it, so the call
                 # boundary consumes it.  A borrowed argument such as a plain

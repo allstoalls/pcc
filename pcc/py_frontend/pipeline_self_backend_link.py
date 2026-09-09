@@ -227,6 +227,7 @@ def link_ir_texts_run(
     extra_link_args: tuple[str, ...] = (),
     tmp: str,
     profile,
+    consume_ir_texts: bool = False,
     resolve_self_link_mode,
     validate_pcc_self_link_surface,
     profile_begin,
@@ -297,6 +298,11 @@ def link_ir_texts_run(
         started = profile_begin(profile)
         host_results = [emit_asm(input_ir_texts[0], tmp, 0)]
         profile_end(profile, "link_self_emit_asm_host", started)
+        if consume_ir_texts:
+            input_ir_texts.clear()
+            ir_texts.clear()
+            text = ""
+            ir_text = ""
     else:
         started = profile_begin(profile)
         object_results = emit_objects(
@@ -308,6 +314,11 @@ def link_ir_texts_run(
             internal_link=signature_owned_by_pcc,
         )
         profile_end(profile, "link_self_emit_objects_host", started)
+        if consume_ir_texts:
+            input_ir_texts.clear()
+            ir_texts.clear()
+            text = ""
+            ir_text = ""
         obj_paths: list[str] = []
         for target_id, obj_path in object_results:
             if target_id == "self-aarch64-darwin-v0":
@@ -435,6 +446,7 @@ def link_ir_texts(
     extra_link_args: tuple[str, ...] = (),
     tmp_dir: Optional[str] = None,
     profile: Optional[dict] = None,
+    consume_ir_texts: bool = False,
     link_run,
 ) -> None:
     normalized_out = str(out_path)
@@ -455,6 +467,7 @@ def link_ir_texts(
                 extra_link_args=extra_link_args,
                 tmp=tmp,
                 profile=profile,
+                consume_ir_texts=consume_ir_texts,
             )
         return
     link_run(
@@ -468,4 +481,5 @@ def link_ir_texts(
         extra_link_args=extra_link_args,
         tmp=str(tmp_dir),
         profile=profile,
+        consume_ir_texts=consume_ir_texts,
     )

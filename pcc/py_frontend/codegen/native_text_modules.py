@@ -13,6 +13,7 @@ from .import_lowering import (
 )
 
 _I64 = ir.IntType(64)
+_CSTR = ir.IntType(8).as_pointer()
 _RE_LITERAL_SPLIT_META = frozenset(".^$*+?{}[]\\|()")
 _RE_CONSTS = {
     "I": 2,
@@ -831,6 +832,7 @@ class NativeTextModulesLoweringMixin:
                     ],
                     name=self._fresh("re.compile.obj"),
                 )
+                self._note_owned_object_value(result)
                 self._emit_post_call_err_check(getattr(expr, "span", None))
                 return result
             if (
@@ -846,11 +848,20 @@ class NativeTextModulesLoweringMixin:
                 # such as the self-backend IR parser off libpython when they
                 # assemble regexes from constant fragments.
                 pattern_obj = self._emit_as_object(pattern_expr)
+                self._gc_pin(pattern_obj)
                 result = self.builder.call(
                     self.runtime["py_re_compile_obj"],
                     [pattern_obj, ir.Constant(_I64, flags_value)],
                     name=self._fresh("re.compile.dynamic.obj"),
                 )
+                # This exact emission returns a NEW Pattern, even when the
+                # expression's inferred type is Dyn. Do not rely on an AST
+                # classifier that must also admit borrowed fallback paths.
+                self._note_owned_object_value(result)
+                self._gc_pin(result)
+                self._gc_unpin(pattern_obj)
+                self._gc_release_if_owned(pattern_obj, pattern_expr)
+                self._gc_unpin(result)
                 self._emit_post_call_err_check(getattr(expr, "span", None))
                 return result
             return None
@@ -1031,20 +1042,31 @@ class NativeTextModulesLoweringMixin:
     ) -> Optional[ir.Value]:
         if kwargs or len(args) < 3 or len(args) > 4:
             return None
-        count = (
-            ir.Constant(_I64, 0) if len(args) == 3 else self._emit_expr_as_i64(args[3])
-        )
+        roots = []
+        values = []
+        for index, argument in enumerate(args[:3]):
+            value = self._emit_expr_with_cpy_operand_cleanup(
+                argument, (), as_object=True, rooted_pcc_lifetimes=tuple(roots),
+            )
+            owned = self._owned_release_needed(value, argument)
+            root = self._enter_container_temp_root(value, self._fresh("re.sub.argument"))
+            roots.append((root, owned))
+            values.append(value)
+        count = ir.Constant(_I64, 0)
+        if len(args) == 4:
+            count = self._emit_expr_with_cpy_operand_cleanup(
+                args[3], (), as_i64=True, rooted_pcc_lifetimes=tuple(roots),
+            )
+        values = [self.builder.call(self.runtime["pcc_gc_load_ptr"],
+            [ir.Constant(_CSTR, None), self._as_gc_ptr(root)]) for root, _owned in roots]
         result = self.builder.call(
             self.runtime["py_re_engine_sub"],
-            [
-                self._emit_as_object(args[0]),
-                self._emit_as_object(args[1]),
-                self._emit_as_object(args[2]),
-                count,
-                ir.Constant(_I64, 0),
-            ],
+            [values[0], values[1], values[2], count, ir.Constant(_I64, 0)],
             name=self._fresh("re.sub.engine"),
         )
+        self._gc_pin(result)
+        self._release_rooted_pcc_lifetimes(tuple(roots))
+        self._gc_unpin(result)
         # This ABI always returns a new string reference. Record its owner
         # at emission: raw-scaffold code can infer a Dyn result and otherwise
         # lose the owner when assigning or copying the replacement string.

@@ -550,11 +550,15 @@ def main(argv: list[str] | None = None) -> int:
             sign_started_ns = 0
 
     def finalize_for_link(merged, **kwargs):
+        # Transfer the temporary into the finalizer without retaining another
+        # caller-local owner throughout allocation of the executable image.
+        pending = [merged]
+        del merged
         sign_before = phase_ns["sign"]
         started_ns = time.perf_counter_ns()
         try:
             return link_prepared_executable(
-                merged,
+                pending.pop(),
                 phase_callback=link_phase_callback,
                 **kwargs,
             )
@@ -580,9 +584,16 @@ def main(argv: list[str] | None = None) -> int:
             )
         validate_image(image)
     elif session is None:
-        merged = prepare_for_link(objects, archives=archives)
+        pending = [prepare_for_link(objects, archives=archives)]
+        # Cold finalization consumes only the prepared representation. Input
+        # codec buffers and assembly results otherwise coexist with all of
+        # its output buffers until this driver returns.
+        objects.clear()
+        natives_by_index.clear()
+        encoded_results.clear()
+        archives.clear()
         image = finalize_for_link(
-            merged,
+            pending.pop(),
             entry=args.entry,
             identifier=identifier,
         )

@@ -52,6 +52,7 @@ from pcc.backend.precise_stackmap import (
 )
 from pcc.backend.self_backend_aarch64_darwin import emit_aarch64_darwin_asm
 from pcc.backend.self_backend_ir import (
+    GlobalDef,
     ParsedBlock,
     ParsedFunction,
     ParsedInstr,
@@ -1163,3 +1164,122 @@ def test_main_planner_materializes_mutable_root_state_only_for_protocol_blocks()
     assert "active = {group.key: group for group in entry_state}" not in source
     assert "if call_header.third & CALL_FLAG_FRAME_PROTOCOL:" in source
     assert "active_groups = tuple(active.values())" in source
+
+
+# ---------------------------------------------------------------------------
+# A frame the runtime registry owns, not this function's machine frame.
+#
+# ``pcc_gc_frame_enter`` is public runtime API reachable from ``pcc.extern``,
+# and the GC probes under ``tests/python/test_gc_backend_*.py`` use it that
+# way: they ``malloc`` a frame map and a slots array and register them by
+# hand.  The precise stack-map analysis read the frame map's root count before
+# it had established whose frame this was, so a run-time-computed map hit
+# ``frame map ... is not one direct global`` and the whole program failed to
+# compile.  Both the slot-group builder and the frame-leave walker already
+# declined to model registry-owned slot arrays; only the enter path did not.
+#
+# The compiler's own frame maps are always internal constant globals built by
+# ``ownership_lowering._gc_one_slot_frame_map``, so keying the decision on the
+# map keeps every compiler-emitted frame on the unchanged fail-closed path.
+# ``test_..._still_fails_closed`` is the half that locks that down.
+# ---------------------------------------------------------------------------
+
+_STACKMAP_TARGETS = ("aarch64-darwin", "x86_64-linux")
+
+_SM_PTR = TypeDesc(kind="ptr")
+_SM_I64 = TypeDesc(kind="int", width=64)
+_SM_VOID = TypeDesc(kind="void")
+
+
+def _sm_call(callee, args, dest=None, ret_type=None):
+    return ParsedInstr(
+        "call",
+        (
+            dest,
+            _SM_VOID if ret_type is None else ret_type,
+            callee,
+            False,
+            tuple(args),
+            len(args),
+            False,
+            tuple(0 for _ in args),
+        ),
+    )
+
+
+def _sm_frame_function(name, frame_map_operand, *, with_leave=True):
+    instructions = [
+        _sm_call("malloc", ((_SM_I64, "4"),), dest="%heap.map", ret_type=_SM_PTR),
+        _sm_call("malloc", ((_SM_I64, "8"),), dest="%heap.slots", ret_type=_SM_PTR),
+        _sm_call(
+            "pcc_gc_frame_enter",
+            ((_SM_PTR, frame_map_operand), (_SM_PTR, "%heap.slots")),
+        ),
+    ]
+    if with_leave:
+        instructions.append(
+            _sm_call("pcc_gc_frame_leave", ((_SM_PTR, "%heap.slots"),))
+        )
+    return ParsedFunction(
+        name=name,
+        ret_type=_SM_VOID,
+        args=[],
+        is_global=True,
+        is_vararg=False,
+        blocks=[
+            ParsedBlock(
+                name="entry",
+                instructions=instructions,
+                terminator=ParsedInstr("ret", (_SM_VOID, "")),
+            )
+        ],
+    )
+
+
+_SM_FRAME_MAP_GLOBAL = GlobalDef(
+    name=".pcc.gc.frame.map.1",
+    type=TypeDesc(kind="int", width=32),
+    initializer="1",
+    is_constant=True,
+    is_internal=True,
+)
+
+
+@pytest.mark.parametrize("target", _STACKMAP_TARGETS)
+def test_a_heap_frame_map_is_registry_owned_and_does_not_stop_the_build(target):
+    func = _sm_frame_function("user_registers_its_own_frame", "%heap.map")
+    plan = precise_stackmaps.build_function_stack_map_plan(
+        func,
+        [_SM_FRAME_MAP_GLOBAL],
+        target=target,
+    )
+    assert plan.function_name == "user_registers_its_own_frame"
+    # Registry-owned roots are not locations in this machine frame, so the
+    # plan must claim none of them rather than inventing an offset.
+    for record in plan.records:
+        assert record.locations == ()
+
+
+@pytest.mark.parametrize("target", _STACKMAP_TARGETS)
+def test_a_compiler_shaped_frame_with_an_untraceable_slots_pointer_still_fails_closed(
+    target,
+):
+    """The half that must not become permissive.
+
+    A global frame map means the compiler emitted this frame, so its slots
+    array is an alloca by construction.  If the alias resolver cannot get
+    there, the analysis has lost roots and must say so -- silently ignoring it
+    would drop them from the stack map and let a moving collector miss them.
+    """
+
+    func = _sm_frame_function(
+        "compiler_frame_with_lost_slots",
+        "@.pcc.gc.frame.map.1",
+        with_leave=False,
+    )
+    with pytest.raises(BackendUnavailable, match="stack alloca"):
+        precise_stackmaps.build_function_stack_map_plan(
+            func,
+            [_SM_FRAME_MAP_GLOBAL],
+            target=target,
+        )

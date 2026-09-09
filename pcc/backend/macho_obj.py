@@ -263,7 +263,13 @@ def _align_up(value: int, align_log2: int) -> int:
     return (value + mask) & ~mask
 
 
-def _validate_section(sec: Section) -> None:
+def _validate_section(sec: Section, *, relocations=None, relocation_count=None) -> None:
+    # Internal indexed-object validation supplies a fresh row iterator and its
+    # exact count. Ordinary object emission continues to use the stored tuple.
+    if relocations is None:
+        relocations = sec.relocations
+    if relocation_count is None:
+        relocation_count = len(sec.relocations)
     if (
         not isinstance(sec.align_log2, int)
         or isinstance(sec.align_log2, bool)
@@ -283,7 +289,7 @@ def _validate_section(sec: Section) -> None:
             raise MachOEmitError(
                 f"zerofill section {sec.sectname} needs a positive size"
             )
-        if sec.relocations:
+        if relocation_count:
             raise MachOEmitError(
                 f"zerofill section {sec.sectname} cannot have relocations"
             )
@@ -319,12 +325,12 @@ def _validate_section(sec: Section) -> None:
                 "__mod_init_func must be pointer-aligned whole 64-bit slots"
             )
         pointer_relocs = {
-            r.offset for r in sec.relocations
+            r.offset for r in relocations
             if r.type == spec.ARM64_RELOC_UNSIGNED
             and not r.pcrel and r.length == 3
         }
         expected = set(range(0, len(sec.data), 8))
-        if pointer_relocs != expected or len(sec.relocations) != len(expected):
+        if pointer_relocs != expected or relocation_count != len(expected):
             raise MachOEmitError(
                 "every __mod_init_func slot needs exactly one 64-bit "
                 "UNSIGNED relocation"
@@ -344,7 +350,7 @@ def _validate_section(sec: Section) -> None:
                 "arm64 __compact_unwind must contain aligned 32-byte rows"
             )
         function_relocs = {
-            r.offset for r in sec.relocations
+            r.offset for r in relocations
             if r.type == spec.ARM64_RELOC_UNSIGNED
             and not r.pcrel and r.length == 3
         }
@@ -379,8 +385,8 @@ def _validate_section(sec: Section) -> None:
             _scanned, address_offsets = _scan_stack_map_section(sec.data)
         except PreciseStackMapError as exc:
             raise MachOEmitError(f"invalid __pcc_stackmaps payload: {exc}") from exc
-        relocation_by_offset = {relocation.offset: relocation for relocation in sec.relocations}
-        if len(relocation_by_offset) != len(sec.relocations):
+        relocation_by_offset = {relocation.offset: relocation for relocation in relocations}
+        if len(relocation_by_offset) != relocation_count:
             raise MachOEmitError("duplicate __pcc_stackmaps relocation offset")
         if set(relocation_by_offset) != set(address_offsets):
             raise MachOEmitError(

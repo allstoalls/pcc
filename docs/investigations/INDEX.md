@@ -3,6 +3,8 @@
 Auto-generated from `docs/investigations/*.md`.
 Each entry shows the doc title and a one-line summary pulled from the first prose paragraph.
 
+Historical search index, not current implementation truth. Start with source and execution; check a matching experiment's revision and later corrections before adopting its conclusion.
+
 Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.py`.
 
 ## codegen
@@ -341,6 +343,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - Backend #4 now relocates scalar objects, lists, tuples, sets, and Tasks. A dict
 - [gc-backend4-forwarded-source-payload-retirement.md](gc-backend4-forwarded-source-payload-retirement.md) — **Backend #4 forwarded sources retain copied payload ownership**
   - Backend #4 relocation gives the target an independent ownership share for every
+- [gc-backend4-forwarding-retirement-starvation.md](gc-backend4-forwarding-retirement-starvation.md) — **backend 4 forwarding entries never retire once the relocation set keeps a residue**
+  - Under `PCC_GC_BACKEND=4`, a program that allocates 64 objects and then steps the
 - [gc-backend4-forwarding-table-concurrency.md](gc-backend4-forwarding-table-concurrency.md) — **Backend #4 forwarding table must be read under graph lock**
   - The pcc-Python runtime mirror protects public forwarding operations with the
 - [gc-backend4-free-hook-side-table-concurrency.md](gc-backend4-free-hook-side-table-concurrency.md) — **Backend #4 free hook must lock side-table removal**
@@ -920,6 +924,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - The new fragment label producer interns arbitrary text. Publication passes
 - [native-fragment-pco-label-publication-regression.md](native-fragment-pco-label-publication-regression.md) — **native fragment PCO label publication adds compute work**
   - The native pointer-reload fragment vertical must preserve Python semantics,
+- [native-http-compiler-memory.md](native-http-compiler-memory.md) — **native HTTP compilation exceeds 6 GiB**
+  - active — 2026-09-09. The earlier combined pcc1 completed the HTTP example
 - [native-ir-class-set-in-global-bridge.md](native-ir-class-set-in-global-bridge.md) — **IR class set in the integer global bridge fails under pcc1**
   - The gateway facade re-exports PCC_TLS_REQUIRED_CAPABILITIES, computed by
 - [native-json-load-file-no-libpython.md](native-json-load-file-no-libpython.md) — **native `json.load(file)` falls into a no-libpython function stub**

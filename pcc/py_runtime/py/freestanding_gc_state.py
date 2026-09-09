@@ -35,6 +35,10 @@ define_global_i32("py_gc_callbacks_firing", 0)
 
 # Shared selector, accounting, pacing, and configuration state.
 define_global_i32("pcc_gc_backend_selected", 0)
+# Mirror of py_gc_backend.c's pcc_gc_unmanaged_refcount_ops.  i64 because it
+# counts every refcount operation that missed provenance, which on a long-lived
+# service is not bounded by anything an i32 covers.
+define_global_i64("pcc_gc_unmanaged_refcount_ops", 0)
 define_global_i32("pcc_gc_metric_alloc", 0)
 define_global_i32("pcc_gc_metric_store", 0)
 define_global_i32("pcc_gc_metric_load", 0)

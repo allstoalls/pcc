@@ -96,19 +96,37 @@ class ExprHelperLoweringMixin:
         key_expr,
         val_expr,
     ) -> None:
-        if kind == "dict":
-            k_obj = self._emit_expr_as_pcc_object(key_expr)
-            v_obj = self._emit_expr_as_pcc_object(val_expr)
-            self.builder.call(
-                self.runtime["py_dict_set"],
-                [container, k_obj, v_obj],
+        expressions = (key_expr, val_expr) if kind == "dict" else (elt_expr,)
+        roots = []
+        operands = [container]
+        for expression in expressions:
+            value = self._emit_expr_with_cpy_operand_cleanup(
+                expression, (), as_pcc_object=True,
+                rooted_pcc_lifetimes=tuple(roots),
             )
-            self._emit_post_call_err_check(getattr(key_expr, "span", None))
-            return
-        v_obj = self._emit_expr_as_pcc_object(elt_expr)
-        fn_name = "py_list_append" if kind == "list" else "py_set_add"
-        self.builder.call(self.runtime[fn_name], [container, v_obj])
-        self._emit_post_call_err_check(getattr(elt_expr, "span", None))
+            owned = self._owned_release_needed(value, expression) or (
+                self._container_store_temp_needs_release(expression, expression.ty, False)
+            )
+            root = self._enter_container_temp_root(value, self._fresh("comp.element"))
+            roots.append((root, owned))
+            operands.append(value)
+        # Insertion retains its operands. Balance the expression owners on
+        # success and on hash/equality errors; keep a dict key alive while its
+        # value is evaluated (which may rebind the key's source or raise).
+        old_err = self._current_try_err_block()
+        target = old_err if old_err is not None else self._ensure_fn_err_exit()
+        self._try_err_block = self._make_cpy_operand_cleanup_block(
+            (), (), target, "comp.element.error", rooted_pcc_lifetimes=tuple(roots),
+        )
+        try:
+            fn_name = "py_dict_set" if kind == "dict" else (
+                "py_list_append" if kind == "list" else "py_set_add"
+            )
+            self.builder.call(self.runtime[fn_name], operands)
+            self._emit_post_call_err_check(getattr(expressions[0], "span", None))
+        finally:
+            self._try_err_block = old_err
+        self._release_rooted_pcc_lifetimes(tuple(roots))
 
     def _emit_comprehension_level(
         self,

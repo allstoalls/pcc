@@ -1,4 +1,4 @@
-import asyncio, socket, urllib.parse, time, re, base64, hmac, struct, hashlib, io, os
+import asyncio, socket, urllib.parse, time, re, base64, hmac, struct, hashlib, io, os, errno
 from . import admin
 HTTP_LINE = re.compile('([^ ]+) +(.+?) +(HTTP/[^ ]+)$')
 HTTP_PREFIXES = (b'GET ', b'HEAD', b'POST', b'PUT ', b'DELE', b'CONN', b'OPTI', b'TRAC', b'PATC')
@@ -226,6 +226,37 @@ class Socks4(BaseProtocol):
         assert await reader_remote.read_n(2) == b'\x00\x5a'
         await reader_remote.read_n(6)
 
+class Socks5Error(ConnectionError):
+    def __init__(self, reply):
+        self.reply = reply if 1 <= reply <= 8 else 1
+        super().__init__(f'SOCKS5 upstream failure: {self.reply}')
+
+class Socks5Reply:
+    def __init__(self, writer, address):
+        self.writer = writer
+        self.address = address
+        self.sent = False
+    async def __call__(self, upstream_writer):
+        self.writer.write(b'\x05\x00\x00' + self.address)
+        self.sent = True
+    async def failed(self, error):
+        if self.sent:
+            return
+        if isinstance(error, Socks5Error):
+            reply = error.reply
+        elif isinstance(error, socket.gaierror):
+            reply = 4
+        elif isinstance(error, ConnectionRefusedError):
+            reply = 5
+        elif isinstance(error, (TimeoutError, asyncio.TimeoutError)):
+            reply = 4
+        else:
+            reply = {errno.ENETUNREACH: 3, errno.EHOSTUNREACH: 4,
+                     errno.EACCES: 2, errno.EPERM: 2}.get(getattr(error, 'errno', None), 1)
+        self.writer.write(b'\x05' + bytes([reply]) + b'\x00\x01' + b'\x00' * 6)
+        self.sent = True
+        await self.writer.drain()
+
 class Socks5(BaseProtocol):
     async def guess(self, reader, **kw):
         header = await reader.read_w(1)
@@ -237,6 +268,7 @@ class Socks5(BaseProtocol):
         user = authtable.authed()
         if users and (not user or b'\x00' not in methods):
             if b'\x02' not in methods:
+                writer.write(b'\x05\xff')
                 raise Exception(f'Unauthorized SOCKS')
             writer.write(b'\x05\x02')
             assert (await reader.read_n(1))[0] == 1, 'Unknown SOCKS auth'
@@ -249,14 +281,16 @@ class Socks5(BaseProtocol):
         elif users and not user:
             raise Exception(f'Unauthorized SOCKS')
         else:
+            if b'\x00' not in methods:
+                writer.write(b'\x05\xff')
+                raise Exception('No supported SOCKS authentication method')
             writer.write(b'\x05\x00')
         if users:
             authtable.set_authed(user)
         assert await reader.read_n(3) == b'\x05\x01\x00', 'Unknown SOCKS protocol'
         header = await reader.read_n(1)
         host_name, port, data = await socks_address_stream(reader, header[0])
-        writer.write(b'\x05\x00\x00' + header + data)
-        return user, host_name, port
+        return user, host_name, port, Socks5Reply(writer, header + data)
     async def connect(self, reader_remote, writer_remote, rauth, host_name, port, **kw):
         if rauth:
             writer_remote.write(b'\x05\x01\x02')
@@ -267,7 +301,10 @@ class Socks5(BaseProtocol):
             writer_remote.write(b'\x05\x01\x00')
             assert await reader_remote.read_n(2) == b'\x05\x00'
         writer_remote.write(b'\x05\x01\x00\x03' + packstr(host_name.encode()) + port.to_bytes(2, 'big'))
-        assert await reader_remote.read_n(3) == b'\x05\x00\x00'
+        response = await reader_remote.read_n(3)
+        assert response[0] == 5 and response[2] == 0, 'Invalid SOCKS reply'
+        if response[1]:
+            raise Socks5Error(response[1])
         header = (await reader_remote.read_n(1))[0]
         await reader_remote.read_n(6 if header == 1 else (18 if header == 4 else (await reader_remote.read_n(1))[0]+2))
     def udp_accept(self, data, **kw):
@@ -338,7 +375,11 @@ class HTTP(BaseProtocol):
             return user, host_name, port, connected
     async def connect(self, reader_remote, writer_remote, rauth, host_name, port, **kw):
         writer_remote.write(f'CONNECT {host_name}:{port} HTTP/1.1\r\nHost: {host_name}:{port}'.encode() + (b'\r\nProxy-Authorization: Basic '+base64.b64encode(rauth) if rauth else b'') + b'\r\n\r\n')
-        await reader_remote.read_until(b'\r\n\r\n')
+        response = await reader_remote.read_until(b'\r\n\r\n')
+        status = response.split(b'\r\n', 1)[0].split()
+        if (len(status) < 2 or not status[0].startswith(b'HTTP/')
+                or not status[1].isdigit() or not 200 <= int(status[1]) < 300):
+            raise ConnectionError('Upstream HTTP CONNECT rejected or returned an invalid response')
     async def http_channel(self, reader, writer, stat_bytes, stat_conn):
         try:
             stat_conn(1)

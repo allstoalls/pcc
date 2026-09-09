@@ -32,6 +32,7 @@ from ..py_ast import (
 from . import marshal
 from .builtin_exceptions import BUILTIN_EXC_TAG as _BUILTIN_EXC_TAG
 from .errors import L1CodegenError
+from .for_loop_lowering import _for_prepare_owned_object_target, _for_store_owned_target
 from .layer1_support import _dataclass_field_names, _dataclass_field_value
 
 
@@ -363,6 +364,14 @@ class ComprehensionLoweringMixin:
         else:
             raise NotImplementedError(f"comprehension kind {kind!r} not supported")
 
+        self._gc_pin(container)
+        outer_error = self._current_try_err_block()
+        outer_cpy_error = getattr(self, "_cpy_operand_cleanup_block", None)
+        error_target = outer_error if outer_error is not None else self._ensure_fn_err_exit()
+        self._try_err_block = self._make_cpy_operand_cleanup_block(
+            (), (), error_target, "comp.result.error", ((container, True),),
+        )
+        self._cpy_operand_cleanup_block = self._try_err_block
         try:
             self._emit_comprehension_level(
                 kind,
@@ -375,6 +384,8 @@ class ComprehensionLoweringMixin:
                 val_expr if kind == "dict" else None,
             )
         finally:
+            self._try_err_block = outer_error
+            self._cpy_operand_cleanup_block = outer_cpy_error
             # Restore the enclosing scope's bindings for every comprehension
             # target name: delete names that did not exist before the
             # comprehension, and reinstate the prior slot/type for names that
@@ -415,6 +426,8 @@ class ComprehensionLoweringMixin:
                         exact_flags.pop(nm, None)
                     else:
                         exact_flags[nm] = prior_exact
+        self._gc_unpin(container)
+        self._note_owned_object_value(container)
         return container
 
     def _collect_comprehension_target_names(self, target, out: set) -> None:
@@ -527,8 +540,7 @@ class ComprehensionLoweringMixin:
 
         if_exits: list = []
         for cond_expr in if_exprs:
-            cond_val = self._emit_expr(cond_expr)
-            cond_b = self._truthy(cond_val, cond_expr.ty)
+            cond_b = self._emit_condition_value(cond_expr)
             keep_bb = self.current_function.append_basic_block(
                 name=self._fresh(f"{kind}comp.keep"),
             )
@@ -710,6 +722,13 @@ class ComprehensionLoweringMixin:
             iter_val,
             iter_ty,
         )
+        source_owned = self._owned_release_needed(iter_val, generators[idx][1])
+        source_root = self._enter_container_temp_root(iter_obj, self._fresh("comp.source"))
+        outer_error = self._current_try_err_block()
+        outer_cpy_error = getattr(self, "_cpy_operand_cleanup_block", None)
+        cleanup_bb = fn.append_basic_block(self._fresh("comp.loop.error"))
+        self._try_err_block = cleanup_bb
+        self._cpy_operand_cleanup_block = cleanup_bb
         if isinstance(iter_ty, ListType):
             len_helper = "py_list_len"
             get_helper = "py_list_get"
@@ -727,15 +746,14 @@ class ComprehensionLoweringMixin:
         self.builder.store(ir.Constant(_I64, 0), idx_slot)
 
         target_ident = target.ident
-        if isinstance(elem_ty, DynType):
-            target_ir_ty = _CSTR
+        target_ir_ty = self._storage_ir_type(elem_ty)
+        if isinstance(target_ir_ty, ir.PointerType):
+            target_slot = _for_prepare_owned_object_target(self, target_ident, elem_ty)
+            alloca = target_slot[0]
         else:
-            target_ir_ty = self._map_type(elem_ty)
-        alloca = self._alloca_in_entry(
-            target_ir_ty,
-            name=f"{target_ident}.addr",
-        )
-        self.env[target_ident] = (alloca, target_ir_ty, elem_ty)
+            target_slot = None
+            alloca = self._alloca_in_entry(target_ir_ty, name=f"{target_ident}.addr")
+            self.env[target_ident] = (alloca, target_ir_ty, elem_ty)
 
         cond_bb = fn.append_basic_block(name=self._fresh("comp.idx.cond"))
         body_bb = fn.append_basic_block(name=self._fresh("comp.idx.body"))
@@ -757,8 +775,9 @@ class ComprehensionLoweringMixin:
             [iter_obj, cur],
             name=self._fresh("comp.elem"),
         )
-        if isinstance(elem_ty, DynType):
-            self.builder.store(elem_obj, alloca)
+        self._emit_post_call_err_check(None)
+        if target_slot is not None:
+            _for_store_owned_target(self, target_ident, target_slot, elem_obj)
         else:
             native_val = None
             if self._is_valueclass_payload_type(elem_ty):
@@ -775,6 +794,7 @@ class ComprehensionLoweringMixin:
                     elem_ty,
                 )
             self.builder.store(native_val, alloca)
+            self._gc_release(elem_obj)
         if self._is_valueclass_payload_type(elem_ty):
             self._ensure_valueclass_payload_gc_roots(
                 target_ident,
@@ -802,7 +822,21 @@ class ComprehensionLoweringMixin:
         )
         self.builder.store(nxt, idx_slot)
         self.builder.branch(cond_bb)
+        self._try_err_block = outer_error
+        self._cpy_operand_cleanup_block = outer_cpy_error
+        self.builder.position_at_end(cleanup_bb)
+        if target_slot is not None:
+            self.builder.call(self.runtime["pcc_gc_store_root"], [self._as_gc_ptr(alloca), ir.Constant(_CSTR, None)])
+            flag = self._ensure_owned_local_flag(target_ident, alloca)
+            self.builder.store(ir.Constant(_I1, 0), flag)
+        self._release_rooted_pcc_lifetimes(((source_root, source_owned),))
+        self.builder.branch(outer_error if outer_error is not None else self._ensure_fn_err_exit())
         self.builder.position_at_end(end_bb)
+        if target_slot is not None:
+            self.builder.call(self.runtime["pcc_gc_store_root"], [self._as_gc_ptr(alloca), ir.Constant(_CSTR, None)])
+            flag = self._ensure_owned_local_flag(target_ident, alloca)
+            self.builder.store(ir.Constant(_I1, 0), flag)
+        self._release_rooted_pcc_lifetimes(((source_root, source_owned),))
     def _emit_comprehension_obj_indexed(
         self,
         target: Name,
@@ -1110,6 +1144,8 @@ class ComprehensionLoweringMixin:
                 [iter_val],
                 name=self._fresh("comp.dict.keys"),
             )
+            self._note_owned_object_value(keys_val)
+            self._gc_release_if_owned(iter_val, iter_e)
             synthetic_ty = ListType(name="list", elem=iter_ty.key)
             self._emit_comprehension_indexed(
                 target,

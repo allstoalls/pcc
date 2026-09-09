@@ -451,11 +451,11 @@
   "member_count": 170,
   "members": [
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "09d611382c96d787f9dc75b5b6f879746c835a0cadd9b0d38ef50a1a9dd4ab06",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "58c8b37653c574dde57cd71fab50d405848d24639a2017707bcd414161408529",
       "member": "py_tuple.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "13c3e1505f2388f8e433bf7cb3434e215b5350bf276b794156e3a794876a4d7c",
+      "object_sha256": "ce57c90dafe9d87b5b64297e64ddfe8ca891d6f8cdbe939f4a6d6f9cc851ab11",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_tuple.py",
@@ -465,11 +465,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "30be59f65331e3ec02f8f215d13622d1fd115b77f16e6c299d4938aa900b2ba3",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "23da8902e7ddebd922f9c508b57dfd21d793a49c0bea0498d7df700ebcd700b2",
       "member": "py_tuple_slice.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "d08be1e7c3e31ea4c175a75cdade6b3c1aaeffdb88be3619644c294d17f18bad",
+      "object_sha256": "6834e09bf275c00d56d62b0023e3fca1b3f719a08912a4556f27c9ce68ba92d9",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_tuple_slice.py",
@@ -479,11 +479,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "99a954c7ec92185a76e2a3aef05db30519af45d08776cb9d25b9fbb67fe6180d",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "f7c69b52d1a5f887d3a52d2daf3f05d2041fe123985e7cd3f0deedb41f1e964e",
       "member": "py_obj_stubs.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "58fffcc91537dedc488b26bc3a1fe9d7864494768d010f69179e1f112be179bc",
+      "object_sha256": "b79c909887e2667da8aa2e4dbe6f367e7408ec03b0227443b42133aefaaa3fa0",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_obj_stubs.py",
@@ -493,11 +493,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "b1baf604e59d0b80ebd8edcba4c876d65d8a68fb011f48c71c4520654dbe5ec9",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "175c5964ad7fea7cca0bd6124807e725495dbadd0aa8ffdb2ce39b1eb87c2a1b",
       "member": "py_exc_tls.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "e931cb499011504fa6c3949bf84f4afb33e039537043b56ee9163f3176af5c38",
+      "object_sha256": "5f00834dbe45888d0d44a423c01e566f08abc7c3fdabfb17e757b9f5867b76eb",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_exc_tls.py",
@@ -507,8 +507,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "605d555e9a94837dde8863c3280a89f2fd7637aa45493b81ca09788f725e69ad",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "a1036a29ae3aa0e79446797240324ae190e0cdb75248f0e734291d11ed20210b",
       "member": "py_exc_objects.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "3a171035d65f71e53c14ff2fcf3f4963ceaaa29ebaccf0e6322ceba004bf4b90",
@@ -521,11 +521,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "abd8f1e02f77e4a2efb09a575cb53219fed7f9aaffeb27e9521349de1b6d8c55",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "5222e60efe276ddfc95c2d1f9a2be6130876fc62f2530e6bfe1c34a490fb819f",
       "member": "py_exc_match.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "a3c4edeed714692319b172b42dcf2e8d624313474ea6b7a08063ec70bfc40487",
+      "object_sha256": "f37d59fdc33e3776a45e30cb388dc1d77fb97a2055f8da3c3f3e68319fce4cf0",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_exc_match.py",
@@ -535,11 +535,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "fe41c6cdf532c1bf6b7c4a188a5961786437c22ae00b3701137c182c0ed35b42",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "a3ef3954ccf73d7fb3119956fcaee3874e920de3c28ff33370861931ecb11c8b",
       "member": "py_exc_table.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "ba3a8a298cf0872b5039ef0edaa17991095dc4de3750e9e727daa278d4073f2d",
+      "object_sha256": "5f5111daf57f91c7dd2cc1e8eb92f3de0789053a8d0c25b2a75ac4e1535e9f79",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_exc_table.py",
@@ -549,11 +549,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "f93feef94370f8c7f6f1e60bf5a42cc26646939fc5e77f551ee2c40263cd8600",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "85339977159cbe17cf8f85fca7dd1e3084fa9ae4323fc76dbeb4af2af175d9f5",
       "member": "py_exc_traceback.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "f24c39a8672ff12a7d2da6e61a2f73843aeadcf2d6f9396be475d1020e819d2a",
+      "object_sha256": "5237da25db6f41fddd9d7499b56cdc19419028b1935d036376e62bd1f45c6848",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_exc_traceback.py",
@@ -563,8 +563,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "585065a8cc12a84b9e0dd06530af10b47ca8ef50f3c611f775f99f3a70185d92",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "fd243aa5f6cda4a3454092e616a69c47f62bc8a44fef98c0a005372e84faad70",
       "member": "py_obj_gc.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "95fc3115a66546f5bd18224f39e7815fc160424901bda8cef37bc737b0926a75",
@@ -577,50 +577,50 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "d78d3fa3cd4f23615bb86e9e66c6c5154cbfcc2f01fb47948f0f454fd0783e41",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "7a13f8da23c360f51f0116141610dbd34ec240148c042cf1903f74d15048ad4a",
       "member": "py_gc_telemetry.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "f0fc1ea639e21a8108a61634994c31ee8199ab1b593ac5ec2c7dd51767856199",
+      "object_sha256": "360155e0894d58e32f369080148b3d31865624a75ce3e96d40dff8f026b3faf6",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_gc_telemetry.py",
       "source_kind": "pcc-python",
-      "source_sha256": "23782d55365ffa697f07bbfec019e7ee2495e56ef208d812bf53e626605b1953",
+      "source_sha256": "68d5b6e3c39a9b38d6bab404d5e8c4bfd1b12c1d97095455878ff389ed67ec0b",
       "target_triple": "arm64-apple-darwin25.5.0",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "7a6aa9fd8105d67ccfa6cffb0c2e62965cd544e367c9387bb19a3fe2f0496c70",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "7bc40620cd95fae32c80e1d0bb86c4dc629a58671900cabf59ae7066a629c767",
       "member": "py_gc_backend.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "e2bd7ccdfc1bbb8d468729c0345a6033080cc916b915061a26859623cd6f91bd",
+      "object_sha256": "6cea477c9b29b17dfef78cbc9d5a684d75156d890d1c33e18837416a47124191",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_gc_backend.py",
       "source_kind": "pcc-python",
-      "source_sha256": "568b1c8b330615a46b72d51c1d58378a9083a31392fad5eae0ffdf2083fc4517",
+      "source_sha256": "e4b4485ba756ac88f6abb6ddd061725dd1e9b02a89758a3940474df27b2adcf2",
       "target_triple": "arm64-apple-darwin25.5.0",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "9e4b29d00b73754a9e7d96083bf6149117ed1f9e21d70592e401a4256b38cadf",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "48eb0cbebc12488180899955d2124de595090f3c70da587973d2a0ded294cb4b",
       "member": "py_set.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "eb21752e8cbe4ad37da3744d5b8d4e65b1cdd8909a25faeba8d677c09e941789",
+      "object_sha256": "fed42b490d3e01b251400f5635067133898355d7fddf542b3dfd46838cecd370",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_set.py",
       "source_kind": "pcc-python",
-      "source_sha256": "b8b85944e88c3bba6cd52bd414f4744211df2de7b794f64115bac4dfdc1aac78",
+      "source_sha256": "1fd87d94fe4e749fb606056c830d594c335ada7ffeea422001331abaec37fe53",
       "target_triple": "arm64-apple-darwin25.5.0",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "1194702b7b4e829459747e8b1534cc6f36b2c3960c2e4d3ce84b074cd68b2a8a",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "4adce1afdd937d4492ad277ed8b9ff508ecf73bdc6974c2ac54c29390e48fc00",
       "member": "py_os_env.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "19a895c64e10d758fa449dc89d90e9d52f6468748a56facde51c4f05b2e92a05",
@@ -633,8 +633,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "62d0efdaea37ed7a31acb96d2831c3b2c6e19256036bf4c426f91dc15cab5bb3",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "808e8d681e6979fca440524aa0ce6b01e5db33a514aeec119719661c28b1f8d8",
       "member": "py_os_system.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "0aff3a376013306afbc5a24c7b63be547de80fb0ccb3bd4cc12b9d8088133c05",
@@ -647,11 +647,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "329de733210fc33a971f5817a932b4be252fde5e6d5a1808bed664f1b6c9ec16",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "fead10c4ee3720b4f9b72d97dc9b6a8f2b3f5b65f96c0e4aedb385153bf99765",
       "member": "py_os_path.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "05da260aa3aba7b0f9ddadc08d67b75b47f4d251858aac18d33cb92c36d06f12",
+      "object_sha256": "3ce0ce80168b43c7ed4c907c95121ed925336769b671a5e33e02d73d550a2da1",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_os_path.py",
@@ -661,11 +661,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "3c34db7da26bb27dabf67519b543d5298ed0e7ff0e854d8d6b78166c24a04011",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "eab8eba7a6cc37a75c6b6b6f278ffa0d612587b1aab0b3fb3ae3c4077259aa74",
       "member": "py_os_substrate.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "6e34ebb3fab4c876e0c01177ed4625f8d805fb1452c49fd49b13c355aefeeec4",
+      "object_sha256": "886d6913885c93d45e0f61f815ef01f43d65ad375bcd579b1b71fb5ea2ec0f97",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_os_substrate.py",
@@ -675,11 +675,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "b0bdc902556028224feaf2d237a4b46bc3ae0ca282ea6f32bf3639ea7d96d418",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "befc3fcedfc8087621358e84e733c405e01087f66c01e6754bd52f87c2514945",
       "member": "py_process.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "4b15e870b625cc92d7063aad385c1a9696f422cddce943d2ac1b3572def0d805",
+      "object_sha256": "0e30585fa4eff3508e0d9721abc24b555c31a79f3517af4a58d9911688c376c7",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_process.py",
@@ -689,11 +689,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "5fb710714a96a3deba2424cd91dd5affb6caf83558c0136a382c226db89122ec",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "3a13b17b3d97a6818129b18b0ea5efffa84414f57ff3c120c17c0062e204ec67",
       "member": "py_process_substrate.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "2eef00b7b70536b89cfb79ac26b6e6640b18b6e0ac39dbefbeb32240e9f2caff",
+      "object_sha256": "37ca0d3c655944c6f872077a15a617a8e74e4b1bffba9ca118fbfe5a5359297f",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_process_substrate.py",
@@ -703,11 +703,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "9215ec4ecbdc405e11cb2b348cd1f9f1530adc26be029bd756a8acf0299ebbca",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "6aa0e73230b10aff940e90cb4753cff4e9808cedbaa8c820a83320c7d676bd26",
       "member": "py_process_timeout.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "dcbcc7a21fdb7a8b5711590e4f3c5139fa22d94585075c939362522d8ca4cc4c",
+      "object_sha256": "c529fe6f769dd5fbb2df7810cb11b5a077470be4b207111abe2c909f1b0104c4",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_process_timeout.py",
@@ -717,8 +717,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "9a8c9fdd7dbef458817cca4b8aadb45b9ba9d30d65cb97673557a5ec832faae7",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "2dbaabd3e242971222417d3a58ae5f3bad744f32df65307eb0613419b6a1eebb",
       "member": "py_print_sys.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "91f0940c10646313eec01f08164921007f7edb0ee87959b581fce6f3720d58d2",
@@ -731,11 +731,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "1160bd96f57a037a08e12b937193107990a8a27d6d17c02b34c88f048f4e9abd",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "b744c557feaf00b4a651f3cd4b7b957a38508ae4ccafdeecc73c6abba609033c",
       "member": "py_print_fmt.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "3a52a87a35b1386229bffef26c82db966af3e9dfce63f3c129dad9d79805a906",
+      "object_sha256": "f13eb4d7ed6b14bc8b188e0658b273158c7e5351c3e94f60202cbb47f04f7979",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_print_fmt.py",
@@ -745,11 +745,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "e74dcaea75f4cd657382af8808065e1583cd6b395cd00225545f112ec7e1bfad",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "b5880c39cfc6f0a9b7b6cab873127891b153ecfc8bf995d7a66b21e314bafc77",
       "member": "py_format_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "534d19ad211157048d4b31c2de0230c433303299d659f720e387c9768e073271",
+      "object_sha256": "b78cf321e42af31347c0eca3d50cf875f21711911e46f454873207ad0426369a",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_format_runtime.py",
@@ -759,25 +759,25 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "ae3d316a56427ef760892aa39b65244c1c9014cfc908d4e95d283bf0452258e0",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "646ccbfb80e3494ba46373045bb31261771e27da85ed7e6dd57883c0a4bac217",
       "member": "py_obj.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "8ff26e5f23a174161ec4b87f6dbeb09f732e08ef4b8e1087b1642ceb955fc53f",
+      "object_sha256": "56e2ee01ce5062b0a5ba3072131af0847656b76ec86af4480f003c0eb1312b27",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_obj.py",
       "source_kind": "pcc-python",
-      "source_sha256": "3719fe6ebb1adf1ad625f9b96100a104145767cb627a47f5a787fa0e0644c45b",
+      "source_sha256": "26c300ba0301f9efc2a991c6a6684ded8c736a0db99339f573587dcf77ef1c90",
       "target_triple": "arm64-apple-darwin25.5.0",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "6ecaf76a24806800fb9025fe21e91bf88cb7dfe38fc3c726df3d4bc2e62d43bf",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "cd93ee7ee8c54f0df3921227a9627cc5ba0f522c348044415e60667e34c0534e",
       "member": "py_obj_dealloc.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "0361f42044b84e34fc3ba9234f1ed0cccfa81eecaeadbf248e5e667bcf197d98",
+      "object_sha256": "2f086219d8bb7046ef01c4d356cc77e0dfa85d96015dac061863b8057ce992df",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_obj_dealloc.py",
@@ -787,11 +787,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "9acde1177c37a12516e338a76d859a519c646c285ea88f8e32f4a888913dadf7",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "4017259443867e31bc9d56f7b7e8c561d31d7c080b643660a47bdcd133a71172",
       "member": "py_dict.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "1644e7cfc19a580b0ce7541ba285cf1c86b9e5bac9debc6859428b720a336876",
+      "object_sha256": "f9309b073b00bc4869d4290edd23df50cd294aaba4d9f718004ee55fa01e2843",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_dict.py",
@@ -801,11 +801,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "3972813e2c98cb4262c27dec1c825d303548e046a259c0e754f4591912592e2e",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "e1777de7b823534202c487430ae024de04ad2ea1faa10f67066eb2299a08a6a7",
       "member": "py_list.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "8b677df2829de253e3a3439b77ce6e2810ebf1f112d935e57fd89fe1c137bcb2",
+      "object_sha256": "f9799d902336953b83d44e2203637eb34125be4668bca904b8b523ae519dc22e",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_list.py",
@@ -815,11 +815,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "f253af7a384ca39caffaa0e3a3d09326d2d3476f601dcf33b9ad86b0a49bd3d3",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "138b7f409488a57ffc9546835df79eb58eb3dbf4a0a7a82a60d3b88a0dabd29b",
       "member": "py_list_set_slice.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "f239808602394e16416af095dd232a66c937e3a43c4db6b8f4e6389964dcc7d7",
+      "object_sha256": "3acc11cf703ea5e092cb7e9123bab8b576e3385874dfdfbdb23880faf56950b2",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_list_set_slice.py",
@@ -829,11 +829,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "affd3b9e968b892e2e2775d4c57a248a51b243f8af7d9c749798539bb2f89add",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "b35f3aaf7b49f25eee699d2c0473b860a3ae1774585e46c61c2c49dcec02e160",
       "member": "py_iter.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "4219707a406b4f3d386cd1570674d85feaad225dfa00f78ab3d709b7fe0a7442",
+      "object_sha256": "d735ca56e5e9238c1a531004d87a6bf95765a9e07ae96079c19b6a8a75133ef8",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_iter.py",
@@ -843,39 +843,39 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "970320174ed6bc65e8eb020d277584328efa1b8b3312994bb6f9df13971cb3e5",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "b3fdf6c662b27e697150a8e047ded11f292e7bcab7981fd9e43072f16020f5a2",
       "member": "py_gen.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "6c60f79a5329ec16bf775312592ad3f67052ecd5e1fcb225bd58ac6416499d7c",
+      "object_sha256": "79c404731ba843fbf9a8edc8027578a0281c18c1b92a043415a125591d4c6d80",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_gen.py",
       "source_kind": "pcc-python",
-      "source_sha256": "df0b1bf4fa44cbaa17ec5e54915622b7cf14dc5203ea6f8edf33494869df1d85",
+      "source_sha256": "280c67da20adec084be59a1544dc2af9838227e40408238b253c4d81e6a3cff1",
       "target_triple": "arm64-apple-darwin25.5.0",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "af47bd3761601f2162e235c02caf7ffa1ed583b59560ba26311cafed3b64abdf",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "878db68f02f10e495e403e6729b61a07a4373942e81de63abdbdc66e8f51f015",
       "member": "py_coroutine.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "ef98b6b0a3693d9783e5d770a9515ffb5059cd3da5a07c44611a96e6c00dc5db",
+      "object_sha256": "2e1193d85eebca45838c9150f6c66051813a8d96f78cda353bf735d946c0c2bf",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_coroutine.py",
       "source_kind": "pcc-python",
-      "source_sha256": "3d1560a8bad84d26c43735861df2509aa6c715f17f6a017b9f9dc8aa2c8bfc2c",
+      "source_sha256": "33c5be7f80d99aee1ac0c34fccca6a859a43f6ba00d55994e9d21ef24219c92c",
       "target_triple": "arm64-apple-darwin25.5.0",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "fc80dff1830e6f9ca04058b726e79c530aa6846bdda6f16ca652a7527a4de8d1",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "7812f65bc9f86e9850bb1ae2c7c5185e508fb876ea6b9891837fc80949c2ade4",
       "member": "py_context_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "259e3a1bcb18818b50aec8e3e06025646f1420bbc0d40f7202c9f8714255bfb2",
+      "object_sha256": "bdd2f3004efa8649954699ad0e8e4ec1991395c6d32f67809c052e35be6ffaca",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_context_runtime.py",
@@ -885,11 +885,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "1547f532057aa2601c7dea4b2000b2b52c91525123ee4f23b00d8159dc2a42d3",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "d3d45b29ab0c7e32c31a05e8979ddda5617387d25aeade1388b78a7375a2388e",
       "member": "py_call_splat_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "cba9fe9ac9fee6c1a38b2b81dadcd2705aa329d0d10689c015aff9f4b681f8f7",
+      "object_sha256": "1a9efb38c3085338ff4ec234d582072d3c8293e335045c9d5699889fc5b7bafb",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_call_splat_runtime.py",
@@ -899,11 +899,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "b095121831ae6e9274cc2f63b622cd2ca2c49dbb1aa27c7996a289490ce401d3",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "1d903af4ace2fe39a6506c1098b063f7d05f6fbb293409de3890fc3c44d9c0b5",
       "member": "py_module_attrs_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "d09b941a252b71a8a851df59281ef1e85424f7159b8e8422f8bbcb29c7d4c584",
+      "object_sha256": "9f9adca7feeecabec5f246725c6580adbc6f3d915b232718dd301e92e0398f7f",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_module_attrs_runtime.py",
@@ -913,11 +913,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "6205d1cfbb64180b6405d4eea3580561716a94395f841dbb16814fa41ddce39b",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "a8127a6501fe12fa93817037f90133ffe56237faa909a4ef4dde759220529ba8",
       "member": "py_compiled_module_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "1724217c851b287af00872e52f00282f2e692035d33c3ffa60d7acde7c614bb1",
+      "object_sha256": "1348a8cd075bccb57909d3b2ee5b0a1662d8f53f6186f72feeb82b21c51a967e",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_compiled_module_runtime.py",
@@ -927,11 +927,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "80613585149b60bac0b441d8cddba8dce12ec1ededffde5781c1f23206ae49c3",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "65680ba6563389a8116de6c66a12112245858000ca84cf6729f68539cbd0ef62",
       "member": "py_dlpack_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "1ca79751e92ff14ccfd64b4075b205bc38a8efd68390f8ccd7a1cc5924dc8313",
+      "object_sha256": "197e3ca778c176fa5e41665383260c1bb2b97e2bf4abb8fa3561b3a5415ff78c",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_dlpack_runtime.py",
@@ -941,11 +941,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "b9933bcc1ee503ab52ba6aa838c26859fd92fcf3bcd6e84d30f61bd4af186d10",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "ca69ea86c3865d2b83da68d694b7f5bf83465afc3767a2d460ca7b749ea62e4a",
       "member": "py_runtime_log.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "ac9bfef7d24b31764908f478b1090c31f10fc794987822c0edbc4adcb88371dd",
+      "object_sha256": "f2bd7e3a4309b97267e0b70953b23124b809e678326c792ac71e453b76a386d5",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_runtime_log.py",
@@ -955,11 +955,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "ad97e2b947915331609631e1a62cea0087d1800b1b7ee27c7a5cebb290860b21",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "5f318edff63e7bd275c523cb543ecb1b07af7f2de02ff7f05add5547b8cd8a0e",
       "member": "py_json_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "bb50fe8a879e59d13f384266a3336b230b1062a63d7c994d28ed77cc26b55216",
+      "object_sha256": "4d8a5fd5fd80e5a8c7c71aab9a6e987189fe002701a7cc5f61e83e3a52ae8660",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_json_runtime.py",
@@ -969,11 +969,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "491df2a569ea841baacc309eef1d1b3bb1bf29f320202bc2352cb6014069c6b1",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "deabf92c52bd23a719cc03f1c43a2d1661404660dcd2a0f00efdf10f65be8495",
       "member": "py_pickle_copy_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "006e8e828b54f36e41d8b409cbc4e4489e24bb7a938dfcc0d09c3cae48f6cc41",
+      "object_sha256": "3cbaf6b4fc0447b8e5d5969fa742135e573a3b3cfb7006067f2ba7b1baf74260",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_pickle_copy_runtime.py",
@@ -983,11 +983,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "b7ff45b1687d6831345ee52495c9a2f01fe227576f452b6a2ddc8f4066cd39ec",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "10d26f9f09b59abe79c7daf1280c6e5dce5a145242c016fb0dd7634e7ceb0086",
       "member": "py_protocol_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "2412ed743b46e0db2f116a3cf7216be3bbc485c9e5056cc736f1f014669cb065",
+      "object_sha256": "c1ce6c09ceaaa82f0c2c41316fc7d632dc6e60a2e685c2fad8dade5faebc518a",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_protocol_runtime.py",
@@ -997,11 +997,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "8993fe4fdec790bb6785b0040b2d7c9772d30fbffdc83429701464131cc0cd17",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "023a36ad2adf1487d90b33f20f165c21b47f1babf363cf5531dbd21a0d89f4cb",
       "member": "py_extension_loader_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "b9da5bc6a37356a059a08493bf57afc743c60bffdac042a4a7ed275aa058cce7",
+      "object_sha256": "2af69faadea542b385b4cda89774ec3fa273a2a9cf504c07b954b25e743bcc02",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_extension_loader_runtime.py",
@@ -1011,11 +1011,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "f020376f29a5afdf7b0e78b031905441a691b6adfb78d14bb42ba560c019374b",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "c862f554e4b6c29192fcd41a5dff7a6c871dbf51ea1c53116d78e1ef92851841",
       "member": "py_http_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "5bd66ae83a3bf1f4498ec589d9e324a467fe816e761d3c7abf340fd3555f30db",
+      "object_sha256": "6b2cb8ffdf5338cc2133102315e28751757c1a88aea4843d1a830b194a1e5b4b",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_http_runtime.py",
@@ -1025,11 +1025,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "e5ba86aa0e02a4a8114339f8fa1f29697ffd6e609d2d60d7e14413fe10273c87",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "5a99b6226c1b357b0c86b0c7e6386c5e322a8c0132dee11bfa651bfb65620409",
       "member": "py_asyncio_io_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "3432b2bb0a184e7977346b3aba7836a54ee7826b0fb0c7665eecc384c0d5eaf1",
+      "object_sha256": "0f9b7038935fd873d0a48af0aa6b05251d2b1d0d60d7ddfa60b25b67d5018c8a",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_asyncio_io_runtime.py",
@@ -1039,11 +1039,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "d5fe496e7857b104405c2ac0d8a7a8af8f6c9f9a736cd33d30a547553f0c0986",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "a30649a832c8c63d55de5c78a6f464f778c3747ee59bd652356b3cac38728bf0",
       "member": "py_re_engine_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "4a24fc86f4ffd66abbb4b4e3e9f67f8634ffcab175f57234ed997c9e5dc1d3d0",
+      "object_sha256": "6740b1db31d23d274c24b931a409c73accca702eb2cf1ac41bd9a554fd8b9a0b",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_re_engine_runtime.py",
@@ -1053,11 +1053,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "eb353a2c9230ceac4129d57226007f5a53b41a5e4ba361bd77c7cf0e3edc913e",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "b47006f34cd0c59eeb779aab36d8c0c94945dee40050cf21c6eea6690ab0bbb4",
       "member": "freestanding_io_waitset.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "975f433cab589823715b10eba60fa8c8a471170fb64e301cec64d0011557fc72",
+      "object_sha256": "b55f41e98482620934df40a927d827771788646baddc6a85256b69894487e2c3",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_io_waitset.py",
@@ -1067,11 +1067,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "b653b2d743072f548f75b25e90ddd0f95a3f2fcad50aa35a19e640157735902b",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "f812569ff0037e4a228736a4a47b31e19d2c3bc6aadc1979acf3f53a657d0939",
       "member": "py_func.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "1f08fe2eb8b10f960a7ee672558d5827ad0caf8fdf57aa727df76a02ebdd7e81",
+      "object_sha256": "dd52e295cfc0a79c6f19e15057601faa138b67fbd4ada2f06865baf01be0f540",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_func.py",
@@ -1081,11 +1081,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "905494981826e7f4361b5095a4aa1fec720aa11d778f456d60c063004ba34eac",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "c2963f2309afc4754b2c780603d77c592150b74e3796677dea94a28f73e470f7",
       "member": "py_re.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "6f118e249d43a0be773a7e078cd75494998d7daae0d83133767651faa510ba17",
+      "object_sha256": "a0c408645f09ecd5eed05c6808da880ccc089aa32757b05bd494716500328985",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_re.py",
@@ -1095,11 +1095,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "793deaa8694cd8fb9cbfea5c2e04f9c48b27e12ff83b4c4525fe435f57a7f3a7",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "1f6da1a75b21b64097d6f60268e6955a7a7fb0081829bc7bf824f7584532e5af",
       "member": "py_dunder.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "160dda822874301f290c92f0d2f954c6af5a84ae8b0bbb70c20effa475eb4f43",
+      "object_sha256": "c77da965e45c6de30b037ffe7ed8f960318bb3ed9b6ac9058cf6f8e260e7c238",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_dunder.py",
@@ -1109,11 +1109,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "3ce22dfa99d996daa5fd7af998cdb9c3280d5ec5ec6e28a36adcdecb7b1012a0",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "59e549bb88f4cf14762dd7a753fa71efab73b477e375b797d59c2398bd2b03f3",
       "member": "py_weakref.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "e31b959ecee8301a549766d9b149b0eb47503c38da37f61e056a85a9db88516c",
+      "object_sha256": "fe8627cf864c2c4013cb1df205b80b97330453b420ba19cf442e7944e6c62dc4",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_weakref.py",
@@ -1123,11 +1123,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "7181d6bc8b9bf3e537289fb9b9094d906e88fac3bd150f32591545de088776ad",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "dae74c09715cb3031cbbc21347961c44c87f00ec570dfa9a4aa75e5cb162dfad",
       "member": "py_file.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "7c10b192f5e2f66aaab899e6cf30e88997df2e19d85d0008d73d6bcd90939f89",
+      "object_sha256": "ce6287733ef3d589cd33a57b3afe943a31505031508b6061d03729a2e774103d",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_file.py",
@@ -1137,25 +1137,25 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "d83c4c7493cf2f7b979532478f9a9e6e748cabb00b50b95dadd7fe4c07f81c8e",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "90171cc2f5cbe92396ace539fd2f7fcc0a4ff60e622b4a7aabb42edc46a66810",
       "member": "py_threading.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "2c9ead047096f053423a61ef3769d10e87b2b1b1a8e4409de374723114d24ea5",
+      "object_sha256": "9a9caf1232a98e0eb79c4ffe4468ed505dd7281418bb6f92b430ca80ee99ce2b",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_threading.py",
       "source_kind": "pcc-python",
-      "source_sha256": "4004f4f94a60f8d2b4e9294b5b0671a488c86592e75ffb36402e37109c0181c3",
+      "source_sha256": "f8f543730a1df0f71ff0529691226fc0cae430ed8e4c58c65f652b1aee5c1bf4",
       "target_triple": "arm64-apple-darwin25.5.0",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "66121b66086a65f02b249dff413f9f3d984d844f37999cd738593003fc26a13a",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "5e8ab0c638f894708474395895ef641ae1ced4d93ee27935b4d50501710b4a7e",
       "member": "py_class.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "eeab1fd4bce646e0b6a5461aeb08e08c44010933c3174cbe7688fd9d63f0febc",
+      "object_sha256": "1dd6458b576c814a8d5504477abea3c14a6c7d0c6faa088614c078f0d5cacc92",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_class.py",
@@ -1165,11 +1165,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "dce29bb0f4d985074c74d3874c8467fc12774354f26709b424782fdd9a1e42ec",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "526a2d79a11cd0632fe4bda08acd4473ebdc9ca590feca5ce8fcd8779bb8a4f5",
       "member": "py_obj_ops_dispatch.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "68acad9d03b5b47a03fbe4c27ca220bf7f1c6d07e37b58e5dd70762138eee8d9",
+      "object_sha256": "ce09fae8baa083c95b239a6f1110e670288c0144295e538bdfb4e1767345d20a",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_obj_ops_dispatch.py",
@@ -1179,11 +1179,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "a4c307dc4cf98469f2f63636a288868674ff0926e1e39e55649180e1925dac33",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "83c9c359b7091169ffdf39ac3e1e46342e05b5eba3cb764bc88353a0bae36f4b",
       "member": "py_obj_ops_slice.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "73950556cf03ef6c022be601844cbba62625447433f6cd98197358355245e045",
+      "object_sha256": "876442bf70b3377e18d5f4a79bd603271b6b47777dd9aad0aead0f73ff9387d7",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_obj_ops_slice.py",
@@ -1193,8 +1193,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "23852ac0752e83fd0f1c393e97f97728452d9cd94776d0a98e6f3c46a373cb86",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "f86531171e7ce6443c106854df933b60d33dd9a7c22619b3a0647ba13330f201",
       "member": "py_obj_ops_set_slice.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "943120cf95e7782afcc2ee5560976ac917db90281a6eeba4637804baa6952a86",
@@ -1207,11 +1207,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "a9e3d5fdc0067cb4b9b883a45a3460065f9b6df6e1c97c668e97ff93b0f80a6f",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "46288174b1a8577e0d7022df210f22ab089bd6d2bbb43cbf835ca50927a962b1",
       "member": "py_obj_ops_mod.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "74e1017587398130b041c39ae44e3685a607bdaeab59a991e9ef3a2e69e73c22",
+      "object_sha256": "752a916fbc7fc890cc794d486aa7bb1a0fd0f3e34a4943eb01d50e8b55ae7770",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_obj_ops_mod.py",
@@ -1221,11 +1221,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "8dd30f0bc98dd83ea7f2f5f41d8e1376ca0787bbad56e5ca1fd3ac72175a3eb3",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "18cf3763461cbf3fa40bf8d0c343b9d490c646468bf5325751a0c54b55394a43",
       "member": "py_obj_ops_compare.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "294cf8ddb787aafbc96f79f422b8318e0bf2bf637ecd6351b775452e5722c0f3",
+      "object_sha256": "77c801d16fd440958ffd7ee44566215147e2a282c400c24831d9222d9d02c3a6",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_obj_ops_compare.py",
@@ -1235,8 +1235,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "96036ddbf112226d29cbdc7340451202c850b394ebc8c1007c3d299e55eddb55",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "ca20f57e401691ac06ff0d9a830e84c7f513f3559eb011d642261ead9d6cede8",
       "member": "py_str.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "6ece539bdeb92b43cc887c1d9c5feae2c484aad6111138c889abf448c2326c85",
@@ -1249,11 +1249,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "c41dd146b1387a11b53a83a891290b1f43e9fa14851ea479aeaef0459cce348e",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "0820992dd9c0215ca005bd23e8ae715b08fe1037fb57ce952f1b94313dc73e3e",
       "member": "py_str_accessors.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "1f4c711e102f9231e73324312db4b4f63694c8080c1d3499b7576dc4184fca2b",
+      "object_sha256": "bdeaa29204a5ef7688531f4e80a7e4a41560425c6d965a97d47aa176601cd2fa",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_str_accessors.py",
@@ -1263,8 +1263,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "68ee53866287d24abb103ec9cda3b00ab5e5a1cdd39c613c6d95df3a8d39a89a",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "828f02633414aed90646a3a76e0aeb65e68e73d9d398c735c552193c590930bb",
       "member": "py_str_slice.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "8e63d8be836b812d54995c8ca0a2dde10f6ac38e2d09b3e847850ff7a55a4309",
@@ -1277,11 +1277,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "10619b97fc0429362453fca8677e0e42494642e2eccda739b2956fcf73c89f2e",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "332f59e81a2a4776868bacbbf4a7871b95600eb21548fec477bfa6c327a64a36",
       "member": "py_int_core.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "76f9f1c2d5cc330fdb314903112db6ef13902d1df1705d41fca8a089b1b33850",
+      "object_sha256": "d9e7746222177546e09b8828255d5d1dbfdf472ceee2e7795c8c53244e4dbb2a",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_int_core.py",
@@ -1291,11 +1291,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "562b67c203859dc860b6915016b29cd918d3aa2ebbab4f8fb5138ce330bbde2e",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "7e5de099592fd372aa6979639dcf0f4f72ba7e4826a5f57d1ad8164ca27c219d",
       "member": "py_int_decimal.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "10b72fd2a0767f5f2841b50e4c4880e2a42ca22910d1ac884b0d17095d2e8d70",
+      "object_sha256": "dcc699e085ed4914d3641c8abc051eebcd57225f1b51ea647fa746701c366bf8",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_int_decimal.py",
@@ -1305,11 +1305,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "2011593f77c0df4ccc35b2f2261a5fc08ac27db44fad6bc955a63bc79362e7bb",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "1f42648466621c8e10eb2eb2bdbc96749434353ff0f5692758ba2a915930b312",
       "member": "py_int_shift.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "2647e67d72ef574e5e225685706515880b4943be2a8a9a69c261eedf1fda0f4e",
+      "object_sha256": "3b83f005c27ac2e625b80b9ddc8865b6685a23d464f9f12c1f8545a5d825550f",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_int_shift.py",
@@ -1319,11 +1319,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "2e916938c3bd76087c6cbb87485887985ee492ed1ec4fa10dd5c1800b1c29d8d",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "7b094fdeace19c4aa21f2f486a82d28a9170f8f434c0e7823c4453d4ff0f6d43",
       "member": "py_int_bitwise.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "2efaaa5f8537926e38c474651d8966557c908587741224796f4a538e4ffb0141",
+      "object_sha256": "a584f62de2729ffbc1e5a4d211e6561410b6e54530f16220b0c24d04d3d46568",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_int_bitwise.py",
@@ -1333,11 +1333,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "e8284bcbf4334976530811c109a8d9ddc9bc56e27c832195b211d409f7adf768",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "21fea68e12bee17c93c56997bac7e07b349547a811e4647707031241f5184206",
       "member": "py_int_addsub.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "44d4f1279d0192459ec22d5840138bc27f139f0242e12aba81c7be50ad7f9a60",
+      "object_sha256": "dfb695f73040c98bb05157c496d02cf3c0b76c9b874f00cb63710ae50f9396dc",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_int_addsub.py",
@@ -1347,11 +1347,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "708cf8e94c4ec4a3af129c849b55289e9c455d0ab07c592817aba38f8b3e0f78",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "67438040022e799bdc6ad90c70aa9d1310b683c60ea1d85e7f9deafeac03f304",
       "member": "py_int_mul.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "0b11bbc687dbfb017af087366c29b2286cbef9588c2243bfded6725931b48ab9",
+      "object_sha256": "32527c0b6b34649ee9b6c4e79b8d93cebbc18f0905f9d4e7ce9d70b6255e1142",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_int_mul.py",
@@ -1361,11 +1361,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "3922f48811820e93e1cb3ac8aaafc1b5787d9da601e1a9919a61de1b508be8b6",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "9d27c1555825da082d12d41b60dbb9ee9340a255aeb104215d1b47eb6bc79235",
       "member": "py_int_bigint_pow.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "7f1c222b66cbb46f992824d7e4413715039f20fc66f407a9e8d139275174cb01",
+      "object_sha256": "2b0121df107060e54809f50af1214e3d6fb83801b0739b648b75e6f5d29a2aab",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_int_bigint_pow.py",
@@ -1375,11 +1375,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "64f8b5a0f53ea69613d9de0cc9c63b30761acbee6483339561f6a51a8953bfc1",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "edcf0c39545877f629c0b0ad35eb3460935c849062c8d60dfd2087e6d6b17edf",
       "member": "py_int_ops.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "87f427f0329e84815b95c226eb8f38a8d9391411e1738176edc33207119d446d",
+      "object_sha256": "981c42bd6040ff397b7db4f0b9672e08bcbaceb43c179992e6cfb6d8db7f628d",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_int_ops.py",
@@ -1389,11 +1389,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "aec2e357794215891f6470f0fcc748e4f9fc0ea67241f94c6c93337a37b266c1",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "d296da9b6e26da9549c74205ea1b79864a77b8f3bb2e44bacac865b6112c7f51",
       "member": "py_int.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "1e1e9f64265287b34a50c5053c59a166215d0e668280222f537f97cb24abcc85",
+      "object_sha256": "f8804f0f087ddb0ad0001b9ad61488559687d238e96b8c97bfe00bf163408586",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_int.py",
@@ -1403,11 +1403,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "2a17d9f080b89a0ec1e65f1115000f85d72d604a9b9004451c1f8f262c5f957f",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "499b06225e13cf8db2453632fb96313bf6f91e1ca5f42d0337480385288675ec",
       "member": "py_int_parse.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "d55e4a0729e60097b2f302c750fb9a56c09df38a9b0ba2fe9ad80ae9bb12e33b",
+      "object_sha256": "99a644c91ea61132d6f4c64c21ae09193936c346350f567fa5446e2ac21b244b",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_int_parse.py",
@@ -1417,11 +1417,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "d03014b5c6c6cd5e87f4bb519b583f1f0744ba03dfac801074be1bb528b274e1",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "1b606e53e695df1fa50978213dc936fb54008949417b614b5d8156545ab1e1a4",
       "member": "py_int_convert.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "5a563d58567857dc65c5bcb97831cbc1635bda1adc26897e797f66626868ce22",
+      "object_sha256": "82e68167d7f0fa1808ee9371e3c7a00bc6c5b222a73cde6a4fd01eabe6a444e0",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_int_convert.py",
@@ -1431,8 +1431,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "b2f4b45f3fb748f0bd9e3dd5c9806fd712dd0ee8dd791a7ec67df502ea6de5ed",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "29d86c198e740bc8235115c8bf78cc6f3b1ce4802a702a473f7fb87b6b7ca668",
       "member": "py_int_bigint_convert.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "32e7716f858e04445dc3cdfc038896051dc11680e3517051d0a9658d4a47d341",
@@ -1445,11 +1445,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "704d65a8689db9c3415bc778f118b6aface9a52f9b0310300ebd388d19ef3ef7",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "59c2febf5c89f68c9a44f1280f9ee3a5db3b26a49dae9cc5fb97ba14aa97c155",
       "member": "py_substrate.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "4eaf92abdb40b575af179497c11d72093ebf82497149b56a764d1700e53e1d07",
+      "object_sha256": "ba54c8f944750eeec49d25cddc42ea0cc0799303349302efe8bea3c7e3d3eeac",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_substrate.py",
@@ -1459,11 +1459,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "548875fe24ac3cf09b94e0b25180bcf324ee692494167f006ada3a6ac500be0c",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "64fc963227e96410c55d3254983009f35d368d4fd140965c5f41b0223537a95b",
       "member": "py_virtual_thread_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "5026e444858bacb4286b956d321805609498615cd667f1d0eec62c53022f3599",
+      "object_sha256": "752f89e39e22819da50694e983b3e525b147d1debbae92b36d3edf45b6ba0875",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_virtual_thread_runtime.py",
@@ -1473,11 +1473,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "2ff47eb745494400ead8b5080435cc2d38e521663c6acdc3d0a5465b46e40d91",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "8af261873fc5d9a77bfc93e418ea46d31c47416f94b5f4de1ce98b8a4f3737de",
       "member": "freestanding_runtime_debug.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "aaaf3d2d03054706caacbdb4b0271e93f8e874175d3b66ea6cb45c4e01104dca",
+      "object_sha256": "4075b3a1e4038120fbd84dbc4761cb29b8bd193aaf8b75e0dc3cd2b97a5690d8",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_runtime_debug.py",
@@ -1487,11 +1487,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "773750aaf6523e7d22504249addbf70b16ed23b4e90c9e3755c14ec511bc8eab",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "02746f6f401fb9fee9aea407fe86768ec9f34c166ab20eb45452c3a91b6b5721",
       "member": "py_capi_core_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "d153de75adb419401e82ce8a9fbd8f6cc09b6569e9fb52502b40eb6b4b4d8c6b",
+      "object_sha256": "a77145b8e390a8e1cc14803af741fe92f90cb09045c0d6a02f65b12f86127c30",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_core_runtime.py",
@@ -1501,11 +1501,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "6b7fff294723929f7ec2592742c0b4eebb7cafc45ddf166ea44037410f46eba0",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "bb7b89abef420cebfc43d6340ece9029d282deed7f6443dbaec3dae45499d5f3",
       "member": "py_capi_memory_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "32c210141ec3c1e0639f46b9e8126f904c3ab57dc9d4a497a609559b75aaf8c9",
+      "object_sha256": "2978c8cb55e49ea61709848eae87a7cfb7fcaf5b8ecbd61e7d3a367369310ce3",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_memory_runtime.py",
@@ -1515,8 +1515,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "0c6eaf42a6bc2c3cf9345658eaec6bf0f2cfe261c1fbabf0a21ef74d3799b1c0",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "8ae297529782aca428aab53be542d946f906e2eaddd4f70a1dd7666e9fdf832c",
       "member": "py_capi_stdio_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "d3c434a45e515fa58bbbf3479a9e264a5181943155ec5e4ee222fedf89d0de7c",
@@ -1529,11 +1529,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "cdd043f73cc4d841101a1b8d8181d9a780de256a839820210466675a874427a1",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "6bf83a9fef8dd6ab676adf2135a6d88d58241bfc057385e708d8fc52c641a1b2",
       "member": "py_capi_numeric_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "12f14164d5ee2c011199c1ec52feae8a44bbf0f2b60f6f5ffe1a024c20e5e304",
+      "object_sha256": "a1ebb5d038dc66c85cfb4094e4fdd897169ca8a51e399c0ad681fc3ff8d1614a",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_numeric_runtime.py",
@@ -1543,11 +1543,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "ad5d36b605111a2519e05269c0497a9134416a184720ff4010f1101c0d0246ec",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "f9b77daf664c78d9805562653eceb907b41d62de85ddffa29a63573654793d40",
       "member": "py_capi_collections_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "75080e8f9b15978f0d4de31898526196932d5c8082ca64d39d4d1a85a44add05",
+      "object_sha256": "8b27b5ec324063570a7c231f0e4c43aec2cb9136f1ff3f46ecdc97ffe940d45e",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_collections_runtime.py",
@@ -1557,11 +1557,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "43fd3fddf9a736c1af086d7175e9e62cf49c6c01e45a7625234a212ccc9ffd46",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "1a5d8309ed1effd97a21281a016a6b15e51c7bc09ea0fd8d59a6d889fef0a581",
       "member": "py_capi_exc_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "3b7912458246f04e865be1dfdd1c7426ef146a550fd029f6fdeeb5dbd407eca1",
+      "object_sha256": "5456678ebd83c1ca457ca26d3de9101fd1d59b0264a03e5b84e3587d1d9b1420",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_exc_runtime.py",
@@ -1571,11 +1571,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "c821826b69d411a034cb77bfe0cccdafb6753f84fb97edc276f224dc047ed957",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "cdab9f3c676c3bb145500fe57948fbc729119ae9a789cb36bb667e18096683e5",
       "member": "py_capi_dict_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "87fe230477a452f048857ad2acd493486c59ad21a8a8a24c99762abc75865fd7",
+      "object_sha256": "be870f3e217a940282d22f77922d859965f643a7b64c757c3fa661fa911662df",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_dict_runtime.py",
@@ -1585,11 +1585,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "dca4ad0bf636bb409be58540aa4bf5139e4e8765f717dc90b6e30ffdf0a19cc3",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "e0a63f3e484ad9535ea1001313d16f1815a09d70c2a07e354df0c8c2fa7cea65",
       "member": "py_capi_object_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "5c5333360200c2a69ce45384528bcaea5ade269da450e157c74b13429245ef19",
+      "object_sha256": "ba0bb7cba451e96bfed205ba1d9c39b253fc2f16c4904004d92d2dc9f5901d4c",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_object_runtime.py",
@@ -1599,11 +1599,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "262f3a9a3bffb73b00bd92154feda26ea3c743e6ed69c69782cfd3f0d7c72c22",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "50caba77a7807551c4a91b1295e14464427dd8c1866f2c3b74ccb67004925a61",
       "member": "py_capi_type_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "aed9209c68e1d382c2d6f4ff07456ff72dba42f99147d4051260a948b9172bb6",
+      "object_sha256": "7e9036610d0ba7b1b4f44c811a6d187b0703c5a9fe0940feef5ebc436427641a",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_type_runtime.py",
@@ -1613,11 +1613,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "9e1e2284cb86d473622453b262001c43fde875640305341c68ab3cb2ff780687",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "d8d1807ce1334df316f89038ea5dc66d42e42ffbb2167cea4f09f417c312da31",
       "member": "py_capi_unicode_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "ee2f247e3d9814288fac8e3012584679c702f1d857a949aa15f318c18ff5e5aa",
+      "object_sha256": "c3c8a4da74ab3544eab48a5da6af5283f2444fb260d2e6aaa0fffecd91f0c95b",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_unicode_runtime.py",
@@ -1627,11 +1627,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "3e69c8d70584e13d617a27653e1ebb31fce211ba97344758d12024e6ed3bd776",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "96eb60190339c307489445ae165f1c2bf63e239343a9fd07435c564a43b05b34",
       "member": "py_capi_capsule_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "1783562b6e770894d80c69b59438ad48392651702b292575bee04327e413e229",
+      "object_sha256": "1976b83af3cc730ea6e221ee2167d6e16fcc709ea307ec8f36ee44bdf4d99577",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_capsule_runtime.py",
@@ -1641,11 +1641,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "1758ba312590b1e614b2eacefcd1772e68bd7015fe5d457cc9baf0e631d53091",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "7c586b332221bb0b02a0c3068196b87daf4300019b553f1fdd68167310a75f49",
       "member": "py_capi_set_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "547120a733199cb9d71dc23288f0b4c915161e74863062490d44ffec5630c336",
+      "object_sha256": "53ca137c8a6ad3b4f3c6093a16f447cc00f90ce5a4bb7ec495a00f2cf338754b",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_set_runtime.py",
@@ -1655,11 +1655,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "fd20674a29cf75cddfb1bf75c46058182bc6224e6318b9157065040e13937fd0",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "95ef56a451aca1591e62e5b7641be3371d319cce07f649bde3094d5000a4e356",
       "member": "py_capi_misc_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "0dedca0172b459287fdc99a3c6533ee19b5c8fc93d0e903af2d36b6884c5cfde",
+      "object_sha256": "658124d9b1dd8f1f3416c26c45c6684bdc61371e69a41c40cbeede9cc0153de3",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_misc_runtime.py",
@@ -1669,11 +1669,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "6f98a921a8536551cc169c4afdd82ea0c690266cabc7a5178ea5466e2a7cf834",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "8069fd88cee6bf1d97f96dfb6af156680ca168dcebe46429730c11b306fb5777",
       "member": "py_capi_cfunction_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "0db5a61f4f26dce4f46d17c38b3f2512bcbccfb4fef8a93e702502c5c9e8968d",
+      "object_sha256": "27cf203088a796ded850af8173221e9905d6b1300bcf91cab24dd18aa183d487",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_cfunction_runtime.py",
@@ -1683,11 +1683,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "c985ee21233ab2eea8fee65fab3f0856bc9ec43cafcdd16b1d89fe44b48d926f",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "721d612de819bf0407fe466b502f934374b0f68377e9710ca23ec0ed16862174",
       "member": "py_capi_object_call_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "7249ab45fce983af50d9f2c1238ff2bb689238e00f506749ffa434f64cbc6b69",
+      "object_sha256": "66c4495dd89735ec11f0f5911232337e31cbc0d6e418238255d1ea2e3d73d477",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_object_call_runtime.py",
@@ -1697,11 +1697,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "56c8063263d88d0dd93cc4d2c50b6528deeef47c7c143e87140aa98ebb5b66cc",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "c83ef853733f197846129e76366ae2488a947609f6725e87983a184822088f4f",
       "member": "py_capi_method_bridge_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "63e77aae51c9b883d9933f5ed433cfae835f4104a721bb18e05d4d6847b4c3bd",
+      "object_sha256": "f2d491920bcf82089acd1ba44b3b8ea8454725fb5b497a21abac620edbc71a70",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_method_bridge_runtime.py",
@@ -1711,11 +1711,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "e2ea6e70f25d2c6dfc4cfdc1fe6e9240bcaf10c719b176b39cacf3b0c291470d",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "4239f6dc306fe3bbbf0e0e335c0a95eda6b86f996d7f52762b8ec478a10b46a7",
       "member": "py_capi_object_attr_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "c817a325aa13a27fb4d10213ae5a858848e825644dd0d1907b017dac5db60f28",
+      "object_sha256": "a51eefed8d7a1b720f918d0d7eadfcd612436ecee6a6ade9e6637c1365e70070",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_object_attr_runtime.py",
@@ -1725,11 +1725,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "dafea00d6b424f58548c2b17d4c73de6f9b13c7989e743b17fe0d98f4f482e36",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "8d0cab349d3cf22a960ef08ad0c60c2f0886314d898b3612b9de386be9e4a534",
       "member": "py_capi_number_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "2dfdd16f9cb15d3f0c8ab440cea19ade3a64e2ffafa6c1305d63b5b90918e96a",
+      "object_sha256": "11e8d16021d8f75d2050e2b90a897c896b5dbcb2ed78a279af5e7f3baf4c0384",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_number_runtime.py",
@@ -1739,11 +1739,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "e0bc5c31ab35f28a9cf26f4516cab77117c8a93f3d661b809e2bf4c7a949c78f",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "3fbbbab262002023b1d0f5f285262f6afeef2e3abe597ff91379f54ea83a84ab",
       "member": "py_capi_sequence_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "370bc1bb0a2cc0b80bc85d6794ccd06d91abbdb41b7824e538c1827b25fa59ee",
+      "object_sha256": "85e3b830a812e3b5cf300b8f67966d0b497e606e345ab9c6cc90939d9aaef9c1",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_sequence_runtime.py",
@@ -1753,11 +1753,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "2bc599694fb85e99c15393d9cf27c2c5b2cc2bed9a1e80e83a5fa81953a93e61",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "e16281f383b0e7c3a23698bf959537e510292b314b8634eed50e1db5d9ac3b21",
       "member": "py_capi_mapping_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "d2e734e1df38da95c8cecbbbb0798fd58f2ab2efc5d9a18a33509949acdfd24a",
+      "object_sha256": "5b82d175d0a26322b0ca6fae5f3fc3658c605aef267e848e6c33be5fbf56aa17",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_mapping_runtime.py",
@@ -1767,11 +1767,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "eabbd645277f46adbaa613e48589c4be818a6f070e6a99181ff943b8e97c1ec7",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "ede89e623afbfdc823c85c4cbe7a090b02299becd6444397e3141b9a18f7ec06",
       "member": "py_capi_import_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "82558be1b9e4fee7a3960a506a75527c2c1a80a5570b7417323ab9f8bb8ebce1",
+      "object_sha256": "11316267983b0584f40c23e3ad96bef2857447fea71173c705f41f30547d8b00",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_import_runtime.py",
@@ -1781,11 +1781,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "f1b822d756d743dd0570ae2a51a8563546b1cb13f66b70c38d71f817c35a80b1",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "de5e492353df2728e9e7941fd8a553f04e8cb3d9718921d3235f691d7c3c572d",
       "member": "py_capi_unicode_search_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "86311175931dfa5fea021d2ecd046b8cffd2fab1e80124505f5c153f957ed9ea",
+      "object_sha256": "c8de43a78efd54b2216e4dc506a6bd5fee28b7ee158b0c4df592447d7844d8a7",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_unicode_search_runtime.py",
@@ -1795,11 +1795,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "d4084de5a11e102da9b794e424d3f874869f0f07035beb6e8bda02fb53073719",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "97feaed54ed11dad6d29d4c348fd51fa5a6605cef3c3566a43998348cfae0719",
       "member": "py_capi_unicode_writer_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "6cbde9bce85d4b1c24d5eb311b929bbbcb53797f3c3432b3c768b14fd1381ec7",
+      "object_sha256": "faffad04fccc8427eb808ee0eff7a617040a4b322e5189588bc13e308670d9c7",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_unicode_writer_runtime.py",
@@ -1809,11 +1809,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "d4d1aab5b262f1819bd855d0dada24b40c10231c27b9dbffdb88963e5a10a037",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "692e0159c424dead9f263658ff209b8d3f2a8d7a45bba2ecc4b50a28c05bf70d",
       "member": "py_capi_buffer_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "69f06bb065923af0d5ed5f55ff834b8ffc3093907ce2d8a6c7843062d19191cc",
+      "object_sha256": "1f71ea695b252d5faf64496f0b5f3f3a02cec694bdb3e61454f312e78f07f0a7",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_buffer_runtime.py",
@@ -1823,11 +1823,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "dafb71fbda478190b00c1a3858e82950ce88fa7c8cd4ddfe31bf7b623ba8e3fb",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "19b792685b41ae418a9d44e697c2f4dd96fdee82f109337c95d32e2f4daf27db",
       "member": "py_capi_module_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "4f30722b62faf9e36139534c8ca58226a340a207fe0593ae4709ec11ec62dc38",
+      "object_sha256": "b76342309385d5e6c8e3815709765470e88bbdcd9526b408f9c712329fc6a455",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_module_runtime.py",
@@ -1837,11 +1837,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "d6afd717f48b3c293514b5450a728ea7bdeddd3e622c3111826c9e7076bc0d86",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "57e8b31592dc4402625f2eabe6b0593b1e08ed93400d38708f09e780cff8e264",
       "member": "py_capi_cext_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "fcbe63a35977904c89837e943f4c5326ceb46361ce6f7e6321b1316535bbea14",
+      "object_sha256": "4a445ebd1aa71cb39080a3f5081e48fc1d025aaef250170d49812145fb5c3b9b",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_cext_runtime.py",
@@ -1851,11 +1851,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "2cbde17af9cdb29809ef4954814162cfd96451641330e9345fb6e33818ab14b5",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "c481d5b95a41b8d8c13b1af0dc4ace39adbd2ff6fa18d41a1c26304f3d030285",
       "member": "py_capi_module_state_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "f108301b59cd0554adfbc93a34f1b2d7babb637b4d09d5938903e04c510f6c07",
+      "object_sha256": "159c4f17031e812a2027f8ec1040e3e1b84e6b84745f1c63423215656c247b81",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_module_state_runtime.py",
@@ -1865,8 +1865,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "ad75f828e180ac76b730c2db40497ef63a1843cc4d70bf6380e969a6c8ea019c",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "3a1436a2a3d36b9ccac5419f047acd9fc5f13d8752544805e3a5d62651c66a47",
       "member": "py_capi_private_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "2c10529aeeb42cbf286f12d1ed6e070fd1f036e239bac567fa3efe84fa87475e",
@@ -1879,11 +1879,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "94ccff0ffb9ceb89ec2c1ad70490324dcba341fcfa7856511d634f3bb273893f",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "50d3997f95ef987af3cd0c3452b0c83f6478af679992d3b9cbc5afedaf11414e",
       "member": "py_capi_slice_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "699286dd141a9792436f234f2886549eccdfc0c529c6cb6c90a5084ed1ed8014",
+      "object_sha256": "4fc89e36829277ed9c0de4e3eb4db82799570c353818bff78459ade2f547891b",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_slice_runtime.py",
@@ -1893,11 +1893,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "04540a189253f0612e1436a583c946be4febeea02b486358da0ccdc9c989334a",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "09527cd695e4e408013042f1e26ffb8858d0003fd3abb61516ae1742e334207e",
       "member": "py_capi_seqiter_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "23e40ff3936c77da0ce42c13bf54129cd02342f5baf4f8dbebfbeee86a48ca5e",
+      "object_sha256": "2ae145f0e6d981ba31d59663ba69ce0b7022a29cabace34d5a52d430d75d9aa6",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_seqiter_runtime.py",
@@ -1907,11 +1907,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "c098c0d7803fda25b6f619ad2ea087d56c5605d7f348f4075b39723cb50fed87",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "04b8f87f2f06cd53b233ce09c9c9169c905ba32fface156850b4332f58625a48",
       "member": "py_capi_contextvar_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "79fdb8e98a594acca702dd722e761ce1240f778d828d93fb89e89d8dfef7b9cf",
+      "object_sha256": "3e7075aa54f4beb4768d509ac68bfd4de839363b0205ec163a6ad9d09aa3a7a0",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_contextvar_runtime.py",
@@ -1921,11 +1921,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "2fd7c594a1eeb6ee54c14e78346d74f47f68197c277d49f418b3a8dfb817f4a0",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "f36cb0401856b87d4dadbac5fb22554f46303684f623b4f6884a35800259acad",
       "member": "py_capi_call_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "8775b74423623e3b32c3314692475a6e591a728650809a97378aea337e893235",
+      "object_sha256": "cb432e751e9c9a627fde609313b4819db94318482fa5a575038579b647ad4d98",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_call_runtime.py",
@@ -1935,11 +1935,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "0c7002fa30decdd22b233c2aa60d080ebf4d3b42507612a45e43d52824fd1ce4",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "e836c1329f6f0be3ad17e4ed3142b46e7b7d2e5546871c2f583975a3d5f7bd0a",
       "member": "py_capi_arg_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "bd3f5df4b6c16b5f5ef937062051d43edd489d44202b6212ceb3c8f317af27d3",
+      "object_sha256": "d7fb4439964c6a99b087c915ee09c381063185e83e0ae93a406b2a6a180410c5",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_arg_runtime.py",
@@ -1949,11 +1949,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "f6caff0e8d4e1b4dd1dd62840d95c170d7c5625ba7ba257b19286a05aaa2a511",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "9a54ce8bea5b3a178b9ab249f6142cf7963d3cf41537f73c2cc66771fe623f00",
       "member": "py_capi_str_conv_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "4818c062063594b9bedbb6c0b85e80a3f67f4e9b8f910ea9d08d059b8d7e8832",
+      "object_sha256": "db3c6d8be7f1abd5e11b79f5ed50ee12e917d1863d21e5f002655fe073cbf145",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_str_conv_runtime.py",
@@ -1963,11 +1963,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "369de83cc17a4ef2a80a8e8f68a1e1b2468175c5e11c2e47ffa699f69e0e0490",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "d6b0774b0327abf54d2c087a92211e7c18cbe62cd5eabc278bab408dbc9bb48f",
       "member": "py_capi_buildvalue_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "0d2b5fe2c93fb5b57695d3f424d7c476a00b0556030c3038cea91ca2381ee4c7",
+      "object_sha256": "cfd6e3be9a6d0b03e841c65aa4d860d31dd4733be2e36316b8d19eba81fe5ced",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_buildvalue_runtime.py",
@@ -1977,11 +1977,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "062d948c2751ca1f6f504e4370c61db4c7529f4b102bc77ca4e4bac3a6c6a9c3",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "7ffcfd7482ac722fd0e3d850edd1f9a954ee3e3f782c1b91cdd5af5c4a75ba60",
       "member": "py_capi_type_descriptor_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "671fdab569ac6181217c15ba872d0ffd4c98edc74de1814978a8e78189e01ed8",
+      "object_sha256": "187697a70948d05a293739c4278795ad12508dbf6e238c15d355498d1f6420ac",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_type_descriptor_runtime.py",
@@ -1991,11 +1991,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "31dc1bfb4b1fada05545c4c021c775b45beeb4c87554f994c24c3db83fcf8bec",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "638dc010930a09462484c6fbe96fb754b97035475dbfea99fada50c8b681105a",
       "member": "py_capi_visit_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "8865be4fb58ab0b30da1b419cb37bdbbdf86ea702b09d7d54e8e6596547c66b9",
+      "object_sha256": "b55ce364dad586908121162ffe7e17e3c3c6cc9a234801f3b0414f656098e7cc",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_capi_visit_runtime.py",
@@ -2005,11 +2005,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "3ccdd60ab1c98a588ac9fe10775753501b38dde11b1796fe6fbdadcf73adf043",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "5b8aa564f8fd5c82e5f6b995ae5b177dcd10a3acef5740613de8f063f323f78c",
       "member": "freestanding_mem_str.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "18bc4e4e1fc8cb699abc16c3a7c19b6829fa84b7428435bf7f97164eff92d457",
+      "object_sha256": "719df5a935d8ca6a68e85e84fa673b2a8ce80b6c68bf4b2f13e68789e7f48dd0",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_mem_str.py",
@@ -2019,8 +2019,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "bcdfd351833d60b71b68f019cb819fea4c2a8584369036125002e2686e00fc1f",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "4c585acc6e03c0663548db6ef9161a88c3ee776adc3705474ff24631911697d2",
       "member": "freestanding_lfq_spsc.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "7dd7d56174a04990e4fe9bc32ee96765a9a430b981a739ccde19805a5fec335e",
@@ -2033,11 +2033,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "804880c44c85aa945df34b37735f182ce7b627d9b949a4272aeee5512a440d74",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "3c788e848a190f2006097a93cd3f0caf700bbb6c71b43b10534ce0f60824118a",
       "member": "freestanding_iobuf_pool.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "7422e03ecb6542dcf204ca2fc645f26973c08e2873a6dc2f3a5949e7d0a53e6e",
+      "object_sha256": "1b3de0b7126d4fb56c063948836aa831572e9cc66f5da3f4e4fbc2969fc795a6",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_iobuf_pool.py",
@@ -2047,11 +2047,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "8946ef8192566315996d02178604ea8f84702b274b18a467d326aa71522f040b",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "00d15c7e6a3672f63445d67e4c7bc6562173566aaa681fc225ca2bf73869d9db",
       "member": "freestanding_uring.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "3a13a8b0d8ffca07a255cc8f5ac29fe28240359369be10f3111319e187259161",
+      "object_sha256": "7b71452afdc320723ff4e14b4f56afdc89a396b5ed8ca3ee94e57e6a14dece4c",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_uring.py",
@@ -2061,11 +2061,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "014ea25d9fa6176644bd78a9d018165651270a72d656d8034035272129f3882b",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "c379a1f07679a3626517ccefc78981aadd880fbcbd62f0754bdde722b46b1b8b",
       "member": "freestanding_libc_numeric.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "4e760413a8ca4ab47278176a9ea691678b6e09bbfa1ce4a8313536ab8dce4485",
+      "object_sha256": "3ecae57c720768d9ef211bde43e245281593fa39278cf98ed9e1c534a6c232e1",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_libc_numeric.py",
@@ -2075,11 +2075,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "672b1701274b8f0664937bd2281f8f0d74c7c592db3abb2b6f59dde8bd293010",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "ff2b69ff8d9e438187521ef48e7610ee6763ccad5250d44abca57dd208795810",
       "member": "freestanding_strtoint.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "19f43f9e4301dbc88c0743cec159ef1efdabb1e0719d530e1e4fb0a420ecd68a",
+      "object_sha256": "3a8420c351f48c971a0d8f5a7be8254e3b3d926e6b5aa9bd8d3736a7fe63f932",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_strtoint.py",
@@ -2089,11 +2089,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "8524ff8e637c344421329a3ac2149e90cb584e64e68b5cd908dde0eb289756d5",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "d220420cc07447e551e83dce93a20441f56f62a29ab3eea2cf1f29aadac63f6d",
       "member": "freestanding_re_engine.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "3901e40552ebdbcd614f8f0bd3ec4178505560160c9db9d10a5cdba8dd40462b",
+      "object_sha256": "5673d7fca5ea96fcb8c06d2688654ffd999f1490d35eef89be5535fff76b3d80",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_re_engine.py",
@@ -2103,25 +2103,25 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "f2f28cad1ae48085ffb14c0e2f4c7e65d19d18a551864abba5ecb2ec79543d8d",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "0c26bbccf0f0be01460fe3f96e02f21ab9f7401ef250e97efbf599be18917ae0",
       "member": "freestanding_allocator.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "bb707ec58c4b1141ab15f510e9b225fe3405a9d3809d412f7876266d00ea582b",
+      "object_sha256": "449ae99d04d2ae5e38d0be82f926cc95e2ee8cd595ca8afa68c8bdbb1a8dacdc",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_allocator.py",
       "source_kind": "pcc-python",
-      "source_sha256": "25d2bd142948f902e4fcfb4fb12ae0ab617be2d014e0d52e6c70bd23b1ecc62a",
+      "source_sha256": "1a9df30c7eed1898f046b358640872a698e0bdb377454fc47cd6a73547379dab",
       "target_triple": "arm64-apple-darwin25.5.0",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "ecf2fe7c4d6e804a594f42d9ea57953e3d13d7f1d96439bbaf9b8364d84b61f7",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "ab06b7535c1fc3b84eab1f5aaf83c27c004bb14afe6be9c36668c0130909d783",
       "member": "freestanding_timer_heap.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "47a9fd617d604b0d3bf547e9dc54bcaa59665a7399c5ab19f80a69efa46c5807",
+      "object_sha256": "f5834ad2336677c10ce5210057ef537c3968b464ee898e5e37f0053037955676",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_timer_heap.py",
@@ -2131,8 +2131,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "08ff88703f722442ef9425ae4c44ff373b6db2b4a08ab2bec9c51aa8d9858b49",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "3cab5768b450b8e8070b9e3fdd9fa7c4b113c9a0e76a8bc89322d6b7b4324888",
       "member": "freestanding_runtime_high_substrate.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "95f551595c16a757fee740c28b9ad60b1fc3d36b518bcbc4bffe4b2d893ace97",
@@ -2145,11 +2145,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "6c8f5b0ffd56247286bb3e36f3504799f2fb557933bf79c4e08ef0df103c3ab2",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "e591e7429a7102677716c4343ae5aadd102e94264df9bad370a3ba04deb1dc62",
       "member": "freestanding_gc_index_table.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "06ca9fe6add5bf78232fb46faa9d8c90bb8f3d05bdad0406c97b447df204d495",
+      "object_sha256": "831d3f586967c538c76395422812a537bc0bdee8e1b66bdcf813427ba9124575",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_index_table.py",
@@ -2159,11 +2159,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "43e8cc21d81b9dd9756dbdc13eb4318c51163a041ca1a2bfca8953436c20169d",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "1de12784b06309dac067071826a9c0b4d578faca90b01b1de6127e8ecd098bec",
       "member": "freestanding_gc_external_resource.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "78f3ac976796a3c6624bb00a2165efeced4081a40eb5f25dd2503892e4a48915",
+      "object_sha256": "05abd670da8c9e0084b58f0c994ad89e4d16d5d1020c79a2111d2ca78e35482e",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_external_resource.py",
@@ -2173,22 +2173,22 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "d3bddee73f2c56abae78da4ecb266250a390cd4d9dcd9ae5768a32fa022ad055",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "6f0215fbb636a1a629a018650ce5b40131bd65299c8f92e7a13824869e91480b",
       "member": "freestanding_gc_state.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "03f4c02faf88d7842914784c7e2a273ad709e3b23894941f5aa64db8dfbe8b28",
+      "object_sha256": "92a799657ae901bdf1898cacd157cda353d19a8f41d3895d33da64efa9c2408e",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_state.py",
       "source_kind": "pcc-python",
-      "source_sha256": "c95596198d7f57f6116ee47b3511a6faeb5c1dc5da0c56fdf9851b2aba82c6bb",
+      "source_sha256": "90ad00ffa70d76c2f90837be6105d67f84ccbeef9b26d413645776837f965d7f",
       "target_triple": "arm64-apple-darwin25.5.0",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "f9144793c3a48577511fd6d06d1d6777b2f777884aa11715a8ed00a915d53cd2",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "03c303296928c0b8db13d89d543d4915ca10e642605520f207e5fbc6d38890a3",
       "member": "freestanding_gc_control.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "5ee07bf04eff9baf31a21e0b4102083ba25252d06f60b98ef3b5de87ffe1eb0d",
@@ -2201,11 +2201,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "76c7153ea2d90aaacf8b273ef7c7e9c120038f4b8d489e7458c4ee7c81dd79a4",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "3bb0b9d85e5d0e0aec3bad0a78c55f982e3963343f2fc91a6313679805a93e5b",
       "member": "freestanding_gc_tracking.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "f08925b8de2ba251482e77684f4d53c66898e6d0cadc6b4fd8f7c4d2c71713a4",
+      "object_sha256": "434a1c7518ea013ee2d2aebb2a81e215293388b019389266ffdce79ff9e470d9",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_tracking.py",
@@ -2215,25 +2215,25 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "a288ace1a37ad577b01e26efa81c372e9f6a95c4986d56a73982f443cad7cc13",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "c01bce381d5fdf700a3d7fc413e9dd9ae42d716a051ce9bd794eb07a90e6b1d9",
       "member": "freestanding_gc_root_registry.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "c2378fab2e68fdf9b8fe09c7e8e4278d171fe48f01ee76c7c97bfae0830a1b67",
+      "object_sha256": "a6c3a905bf58760032d8b71d330da7d5d3e0b2e7dcd6bc5ecb86535adb83bbdd",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_root_registry.py",
       "source_kind": "pcc-python",
-      "source_sha256": "ab752bfd72dcb08768dca01804ca80518218cfb99756852e34899c9fbad13e22",
+      "source_sha256": "ccf3d3300f98f0317706614bc52fa80180b68162d3a35badcce4e18f8b8067bf",
       "target_triple": "arm64-apple-darwin25.5.0",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "d597e85c3dda684f37714e884dfedc549976067b158cd29a519822695f5c2f59",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "4f51b60a66b18d2722cba9dcc624c5073827bcf01589b8382df9d8decc28d03d",
       "member": "freestanding_gc_frame_registry.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "f54673b397682d7b882d64af0c309a2198baebb36b20494fc9c910353c342511",
+      "object_sha256": "eee17892071fd7d55c066f2ca22d25f40c905f86be7c15229601111be608e3be",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_frame_registry.py",
@@ -2243,8 +2243,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "5ddc3384dd26051f6c81713e967668740dd50d905c83cb068dc2b69ccde9226d",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "2510512cdd62bf1d5b8985e19257824f866c405dd324e8dc37b39b66f7082443",
       "member": "freestanding_gc_root_operations.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "aa780d207289a0f45a0ee25418e9009fa6508d5fe4dbed43e605157c271cb30e",
@@ -2257,11 +2257,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "e2684196683ddba3f64be06bff65ca1d67398f1274de0e7c3d6f769acd5636d6",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "1e66a3f1c79835be9632ac8b32596b30227cdc8a38b8ca454a60efd722b96048",
       "member": "freestanding_gc_mapped_roots.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "f82dbf5f2cb994b78c3e8e944196b8693e2c7f4ecd30c4bf8e731f0a92dab06c",
+      "object_sha256": "7d13c66a0b9aea2b25c3eab1a8ecf094c50d1f46034ef08fba4410d819f02e25",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_mapped_roots.py",
@@ -2271,8 +2271,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "0b6ef24f14d450874ca4c203d8936298be7e5072a809a013335f06068063cbb6",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "6d2a5757987d6476f1c415b37d6fe982583f4c4d1c3410fcb5293b99bd62009f",
       "member": "freestanding_gc_object_root_seeding.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "07e502136f12c668365a0956e8080b54a1ab8f5a50e860084e1581fe2be59fe1",
@@ -2285,11 +2285,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "60c506f4860b923dd7d39914d1578e47e6a97b5cd5c8197c0d5bf5ddb468e35b",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "31a15316a550ec81f8c9feb66f5644967f78e2a08c0245f0847d66d8c98adcfd",
       "member": "freestanding_gc_refcount_roots.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "3bf61532481c4eb15e1bcdd5140ceebb5fbdec10acbd319a875a816c97e5844c",
+      "object_sha256": "0b20a48bff8d473bcfbd3ed7752ee57899db8ae5e6d5fa0581d3ff3a429e1e4f",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_refcount_roots.py",
@@ -2299,11 +2299,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "1302b452e0ccc81aeb8ebc9ce6188d1390a6facc2cf398e8eab248fc82f6a68d",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "b3810c96a92e1a7d7d413fdfb5ea1bbd745a3d8cfd86f320814a9cefca600a83",
       "member": "freestanding_gc_object_slots.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "2958ba705604e0860420668327786373c938a34bd339cf3dbca1848a228b3a73",
+      "object_sha256": "9e7c874fad3ad7695ee2cc621a2dca768acb6e5b1207733172ceb453afcbf0e1",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_object_slots.py",
@@ -2313,11 +2313,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "aef9bc4e8f394ee71ab025e66b88849b9f119c85eea942525e98ca0d6d99a1a9",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "2cd3ed13aa07d42f02199ef1833cd56c2ed0882437498d660aae3431844862a2",
       "member": "freestanding_gc_common_mark_cycle.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "8e87f09c3218fa43b3e738515f96f4cf14d7a692b9ca97f140b0606283c30d2c",
+      "object_sha256": "4a8dbd949ae463fa9c10aaa3a71bb2ebeca7c106736229429e0ec7fa88aa805a",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_common_mark_cycle.py",
@@ -2327,11 +2327,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "fd89295ba4a5f40a9430e9ee1fc3466df1592d289a42fdb20ee567903336ccb7",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "1526a71df8d08ac3baba0dd3e09756ada581bf90ac3b28825455e2eafd576d9c",
       "member": "freestanding_gc_backend0_slots.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "ea528dea31967cc77d2154dc2541f4d2116773e52edee979bd52e86c0ebf8c62",
+      "object_sha256": "0169ece039d25d31aedc8b398c18a20773c427b884fd3df1908e8b164ade258e",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_backend0_slots.py",
@@ -2341,11 +2341,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "b460ede82381715485b8ca408e6714b6d47610131dcf2b153c39f7dce48e8cb7",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "f2a2ee00c7732ef25a111c277994c36b31dc588b570512a74c51158a530d172d",
       "member": "freestanding_gc_sweep_slots.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "cfe85e3205ee0cc1f36b8581b342522de2aabb42e33dd9c24eae5565c8b7ff5b",
+      "object_sha256": "9752aa07a9df58bbbe348fcc03be3be8f06e38407802b5612b84925e680d61e6",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_sweep_slots.py",
@@ -2355,11 +2355,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "76089a827ec1097eaa12c979880e8f391cdae4417bd5865b36f87b7697d24e3e",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "cdc129cc743a152d1983da3c73e670e61cfd14131b4d8c1cd02809c1e84d9236",
       "member": "freestanding_gc_tracing_sweep_collector.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "bfcc7a053c597c622dd808c571edf927cdf394859112877e193c2300cc1a8267",
+      "object_sha256": "4fc3e077619dca427a26b4cea72a8938057e4c1cea6976b3d02dd3fd29d3757d",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_tracing_sweep_collector.py",
@@ -2369,11 +2369,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "af23900beb6fe7657d89ada19efc60e081be24cca22f1273ca974a460c81b978",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "bbbe27a7c23bf36b6c7330f334a009980a3fdcbdb847e530732d8a9c12601412",
       "member": "freestanding_gc_public_collection.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "cdb5fc0f46756895cd715c3efe936a905ec20b06960bf099754d6a833bb79562",
+      "object_sha256": "eb00a1624fe1e2d6ed3d0c2de3c311a0b6c909494ce41a824decb26bd61d2610",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_public_collection.py",
@@ -2383,11 +2383,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "fd502b90a8e8da193975414a40660a7c6c8297d08b8472195a9a5afdffc4a926",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "401781013ff6e8132010078c1ae0f4e928009230844460a59f45dabb842bb6e4",
       "member": "freestanding_gc_incremental_concurrent_scheduler.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "4816497f773c94d4080578cadfb79adda51be25844d7ba3e4f715141be1164b3",
+      "object_sha256": "c2ed71367479ab7469a20f41ffd4f2e0b09ce234f6434c129ea50782166a26e6",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_incremental_concurrent_scheduler.py",
@@ -2397,11 +2397,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "73f54e7438b26d33fc5360d38c6f37a4cf0132cd8670459b16b42948c4e355bf",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "adca69a40a94ac4c399b86613edc67bf15aa6c4ab0440684c2a3d255739bee7b",
       "member": "freestanding_gc_forwarding_identity.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "51106d1dcb8f0308cee6ec73a1eb782b0f06835ad22d8a8bf6d0a2822ff1f0fd",
+      "object_sha256": "aaf0586892e58d42775a5037f99776cd3406b77c4c273afa90f612f20d954a6d",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_forwarding_identity.py",
@@ -2411,11 +2411,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "4043d88a9d23da76a763f71f4994e7d0e35ef4b6cfe395ba0d76cec1f5a04491",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "93d68f16514d4febeaaf1c73680c47aca9687c644b60dbd3213bf430d7c451e0",
       "member": "freestanding_gc_object_nodes.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "82bb6747d6b82aa2fdf6a9d56cbd792b8d24fa93e3d13b95caddbad56720d5ba",
+      "object_sha256": "5acc892e94f1c069a26c88c915027a0f3a628325766f19793b460c051ae5f6c3",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_object_nodes.py",
@@ -2425,11 +2425,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "e99ba1d6d52244bc164df9d54fc5377322024fd1fe9de61dd0d30fb7e0f2fbee",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "de63bc93bf2e5905491d496ea5b3ad8748414773cbb8df9a15e20d40edd01c85",
       "member": "freestanding_gc_generational_oldification.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "60ef664cebf891781c81684c40062bfde26a42998f252692e541e3825dcc4635",
+      "object_sha256": "27c82ef40064e2b398f662f8c42a02dd4bb5464c8c30b38e77fe5649101142ec",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_generational_oldification.py",
@@ -2439,11 +2439,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "b3b8a0288ce49516e51ebfe2238e1532ef2ffa01372a483e08091a18d8c1cc8f",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "014a05773a1452d9c02c40e286feda046cde17bf7e3ef272303ee51460e341cd",
       "member": "freestanding_gc_generational_remembered_owners.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "845b6b13fd426eef3d8aff9b2f15644e2b96ccab8ace781913e810920b22066d",
+      "object_sha256": "6c2d0feff01e51ca0e7539376c8c6da348c34919606bcab164ca0eee273f1eb1",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_generational_remembered_owners.py",
@@ -2453,11 +2453,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "20e4e4af29c6b90856582a3b095ac8afe0c7d1d1429d65e1e9985359f0a0d952",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "387f6d6b4c282e800210e8f91ce6eb723c96bbb8c962b4394a25f9f110754646",
       "member": "freestanding_gc_generational_promotion.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "d7a0b97ffbfc9847788efa26585e5ecf2190e2a1106298af21add543be407a34",
+      "object_sha256": "a5ddf994a6a99f9b55e70496d30977af19d89b54d814e4b79c551b17feaffbc4",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_generational_promotion.py",
@@ -2467,11 +2467,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "e1c32c27977226bbb52f1898de0c3b32a7ec5ca98ff5a7f17616feb57e479f1d",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "7b01e187a28fdf60b975560d46154fc932047fc1aedc68ede201f8dfd3461fd5",
       "member": "freestanding_gc_generational_scheduler.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "acd36b37638cd70151184b01e05d412594518230a52c91c909eb19eba1ea5679",
+      "object_sha256": "8797fc77b2d1391fdc5380f3ba73b750333e1c4d9f842cd372a45260e7a28f95",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_generational_scheduler.py",
@@ -2481,11 +2481,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "1c76850e88c75fb8a3e566ccb6037aefe3e9b9fc01b1ea7bf7e90dc871ab334f",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "6ec89eaaebb39cdaec4480ab4bb5e4aa9e21d3e965b1b37d97852f0c463ff293",
       "member": "freestanding_gc_relocation_remap.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "194b8ab61ed602d0f913d3558c8089e6bfa854188fa013cc176a89dac3a20ac2",
+      "object_sha256": "93877a4f37125aec39a9b32777914d8ddfcd30d74784588602cf2762aaca64c9",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_relocation_remap.py",
@@ -2495,11 +2495,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "b89f7158cc489d101111b4221abc524b5deed321d14756335a17be6eb0498ea1",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "b8a47adec909b5d6950571d1d6e9f06d8cd0f06875348c6e48270864550feba1",
       "member": "freestanding_gc_relocation_payload.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "f7614a363de5763dc28ec24f105e2d68818f044d5bbfc4c06ef5bd81d6636733",
+      "object_sha256": "9d354e748266c54a47821b78e81931e4b7932bab5c679e75f17fe5aa0d697d43",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_relocation_payload.py",
@@ -2509,11 +2509,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "ea9b4f6dce19c9632420f211288ae9c13618d67aab61e86c09b2ca90d3664b44",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "35ad91876eebc5a7aa6c3d9a9d0330bb2d3abfb285ca91d2ebad64f245795f75",
       "member": "freestanding_gc_relocation_copy.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "d6efcebf129711a343e2d51b7a7180b1b529c0791183d7f81505ca9f604e7980",
+      "object_sha256": "80d1dd8568f0f8b1422bcf6769594ff19145265e9cfc99db65bc894d701ae3ac",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_relocation_copy.py",
@@ -2523,11 +2523,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "3a63c47650ff2f2c32f039e287375705fda6372b62220164fa5df07aa1b3a19e",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "d8fe4306d85f72d76709efaa75f96694fe373cb3e1974ca8d7f3e51d7090f9cd",
       "member": "freestanding_gc_relocation_selector.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "bd2b8c85617b24c590647f339b2966f0ace50b512a5253558bf3882888c92f14",
+      "object_sha256": "76d84cad4b59219becfcbbe83424d160c2d7836ae2c617c752f3446056c32067",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_relocation_selector.py",
@@ -2537,11 +2537,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "d74a7681af0a5763a231db5f9920505b1da4a4632cf955fc8f92edd136b22aa7",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "26eb0ace93e0f71445d588a8c491650a3d8676c416915337f03237a19a060f61",
       "member": "freestanding_gc_relocation_drain.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "8cee79a277c79dff99e4d5f0bc21c758ea01bce371a773ca3a6231616f1c4bcf",
+      "object_sha256": "d3d7dc773d46533c882590db1604fb371f7ed8da78469291ac4c48a44fbba77e",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_relocation_drain.py",
@@ -2551,11 +2551,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "efaaa5bce5a615046485c6dd94904e8f073434aba762add65eb2f3f875cbce0d",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "c00989e5c7cbdeedd0ae926f26285c94a12fe0702e2754ca1aa709c8b4f7c563",
       "member": "freestanding_gc_zpage_mechanics.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "34454bded4c4e8f7f0cbcb315ee2dc936e4f7acfe927469a9c5ee27e49118899",
+      "object_sha256": "3b41063aba7463f9725ca2a93ad02cf2240e4c95e6ede38cced31e54649f4859",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_zpage_mechanics.py",
@@ -2565,11 +2565,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "67b2fdbb90b0a8325e85db0e948436abf21a09b513f33589c95b3e17030ef239",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "fba386a6156401bf296f16c47b7e28cf0b40333112ffd799ae92e5134795b5d2",
       "member": "freestanding_gc_zpage_lifecycle.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "4e48b3f06b32ee82bb48fe6628a8ac349eabc2c937f09d63bae1ee8306b4a21c",
+      "object_sha256": "444b74e376b08216863c80758bdc0b5b7d79cb9f61a239767f1128c4f3acf364",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_zpage_lifecycle.py",
@@ -2579,11 +2579,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "77b36c7987d03787ac734779e28cdf6731b8a1651ade6eca69f3be6c79e6930e",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "589af9619054c4d19dcb2d6869884babb96ce238d9e0e90ad1792d0dfcd4c2e0",
       "member": "freestanding_gc_forwarding_retirement.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "4f5aa30cdbd21ec4cc63dab06dcd79ad67b5d9de2257c62dd9036140cd079c74",
+      "object_sha256": "05a0a8186946d1450396ac290f9439e4a06d4ef1ee4e46270b50b39e3604c84c",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_forwarding_retirement.py",
@@ -2593,11 +2593,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "6e649100ae02022fd14fd2922bd38f6eb31b7ad7e8c04405354530a17972b7ff",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "4ff9520ff2c592d33f8f4140f149b4679dfa7ac92e8f42aec22ba7b396ccc7b7",
       "member": "freestanding_gc_barrier_dispatcher.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "999f1e29d9ef51d047bf1f10d2a5f821da0ec1ee0e97c50b0a063c6dad7fbe63",
+      "object_sha256": "afc91cf8145e3253b656affa968c670889cc8467680865f1994b1dcc3b700de8",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_barrier_dispatcher.py",
@@ -2607,11 +2607,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "157360b53e5876ac0529be918d34e5c21ab5135acf10ed8c09cac843f020c926",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "28670f6d011b8ab7d0650dc15a3749e8b7c96e4c49276985bf0037624b54fa24",
       "member": "freestanding_gc_zpage_allocation.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "22e8479a0e5e9e6283f6f9c007620f5916349b2e45853e26296184a465d34c4f",
+      "object_sha256": "5b40801a8c76181636ff81769f894fde8cc12d200e7503493cde8151b5253257",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_zpage_allocation.py",
@@ -2621,11 +2621,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "11c6f216fb5de2cf768aaea236a078ac583f50cab51b2a3d7ba8518ad672cdcc",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "7d72be43d40db59b36ed5979dc5d0df62ff0150940b60deb34b56352601f91d7",
       "member": "freestanding_gc_backend0_collector.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "e5839bf210315a95dc3a045dfc5a86c238fe6b633bc61a0f0576b4c0acd6e4b9",
+      "object_sha256": "3aaf1e0bf844231635116d9aef0cc1d6705e81480d55cd1fe865ddb47c2b78a8",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_backend0_collector.py",
@@ -2635,11 +2635,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "a306fdabcfcebc73c5dea88e6c91acc4b5142bacfc6fbebdb771f1c1f7427a08",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "90811912be6e34c40ade843921ef4d858b6a125c8c69eaed4f942a2dbef1914e",
       "member": "freestanding_gc_root_introspection.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "57ffa638bb159e70797e1291828522afa09330292bd8dec7209fcb7996f1bbd6",
+      "object_sha256": "d1484ea74752fcb6b49a6e4376b76ab31d67d1c00286a776b115f7dd65c89d7b",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_root_introspection.py",
@@ -2649,8 +2649,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "c5fd5ffb40bd0ddf2825c59d481d187319f5bba13eb32e34c931d4bba2e829a4",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "7874ac9a51e719195c00698ee97d07b6aec4c90a7daa8d863ce0b92ffa3bd126",
       "member": "freestanding_platform_io.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "37fa4cc941458feecc6674875b8a67f1e8bac7e30446921ffd04986df4a8691e",
@@ -2663,11 +2663,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "11b647c4952e32898588710179be0cc2206c7c2c54eca84a156edc83ff689111",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "4eae5a479258cfdfc73b2c6097aa252d896d744bd8bc34be18828d1cec9125b5",
       "member": "freestanding_platform_fs.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "5771fd34e4e60937edde49b3f7ec71581061a0672e0a15d2ebc9974736885cb0",
+      "object_sha256": "524577170a226f886cd4950232007aa27b93be5d94e8300e25b4807364689a93",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_platform_fs.py",
@@ -2677,11 +2677,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "3e9e7481fc4a7c8cda20e0a2e3fda0a2aa0f692b29f6238f912c97893f745f8d",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "c8898fd5a31fca864ac7e097dca75304795c9502645e9455221fc9ee1bd16999",
       "member": "freestanding_platform_env.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "873788e05d2ebc61d13ed910d32dd6dc9ef70f7dbe408521a92acbf57424103b",
+      "object_sha256": "84358c0c8145df45e1a63f8b4e44af402c4799b76ec8acc4cec4a8fa494f499c",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_platform_env.py",
@@ -2691,8 +2691,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "8a3a6d59ea564417d6fe26634dd7d51862d7aba1f3cfbdbcf35ed06de4d1e8ee",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "cd1d1e71bee6d18d8848062208f9aed26d06fc610d16832171db8ab578247030",
       "member": "freestanding_platform_system.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "d722af932cc993acd36ab40c106aa06d55d3a0c859dc09ce90f3442183d7b1b2",
@@ -2705,11 +2705,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "7624e65e9df86e82a8ab6b5974f09d934be028d2ec094a0fa91bb8819100747f",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "a1ff19c0de03d0a0ffeb194aec18902fcdae7c7aef2d8eaba2e350253814e888",
       "member": "freestanding_platform_time.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "952559f7ccea5974b39fdeb24b30d56d5115d817687683423b4097af5ed998c5",
+      "object_sha256": "01193021413628d25f3cd6b12dd393562abd506f6ca5b99b1684136b31436325",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_platform_time.py",
@@ -2719,11 +2719,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "2a912f6f33bbc63d73364011f336fac3851ebf6116d9a2774a55095a4b4207e7",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "6192d45e6b20e33faefac18cb07f5acf0e588fadfd36248f4f8dc36267525900",
       "member": "freestanding_platform_process.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "541e2fa6152768d425e3e788eb4be0242a65a5ae37dbdc86a780bf49f6fa1461",
+      "object_sha256": "0cacac42fbd40ac72a2227e3789ee3e28bb1596dc5d5d856025ef00e56e30e69",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_platform_process.py",
@@ -2733,11 +2733,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "7a698c0f53fd11ec267402eed2d89910dd721cc6dc5e371d71109710258ed65f",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "e411ee8d3ae8252025e565a9b945d1ab1ace9f5c48744eae7ee11c099a10dc47",
       "member": "freestanding_platform_socket.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "05ee7923d329a1203fc32b4aac962743c71bde88b6fc8a51eadb835a7e3fd252",
+      "object_sha256": "e7616196a5f9a8fe06545637dbac94eac26ca5e550b5d7af53c221ff0e3756e2",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_platform_socket.py",
@@ -2747,11 +2747,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "046358eafa36a718976c160fde5b8a92ba4a9a469f17652176f1ee26ecce3637",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "67f0dc49799a7e206823ac578b1140326b61bda1a166ce3cf40e7ce31eee9ee7",
       "member": "freestanding_platform_rss.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "0cdb773090e40642a4b738e639e7d9f1eeb8de9bd92119348806a14266a14720",
+      "object_sha256": "ff42ee0e405f1deb161a1cedb8a59ab5794fd27b7a0b30b70c77824b7c3f7dbd",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_platform_rss.py",
@@ -2761,11 +2761,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "a6d0661c3a9deafae04da95a11cb7e859761a3d59619f6f01fe6e8202c0e650d",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "ac4d7408d04cdfdd531caa40f4bafaad2ffcbcd9f6a22f451a03938be35c7c4a",
       "member": "freestanding_errno.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "2224dde4601d2913c3176353723424220cac22a44a00cca2cdfcc49aee2bbaac",
+      "object_sha256": "f096dcba910434ff550a007a083501530b1b2b505b982980508ae46dbb4eda9d",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_errno.py",
@@ -2775,11 +2775,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "c1568fdaa0f247d3779b969cf8f1ee5278d0284b9c23604a8373c9bd62843f24",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "ef3a5327aedd67e8d3c0fffe766de9a4a249900f469cffdd652b535e83daa8c1",
       "member": "freestanding_metal_runtime.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "57a98245cf9cb5dc9e424d4e2f58ddd2c175e3bb783d63b9d3c907470c19599d",
+      "object_sha256": "1a845dc2a842b97568eb3b83d6794d91578c61c00abd83beb0c2cbe6be8871f2",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_metal_runtime.py",
@@ -2789,11 +2789,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "3c54ce69e356e79a4ee03432a12c5b491a1c29a4d30574c8f4c66d9b48c8e87b",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "4bda24e3ef01a1416e7d8167dec09ece70ed75e9aa5009556b92c8a7a38b1890",
       "member": "freestanding_stdio.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "42c7670e65be203ae5206e37ab454971f6b70d1b938d5a4df67c25dce4ac8aa1",
+      "object_sha256": "e3dbde80b6a1017c7ba5a4866255c2f881794c88deca2917b0e2cd4fa5692a6f",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_stdio.py",
@@ -2803,11 +2803,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "414d5381a0c93701ff23cc9d607bcb356973f23163ffda92c4336c77d26f47f0",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "ddecc673ed995dd8b5923cc2a794157df8fefba611da0b1954010824f2891949",
       "member": "freestanding_gateway_control.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "28dab96cfee904a15044784dee7ceca1fbecfaeec711826135964553f99757f6",
+      "object_sha256": "b72f6e5cdf37fb1b4f94afa9cc0d33fc219cfa557670b38a9c55c5899bd57d81",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gateway_control.py",
@@ -2817,11 +2817,11 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "16fedfd6b605c6b762c6b6328a20cb659ce9c14ac619e600cf317d4c0cb0ba9a",
-      "ir_sha256": "147d9bb7e6603cf0f47bf61eef51d41b513976c4ac95bc92a16d9a2b19876bfd",
+      "codegen_checksum": "9d0d05206a04be1ba743831cb898c6eeb9dcb2c673016305273e3e7e2b3c06b9",
+      "ir_sha256": "c0688faa03be00e9754123245f9b575ed764c7b6160fb1086300730d6a6ed77d",
       "member": "freestanding_thread_kernel.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "b5f30763b2b8395b7103b21beb8dd8a7026673ac4a041ed06c8b46a953355d35",
+      "object_sha256": "da8ca3af54f1f399733ac4fb790e031ea5f58b53ff48bd66774266801e0a88bd",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_thread_kernel.py",
@@ -2831,7 +2831,7 @@
       "uses_host_cc": false
     }
   ],
-  "members_sha256": "bc2249488c222effa464e788051fbfe2e4d0b9e203fd9e42998715c6e52f73cb",
+  "members_sha256": "20ea5ea8275d832c27360e9e7720a74ee4c717f1eeb8e1aeb4f983ffeedec634",
   "policy": "pcc-production-no-handwritten-c.v1",
   "schema": "pcc.runtime-archive-provenance.v2",
   "target_triple": "arm64-apple-darwin25.5.0"

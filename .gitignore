@@ -209,3 +209,5 @@ projects/mac_diff_app/libpcc_gui_metal.dylib
 projects/mac_diff_app/mac_diff_app
 projects/mac_diff_app/pcc_gui_metal_render_bridge.m
 .playwright-mcp/
+.playwright-cli/
+projects/python-proxy/pproxy/diagnostic_log.py
