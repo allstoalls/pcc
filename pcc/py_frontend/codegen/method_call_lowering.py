@@ -241,6 +241,51 @@ def _method_release_arg_provenance(host, provenance) -> None:
             raise L1CodegenError("raw method argument cannot carry pcc ownership")
 
 
+def _method_unflatten_call_shape(declared, arg_values):
+    """Recover a Python call shape from ABI-flattened method arguments.
+
+    ``_resolve_call_kwargs`` hands back one value per declared formal in formal
+    order: a keyword-only formal lands in a positional slot, ``*args`` holds a
+    packed tuple and ``**kwargs`` a packed dict. That is exactly what the
+    native ABI wants. The dynamic ``py_func_call`` path re-packs those slots
+    into a Python argument tuple instead, where a keyword-only formal has to
+    arrive by name and the packed slots have to be splatted, or the runtime
+    binder rejects the call.
+
+    Returns ``(positional, keywords, var_positional, var_keyword)``. Shapes
+    ``_resolve_call_kwargs`` does not produce one-to-one are returned flat and
+    unchanged, so the caller keeps its existing behaviour for them.
+    """
+    flat = (list(arg_values), [], None, None)
+    if len(declared) != len(arg_values):
+        return flat
+    positional: list = []
+    keywords: list = []
+    var_positional = None
+    var_keyword = None
+    for formal, value in zip(declared, arg_values):
+        kind = formal.kind
+        if kind == "**kwargs":
+            if var_keyword is not None:
+                return flat
+            var_keyword = value
+        elif var_keyword is not None:
+            return flat
+        elif kind == "kw_only":
+            keywords.append((formal.name, value))
+        elif kind == "*args":
+            if var_positional is not None or keywords:
+                return flat
+            var_positional = value
+        elif kind in ("pos", "pos_only"):
+            if var_positional is not None or keywords:
+                return flat
+            positional.append(value)
+        else:
+            return flat
+    return positional, keywords, var_positional, var_keyword
+
+
 def _method_coerce_value_for_abi(
     host,
     value: ir.Value,
@@ -748,19 +793,70 @@ class MethodCallLoweringMixin:
             self.builder.cbranch(is_func, func_bb, raw_bb)
 
             self.builder.position_at_end(func_bb)
+            (
+                pos_values,
+                kw_values,
+                var_pos_value,
+                var_kw_value,
+            ) = _method_unflatten_call_shape(declared, arg_values)
+            slot_prefix = f"{info.name}.{method_name}.super.pyfunc"
+
+            def _as_object(pair):
+                return marshal.marshal_to_object(
+                    self.builder, self.module, self.runtime, pair[0], pair[1]
+                )
+
             full_args = self._emit_object_tuple_from_values(
-                ((self_val, DynType(name="dyn")),) + tuple(arg_values),
-                name=f"{info.name}.{method_name}.super.pyfunc.args",
+                ((self_val, DynType(name="dyn")),) + tuple(pos_values),
+                name=f"{slot_prefix}.args",
             )
-            func_result = self.builder.call(
-                self.runtime["py_func_call"],
-                [method_ptr, full_args],
-                name=(
-                    ""
-                    if isinstance(ret_ty, ir.VoidType)
-                    else self._fresh(f"{info.name}.{method_name}.super.pyfunc.ret")
-                ),
+            if var_pos_value is not None:
+                spread = self.builder.call(
+                    self.runtime["py_tuple_concat"],
+                    [full_args, _as_object(var_pos_value)],
+                    name=self._fresh(f"{slot_prefix}.args.spread"),
+                )
+                self._gc_release(full_args)
+                full_args = spread
+            kwargs_obj = None
+            if kw_values or var_kw_value is not None:
+                kwargs_obj = self.builder.call(
+                    self.runtime["py_dict_new"],
+                    [],
+                    name=self._fresh(f"{slot_prefix}.kwargs"),
+                )
+                if var_kw_value is not None:
+                    self.builder.call(
+                        self.runtime["py_dict_update"],
+                        [kwargs_obj, _as_object(var_kw_value)],
+                    )
+                for kw_name, kw_pair in kw_values:
+                    self.builder.call(
+                        self.runtime["py_dict_set"],
+                        [
+                            kwargs_obj,
+                            self._emit_str_literal(kw_name),
+                            _as_object(kw_pair),
+                        ],
+                    )
+            func_ret_name = (
+                ""
+                if isinstance(ret_ty, ir.VoidType)
+                else self._fresh(f"{slot_prefix}.ret")
             )
+            if kwargs_obj is None:
+                func_result = self.builder.call(
+                    self.runtime["py_func_call"],
+                    [method_ptr, full_args],
+                    name=func_ret_name,
+                )
+            else:
+                func_result = self.builder.call(
+                    self.runtime["py_func_call_kwargs"],
+                    [method_ptr, full_args, kwargs_obj],
+                    name=func_ret_name,
+                )
+                self._gc_release(kwargs_obj)
             self._gc_release(full_args)
             self._emit_post_call_err_check(
                 None,
