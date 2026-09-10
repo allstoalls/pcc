@@ -2182,6 +2182,16 @@ def _infer_expr(ctx: _InferCtx, scope: _Scope, expr: Expr) -> Expr:
             acc = ctx.resolve_type_refs(new_elems[0].ty)
             for el in new_elems[1:]:
                 acc = common_type(acc, ctx.resolve_type_refs(el.ty))
+            if isinstance(acc, NoneType):
+                # `[None]` describes as little as `[]` above: it says where a
+                # slot starts, not what it holds. Typing the element NoneType
+                # made every read of such a box NoneType too, so the mutable
+                # cell idiom -- `_BOX = [None]` with `_BOX[0] = value`
+                # elsewhere -- pushed each reader onto the CPython fallback:
+                # asyncio's `get_event_loop()` returned NoneType and
+                # `loop.create_task(...)` then misdispatched to the
+                # module-level function of the same name.
+                acc = TYPE_DYN
             list_ty = ListType(name="list", elem=acc)
         return replace(expr, elems=new_elems, ty=list_ty)
 
@@ -4047,14 +4057,30 @@ def _class_fields_from_def(
                     # Method writes contribute field order, but must not
                     # replace constructor/declaration types with a cleanup
                     # sentinel (e.g. an exhausted list replaced by ()).
+                    widen_from_none = False
                     if body_stmt.name != "__init__":
                         field_known = False
+                        known_field_ty = None
                         for known_name, _known_ty in fields:
                             if known_name == target.name:
                                 field_known = True
+                                known_field_ty = _known_ty
                                 break
-                        if field_known:
+                        # `self._x = None` in the constructor does not
+                        # describe the field, it only says where it starts.
+                        # Skipping later writes left such a field NoneType,
+                        # and every use of it then went through the CPython
+                        # fallback: `self._loop.create_task(...)` in asyncio
+                        # and `self.server` in the gateway's DNS driver each
+                        # took their whole enclosing function down to a
+                        # no-libpython stub. A write of a real type widens it;
+                        # a sentinel write still cannot erase a real
+                        # constructor type, because that type is not NoneType.
+                        if field_known and not isinstance(
+                            known_field_ty, NoneType
+                        ):
                             continue
+                        widen_from_none = field_known
                     field_ty = explicit_ty
                     if field_ty is None and isinstance(init_stmt.value, Name):
                         field_ty = arg_types.get(_name_ident(init_stmt.value))
@@ -4072,6 +4098,18 @@ def _class_fields_from_def(
                                 break
                         if field_ty is None:
                             field_ty = DynType(name="dyn")
+                    if widen_from_none:
+                        # A field the constructor only initialises to None and
+                        # that some other method writes is, by construction, a
+                        # field whose value changes; Dyn is the supertype both
+                        # states satisfy and is what routes the attribute
+                        # through native dynamic dispatch instead of the None
+                        # conversion. The write's own type is not required to
+                        # be useful: `self._loop = get_running_loop()` returns
+                        # a list-box element that is itself NoneType, and
+                        # demanding a better type there left the whole
+                        # TaskGroup on the CPython fallback.
+                        field_ty = DynType(name="dyn")
                     _append_field(fields, target.name, field_ty)
     return tuple(fields)
 
