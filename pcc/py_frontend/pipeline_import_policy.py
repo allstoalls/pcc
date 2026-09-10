@@ -63,14 +63,22 @@ NATIVE_BUILTIN_IMPORTS = frozenset(
 
 # Most builtin-native modules need no compiled provider because dedicated
 # lowering owns their values. platform's version functions and subprocess's
-# exception classes belong to their pcc-Python providers in the closed world.
-NATIVE_BUILTIN_IMPORTS_WITH_COMPILED_PROVIDER = frozenset({"platform", "subprocess"})
+# exception classes belong to their pcc-Python providers in the closed world,
+# and so do contextvars' `Context`/`copy_context`: dedicated lowering owns
+# `ContextVar` only, so without a walked provider `copy_context()` resolved
+# through CPython and took every function that called it -- including
+# `asyncio.Task.__init__` -- down to a fail-closed no-libpython stub.
+NATIVE_BUILTIN_IMPORTS_WITH_COMPILED_PROVIDER = frozenset(
+    {"platform", "subprocess", "contextvars"}
+)
 
 # A shallow explicit multi-file compile normally admits every directly
 # imported pcc-owned provider.  Entries are needed here only when the module is
 # also classified as compiler-owned builtin dispatch but still exposes
 # semantic objects that require its compiled provider.
-REQUIRED_COMPILED_STDLIB_PROVIDERS = frozenset({"platform", "subprocess"})
+REQUIRED_COMPILED_STDLIB_PROVIDERS = frozenset(
+    {"platform", "subprocess", "contextvars"}
+)
 
 NATIVE_IMPORT_FROMS = {
     "builtins": frozenset(
