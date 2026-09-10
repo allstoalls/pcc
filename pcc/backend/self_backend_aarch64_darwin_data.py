@@ -179,6 +179,34 @@ def emit_scalar_initializer(
             )
         if init.startswith("inttoptrconst:"):
             return [f"  .quad {int(init.split(':', 1)[1])}"]
+        if init.startswith("bitcast"):
+            # A pointer-to-pointer bitcast is the identity, and C static
+            # initializers produce it constantly (`PyObject *const py_None =
+            # (PyObject *)&py_none_storage;`). This emitter receives the raw
+            # initializer text, so it has to decode before deciding, the way
+            # the inttoptr case above does; otherwise the token fell through
+            # to `int(init)` and the whole translation unit failed with
+            # "invalid literal for int()".
+            decoded = decode_value_token(init)
+            if decoded.startswith("@"):
+                return [f"  .quad {asm_symbol(decoded[1:], module_symbols)}"]
+            if decoded.startswith("gep0:"):
+                return [
+                    f"  .quad {asm_symbol(decoded.split(':', 1)[1], module_symbols)}"
+                ]
+            if decoded.startswith("gepconst:"):
+                base, offset_text = decoded.split(":", 2)[1:]
+                offset = int(offset_text)
+                suffix = "" if offset == 0 else f"+{offset}"
+                return [
+                    f"  .quad {asm_symbol(base, module_symbols)}{suffix}"
+                ]
+            if decoded.startswith("inttoptrconst:"):
+                return [f"  .quad {int(decoded.split(':', 1)[1])}"]
+            raise BackendUnavailable(
+                "self backend does not support this bitcast global initializer "
+                f"for {global_name!r}: {init!r}"
+            )
         if init.startswith("@"):
             return [f"  .quad {asm_symbol(decode_global_name(init), module_symbols)}"]
         return [f"  .quad {int(init)}"]

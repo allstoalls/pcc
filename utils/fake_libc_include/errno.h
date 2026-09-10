@@ -67,6 +67,15 @@
 #ifndef EWOULDBLOCK
 #define EWOULDBLOCK EAGAIN
 #endif
+/* py_asyncio_io.c tests a non-blocking connect() against these two alongside
+ * EWOULDBLOCK; without them the pcc-C runtime archive could not be built at
+ * all. Darwin values, matching the EAGAIN=35 line above. */
+#ifndef EINPROGRESS
+#define EINPROGRESS 36
+#endif
+#ifndef EALREADY
+#define EALREADY 37
+#endif
 #ifndef ENOTSUP
 #define ENOTSUP 45
 #endif

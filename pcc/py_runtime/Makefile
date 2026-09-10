@@ -171,10 +171,26 @@ ifeq ($(PCC_WITH_LIBPYTHON),1)
 LIBPYTHON_SRCS = py_libpython.c
 endif
 
-PY_CAPI_SHIM_SRC =
 PY_CAPI_ORACLE_SRC =
 ifneq ($(PCC_WITH_LIBPYTHON),1)
 PY_CAPI_ORACLE_SRC = $(SRCDIR)/py_capi_shim_oracle.c
+endif
+
+# Whether this archive is expected to DEFINE the CPython API surface.
+#
+# The no-libpython builds compile py_capi_shim_oracle.c and therefore define
+# ~444 `Py*` symbols, which the inventory below records. A
+# PCC_WITH_LIBPYTHON=1 archive defines none of them: they are undefined here
+# and resolved against the real libpython at link time, and the `nm` filter
+# deliberately drops `U`. An empty inventory is the CORRECT result in that
+# mode, so asserting it non-empty failed every libpython runtime build -- the
+# production `--python-libpython=on` path as well as the cc/pcc oracle-diff
+# fixtures. What the completion marker actually has to prove is that nm ran
+# and the archive is not object-less; that is asserted separately.
+ifeq ($(PCC_WITH_LIBPYTHON),1)
+REQUIRE_CAPI_SHIM_INVENTORY = 0
+else
+REQUIRE_CAPI_SHIM_INVENTORY = 1
 endif
 
 OBJS     = $(patsubst $(SRCDIR)/%.c,$(OBJDIR)/%.o,$(SRCS))
@@ -218,7 +234,7 @@ FORTIFY_OBJ_PCC = $(OBJDIR_PCC)/py_libc_fortify.o
 # wrappers are compiled only for the pcc archives (they exist to remove
 # libSystem imports from pcc-produced artifacts).
 $(OBJDIR_PCC)/py_libc_fortify.o: $(SRCDIR)/py_libc_fortify.c $(RUNTIME_HEADERS) | $(OBJDIR_PCC)
-	$(PCC) --cpp-arg=-DPCC_USE_FREESTANDING_PLATFORM_PROCESS=1 --cpp-arg=-I$(CURDIR)/include --cpp-arg=-I$(CURDIR)/src --emit-obj $@ $<
+	PCC_HOST_PYTHON=$(PYTHON) $(PCC) --cpp-arg=-DPCC_USE_FREESTANDING_PLATFORM_PROCESS=1 --cpp-arg=-I$(CURDIR)/include --cpp-arg=-I$(CURDIR)/src --emit-obj $@ $<
 
 $(OBJDIR_PCC)/vendor_%.o: %.c | $(OBJDIR_PCC)
 	# PCC_NO_BUILTIN=1 is pcc's -fno-builtin: a unit that DEFINES a libc
@@ -226,7 +242,7 @@ $(OBJDIR_PCC)/vendor_%.o: %.c | $(OBJDIR_PCC)
 	# primitive (llvm.memset(p,0,n) becomes a `bzero` call on Darwin, so
 	# libc's own bzero would recurse forever). -O0 additionally keeps the
 	# loop-idiom pass from re-synthesizing the intrinsics.
-	PCC_NO_BUILTIN=1 $(PCC) $(if $(filter $(notdir $<),$(VENDOR_MUSL_O0_SRCS)),-O0,) $(VENDOR_MUSL_INCLUDES) --emit-obj $@ $<
+	PCC_HOST_PYTHON=$(PYTHON) PCC_NO_BUILTIN=1 $(PCC) $(if $(filter $(notdir $<),$(VENDOR_MUSL_O0_SRCS)),-O0,) $(VENDOR_MUSL_INCLUDES) --emit-obj $@ $<
 OBJS_PY  = $(patsubst %,$(OBJDIR_PY)/%.o,$(PY_MODULES))
 # Raw C-ABI modules are authored in pcc-Python like the runtime-high ports,
 # but their strict freestanding contract forbids managed-runtime references.
@@ -268,7 +284,10 @@ $(LIB): $(OBJS)
 	$(RANLIB) "$@.tmp"; \
 	nm -g "$@.tmp" > "$@.capi_syms.nm.tmp" 2>/dev/null; \
 	awk '$$2!="U" && $$2 ~ /^[A-Z]$$/ && ($$3 ~ /^_?Py/ || $$3 ~ /^_?_Py/) {print $$3}' "$@.capi_syms.nm.tmp" | LC_ALL=C sort -u > "$@.capi_syms.tmp"; \
-	test -s "$@.capi_syms.tmp"; \
+	test -s "$@.capi_syms.nm.tmp"; \
+	if [ "$(REQUIRE_CAPI_SHIM_INVENTORY)" = 1 ]; then \
+		test -s "$@.capi_syms.tmp"; \
+	fi; \
 	rm -f "$@.capi_syms.nm.tmp"; \
 	mv -f "$@.tmp" "$@"; \
 	mv -f "$@.capi_syms.tmp" "$@.capi_syms"
@@ -292,13 +311,21 @@ $(LIB_PCC): $(OBJS_PCC) $(VENDOR_STRING_OBJS_PCC)
 	$(RANLIB) "$@.tmp"; \
 	nm -g "$@.tmp" > "$@.capi_syms.nm.tmp" 2>/dev/null; \
 	awk '$$2!="U" && $$2 ~ /^[A-Z]$$/ && ($$3 ~ /^_?Py/ || $$3 ~ /^_?_Py/) {print $$3}' "$@.capi_syms.nm.tmp" | LC_ALL=C sort -u > "$@.capi_syms.tmp"; \
-	test -s "$@.capi_syms.tmp"; \
+	test -s "$@.capi_syms.nm.tmp"; \
+	if [ "$(REQUIRE_CAPI_SHIM_INVENTORY)" = 1 ]; then \
+		test -s "$@.capi_syms.tmp"; \
+	fi; \
 	rm -f "$@.capi_syms.nm.tmp"; \
 	mv -f "$@.tmp" "$@"; \
 	mv -f "$@.capi_syms.tmp" "$@.capi_syms"
 
+# PCC_HOST_PYTHON has to be handed over the way the pcc-Python rules do it: the
+# C driver delegates to a host pcc entrypoint, and without it that lookup falls
+# back to whichever python3 is first on PATH. When that interpreter has no pcc
+# module the real compile error is replaced by
+# PCC-CPY-UNSUPPORTED-L3-TOOLING-C-DRIVER, which hid a genuine frontend bug.
 $(OBJDIR_PCC)/%.o: $(SRCDIR)/%.c $(RUNTIME_HEADERS) | $(OBJDIR_PCC)
-	$(PCC) --cpp-arg=-I$(CURDIR)/include --cpp-arg=-I$(CURDIR)/src --emit-obj $@ $<
+	PCC_HOST_PYTHON=$(PYTHON) $(PCC) --cpp-arg=-I$(CURDIR)/include --cpp-arg=-I$(CURDIR)/src --emit-obj $@ $<
 
 # py_re_engine.c uses C11 atomics through pcc's parser-facing fake header.
 # Track that preprocessing input so an atomic-surface edit cannot leave a stale
@@ -440,7 +467,10 @@ $(LIB_PCC_PY_LIBPYTHON): $(LIB_PCC_PY) $(OBJDIR_LIBPY)/py_libpython.o
 	$(RANLIB) "$@.tmp"; \
 	nm -g "$@.tmp" > "$@.capi_syms.nm.tmp" 2>/dev/null; \
 	awk '$$2!="U" && $$2 ~ /^[A-Z]$$/ && ($$3 ~ /^_?Py/ || $$3 ~ /^_?_Py/) {print $$3}' "$@.capi_syms.nm.tmp" | LC_ALL=C sort -u > "$@.capi_syms.tmp"; \
-	test -s "$@.capi_syms.tmp"; \
+	test -s "$@.capi_syms.nm.tmp"; \
+	if [ "$(REQUIRE_CAPI_SHIM_INVENTORY)" = 1 ]; then \
+		test -s "$@.capi_syms.tmp"; \
+	fi; \
 	rm -f "$@.capi_syms.nm.tmp"; \
 	mv -f "$@.tmp" "$@"; \
 	mv -f "$@.capi_syms.tmp" "$@.capi_syms"
@@ -448,8 +478,13 @@ $(LIB_PCC_PY_LIBPYTHON): $(LIB_PCC_PY) $(OBJDIR_LIBPY)/py_libpython.o
 $(OBJDIR_LIBPY)/py_libpython.o: $(SRCDIR)/py_libpython.c $(RUNTIME_HEADERS) | $(OBJDIR_LIBPY)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -DPCC_WITH_LIBPYTHON=1 $(shell python3-config --includes) $(INCLUDES) -c $< -o $@
 
+# Callers build the libpython archive with OBJDIR=build_libpython, which makes
+# this target identical to $(OBJDIR) above; defining it twice made make warn
+# about overriding commands on every libpython build.
+ifneq ($(OBJDIR_LIBPY),$(OBJDIR))
 $(OBJDIR_LIBPY):
 	mkdir -p $(OBJDIR_LIBPY)
+endif
 
 # Recompile a pcc-Python runtime module when that module changes. The archive
 # target already tracks additions/removals through OBJS_PY/FREESTANDING_OBJS_PY;

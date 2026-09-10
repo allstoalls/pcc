@@ -20,6 +20,9 @@
 #define SO_REUSEADDR 0x0004
 #define SO_REUSEPORT 0x0200
 #define SO_NOSIGPIPE 0x1022
+/* py_asyncio_io.c reads it with getsockopt to complete a non-blocking
+ * connect(); its absence blocked the pcc-C runtime archive build. */
+#define SO_ERROR 0x1007
 
 #define SHUT_RD 0
 #define SHUT_WR 1

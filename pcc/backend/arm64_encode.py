@@ -3036,14 +3036,21 @@ def _encode_one(line, at, labels, resolve_branch, relocations, undefined,
 
     # --- floating point (double, with fcvt/scvtf/fcvtzs domain crossings) ---
 
+    # Scalar FP was encoded for double precision only, a deliberate scope
+    # boundary that the pcc-C runtime build walked straight into (py_json.c's
+    # float paths). Single precision is the same encoding with ftype 01 -> 00,
+    # i.e. base 0x1E600000 -> 0x1E200000 and nothing else moved; verified
+    # against the system assembler for fmul/fdiv/fadd/fsub, fneg/fabs/fsqrt,
+    # frintn/p/m/z, fcmp and fcsel with Rd=9 Rn=10 Rm=11.
     if mn in ("fadd", "fsub", "fmul", "fdiv"):
         rd, kd = _freg(ops[0])
         rn, _ = _freg(ops[1])
         rm, _ = _freg(ops[2])
-        if kd != "d":
-            raise EncodeError(f"{mn} only proven for double precision")
+        if kd not in ("d", "s"):
+            raise EncodeError(f"{mn} only proven for single/double precision")
+        base = 0x1E600000 if kd == "d" else 0x1E200000
         opc = {"fmul": 0x0800, "fdiv": 0x1800, "fadd": 0x2800, "fsub": 0x3800}[mn]
-        return 0x1E600000 | opc | (rm << 16) | (rn << 5) | rd
+        return base | opc | (rm << 16) | (rn << 5) | rd
 
     if mn in (
         "fneg", "fabs", "fsqrt",
@@ -3051,8 +3058,8 @@ def _encode_one(line, at, labels, resolve_branch, relocations, undefined,
     ):
         rd, kd = _freg(ops[0])
         rn, _ = _freg(ops[1])
-        if kd != "d":
-            raise EncodeError(f"{mn} only proven for double precision")
+        if kd not in ("d", "s"):
+            raise EncodeError(f"{mn} only proven for single/double precision")
         # FP data-processing (1 source): opc packs opcode<<15 with the fixed
         # 10000 field at bits 14-10 (0x4000).  The frint* opcodes are 001000
         # (N, nearest-even), 001001 (P, +inf), 001010 (M, -inf) and 001011
@@ -3067,7 +3074,7 @@ def _encode_one(line, at, labels, resolve_branch, relocations, undefined,
             "frintm": 0x54000,
             "frintz": 0x5C000,
         }[mn]
-        return 0x1E600000 | opc | (rn << 5) | rd
+        return (0x1E600000 if kd == "d" else 0x1E200000) | opc | (rn << 5) | rd
 
     if mn == "fmov":
         if ops[1].strip().startswith("#"):
@@ -3080,6 +3087,21 @@ def _encode_one(line, at, labels, resolve_branch, relocations, undefined,
         if kd == "d" and ks == "d":
             rd, _ = _freg(ops[0]); rn, _ = _freg(ops[1])
             return 0x1E604000 | (rn << 5) | rd
+        # The single-precision mirrors of the three shapes below. Only the
+        # double forms were encoded, so `fmov s9, s10` -- which the pcc-C
+        # runtime build emits for py_capi_shim_oracle.c -- aborted with
+        # "shape not proven". Bases verified against the system assembler:
+        # fmov s9,s10 = 1e204149, fmov s9,w10 = 1e270149,
+        # fmov w9,s10 = 1e260149, with (Rn<<5)|Rd = 0x149.
+        if kd == "s" and ks == "s":
+            rd, _ = _freg(ops[0]); rn, _ = _freg(ops[1])
+            return 0x1E204000 | (rn << 5) | rd
+        if kd == "s" and ks == "w":
+            rd, _ = _freg(ops[0]); rn, _ = _reg(ops[1])
+            return 0x1E270000 | (rn << 5) | rd
+        if kd == "w" and ks == "s":
+            rd, _ = _reg(ops[0]); rn, _ = _freg(ops[1])
+            return 0x1E260000 | (rn << 5) | rd
         if kd == "d" and ks == "x":
             rd, _ = _freg(ops[0]); rn, _ = _reg(ops[1])
             return 0x9E670000 | (rn << 5) | rd
@@ -3097,21 +3119,34 @@ def _encode_one(line, at, labels, resolve_branch, relocations, undefined,
             return 0x1E624000 | (rn << 5) | rd
         raise EncodeError(f"fcvt shape {line!r} not proven")
 
+    # Single-precision bases verified against the system assembler with
+    # Rd=9 Rn=10 (low bits 0x149): scvtf s9,w10 = 1e220149,
+    # scvtf s9,x10 = 9e220149, fcvtzs w9,s10 = 1e380149,
+    # fcvtzs x9,s10 = 9e380149; the unsigned forms add 0x10000, and the
+    # double bases below are the ones the assembler confirms unchanged.
     if mn in ("scvtf", "ucvtf"):
         rd, kd = _freg(ops[0])
         rn, n64 = _reg(ops[1])
-        if kd != "d":
-            raise EncodeError(f"{mn} only proven for double destinations")
+        if kd not in ("d", "s"):
+            raise EncodeError(f"{mn} only proven for single/double destinations")
         u = 0x10000 if mn == "ucvtf" else 0
-        return (0x9E620000 if n64 else 0x1E620000) | u | (rn << 5) | rd
+        if kd == "d":
+            base = 0x9E620000 if n64 else 0x1E620000
+        else:
+            base = 0x9E220000 if n64 else 0x1E220000
+        return base | u | (rn << 5) | rd
 
     if mn in ("fcvtzs", "fcvtzu"):
         rd, d64 = _reg(ops[0])
         rn, ks = _freg(ops[1])
-        if ks != "d":
-            raise EncodeError(f"{mn} only proven from double sources")
+        if ks not in ("d", "s"):
+            raise EncodeError(f"{mn} only proven from single/double sources")
         u = 0x10000 if mn == "fcvtzu" else 0
-        return (0x9E780000 if d64 else 0x1E780000) | u | (rn << 5) | rd
+        if ks == "d":
+            base = 0x9E780000 if d64 else 0x1E780000
+        else:
+            base = 0x9E380000 if d64 else 0x1E380000
+        return base | u | (rn << 5) | rd
 
     if mn == "uxtw":  # zero-extend w -> x
         rd, d64 = _reg(ops[0])
@@ -3146,22 +3181,24 @@ def _encode_one(line, at, labels, resolve_branch, relocations, undefined,
 
     if mn == "fcmp":
         rn, kn = _freg(ops[0])
-        if kn != "d":
-            raise EncodeError("fcmp only proven for double precision")
+        if kn not in ("d", "s"):
+            raise EncodeError("fcmp only proven for single/double precision")
+        base = 0x1E602000 if kn == "d" else 0x1E202000
         if ops[1].startswith("#"):
             if float(ops[1][1:]) != 0.0:
                 raise EncodeError("fcmp immediate must be #0.0")
-            return 0x1E602008 | (rn << 5)
+            return base | 0x8 | (rn << 5)
         rm, _ = _freg(ops[1])
-        return 0x1E602000 | (rm << 16) | (rn << 5)
+        return base | (rm << 16) | (rn << 5)
 
     if mn == "fcsel":
         rd, kd = _freg(ops[0])
         rn, _ = _freg(ops[1])
         rm, _ = _freg(ops[2])
-        if kd != "d":
-            raise EncodeError("fcsel only proven for double precision")
-        return 0x1E600C00 | (rm << 16) | (_cond(ops[3]) << 12) | (rn << 5) | rd
+        if kd not in ("d", "s"):
+            raise EncodeError("fcsel only proven for single/double precision")
+        base = 0x1E600C00 if kd == "d" else 0x1E200C00
+        return base | (rm << 16) | (_cond(ops[3]) << 12) | (rn << 5) | rd
 
     raise EncodeError(f"mnemonic {mn!r} not in the proven subset: {line!r}")
 

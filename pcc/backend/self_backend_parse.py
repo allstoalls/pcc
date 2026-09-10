@@ -491,7 +491,9 @@ def decode_value_token(token: str) -> str:
             break
         if _is_int_token(token) or _is_hex_token(token) or _is_float_token(token):
             break
-        if token.startswith(("inttoptr ", "ptrtoint ", "trunc ", "zext ", "sext ")):
+        if token.startswith(
+            ("inttoptr ", "ptrtoint ", "trunc ", "zext ", "sext ", "bitcast ")
+        ):
             break
         if token[0].isalpha():
             depth = 0
@@ -906,7 +908,7 @@ def _decode_parenthesized_constant_cast(token: str) -> str | None:
     text = token.strip()
     original_text = text
     op: str | None = None
-    for candidate in ("inttoptr", "ptrtoint", "trunc", "zext", "sext"):
+    for candidate in ("inttoptr", "ptrtoint", "trunc", "zext", "sext", "bitcast"):
         if text.startswith(candidate):
             op = candidate
             text = text[len(candidate) :].strip()
@@ -935,6 +937,37 @@ def _decode_parenthesized_constant_cast(token: str) -> str | None:
         if not dst_type.is_int:
             return None
         return f"ptrtointconst:{decoded_value}"
+    if op == "bitcast":
+        try:
+            src_type = _parse_type(_src_type_text.strip())
+        except BackendUnavailable:
+            return None
+        # A pointer-to-pointer bitcast is the identity, and C static
+        # initializers are full of it (`PyObject *const py_None =
+        # (PyObject *)&py_none_storage;`). Nothing has to be materialized.
+        if src_type.is_ptr and dst_type.is_ptr:
+            return decoded_value
+        # An integer-to-float bitcast is NOT folded here, deliberately.
+        #
+        # `NAN` from <math.h> reaches the backend as
+        # `fpext float bitcast (i32 2143289344 to float) to double`, and
+        # returning LLVM's own exact form for that constant -- the double bit
+        # pattern `0x7FF8000000000000` -- compiles but produces 0.0 at
+        # runtime. `emit_fp_hex_constant` does read a hex token as a double
+        # pattern and narrows it correctly, but a probe shows it is never
+        # reached for this operand: the live materializer truncates the token
+        # to the value's own 32 bits, and the low half of a quiet NaN's double
+        # pattern is exactly zero. The two consumers disagree about the
+        # convention, and this backend carries two parallel op lowerings
+        # (`src_type.describe()` and the `TYPE_KIND_*` kernel path), so which
+        # one is live is not something to guess at.
+        #
+        # Folding it therefore replaced a loud, correct build failure with a
+        # silently wrong floating-point constant, which is strictly worse.
+        # Until the hex-float convention is reconciled between those
+        # materializers, this returns None and the caller reports
+        # "unsupported value syntax" as before.
+        return None
     if op in {"trunc", "zext", "sext"}:
         if not dst_type.is_int:
             return None

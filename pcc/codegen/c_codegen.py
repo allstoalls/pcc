@@ -765,7 +765,22 @@ class LLVMCodeGenerator(
         state.function_type = merged_function_type
         state.type_key = str(merged_function_type)
         if state.linkage != linkage:
-            raise SemanticError(f"conflicting linkage for function '{name}'")
+            # An implicit record is a *use* with no linkage intent -- the
+            # ``extern`` above is what C forces an implicit declaration to
+            # assume, not something the source said. pcc's own C inliner
+            # lowers a wrapper body at an earlier call site, so a `static`
+            # helper defined further down the file can be used before its
+            # declaration is reached; treating the fabricated `extern` as
+            # binding rejected translation units that cc compiles cleanly
+            # (py_obj.c's pcc_gc_store_plan_commit_locked_impl, which broke
+            # every pcc-C runtime archive build). A real declaration still
+            # conflicts, because only implicit records are settled here.
+            if state.implicit and not state.defined:
+                state.linkage = linkage
+                state.symbol_name = symbol_name
+                state.implicit = False
+            else:
+                raise SemanticError(f"conflicting linkage for function '{name}'")
         if state.symbol_name != symbol_name:
             raise SemanticError(f"conflicting symbol binding for function '{name}'")
         if is_definition:
@@ -1495,6 +1510,7 @@ class LLVMCodeGenerator(
                 linkage="external",
                 defined=False,
                 symbol_name=name,
+                implicit=True,
             )
         existing = self.module.globals.get(name)
         if existing is None:
