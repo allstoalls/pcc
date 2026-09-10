@@ -420,13 +420,36 @@ class StringMethodLoweringMixin:
             name == "encode"
             and len(expr.args) == 1
             and isinstance(expr.args[0], StrLit)
+            and expr.args[0].value in ("ascii", "ASCII", "us-ascii")
+        ):
+            encoded = self.builder.call(
+                self.runtime["py_str_ascii_encode"],
+                [recv],
+                name=self._fresh("dyn.str.encode.ascii"),
+            )
+            # The encoder raises when a code point is out of range; emit the
+            # post-call error check so a surrounding try/except sees it
+            # (mirrors index/rindex above). Without it the NULL return became
+            # empty bytes and the failure was silent.
+            self._emit_post_call_err_check(getattr(expr, "span", None))
+            return encoded
+        if (
+            name == "encode"
+            and len(expr.args) == 1
+            and isinstance(expr.args[0], StrLit)
             and expr.args[0].value in ("latin-1", "latin1")
         ):
-            return self.builder.call(
+            encoded = self.builder.call(
                 self.runtime["py_str_latin1_encode"],
                 [recv],
                 name=self._fresh("dyn.str.encode.latin1"),
             )
+            # The encoder raises when a code point is out of range; emit the
+            # post-call error check so a surrounding try/except sees it
+            # (mirrors index/rindex above). Without it the NULL return became
+            # empty bytes and the failure was silent.
+            self._emit_post_call_err_check(getattr(expr, "span", None))
+            return encoded
         if name == "encode" and (
             len(expr.args) == 0
             or (
@@ -986,13 +1009,34 @@ class StringMethodLoweringMixin:
             name == "encode"
             and len(expr.args) == 1
             and isinstance(expr.args[0], StrLit)
+            and expr.args[0].value in ("ascii", "ASCII", "us-ascii")
+        ):
+            encoded = self.builder.call(
+                self.runtime["py_str_ascii_encode"],
+                [recv],
+                name=self._fresh("str.encode.ascii"),
+            )
+            # The encoder raises when a code point is out of range; emit the
+            # post-call error check so a surrounding try/except sees it
+            # (mirrors index/rindex above). Without it the NULL return became
+            # empty bytes and the failure was silent.
+            self._emit_post_call_err_check(getattr(expr, "span", None))
+            return encoded
+        if (
+            name == "encode"
+            and len(expr.args) == 1
+            and isinstance(expr.args[0], StrLit)
             and expr.args[0].value in ("latin-1", "latin1")
         ):
-            return self.builder.call(
+            encoded = self.builder.call(
                 self.runtime["py_str_latin1_encode"],
                 [recv],
                 name=self._fresh("str.encode.latin1"),
             )
+            # See the dyn gate above: the encoder raises out of range, and
+            # without this check the NULL return became empty bytes.
+            self._emit_post_call_err_check(getattr(expr, "span", None))
+            return encoded
         if name == "encode" and (
             len(expr.args) == 0
             or (

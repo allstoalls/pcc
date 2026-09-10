@@ -257,18 +257,7 @@ PyObject *py_gen_next(PyObject *gen) {
 PyObject *py_gen_send(PyObject *gen, PyObject *value) {
     if (gen != NULL && !PY_IS_TAGGED_INT(gen)
         && py_type_of(gen) == PY_TYPE_COROUTINE) {
-        if (value != NULL && value != py_None) {
-            py_raise_owned(py_exc_new(
-                PY_EXC_TYPEERROR,
-                "can't send non-None value to a just-started coroutine"
-            ));
-            return NULL;
-        }
-        return gen_require_result(
-            py_coroutine_run(gen),
-            "py_coroutine_run",
-            "coroutine send returned NULL without setting an exception"
-        );
+        return py_coroutine_send(gen, value, NULL);
     }
     PyGenObject *g = checked_gen(gen);
     if (g == NULL) return NULL;
@@ -294,6 +283,8 @@ PyObject *py_gen_send(PyObject *gen, PyObject *value) {
 
 
 PyObject *py_gen_throw(PyObject *gen, PyObject *exc) {
+    if (gen != NULL && !PY_IS_TAGGED_INT(gen) && py_type_of(gen) == PY_TYPE_COROUTINE)
+        return py_coroutine_send(gen, py_None, exc);
     PyGenObject *g = checked_gen(gen);
     if (g == NULL) return NULL;
     if (g->done != 0 || g->resume == NULL) {

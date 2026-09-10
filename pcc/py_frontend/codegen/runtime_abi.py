@@ -468,6 +468,7 @@ def _runtime_signatures_part_8():
     "py_str_ord": (_I64, [_PYOBJ], False),
     "py_str_ord_at_i64": (_I64, [_PYOBJ, _I64], False),
     "py_str_byte_at_i64": (_I64, [_PYOBJ, _I64], False),
+    "py_str_ascii_encode": (_PYOBJ, [_PYOBJ], False),
     "py_str_latin1_encode": (_PYOBJ, [_PYOBJ], False),
     "py_str_utf8_encode": (_PYOBJ, [_PYOBJ], False),
     "py_str_byte_slice_i64": (_PYOBJ, [_PYOBJ, _I64, _I64], False),
@@ -771,6 +772,10 @@ def _runtime_signatures_part_13():
     # ---- Native coroutine shell objects ----------------------------
     "py_coroutine_new": (_PYOBJ, [_CSTR], False),
     "py_coroutine_new_native": (_PYOBJ, [_CSTR, _PTR, _PYOBJ, _PYOBJ], False),
+    "py_coroutine_new_resumable": (_PYOBJ, [_CSTR, _PTR, _PYOBJ, _PYOBJ], False),
+    "py_coroutine_send": (_PYOBJ, [_PYOBJ, _PYOBJ, _PYOBJ], False),
+    "py_await_iterator": (_PYOBJ, [_PYOBJ], False),
+    "py_await_step": (_PYOBJ, [_PYOBJ, _PYOBJ, _PYOBJ], False),
     "py_coroutine_run": (_PYOBJ, [_PYOBJ], False),
     "py_coroutine_close": (_PYOBJ, [_PYOBJ], False),
     "py_coroutine_class": (_PYOBJ, [], False),

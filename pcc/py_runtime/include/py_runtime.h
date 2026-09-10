@@ -1219,6 +1219,10 @@ PyObject *py_gen_finish(PyObject *gen, PyObject *value);
 /* ---- Native coroutine shell objects ------------------------------------ */
 PyObject *py_coroutine_new(const char *name);
 PyObject *py_coroutine_new_native(const char *name, void *entry, PyObject *captures_tuple, PyObject *args_tuple);
+PyObject *py_coroutine_new_resumable(const char *name, void *entry, PyObject *captures_tuple, PyObject *args_tuple);
+PyObject *py_coroutine_send(PyObject *coro, PyObject *value, PyObject *error);
+PyObject *py_await_iterator(PyObject *awaitable);
+PyObject *py_await_step(PyObject *iterator, PyObject *value, PyObject *error);
 PyObject *py_coroutine_run(PyObject *coro);
 PyObject *py_coroutine_close(PyObject *coro);
 PyObject *py_coroutine_class(void);

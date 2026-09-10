@@ -117,6 +117,13 @@ static PyCoroutineObject *checked_coroutine(PyObject *coro) {
     return (PyCoroutineObject *)coro;
 }
 
+PyObject *py_coroutine_new_resumable(const char *name, void *entry,
+                                   PyObject *captures, PyObject *args) {
+    PyCoroutineObject *c = (PyCoroutineObject *)py_coroutine_new_native(name, entry, captures, args);
+    if (c != NULL) c->done = -1;
+    return (PyObject *)c;
+}
+
 PyObject *py_coroutine_run(PyObject *coro) {
     PyCoroutineObject *c = checked_coroutine(coro);
     if (c == NULL) return NULL;
@@ -124,7 +131,24 @@ PyObject *py_coroutine_run(PyObject *coro) {
         py_raise_owned(py_exc_new(PY_EXC_RUNTIMEERROR, "cannot reuse closed coroutine"));
         return NULL;
     }
-    if (c->done != 0) {
+    if (c->done < 0) {
+        PyObject *result = py_coroutine_send(coro, py_None, NULL);
+        if (result != NULL) {
+            py_decref(result);
+            py_raise_owned(py_exc_new(PY_EXC_RUNTIMEERROR, "suspended coroutine requires an asyncio event loop"));
+            return NULL;
+        }
+        PyObject *error = py_current_exception();
+        if (py_exc_matches(error, py_exc_builtin_class(PY_EXC_STOPITERATION))) {
+            PyObject *value = py_exc_get_message(error);
+            if (value == NULL) value = py_None;
+            py_incref(value);
+            py_clear_exception();
+            return value;
+        }
+        return NULL;
+    }
+    if (c->done == 1) {
         py_raise_owned(py_exc_new(
             PY_EXC_RUNTIMEERROR,
             "cannot reuse already awaited coroutine"
@@ -154,13 +178,13 @@ PyObject *py_coroutine_run(PyObject *coro) {
 int64_t py_coroutine_is_done(PyObject *coro) {
     PyCoroutineObject *c = checked_coroutine(coro);
     if (c == NULL) return 1;
-    return c->done != 0 ? 1 : 0;
+    return c->done == 1 ? 1 : 0;
 }
 
 PyObject *py_coroutine_get_result(PyObject *coro) {
     PyCoroutineObject *c = checked_coroutine(coro);
     if (c == NULL) return NULL;
-    PyObject *result = pcc_gc_load_ptr(coro, &c->result);
+    PyObject *result = c->done == 1 ? pcc_gc_load_ptr(coro, &c->result) : NULL;
     if (result == NULL) result = py_None;
     py_incref(result);
     return result;
@@ -178,9 +202,123 @@ PyObject *py_coroutine_get_args(PyObject *coro) {
 PyObject *py_coroutine_close(PyObject *coro) {
     if (coro == NULL || PY_IS_TAGGED_INT(coro)) return py_None;
     if (py_type_of(coro) == PY_TYPE_COROUTINE) {
-        ((PyCoroutineObject *)coro)->closed = 1;
+        PyCoroutineObject *c = (PyCoroutineObject *)coro;
+        if (c->done == -2) {
+            pcc_gc_pin(coro);
+            PyObject *result = py_gen_close(pcc_gc_load_ptr(coro, &c->result));
+            pcc_gc_store_ptr(coro, &c->result, NULL);
+            c->closed = 1;
+            c->done = 1;
+            pcc_gc_unpin(coro);
+            return result;
+        }
+        c->closed = 1;
     }
     return py_None;
+}
+
+static PyObject *coroutine_resume(PyCoroutineObject *c, PyObject *value, PyObject *error) {
+    PyObject *coro = (PyObject *)c;
+    if (c->done == 1 || c->closed != 0) {
+        py_raise_owned(py_exc_new(PY_EXC_RUNTIMEERROR, "cannot reuse already awaited coroutine"));
+        return NULL;
+    }
+    if (c->done == 0) {
+        if (error != NULL) { c->done = 1; py_raise(error); return NULL; }
+        PyObject *result = py_coroutine_run(coro);
+        if (result == NULL) return NULL;
+        PyObject *stopped = py_exc_new_with_value(PY_EXC_STOPITERATION, result);
+        py_decref(result);
+        py_raise_owned(stopped);
+        return NULL;
+    }
+    if (c->done == -1) {
+        if (error != NULL) { c->done = 1; py_raise(error); return NULL; }
+        if (value != NULL && value != py_None) {
+            py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "cannot send non-None value to a just-started coroutine"));
+            return NULL;
+        }
+        PyObject *iterator = c->entry(pcc_gc_load_ptr(coro, &c->captures), pcc_gc_load_ptr(coro, &c->args));
+        if (iterator == NULL) {
+            c->done = 1;
+            return coroutine_require_result(NULL, "coroutine factory", "coroutine factory returned NULL");
+        }
+        pcc_gc_store_ptr(coro, &c->result, iterator);
+        py_decref(iterator);
+        c->done = -2;
+    }
+    PyObject *iterator = pcc_gc_load_ptr(coro, &c->result);
+    PyObject *result = error == NULL ? py_gen_send(iterator, value) : py_gen_throw(iterator, error);
+    if (result == NULL) {
+        PyObject *stopped = py_current_exception();
+        PyObject *completed = py_None;
+        if (py_exc_matches(stopped, py_exc_builtin_class(PY_EXC_STOPITERATION))) {
+            completed = py_exc_get_message(stopped);
+            if (completed == NULL) completed = py_None;
+        }
+        pcc_gc_store_ptr(coro, &c->result, completed);
+        c->done = 1;
+    }
+    return result;
+}
+
+PyObject *py_coroutine_send(PyObject *coro, PyObject *value, PyObject *error) {
+    PyCoroutineObject *c = checked_coroutine(coro);
+    if (c == NULL) return NULL;
+    pcc_gc_pin(coro);
+    PyObject *result = coroutine_resume(c, value, error);
+    pcc_gc_unpin(coro);
+    return result;
+}
+
+PyObject *py_await_iterator(PyObject *awaitable) {
+    if (awaitable == NULL || PY_IS_TAGGED_INT(awaitable)) {
+        py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "object is not awaitable"));
+        return NULL;
+    }
+    if (py_type_of(awaitable) == PY_TYPE_COROUTINE) { py_incref(awaitable); return awaitable; }
+    PyObject *method = py_obj_getattr(awaitable, "__await__");
+    if (method == NULL) {
+        py_clear_exception();
+        py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "object is not awaitable"));
+        return NULL;
+    }
+    PyObject *args = py_tuple_new(0);
+    if (args == NULL) { py_decref(method); return NULL; }
+    PyObject *iterator = py_obj_call(method, args, py_None);
+    py_decref(args); py_decref(method);
+    if (iterator == NULL) return NULL;
+    PyObject *checked = py_obj_iter(iterator);
+    if (checked == NULL) { py_decref(iterator); return NULL; }
+    if (checked != iterator) {
+        py_decref(checked); py_decref(iterator);
+        py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "__await__ returned a non-iterator"));
+        return NULL;
+    }
+    py_decref(checked);
+    return iterator;
+}
+
+PyObject *py_await_step(PyObject *iterator, PyObject *value, PyObject *error) {
+    if (iterator == NULL || PY_IS_TAGGED_INT(iterator)) {
+        py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "invalid await iterator"));
+        return NULL;
+    }
+    int tag = py_type_of(iterator);
+    if (tag == PY_TYPE_COROUTINE) return py_coroutine_send(iterator, value, error);
+    if (tag == PY_TYPE_GEN) return error == NULL ? py_gen_send(iterator, value) : py_gen_throw(iterator, error);
+    if (error == NULL && (value == NULL || value == py_None)) return py_obj_next(iterator);
+    PyObject *method = py_obj_getattr(iterator, error == NULL ? "send" : "throw");
+    if (method == NULL) {
+        if (error != NULL) { py_clear_exception(); py_raise(error); }
+        return NULL;
+    }
+    PyObject *args = py_tuple_new(1);
+    if (args == NULL) { py_decref(method); return NULL; }
+    py_tuple_set_item(args, 0, error == NULL ? value : error);
+    PyObject *result = py_obj_call(method, args, py_None);
+    py_decref(args); py_decref(method);
+    return result;
 }
 
 static PyObject *await_iterator(PyObject *it) {

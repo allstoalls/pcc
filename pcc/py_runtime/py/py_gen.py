@@ -44,6 +44,7 @@ py_raise    = extern("py_raise",    (c_ptr,),         c_void)
 # owns a reference.  py_raise_owned raises and releases that reference.
 py_raise_owned = extern("py_raise_owned", (c_ptr,), c_void)
 py_coroutine_run = extern("py_coroutine_run", (c_ptr,), c_ptr)
+py_coroutine_send = extern("py_coroutine_send", (c_ptr, c_ptr, c_ptr), c_ptr)
 py_current_exception = extern("py_current_exception", (), c_ptr)
 py_clear_exception   = extern("py_clear_exception",   (), c_void)
 py_exc_builtin_class = extern("py_exc_builtin_class", (c_int64,), c_ptr)
@@ -379,17 +380,7 @@ def py_gen_send(gen, value):
     if not ptr_is_null(gen):
         if is_tagged_int(gen) == 0:
             if load_i32(gen, 8) == PY_TYPE_COROUTINE:       # PY_TYPE_COROUTINE
-                none = global_load_ptr("py_None")
-                if not ptr_is_null(value):
-                    if ptr_eq(value, none) == 0:
-                        exc = py_exc_new(3, null())
-                        py_raise_owned(exc)
-                        return null()
-                return _require_result(
-                    py_coroutine_run(gen),
-                    cstr("py_coroutine_run"),
-                    cstr("coroutine send returned NULL without setting an exception"),
-                )
+                return py_coroutine_send(gen, value, null())
     gen = _checked_gen(gen)
     if ptr_is_null(gen):
         return null()
@@ -419,6 +410,9 @@ def py_gen_send(gen, value):
 
 @c_abi_export("py_gen_throw")
 def py_gen_throw(gen, exc):
+    if not ptr_is_null(gen) and is_tagged_int(gen) == 0:
+        if load_i32(gen, 8) == PY_TYPE_COROUTINE:
+            return py_coroutine_send(gen, global_load_ptr("py_None"), exc)
     gen = _checked_gen(gen)
     if ptr_is_null(gen):
         return null()

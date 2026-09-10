@@ -487,6 +487,91 @@ def py_str_latin1_encode(s):
             return null()
         if cp > 255:
             free(buf)
+            # CPython raises UnicodeEncodeError, a ValueError subclass. The
+            # builtin table has no UnicodeError, so ValueError is the closest
+            # correct supertype: `except ValueError` still catches it and
+            # `except UnicodeError` does not. Returning NULL alone raised
+            # nothing at all -- `"\u65e5".encode(...)` produced EMPTY BYTES and a
+            # caller built a malformed message from it, which is worse than
+            # either exception.
+            py_raise_owned(py_exc_new(2, cstr("latin-1 codec cannot encode character")))
+            return null()
+        store_i8(buf, out, cp)
+        out = out + 1
+        i = i + step
+    result = py_bytes_new(buf, out)
+    free(buf)
+    return result
+
+
+@c_abi_export("py_str_ascii_encode")
+def py_str_ascii_encode(s):
+    # `str.encode("ascii")`. Structurally the latin-1 encoder above with the
+    # bound at 127: pcc strings are UTF-8, so the decode loop and the
+    # out-of-range exit are the reviewed ones rather than a second dialect.
+    # Out-of-range returns NULL exactly as latin-1 does, so the caller's
+    # error check raises. CPython raises UnicodeEncodeError specifically;
+    # the runtime has no native UnicodeEncodeError yet, and inventing one
+    # here would make this encoder disagree with its own latin-1 mirror.
+    if ptr_is_null(s) != 0:
+        return py_bytes_new(null(), 0)
+    byte_len: int = load_i64(s, PYSTROBJECT_BYTE_LEN_OFFSET)
+    if byte_len <= 0:
+        return py_bytes_new(null(), 0)
+    buf = malloc(byte_len)
+    if ptr_is_null(buf):
+        return null()
+    raw = ptr_add(s, PYSTROBJECT_DATA_OFFSET)
+    i: int = 0
+    out: int = 0
+    while i < byte_len:
+        b0: int = load_i8(raw, i)
+        if b0 < 0:
+            b0 = b0 + 256
+        cp: int = 0
+        step: int = 1
+        if b0 < 128:
+            cp = b0
+        elif (b0 & 224) == 192 and i + 1 < byte_len:
+            b1: int = load_i8(raw, i + 1)
+            if b1 < 0:
+                b1 = b1 + 256
+            cp = ((b0 & 31) << 6) | (b1 & 63)
+            step = 2
+        elif (b0 & 240) == 224 and i + 2 < byte_len:
+            b1 = load_i8(raw, i + 1)
+            b2: int = load_i8(raw, i + 2)
+            if b1 < 0:
+                b1 = b1 + 256
+            if b2 < 0:
+                b2 = b2 + 256
+            cp = ((b0 & 15) << 12) | ((b1 & 63) << 6) | (b2 & 63)
+            step = 3
+        elif (b0 & 248) == 240 and i + 3 < byte_len:
+            b1 = load_i8(raw, i + 1)
+            b2 = load_i8(raw, i + 2)
+            b3: int = load_i8(raw, i + 3)
+            if b1 < 0:
+                b1 = b1 + 256
+            if b2 < 0:
+                b2 = b2 + 256
+            if b3 < 0:
+                b3 = b3 + 256
+            cp = ((b0 & 7) << 18) | ((b1 & 63) << 12) | ((b2 & 63) << 6) | (b3 & 63)
+            step = 4
+        else:
+            free(buf)
+            return null()
+        if cp > 127:
+            free(buf)
+            # CPython raises UnicodeEncodeError, a ValueError subclass. The
+            # builtin table has no UnicodeError, so ValueError is the closest
+            # correct supertype: `except ValueError` still catches it and
+            # `except UnicodeError` does not. Returning NULL alone raised
+            # nothing at all -- `"caf\u00e9".encode(...)` produced EMPTY BYTES and a
+            # caller built a malformed message from it, which is worse than
+            # either exception.
+            py_raise_owned(py_exc_new(2, cstr("ascii codec cannot encode character")))
             return null()
         store_i8(buf, out, cp)
         out = out + 1

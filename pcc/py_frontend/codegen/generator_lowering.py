@@ -28,6 +28,7 @@ from ..py_ast import (
     NoneType,
     Return,
     Stmt,
+    ExceptHandler,
     Try,
     TupleExpr,
     While,
@@ -488,6 +489,16 @@ def _dataclass_field_names(obj):
         return ("span", "value")
     if isinstance(obj, Try):
         return ("span", "body", "handlers", "else_body", "finally_body")
+    if isinstance(obj, ExceptHandler):
+        # ExceptHandler is not a Stmt, so without an entry here this table
+        # answered () for it and the generic descent stopped at the handler
+        # without ever reaching its body. Every collector built on this table
+        # silently skipped `except` bodies: the frame-slot planner reserved no
+        # delegation slot for an `await` inside a handler, and codegen then
+        # failed with "may_park call missing managed child frame slot". One
+        # caller had already worked around it by walking handlers by hand;
+        # naming the fields fixes it for all of them.
+        return ("span", "exc_type", "name", "body")
     if isinstance(obj, With):
         return ("span", "items", "body")
     if isinstance(obj, FuncDef):
@@ -565,6 +576,8 @@ class GeneratorLoweringMixin:
         recognize generator functions.
         """
         cache_key = id(fd)
+        if fd.is_async:
+            return True
         if cache_key in self._funcdef_yield_sentinel_cache:
             return self._funcdef_yield_sentinel_cache[cache_key]
         if (
@@ -718,6 +731,11 @@ class GeneratorLoweringMixin:
                 continue
             if isinstance(node, (FuncDef, ClassDef)):
                 continue
+            if isinstance(node, Call) and isinstance(node.func, Name) and node.func.ident == "__await__":
+                for kind in ("asyncio.await.child", "asyncio.await.send", "asyncio.await.error"):
+                    hidden = vthread_delegate_frame_name(node, kind)
+                    if hidden not in names:
+                        names.append(hidden)
             if (
                 isinstance(node, BinOp)
                 and isinstance(node.lhs.ty, (IntType, BoolType))

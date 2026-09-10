@@ -2069,7 +2069,7 @@ class UserFunctionLoweringMixin:
             name=f"{orig_name}.async.runner",
         )
         coro = self.builder.call(
-            self.runtime["py_coroutine_new_native"],
+            self.runtime["py_coroutine_new_resumable"],
             [
                 self._attr_name_ptr(orig_name),
                 runner,

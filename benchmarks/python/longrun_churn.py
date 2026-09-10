@@ -82,6 +82,15 @@ def main() -> int:
             idx = idx + 1
         if r % SAMPLE_EVERY == 0:
             elapsed = (pcc_monotonic_us() - start_us) // 1000
+            # Formatting allocates and can itself trigger GC. Read the pause
+            # counters together so count and histogram describe the same work.
+            pause_count = pcc_gc_telemetry(PAUSE_COUNT)
+            pause_sum = pcc_gc_telemetry(PAUSE_SUM_US)
+            pause_max = pcc_gc_telemetry(MAX_PAUSE_US)
+            pause_lt_100us = pcc_gc_telemetry(PAUSE_LT_100US)
+            pause_lt_1ms = pcc_gc_telemetry(PAUSE_LT_1MS)
+            pause_lt_10ms = pcc_gc_telemetry(PAUSE_LT_10MS)
+            pause_ge_10ms = pcc_gc_telemetry(PAUSE_GE_10MS)
             print(
                 str(elapsed)
                 + ","
@@ -89,19 +98,19 @@ def main() -> int:
                 + ","
                 + str(pcc_os_peak_rss_bytes())
                 + ","
-                + str(pcc_gc_telemetry(PAUSE_COUNT))
+                + str(pause_count)
                 + ","
-                + str(pcc_gc_telemetry(PAUSE_SUM_US))
+                + str(pause_sum)
                 + ","
-                + str(pcc_gc_telemetry(MAX_PAUSE_US))
+                + str(pause_max)
                 + ","
-                + str(pcc_gc_telemetry(PAUSE_LT_100US))
+                + str(pause_lt_100us)
                 + ","
-                + str(pcc_gc_telemetry(PAUSE_LT_1MS))
+                + str(pause_lt_1ms)
                 + ","
-                + str(pcc_gc_telemetry(PAUSE_LT_10MS))
+                + str(pause_lt_10ms)
                 + ","
-                + str(pcc_gc_telemetry(PAUSE_GE_10MS))
+                + str(pause_ge_10ms)
                 + ","
                 + str(ops)
                 + ","

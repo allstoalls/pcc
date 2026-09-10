@@ -69,7 +69,7 @@ class NativeAsyncioLoweringMixin:
             name=self._fresh(f"{display_name}.runner"),
         )
         coro = self.builder.call(
-            self.runtime["py_coroutine_new_native"],
+            self.runtime["py_coroutine_new_resumable"],
             [self._attr_name_ptr(display_name), runner, captures_tuple, args_tuple],
             name=self._fresh(f"{display_name}.coroutine"),
         )
@@ -105,6 +105,9 @@ class NativeAsyncioLoweringMixin:
     def _emit_await_expr(self, expr: Call) -> ir.Value:
         if len(expr.args) != 1 or expr.kwargs:
             raise NotImplementedError("await expects exactly one expression")
+        if getattr(self, "_generator_ctx_stack", ()):
+            from .async_await_lowering import emit_resumable_await
+            return emit_resumable_await(self, expr)
         source = expr.args[0]
         hint = self._class_hint_for_expr(source)
         if hint is not None:

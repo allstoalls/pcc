@@ -6310,6 +6310,8 @@ def infer_module(
     ``DynType``.
     """
 
+    from .async_context_lowering import lower_async_contexts
+    m = lower_async_contexts(m)
     ctx = _InferCtx(
         m,
         external_exports=external_exports,

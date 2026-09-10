@@ -282,12 +282,19 @@ class UnaryCallLoweringMixin:
                 [root_ptr, ir.Constant(result.type, None)],
             )
             self._emit_gc_frame_leave_lifo_for_slot(root_slot)
-        if root_result and isinstance(result.type, ir.PointerType):
+        if (
+            root_result
+            and isinstance(result.type, ir.PointerType)
+            and not getattr(self, "_suppress_borrowed_return_retain", False)
+        ):
             # The declared user-function ABI returns one object owner. The
             # expression can still have an imprecise Dyn type, and a GC-root
             # reload creates a different SSA value. Preserve the producer's
             # ownership proof so assignments and borrowing consumers release
             # that owner instead of treating this result as a raw pointer.
+            # Runtime-library helpers suppress automatic return retains and
+            # manage raw/borrowed results explicitly. Their pointer ABI alone
+            # does not prove an owner that the caller may consume.
             self._note_owned_object_value(result)
         return result
 

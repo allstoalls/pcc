@@ -6,9 +6,9 @@ Coroutine object layout:
     offset 24   entry PyNativeFuncEntry
     offset 32   captures tuple
     offset 40   args tuple
-    offset 48   cached result
+    offset 48   suspended generator or cached result (selected by done)
     offset 56   closed i32
-    offset 60   done i32
+    offset 60   state: -2 active generator, -1 resumable factory, 0 legacy, 1 done
     total size: 64 bytes
 """
 
@@ -56,9 +56,17 @@ py_class_new = extern(
     c_ptr,
 )
 py_tuple_new = extern("py_tuple_new", (c_int64,), c_ptr)
+py_tuple_set_item = extern("py_tuple_set_item", (c_ptr, c_int64, c_ptr), c_void)
+py_obj_iter = extern("py_obj_iter", (c_ptr,), c_ptr)
 py_incref = extern("py_incref", (c_ptr,), c_void)
 py_decref = extern("py_decref", (c_ptr,), c_void)
 py_exc_new = extern("py_exc_new", (c_int64, c_ptr), c_ptr)
+py_exc_new_with_value = extern("py_exc_new_with_value", (c_int64, c_ptr), c_ptr)
+py_gen_send = extern("py_gen_send", (c_ptr, c_ptr), c_ptr)
+py_gen_throw = extern("py_gen_throw", (c_ptr, c_ptr), c_ptr)
+py_gen_close = extern("py_gen_close", (c_ptr,), c_ptr)
+pcc_gc_pin = extern("pcc_gc_pin", (c_ptr,), c_void)
+pcc_gc_unpin = extern("pcc_gc_unpin", (c_ptr,), c_void)
 py_raise = extern("py_raise", (c_ptr,), c_void)
 # py_raise increfs; a caller that created the exception must release it.
 py_raise_owned = extern("py_raise_owned", (c_ptr,), c_void)
@@ -212,6 +220,14 @@ def py_coroutine_new_native(name, entry, captures_tuple, args_tuple):
     return coro
 
 
+@c_abi_export("py_coroutine_new_resumable")
+def py_coroutine_new_resumable(name, entry, captures_tuple, args_tuple):
+    coro = py_coroutine_new_native(name, entry, captures_tuple, args_tuple)
+    if ptr_is_null(coro) == 0:
+        store_i32(coro, 60, -1)
+    return coro
+
+
 def _checked_coroutine(coro):
     if ptr_is_null(coro):
         _raise_typeerror(cstr("object is not a coroutine"))
@@ -233,7 +249,22 @@ def py_coroutine_run(coro):
     if load_i32(coro, 56) != 0:
         _raise_runtimeerror(cstr("cannot reuse closed coroutine"))
         return null()
-    if load_i32(coro, 60) != 0:
+    if load_i32(coro, 60) < 0:
+        result = py_coroutine_send(coro, global_load_ptr("py_None"), null())
+        if ptr_is_null(result) == 0:
+            py_decref(result)
+            _raise_runtimeerror(cstr("suspended coroutine requires an asyncio event loop"))
+            return null()
+        error = py_current_exception()
+        if py_exc_matches(error, py_exc_builtin_class(8)) != 0:
+            value = py_exc_get_message(error)
+            if ptr_is_null(value):
+                value = global_load_ptr("py_None")
+            py_incref(value)
+            py_clear_exception()
+            return value
+        return null()
+    if load_i32(coro, 60) == 1:
         _raise_runtimeerror(cstr("cannot reuse already awaited coroutine"))
         return null()
     entry = load_ptr(coro, 24)
@@ -263,7 +294,7 @@ def py_coroutine_is_done(coro) -> int:
     coro = _checked_coroutine(coro)
     if ptr_is_null(coro):
         return 1
-    if load_i32(coro, 60) != 0:
+    if load_i32(coro, 60) == 1:
         return 1
     return 0
 
@@ -273,10 +304,75 @@ def py_coroutine_get_result(coro):
     coro = _checked_coroutine(coro)
     if ptr_is_null(coro):
         return null()
-    result = pcc_gc_load_ptr(coro, ptr_add(coro, 48))
+    result = null()
+    if load_i32(coro, 60) == 1:
+        result = pcc_gc_load_ptr(coro, ptr_add(coro, 48))
     if ptr_is_null(result):
         result = global_load_ptr("py_None")
     py_incref(result)
+    return result
+
+
+def _coroutine_resume(coro, value, error):
+    state: int = load_i32(coro, 60)
+    if state == 1 or load_i32(coro, 56) != 0:
+        _raise_runtimeerror(cstr("cannot reuse already awaited coroutine"))
+        return null()
+    if state == 0:
+        if ptr_is_null(error) == 0:
+            store_i32(coro, 60, 1)
+            py_raise(error)
+            return null()
+        result = py_coroutine_run(coro)
+        if ptr_is_null(result):
+            return null()
+        stopped = py_exc_new_with_value(8, result)
+        py_decref(result)
+        py_raise_owned(stopped)
+        return null()
+    if state == -1:
+        if ptr_is_null(error) == 0:
+            store_i32(coro, 60, 1)
+            py_raise(error)
+            return null()
+        if ptr_is_null(value) == 0 and ptr_eq(value, global_load_ptr("py_None")) == 0:
+            _raise_typeerror(cstr("cannot send non-None value to a just-started coroutine"))
+            return null()
+        entry = load_ptr(coro, 24)
+        iterator = call_ptr2(entry, pcc_gc_load_ptr(coro, ptr_add(coro, 32)), pcc_gc_load_ptr(coro, ptr_add(coro, 40)))
+        if ptr_is_null(iterator):
+            store_i32(coro, 60, 1)
+            return _coroutine_require_result(null(), cstr("coroutine factory"), cstr("coroutine factory returned NULL"))
+        pcc_gc_store_ptr(coro, ptr_add(coro, 48), iterator)
+        py_decref(iterator)
+        store_i32(coro, 60, -2)
+    iterator = pcc_gc_load_ptr(coro, ptr_add(coro, 48))
+    result = null()
+    if ptr_is_null(error):
+        result = py_gen_send(iterator, value)
+    else:
+        result = py_gen_throw(iterator, error)
+    if ptr_is_null(result):
+        stopped = py_current_exception()
+        completed = global_load_ptr("py_None")
+        if py_exc_matches(stopped, py_exc_builtin_class(8)) != 0:
+            completed = py_exc_get_message(stopped)
+            if ptr_is_null(completed):
+                completed = global_load_ptr("py_None")
+        pcc_gc_store_ptr(coro, ptr_add(coro, 48), completed)
+        store_i32(coro, 60, 1)
+    return result
+
+
+@c_abi_export("py_coroutine_send")
+def py_coroutine_send(coro, value, error):
+    coro = _checked_coroutine(coro)
+    if ptr_is_null(coro):
+        return null()
+    # A resumed body may collect; pin the shell containing the traced frame.
+    pcc_gc_pin(coro)
+    result = _coroutine_resume(coro, value, error)
+    pcc_gc_unpin(coro)
     return result
 
 
@@ -287,6 +383,14 @@ def py_coroutine_close(coro):
     if is_tagged_int(coro):
         return global_load_ptr("py_None")
     if _type_of(coro) == PY_TYPE_COROUTINE:
+        if load_i32(coro, 60) == -2:
+            pcc_gc_pin(coro)
+            result = py_gen_close(pcc_gc_load_ptr(coro, ptr_add(coro, 48)))
+            pcc_gc_store_ptr(coro, ptr_add(coro, 48), null())
+            store_i32(coro, 56, 1)
+            store_i32(coro, 60, 1)
+            pcc_gc_unpin(coro)
+            return result
         store_i32(coro, 56, 1)
     return global_load_ptr("py_None")
 
@@ -355,6 +459,79 @@ def py_await(awaitable):
         return result
     _raise_typeerror(cstr("object is not awaitable"))
     return null()
+
+
+@c_abi_export("py_await_iterator")
+def py_await_iterator(awaitable):
+    if ptr_is_null(awaitable) or is_tagged_int(awaitable):
+        _raise_typeerror(cstr("object is not awaitable"))
+        return null()
+    if _type_of(awaitable) == PY_TYPE_COROUTINE:
+        py_incref(awaitable)
+        return awaitable
+    method = py_obj_getattr(awaitable, cstr("__await__"))
+    if ptr_is_null(method):
+        py_clear_exception()
+        _raise_typeerror(cstr("object is not awaitable"))
+        return null()
+    args = py_tuple_new(0)
+    if ptr_is_null(args):
+        py_decref(method)
+        return null()
+    iterator = py_obj_call(method, args, global_load_ptr("py_None"))
+    py_decref(args)
+    py_decref(method)
+    if ptr_is_null(iterator):
+        return null()
+    # __await__ returns an iterator, not another coroutine or arbitrary value.
+    checked = py_obj_iter(iterator)
+    if ptr_is_null(checked):
+        py_decref(iterator)
+        return null()
+    if ptr_eq(checked, iterator) == 0:
+        py_decref(checked)
+        py_decref(iterator)
+        _raise_typeerror(cstr("__await__ returned a non-iterator"))
+        return null()
+    py_decref(checked)
+    return iterator
+
+
+@c_abi_export("py_await_step")
+def py_await_step(iterator, value, error):
+    if ptr_is_null(iterator) or is_tagged_int(iterator):
+        _raise_typeerror(cstr("invalid await iterator"))
+        return null()
+    tag: int = _type_of(iterator)
+    if tag == PY_TYPE_COROUTINE:
+        return py_coroutine_send(iterator, value, error)
+    if tag == PY_TYPE_GEN:
+        if ptr_is_null(error) == 0:
+            return py_gen_throw(iterator, error)
+        return py_gen_send(iterator, value)
+    if ptr_is_null(error) and (ptr_is_null(value) or ptr_eq(value, global_load_ptr("py_None")) != 0):
+        return py_obj_next(iterator)
+    method = null()
+    argument = value
+    if ptr_is_null(error):
+        method = py_obj_getattr(iterator, cstr("send"))
+    else:
+        method = py_obj_getattr(iterator, cstr("throw"))
+        argument = error
+    if ptr_is_null(method):
+        if ptr_is_null(error) == 0:
+            py_clear_exception()
+            py_raise(error)
+        return null()
+    args = py_tuple_new(1)
+    if ptr_is_null(args):
+        py_decref(method)
+        return null()
+    py_tuple_set_item(args, 0, argument)
+    result = py_obj_call(method, args, global_load_ptr("py_None"))
+    py_decref(args)
+    py_decref(method)
+    return result
 
 
 @c_abi_export("py_asyncio_sleep")

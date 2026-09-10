@@ -8,9 +8,16 @@ serve simple stream workloads without falling back to CPython.
 """
 from __future__ import annotations
 
+import time as _time
+import contextvars as _contextvars
+from heapq import heappush as _heappush, heappop as _heappop
+
 from pcc.extern import extern, c_int64, c_ptr, c_obj
 from pcc.unsafe import is_tagged_int, load_i32, ptr_is_null
 
+
+_py_await_iterator = extern("py_await_iterator", (c_ptr,), c_obj)
+_py_await_step = extern("py_await_step", (c_ptr, c_ptr, c_ptr), c_obj)
 
 _py_await: "extern" = extern("py_await", (c_ptr,), c_obj)
 _py_asyncio_sleep: "extern" = extern("py_asyncio_sleep", (c_ptr,), c_obj)
@@ -34,7 +41,7 @@ _io_waitset_backend: "extern" = extern(
 _usleep: "extern" = extern("usleep", (c_int64,), c_int64)
 
 
-class CancelledError(Exception):
+class CancelledError(BaseException):
     pass
 
 
@@ -57,6 +64,7 @@ class LimitOverrunError(Exception):
 
 _TASKS = []
 _LOOP_BOX = [None]
+_RUNNING_LOOP_BOX = [None]
 _SERVERS = []
 _PENDING_STREAM_RELAYS = []
 # Active relays driven cooperatively by the event loop. Each entry is a mutable
@@ -97,13 +105,22 @@ def _bytes_find(data, needle):
     return -1
 
 
+class InvalidStateError(Exception):
+    pass
+
+
 class Future:
-    def __init__(self) -> None:
+    def __init__(self, *, loop=None) -> None:
+        self._loop = get_event_loop() if loop is None else loop
         self._done = False
         self._cancelled = False
         self._result = None
         self._exception = None
         self._callbacks = []
+        self._awaited_by = set()
+
+    def get_loop(self):
+        return self._loop
 
     def done(self):
         return self._done
@@ -111,59 +128,73 @@ class Future:
     def cancelled(self):
         return self._cancelled
 
-    def cancel(self):
+    def cancel(self, msg=None):
         if self._done:
             return False
         self._cancelled = True
         self._done = True
+        self._exception = CancelledError(msg)
         self._run_callbacks()
         return True
 
     def set_result(self, value):
+        if self._done:
+            raise InvalidStateError('invalid state')
         self._result = value
         self._done = True
         self._run_callbacks()
 
     def set_exception(self, exc):
+        if self._done:
+            raise InvalidStateError('invalid state')
+        if isinstance(exc, type):
+            exc = exc()
+        if not isinstance(exc, BaseException):
+            raise TypeError('exception must be a BaseException')
         self._exception = exc
         self._done = True
         self._run_callbacks()
 
     def result(self):
+        if self._cancelled:
+            raise self._exception
+        if not self._done:
+            raise InvalidStateError('result is not ready')
         if self._exception is not None:
             raise self._exception
-        if self._cancelled:
-            raise CancelledError()
         return self._result
 
     def exception(self):
+        if self._cancelled:
+            raise self._exception
+        if not self._done:
+            raise InvalidStateError('exception is not ready')
         return self._exception
 
-    def add_done_callback(self, fn, *args, **kwargs):
+    def add_done_callback(self, callback, *, context=None):
+        if context is None:
+            context = _contextvars.copy_context()
         if self._done:
-            fn(self)
+            self._loop.call_soon(callback, self, context=context)
         else:
-            self._callbacks.append(fn)
+            self._callbacks.append((callback, context))
 
-    def remove_done_callback(self, fn):
-        kept = []
-        removed = 0
-        for cb in self._callbacks:
-            if cb is fn:
-                removed += 1
-            else:
-                kept.append(cb)
-        self._callbacks = kept
-        return removed
+    def remove_done_callback(self, callback):
+        old = self._callbacks
+        self._callbacks = [item for item in old if item[0] != callback]
+        return len(old) - len(self._callbacks)
 
     def _run_callbacks(self):
         callbacks = self._callbacks
         self._callbacks = []
-        for cb in callbacks:
-            cb(self)
+        for callback, context in callbacks:
+            self._loop.call_soon(callback, self, context=context)
 
     def __await__(self):
-        yield
+        if not self._done:
+            yield self
+        if not self._done:
+            raise RuntimeError('await was resumed before its Future completed')
         return self.result()
 
 
@@ -173,80 +204,479 @@ def _completed_future(value=None):
     return future
 
 
-class Task:
-    def __init__(self, coro=None) -> None:
-        self._task = _py_task_new(coro)
-        self._cancelled = False
-        self._done = False
-        self._result = None
-        self._callbacks = []
+def future_add_to_awaited_by(future, waiter):
+    future._awaited_by.add(waiter)
 
-    def done(self):
-        if self._cancelled:
-            return True
-        return self._done
 
-    def cancelled(self):
-        return self._cancelled
+def future_discard_from_awaited_by(future, waiter):
+    future._awaited_by.discard(waiter)
 
-    def cancel(self):
+
+def _advance_coroutine(task, error):
+    return _py_await_step(task._coro, None, error)
+
+
+class Task(Future):
+    def __init__(self, coro, *, loop=None, name=None, context=None, eager_start=False) -> None:
+        super().__init__(loop=loop)
+        self._coro = _py_await_iterator(coro)
+        self._source_coro = coro
+        self._name = 'Task' if name is None else str(name)
+        self._context = _contextvars.copy_context() if context is None else context
+        self._waiter = None
+        self._pending_error = None
+        self._must_cancel = False
+        self._cancel_message = None
+        self._cancel_count = 0
+        self._queued = False
+        _TASKS.append(self)
+        if eager_start and self._loop.is_running():
+            self._step()
+        else:
+            self._schedule()
+
+    def get_coro(self):
+        return self._source_coro
+
+    def get_name(self):
+        return self._name
+
+    def set_name(self, value):
+        self._name = str(value)
+
+    def get_context(self):
+        return self._context
+
+    def cancelling(self):
+        return self._cancel_count
+
+    def uncancel(self):
+        if self._cancel_count > 0:
+            self._cancel_count -= 1
+        if self._cancel_count == 0:
+            self._must_cancel = False
+        return self._cancel_count
+
+    def cancel(self, msg=None):
         if self._done:
             return False
-        self._cancelled = True
-        self._done = True
-        self._run_callbacks()
+        self._cancel_count += 1
+        self._cancel_message = msg
+        if self._waiter is not None and self._waiter.cancel(msg):
+            return True
+        self._must_cancel = True
+        self._schedule()
         return True
 
-    def result(self):
-        if self._cancelled:
-            raise CancelledError()
-        if not self._done:
-            return self._step()
-        return self._result
+    def set_result(self, value):
+        raise RuntimeError('Task does not support set_result')
 
-    def exception(self):
-        return None
+    def set_exception(self, error):
+        raise RuntimeError('Task does not support set_exception')
 
-    def add_done_callback(self, fn, *args, **kwargs):
-        if self.done():
-            fn(self)
-        else:
-            self._callbacks.append(fn)
+    def _schedule(self):
+        if not self._queued and not self._done:
+            self._queued = True
+            self._loop.call_soon(self._step, context=self._context)
 
-    def remove_done_callback(self, fn):
-        kept = []
-        removed = 0
-        for cb in self._callbacks:
-            if cb is fn:
-                removed += 1
-            else:
-                kept.append(cb)
-        self._callbacks = kept
-        return removed
+    def _wakeup(self, future):
+        if self._done:
+            return
+        self._waiter = None
+        try:
+            future.result()
+        except BaseException as error:
+            self._pending_error = error
+        self._schedule()
 
-    def _run_callbacks(self):
-        callbacks = self._callbacks
-        self._callbacks = []
-        for cb in callbacks:
-            cb(self)
+    def _finish(self):
+        self._waiter = None
+        self._coro = None
+        self._pending_error = None
+        if self in _TASKS:
+            _TASKS.remove(self)
+        self._run_callbacks()
 
     def _step(self):
-        if self._cancelled:
-            return None
+        self._queued = False
         if self._done:
-            return self._result
-        self._result = _py_task_step(self._task)
-        self._done = True
-        self._run_callbacks()
-        return self._result
-
-    def __await__(self):
-        yield
-        return self._step()
+            return
+        error = self._pending_error
+        self._pending_error = None
+        if self._must_cancel:
+            if not isinstance(error, CancelledError):
+                error = CancelledError(self._cancel_message)
+            self._must_cancel = False
+        previous = self._loop._current_task
+        self._loop._current_task = self
+        try:
+            yielded = _advance_coroutine(self, error)
+        except StopIteration as stopped:
+            self._result = stopped.value
+            self._done = True
+            self._finish()
+            return
+        except CancelledError as cancelled:
+            self._exception = cancelled
+            self._cancelled = True
+            self._done = True
+            self._finish()
+            return
+        except BaseException as failed:
+            self._exception = failed
+            self._done = True
+            self._finish()
+            if isinstance(failed, (KeyboardInterrupt, SystemExit)):
+                raise
+            return
+        finally:
+            self._loop._current_task = previous
+        if yielded is None:
+            self._schedule()
+        elif isinstance(yielded, Future):
+            if yielded is self:
+                self._pending_error = RuntimeError('Task cannot await itself')
+                self._schedule()
+            elif yielded.get_loop() is not self._loop:
+                self._pending_error = RuntimeError('Future belongs to another event loop')
+                self._schedule()
+            else:
+                self._waiter = yielded
+                yielded.add_done_callback(self._wakeup, context=self._context)
+                if self._must_cancel and yielded.cancel(self._cancel_message):
+                    self._must_cancel = False
+        else:
+            self._pending_error = RuntimeError('Task received an unsupported suspension value')
+            self._schedule()
 
     @staticmethod
     def all_tasks(loop=None):
         return all_tasks(loop)
+
+
+# TaskGroup state machine adapted from CPython 3.15 asyncio/taskgroups.py.
+# Copyright Python Software Foundation; distributed under the PSF license.
+class TaskGroup:
+    """Asynchronous context manager for managing groups of
+
+    Example use:
+
+        async with asyncio.TaskGroup() as group:
+            task1 = group.create_task(some_coroutine(...))
+            task2 = group.create_task(other_coroutine(...))
+        print("Both tasks have completed now.")
+
+    All tasks are awaited when the context manager exits.
+
+    Any exceptions other than `asyncio.CancelledError` raised within
+    a task will cancel all remaining tasks and wait for them to exit.
+    The exceptions are then combined and raised as an `ExceptionGroup`.
+    """
+    def __init__(self):
+        self._entered = False
+        self._exiting = False
+        self._aborting = False
+        self._loop = None
+        self._parent_task = None
+        self._parent_cancel_requested = False
+        self._tasks = set()
+        self._errors = []
+        self._base_error = None
+        self._on_completed_fut = None
+        self._cancel_on_enter = False
+
+    def __repr__(self):
+        info = ['']
+        if self._tasks:
+            info.append(f'tasks={len(self._tasks)}')
+        if self._errors:
+            info.append(f'errors={len(self._errors)}')
+        if self._aborting:
+            info.append('cancelling')
+        elif self._entered:
+            info.append('entered')
+
+        info_str = ' '.join(info)
+        return f'<TaskGroup{info_str}>'
+
+    async def __aenter__(self):
+        if self._entered:
+            raise RuntimeError(
+                f"TaskGroup {self!r} has already been entered")
+        if self._loop is None:
+            self._loop = get_running_loop()
+        self._parent_task = current_task(self._loop)
+        if self._parent_task is None:
+            raise RuntimeError(
+                f'TaskGroup {self!r} cannot determine the parent task')
+        self._entered = True
+        if self._cancel_on_enter:
+            self.cancel()
+
+        return self
+
+    async def __aexit__(self, et, exc, tb):
+        tb = None
+        try:
+            return await self._aexit(et, exc)
+        finally:
+            # Exceptions are heavy objects that can have object
+            # cycles (bad for GC); let's not keep a reference to
+            # a bunch of them. It would be nicer to use a try/finally
+            # in __aexit__ directly but that introduced some diff noise
+            self._parent_task = None
+            self._errors = None
+            self._base_error = None
+            exc = None
+
+    async def _aexit(self, et, exc):
+        self._exiting = True
+
+        if (exc is not None and
+                self._is_base_error(exc) and
+                self._base_error is None):
+            self._base_error = exc
+
+        if et is not None and issubclass(et, CancelledError):
+            propagate_cancellation_error = exc
+        else:
+            propagate_cancellation_error = None
+
+        if et is not None:
+            if not self._aborting:
+                # Our parent task is being cancelled:
+                #
+                #    async with TaskGroup() as g:
+                #        g.create_task(...)
+                #        await ...  # <- CancelledError
+                #
+                # or there's an exception in "async with":
+                #
+                #    async with TaskGroup() as g:
+                #        g.create_task(...)
+                #        1 / 0
+                #
+                self._abort()
+
+        # We use while-loop here because "self._on_completed_fut"
+        # can be cancelled multiple times if our parent task
+        # is being cancelled repeatedly (or even once, when
+        # our own cancellation is already in progress)
+        while self._tasks:
+            if self._on_completed_fut is None:
+                self._on_completed_fut = self._loop.create_future()
+
+            try:
+                await self._on_completed_fut
+            except CancelledError as ex:
+                if not self._aborting:
+                    # Our parent task is being cancelled:
+                    #
+                    #    async def wrapper():
+                    #        async with TaskGroup() as g:
+                    #            g.create_task(foo)
+                    #
+                    # "wrapper" is being cancelled while "foo" is
+                    # still running.
+                    propagate_cancellation_error = ex
+                    self._abort()
+
+            self._on_completed_fut = None
+
+        assert not self._tasks
+
+        if self._base_error is not None:
+            try:
+                raise self._base_error
+            finally:
+                exc = None
+
+        if self._parent_cancel_requested:
+            # If this flag is set we *must* call uncancel().
+            if self._parent_task.uncancel() == 0:
+                # If there are no pending cancellations left,
+                # don't propagate CancelledError.
+                propagate_cancellation_error = None
+
+        # Propagate CancelledError if there is one, except if there
+        # are other errors -- those have priority.
+        try:
+            if propagate_cancellation_error is not None and not self._errors:
+                try:
+                    raise propagate_cancellation_error
+                finally:
+                    exc = None
+        finally:
+            propagate_cancellation_error = None
+
+        if et is not None and not issubclass(et, CancelledError):
+            self._errors.append(exc)
+
+        if self._errors:
+            # If the parent task is being cancelled from the outside
+            # of the taskgroup, un-cancel and re-cancel the parent task,
+            # which will keep the cancel count stable.
+            if self._parent_task.cancelling():
+                self._parent_task.uncancel()
+                self._parent_task.cancel()
+            try:
+                # If the *only* error is a GeneratorExit from the body
+                # of the group, then instead of raising an
+                # ExceptionGroup we raise GeneratorExit. This ensures
+                # that async generators that use TaskGroup properly
+                # swallow the exception on `aclose()` while ensuring
+                # that no exceptions from subtasks are swallowed.
+                if (
+                    et is not None
+                    and issubclass(et, GeneratorExit)
+                    and len(self._errors) == 1
+                ):
+                    raise exc
+                else:
+                    raise BaseExceptionGroup(
+                        'unhandled errors in a TaskGroup',
+                        self._errors,
+                    ) from None
+            finally:
+                exc = None
+
+        # Suppress any remaining exception (exceptions deserving to be raised
+        # were raised above).
+        return True
+
+    def create_task(self, coro, *, name=None, context=None, eager_start=False):
+        """Create a new task in this group and return it.
+
+        Similar to `asyncio.create_task`. The keywords are written out rather
+        than forwarded as `**kwargs` because a `**` expansion at a call site
+        needs a statically dict-typed operand here, and a `**kwargs` parameter
+        is not one -- codegen refuses it with "arbitrary mapping expansion is
+        not yet source-ordered". Naming them also matches the loop method this
+        forwards to and CPython's own keyword-only signature.
+        """
+        if not self._entered:
+            coro.close()
+            raise RuntimeError(f"TaskGroup {self!r} has not been entered")
+        if self._exiting and not self._tasks:
+            coro.close()
+            raise RuntimeError(f"TaskGroup {self!r} is finished")
+        if self._aborting:
+            coro.close()
+            raise RuntimeError(f"TaskGroup {self!r} is shutting down")
+        task = self._loop.create_task(
+            coro, name=name, context=context, eager_start=eager_start
+        )
+
+        future_add_to_awaited_by(task, self._parent_task)
+
+        # Always schedule the done callback even if the task is
+        # already done (e.g. if the coro was able to complete eagerly),
+        # otherwise if the task completes with an exception then it will cancel
+        # the current task too early. gh-128550, gh-128588
+        self._tasks.add(task)
+        task.add_done_callback(self._on_task_done)
+        try:
+            return task
+        finally:
+            # gh-128552: prevent a refcycle of
+            # task.exception().__traceback__->TaskGroup.create_task->task
+            del task
+
+    # Since Python 3.8 Tasks propagate all exceptions correctly,
+    # except for KeyboardInterrupt and SystemExit which are
+    # still considered special.
+
+    def _is_base_error(self, exc: BaseException) -> bool:
+        assert isinstance(exc, BaseException)
+        return isinstance(exc, (SystemExit, KeyboardInterrupt))
+
+    def _abort(self):
+        self._aborting = True
+
+        for t in self._tasks:
+            if not t.done():
+                t.cancel()
+
+    def _on_task_done(self, task):
+        self._tasks.discard(task)
+
+        future_discard_from_awaited_by(task, self._parent_task)
+
+        if self._on_completed_fut is not None and not self._tasks:
+            if not self._on_completed_fut.done():
+                self._on_completed_fut.set_result(True)
+
+        if task.cancelled():
+            return
+
+        exc = task.exception()
+        if exc is None:
+            return
+
+        self._errors.append(exc)
+        if self._is_base_error(exc) and self._base_error is None:
+            self._base_error = exc
+
+        if self._parent_task.done():
+            # Not sure if this case is possible, but we want to handle
+            # it anyways.
+            self._loop.call_exception_handler({
+                'message': f'Task {task!r} has errored out but its parent '
+                           f'task {self._parent_task} is already completed',
+                'exception': exc,
+                'task': task,
+            })
+            return
+
+        if not self._aborting and not self._parent_cancel_requested:
+            # If parent task *is not* being cancelled, it means that we want
+            # to manually cancel it to abort whatever is being run right now
+            # in the TaskGroup.  But we want to mark parent task as
+            # "not cancelled" later in __aexit__.  Example situation that
+            # we need to handle:
+            #
+            #    async def foo():
+            #        try:
+            #            async with TaskGroup() as g:
+            #                g.create_task(crash_soon())
+            #                await something  # <- this needs to be canceled
+            #                                 #    by the TaskGroup, e.g.
+            #                                 #    foo() needs to be cancelled
+            #        except Exception:
+            #            # Ignore any exceptions raised in the TaskGroup
+            #            pass
+            #        await something_else     # this line has to be called
+            #                                 # after TaskGroup is finished.
+            self._abort()
+            self._parent_cancel_requested = True
+            self._parent_task.cancel()
+
+    def cancel(self):
+        """Cancel the task group
+
+        `cancel()` will be called on any tasks in the group that aren't yet
+        done, as well as the parent (body) of the group.  This will cause
+        the task group context manager to exit *without*
+        `asyncio.CancelledError` being raised.
+
+        If `cancel()` is called before entering the task group, the group
+        will be cancelled upon entry.  This is useful for patterns where
+        one piece of code passes an unused TaskGroup instance to another in
+        order to have the ability to cancel anything run within the group.
+
+        `cancel()` is idempotent and may be called after the task group has
+        already exited.
+        """
+        if not self._entered:
+            self._cancel_on_enter = True
+            return
+        if self._exiting and not self._tasks:
+            return
+        if not self._aborting:
+            self._abort()
+            if self._parent_task and not self._parent_cancel_requested:
+                self._parent_cancel_requested = True
+                self._parent_task.cancel()
 
 
 class Event:
@@ -762,97 +1192,185 @@ class _SSLProtoModule:
 sslproto = _SSLProtoModule()
 
 
+class _Handle:
+    def __init__(self, callback, args, context):
+        self._callback = callback
+        self._args = args
+        self._context = _contextvars.copy_context() if context is None else context
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
+        self._callback = None
+        self._args = ()
+
+    def cancelled(self):
+        return self._cancelled
+
+    def _run(self):
+        if not self._cancelled:
+            self._context.run(self._callback, *self._args)
+
+
 class _Loop:
     def __init__(self) -> None:
         self._closed = False
+        self._running = False
+        self._stopping = False
+        self._current_task = None
+        self._ready = []
+        self._timers = []
+        self._timer_sequence = 0
+        self._exception_handler = None
+        self._task_factory = None
 
     def create_future(self):
-        return Future()
+        return Future(loop=self)
 
-    def create_task(self, coro):
-        return ensure_future(coro)
+    def create_task(self, coro, *, name=None, context=None, eager_start=False):
+        if self._closed:
+            raise RuntimeError('event loop is closed')
+        if self._task_factory is not None:
+            return self._task_factory(self, coro, name=name, context=context, eager_start=eager_start)
+        return Task(coro, loop=self, name=name, context=context, eager_start=eager_start)
+
+    def set_task_factory(self, factory):
+        self._task_factory = factory
+
+    def get_task_factory(self):
+        return self._task_factory
 
     def run_until_complete(self, awaitable):
-        return _py_await(awaitable)
+        if self._closed or self._running:
+            raise RuntimeError('event loop is closed or already running')
+        future = ensure_future(awaitable, loop=self)
+        previous = _RUNNING_LOOP_BOX[0]
+        _RUNNING_LOOP_BOX[0] = self
+        self._running = True
+        self._stopping = False
+        try:
+            while not future.done():
+                if self._stopping:
+                    raise RuntimeError('event loop stopped before Future completed')
+                self._run_once()
+            return future.result()
+        finally:
+            self._running = False
+            _RUNNING_LOOP_BOX[0] = previous
+
+    def _run_once(self):
+        now = self.time()
+        while self._timers and self._timers[0][2].cancelled():
+            _heappop(self._timers)
+        if not self._ready:
+            delay = 0.001
+            if self._timers:
+                delay = max(0.0, self._timers[0][0] - now)
+                if _SERVERS or _ACTIVE_RELAYS:
+                    delay = min(delay, 0.001)
+            if delay > 0:
+                _time.sleep(delay)
+            now = self.time()
+        while self._timers and self._timers[0][0] <= now:
+            record = _heappop(self._timers)
+            if not record[2].cancelled():
+                self._ready.append(record[2])
+        ready = self._ready
+        self._ready = []
+        for handle in ready:
+            try:
+                handle._run()
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except BaseException as error:
+                self.call_exception_handler({'message': 'exception in event loop callback', 'exception': error})
+        for server in _SERVERS:
+            if not server._closed:
+                server._accept_once()
+        _drive_relays()
 
     def run_forever(self):
-        while True:
-            active = False
-            progressed = False
-            for server in _SERVERS:
-                if not server._closed:
-                    active = True
-                    if server._accept_once():
-                        progressed = True
-            if _drive_relays():
-                progressed = True
-            if len(_ACTIVE_RELAYS) > 0:
-                # keep the loop alive to finish relays even if servers closed
-                active = True
-            if not active:
-                break
-            # Step pending tasks and DROP finished ones, so _TASKS cannot grow
-            # without bound (every accepted connection schedules tasks; leaving
-            # the completed ones in the list turned each loop pass into an O(N)
-            # walk over all historical tasks -> rising CPU, rising RSS, and an
-            # eventual livelock under sustained load). progressed is only set
-            # when a not-yet-done task actually runs, so an idle loop can sleep
-            # instead of spinning at 100% CPU.
-            i = 0
-            while i < len(_TASKS):
-                task = _TASKS[i]
-                if task.done():
-                    _TASKS.pop(i)
-                    continue
-                task._step()
-                progressed = True
-                if task.done():
-                    _TASKS.pop(i)
-                else:
-                    i += 1
-            if not progressed:
-                _usleep(1000)
+        if self._running or self._closed:
+            raise RuntimeError('event loop is closed or already running')
+        previous = _RUNNING_LOOP_BOX[0]
+        _RUNNING_LOOP_BOX[0] = self
+        self._running = True
+        self._stopping = False
+        try:
+            while not self._stopping:
+                self._run_once()
+        finally:
+            self._running = False
+            _RUNNING_LOOP_BOX[0] = previous
 
     def stop(self):
-        return None
+        self._stopping = True
 
     def close(self):
+        if self._running:
+            raise RuntimeError('cannot close a running event loop')
         self._closed = True
+        self._ready = []
+        self._timers = []
 
     def is_closed(self):
         return self._closed
 
+    def is_running(self):
+        return self._running
+
     def shutdown_asyncgens(self):
         return _completed_future(None)
 
-    def call_soon(self, callback, *args, **kwargs):
-        return callback(*args)
+    def call_soon(self, callback, *args, context=None):
+        if self._closed:
+            raise RuntimeError('event loop is closed')
+        handle = _Handle(callback, args, context)
+        self._ready.append(handle)
+        return handle
 
-    def call_later(self, delay, callback, *args, **kwargs):
-        return callback(*args)
+    def call_at(self, when, callback, *args, context=None):
+        if self._closed:
+            raise RuntimeError('event loop is closed')
+        handle = _Handle(callback, args, context)
+        self._timer_sequence += 1
+        _heappush(self._timers, (when, self._timer_sequence, handle))
+        return handle
+
+    def call_later(self, delay, callback, *args, context=None):
+        return self.call_at(self.time() + max(0.0, delay), callback, *args, context=context)
 
     def time(self):
-        return 0.0
+        return _time.monotonic()
+
+    def set_exception_handler(self, handler):
+        self._exception_handler = handler
+
+    def call_exception_handler(self, details):
+        if self._exception_handler is not None:
+            self._exception_handler(self, details)
+        else:
+            error = details.get('exception')
+            if error is not None:
+                raise error
 
     def add_reader(self, fd, callback, *args):
-        return None
+        raise NotImplementedError('reader callbacks require the native I/O adapter')
 
     def remove_reader(self, fd):
         return False
 
     def run_in_executor(self, executor, fn, *args):
-        return fn(*args)
+        raise NotImplementedError('executor integration is not implemented')
 
     def getaddrinfo(self, *args, **kwargs):
-        raise NotImplementedError("asyncio.getaddrinfo awaits native event-loop I/O")
+        raise NotImplementedError('asyncio.getaddrinfo awaits native event-loop I/O')
 
     def create_datagram_endpoint(self, *args, **kwargs):
-        raise NotImplementedError(
-            "asyncio.create_datagram_endpoint awaits native event-loop I/O"
-        )
+        raise NotImplementedError('asyncio.create_datagram_endpoint awaits native event-loop I/O')
 
     def create_connection(self, *args, **kwargs):
-        raise NotImplementedError("asyncio.create_connection awaits native event-loop I/O")
+        raise NotImplementedError('asyncio.create_connection awaits native event-loop I/O')
 
 
 class _Server:
@@ -913,50 +1431,176 @@ def set_event_loop(loop):
     _LOOP_BOX[0] = loop
 
 
-def run(awaitable, debug=None):
-    return _py_await(awaitable)
+def get_running_loop():
+    loop = _RUNNING_LOOP_BOX[0]
+    if loop is None:
+        raise RuntimeError('no running event loop')
+    return loop
 
 
-def sleep(delay, result=None):
-    return _py_asyncio_sleep(delay)
+def run(awaitable, *, debug=None, loop_factory=None):
+    if _RUNNING_LOOP_BOX[0] is not None:
+        raise RuntimeError('asyncio.run cannot be called from a running event loop')
+    loop = _Loop() if loop_factory is None else loop_factory()
+    previous = _LOOP_BOX[0]
+    _LOOP_BOX[0] = loop
+    try:
+        return loop.run_until_complete(awaitable)
+    finally:
+        pending = [task for task in _TASKS if task.get_loop() is loop and not task.done()]
+        for task in pending:
+            task.cancel()
+        for task in pending:
+            try:
+                loop.run_until_complete(task)
+            except BaseException:
+                pass
+        loop.close()
+        _LOOP_BOX[0] = previous
 
 
-def ensure_future(awaitable, loop=None):
-    if isinstance(awaitable, Task):
+class _YieldOnce:
+    def __await__(self):
+        yield None
+        return None
+
+
+def _set_result_unless_cancelled(future, value):
+    if not future.done():
+        future.set_result(value)
+
+
+async def sleep(delay, result=None):
+    if delay <= 0:
+        await _YieldOnce()
+        return result
+    loop = get_running_loop()
+    future = loop.create_future()
+    handle = loop.call_later(delay, _set_result_unless_cancelled, future, result)
+    try:
+        return await future
+    finally:
+        handle.cancel()
+
+
+async def _wrap_awaitable(awaitable):
+    return await awaitable
+
+
+def ensure_future(awaitable, *, loop=None):
+    if isinstance(awaitable, Future):
+        if loop is not None and awaitable.get_loop() is not loop:
+            raise ValueError('Future belongs to a different loop')
         return awaitable
-    task = Task(awaitable)
-    _TASKS.append(task)
-    _try_stream_relay(awaitable, task)
-    return task
+    if loop is None:
+        loop = get_event_loop()
+    return loop.create_task(awaitable)
 
 
-def create_task(awaitable):
-    return ensure_future(awaitable)
+def create_task(coro, *, name=None, context=None, eager_start=False):
+    return get_running_loop().create_task(coro, name=name, context=context, eager_start=eager_start)
 
 
 def all_tasks(loop=None):
-    return list(_TASKS)
+    if loop is None:
+        loop = get_running_loop()
+    return set(task for task in _TASKS if task.get_loop() is loop and not task.done())
 
 
 def current_task(loop=None):
-    if _TASKS:
-        return _TASKS[0]
-    return None
+    if loop is None:
+        loop = get_running_loop()
+    return loop._current_task
 
 
-def wait_for(awaitable, timeout=None):
-    return awaitable
+async def wait_for(awaitable, timeout=None):
+    task = ensure_future(awaitable)
+    if timeout is None:
+        return await task
+    loop = get_running_loop()
+    timed_out = [False]
+    def expire():
+        if not task.done():
+            timed_out[0] = True
+            task.cancel()
+    handle = loop.call_later(timeout, expire)
+    try:
+        return await task
+    except CancelledError:
+        if timed_out[0]:
+            raise TimeoutError()
+        task.cancel()
+        try:
+            await task
+        except BaseException:
+            pass
+        raise
+    finally:
+        handle.cancel()
 
 
-async def wait(fs, timeout=None, return_when=None):
-    return set(fs), set()
+FIRST_COMPLETED = 'FIRST_COMPLETED'
+FIRST_EXCEPTION = 'FIRST_EXCEPTION'
+ALL_COMPLETED = 'ALL_COMPLETED'
+
+
+async def wait(fs, *, timeout=None, return_when=ALL_COMPLETED):
+    if return_when not in (FIRST_COMPLETED, FIRST_EXCEPTION, ALL_COMPLETED):
+        raise ValueError('invalid return_when')
+    children = set(fs)
+    if not children:
+        raise ValueError('empty task set')
+    waiter = get_running_loop().create_future()
+    def done(task):
+        finished = [item for item in children if item.done()]
+        if (len(finished) == len(children) or return_when == FIRST_COMPLETED
+                or (return_when == FIRST_EXCEPTION and not task.cancelled() and task.exception() is not None)):
+            _set_result_unless_cancelled(waiter, None)
+    for task in children:
+        task.add_done_callback(done)
+    timer = None
+    if timeout is not None:
+        timer = get_running_loop().call_later(timeout, _set_result_unless_cancelled, waiter, None)
+    try:
+        await waiter
+    finally:
+        if timer is not None:
+            timer.cancel()
+        for task in children:
+            task.remove_done_callback(done)
+    return set(task for task in children if task.done()), set(task for task in children if not task.done())
 
 
 async def gather(*aws, return_exceptions=False):
+    children = [ensure_future(aw) for aw in aws]
     out = []
-    for aw in aws:
-        out.append(await aw)
-    return out
+    try:
+        for child in children:
+            try:
+                # Bound first rather than `out.append(await child)`. An await
+                # in argument position suspends after the receiver has already
+                # been evaluated, and the receiver is not spilled to the
+                # generator frame across the suspension, so the self backend
+                # rejects the resume block with "definition of 'out' does not
+                # dominate await.completed". Compiler gap, reproduced in 16
+                # lines; see the receipt in pcc-gateway
+                # benchmarks/results/2026-09-10-ownership-leaks/README.md.
+                item = await child
+                out.append(item)
+            except BaseException as error:
+                if not return_exceptions:
+                    raise
+                out.append(error)
+        return out
+    except CancelledError:
+        for child in children:
+            child.cancel()
+        for child in children:
+            try:
+                await child
+            except BaseException:
+                pass
+        raise
 
 
 def open_connection(*args, **kwargs):

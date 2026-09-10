@@ -4,6 +4,36 @@ import os
 import re
 import subprocess
 import textwrap
+from pathlib import Path
+
+import pytest
+
+
+@pytest.mark.parametrize("helper", ["_module_find", "_module_ensure"])
+def test_runtime_library_helpers_preserve_manual_return_ownership(tmp_path, helper):
+    """Raw runtime helpers balance their references explicitly, including borrows."""
+    from pcc.py_frontend.pipeline import compile_python
+
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "pcc/py_runtime/py/py_module_attrs_runtime.py"
+    )
+    output = tmp_path / "module_attrs.ll"
+    compile_python(
+        str(source), str(output), emit_llvm_only=True,
+        libpython_mode="off", python_library=True,
+    )
+    ir_text = output.read_text(encoding="utf-8")
+    body = re.search(
+        rf"define\s+[^@]*@user_[^(]*{helper}[^(]*\([^{{]*\{{.*?\n\}}",
+        ir_text, re.S,
+    )
+    assert body is not None, ir_text
+    # The cache and attribute dictionaries are borrowed raw helper results.
+    # Compiler-injected cleanup would consume the cache's reference again.
+    assert "@py_decref(" in body.group(0)
+    assert "@pcc_gc_release(" not in body.group(0)
+    assert "@pcc_gc_frame_enter(" not in body.group(0)
 
 
 def test_returning_borrowed_parameter_retains_for_owned_call_result(tmp_path):
