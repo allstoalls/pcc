@@ -383,6 +383,7 @@ def _runtime_signatures_part_6():
     "py_builtin_callable": (_PYOBJ, [_PYOBJ], False),
     # ---- Float -----------------------------------------------------
     "py_float_from_f64": (_PYOBJ, [_DOUBLE], False),
+    "py_time_sleep": (_PYOBJ, [_PYOBJ], False),
     "py_float_to_f64": (_DOUBLE, [_PYOBJ], False),
     "py_float_value_of": (_DOUBLE, [_PYOBJ], False),
     "py_float_is_integer": (_I64, [_PYOBJ], False),

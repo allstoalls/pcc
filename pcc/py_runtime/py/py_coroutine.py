@@ -502,6 +502,15 @@ def py_await_step(iterator, value, error):
     if ptr_is_null(iterator) or is_tagged_int(iterator):
         _raise_typeerror(cstr("invalid await iterator"))
         return null()
+    # "No exception" arrives here spelled two ways. The compiler passes NULL;
+    # a Python-level caller passes None, which is a real object pointer. Every
+    # test below decides between send and throw by null-checking `error`, so
+    # None used to select throw and asyncio's `Task._step` failed every
+    # ordinary resume with "exceptions must derive from BaseException". The
+    # `value` argument has always accepted either spelling (see the send test
+    # further down); this makes `error` agree with it.
+    if ptr_is_null(error) == 0 and ptr_eq(error, global_load_ptr("py_None")) != 0:
+        error = null()
     tag: int = _type_of(iterator)
     if tag == PY_TYPE_COROUTINE:
         return py_coroutine_send(iterator, value, error)

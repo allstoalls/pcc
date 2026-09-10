@@ -414,7 +414,8 @@ class NativeModuleAliasMixin:
             isinstance(expr, Attr)
             and isinstance(expr.obj, Name)
             and self._native_builtin_module_for_name(expr.obj.ident) == "time"
-            and expr.name in ("monotonic", "perf_counter", "time", "strftime")
+            and expr.name
+            in ("monotonic", "perf_counter", "time", "strftime", "sleep")
         ):
             return "time." + expr.name
         if (
@@ -461,6 +462,7 @@ class NativeModuleAliasMixin:
             "time.perf_counter",
             "time.time",
             "time.strftime",
+            "time.sleep",
         ):
             return self._emit_native_time_call(
                 builtin_value,
@@ -543,6 +545,7 @@ class NativeModuleAliasMixin:
             "perf_counter",
             "time",
             "strftime",
+            "sleep",
         ):
             return self._emit_native_time_call(
                 "time." + attr.name,
@@ -959,6 +962,21 @@ class NativeModuleAliasMixin:
         kwargs: tuple[tuple[str, Expr], ...],
         result_name: str,
     ) -> Optional[ir.Value]:
+        if builtin_value == "time.sleep":
+            if len(args) != 1 or kwargs:
+                return None
+            result = self.builder.call(
+                self.runtime["py_time_sleep"],
+                [self._emit_as_object(args[0])],
+                name=self._fresh(result_name),
+            )
+            # A negative delay raises ValueError, so the error gate is load
+            # bearing rather than defensive.
+            self._emit_post_call_err_check(args[0].span)
+            # `py_time_sleep` hands back the immortal None; it is borrowed, so
+            # this must NOT be recorded as an owned value the way the three
+            # clock reads below are.
+            return result
         if builtin_value == "time.strftime":
             if len(args) != 1 or kwargs:
                 return None

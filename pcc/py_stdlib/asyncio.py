@@ -38,7 +38,6 @@ _fd_peername: "extern" = extern("py_asyncio_fd_peername", (c_ptr,), c_obj)
 _io_waitset_backend: "extern" = extern(
     "py_asyncio_io_waitset_backend", (), c_obj
 )
-_usleep: "extern" = extern("usleep", (c_int64,), c_int64)
 
 
 class CancelledError(BaseException):
