@@ -53,6 +53,30 @@ def test_pcc_surface_rejects_each_unowned_semantic_before_link(kwargs, message):
     pipeline_self_link.validate_pcc_self_link_surface("cc", **kwargs)
 
 
+def test_darwin_arm64_default_link_mode_cannot_serve_native_extension_exports():
+    """Pin the owned-link capability gap the native-extension tests opt out of.
+
+    On Darwin AArch64 the default mode is ``pcc``, and loading a CPython
+    extension needs C-API export anchors in the executable. Until the owned
+    Mach-O link synthesizes them, every native-extension test declares
+    ``PCC_SELF_LINK=cc``. This pins the gap at the production default so a
+    silent fallback to the system linker cannot quietly replace the owned
+    path: the owned mode must refuse the export surface before any object is
+    emitted.
+    """
+    default_mode = pipeline_self_link.default_self_link_mode("darwin", "arm64")
+
+    assert default_mode == "pcc"
+    with pytest.raises(
+        pipeline_self_link.SelfLinkContractError,
+        match="native-extension export anchors",
+    ):
+        pipeline_self_link.validate_pcc_self_link_surface(
+            default_mode,
+            needs_native_extension_exports=True,
+        )
+
+
 def test_owned_link_command_preserves_input_kinds_and_stable_patch_base():
     command = pipeline_self_link.build_pcc_link_command(
         host_python="/repo/.venv/bin/python3",

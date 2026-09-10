@@ -56,6 +56,7 @@ from pcc.unsafe import (
     load_i8,
     load_i32,
     load_i64,
+    load_i8,
     load_ptr,
     malloc,
     null,
@@ -63,6 +64,7 @@ from pcc.unsafe import (
     ptr_eq,
     ptr_is_null,
     store_i64,
+    store_i8,
     strlen,
 )
 
@@ -1639,18 +1641,81 @@ def py_builtin_type_class_tag(value) -> int:
     return -2
 
 
-def _raise_attribute_error(name):
-    if py_err_occurred() == 0:
-        msg = name
-        if ptr_is_null(msg) != 0:
-            msg = cstr("")
-        exc = py_exc_new(6, msg)  # PY_EXC_ATTRIBUTEERROR
-        py_raise_owned(exc)
+def _cstr_append(buf, at: int, text) -> int:
+    """Copy a NUL-terminated cstr into ``buf`` at ``at``; return the new end."""
+    pos: int = at
+    index: int = 0
+    while True:
+        ch: int = load_i8(text, index)
+        if ch == 0:
+            return pos
+        store_i8(buf, pos, ch)
+        pos = pos + 1
+        index = index + 1
+
+
+def _raise_attribute_error(o, name):
+    """Raise CPython's ``'<type>' object has no attribute '<name>'``.
+
+    The message used to be the bare attribute name. That is a real diagnostic
+    defect and not only a cosmetic one: ``str(exc)`` was a single word, so any
+    caller doing ``raise SomeError(str(exc))`` reported a missing
+    ``.returncode`` as just "returncode", with no hint that the failure was an
+    attribute miss at all -- which is exactly how a self-host link failure got
+    chased through the linker for a long time before anyone read it as an
+    AttributeError.
+
+    ``py_exc_alloc`` copies the cstr into a str object, so the scratch buffer
+    is released immediately after.
+    """
+    if py_err_occurred() != 0:
+        return null()
+    attr = name
+    if ptr_is_null(attr) != 0:
+        attr = cstr("?")
+    type_name = cstr("object")
+    if ptr_is_null(o) == 0:
+        if is_tagged_int(o) != 0:
+            type_name = cstr("int")
+        else:
+            tag: int = load_i32(o, 8)
+            # A user instance carries its class name; the tag table only knows
+            # the builtins, so consulting it alone reported every instance as
+            # "object". Same lookup order as py_obj_type_name. Track the hit
+            # with a flag rather than comparing against a second
+            # ``cstr("object")`` -- two identical literals need not be the same
+            # pointer, and that comparison silently lost NoneType.
+            resolved: int = 0
+            if _is_instance_tag(tag) != 0:
+                cls = pcc_gc_load_ptr(o, ptr_add(o, PYINSTANCEOBJECT_CLS_OFFSET))
+                if ptr_is_null(cls) == 0:
+                    cls_name = load_ptr(cls, PYCLASSOBJECT_NAME_OFFSET)
+                    if ptr_is_null(cls_name) == 0:
+                        type_name = cls_name
+                        resolved = 1
+            if resolved == 0:
+                candidate = _type_name_cstr_for_tag(tag)
+                if ptr_is_null(candidate) == 0:
+                    type_name = candidate
+    total: int = strlen(type_name) + strlen(attr) + 32
+    buf = malloc(total)
+    if ptr_is_null(buf) != 0:
+        # Out of memory while formatting: the bare name still identifies it.
+        py_raise_owned(py_exc_new(6, attr))  # PY_EXC_ATTRIBUTEERROR
+        return null()
+    pos: int = _cstr_append(buf, 0, cstr("'"))
+    pos = _cstr_append(buf, pos, type_name)
+    pos = _cstr_append(buf, pos, cstr("' object has no attribute '"))
+    pos = _cstr_append(buf, pos, attr)
+    pos = _cstr_append(buf, pos, cstr("'"))
+    store_i8(buf, pos, 0)
+    py_raise_owned(py_exc_new(6, buf))  # PY_EXC_ATTRIBUTEERROR
+    free(buf)
     return null()
 
 
-def _raise_attribute_status(name) -> int:
-    _raise_attribute_error(name)
+def _raise_attribute_status(o, name) -> int:
+    _raise_attribute_error(o, name)
     return -1
 
 
@@ -1872,13 +1937,13 @@ def _py_str_count_bound(o):
 @c_abi_export("py_obj_getattr")
 def py_obj_getattr(o, name):
     if ptr_is_null(o) != 0:
-        return _raise_attribute_error(name)
+        return _raise_attribute_error(o, name)
     if ptr_is_null(name) != 0:
-        return _raise_attribute_error(name)
+        return _raise_attribute_error(o, name)
     if _cstr_is_dunder_class(name) != 0:
         return py_type_builtin(o)
     if is_tagged_int(o) != 0:
-        return _raise_attribute_error(name)
+        return _raise_attribute_error(o, name)
 
     tag: int = load_i32(o, 8)
     pcc_runtime_log_event_code(7, 5, tag, 0, o)
@@ -1895,7 +1960,7 @@ def py_obj_getattr(o, name):
         result = pcc_capi_cext_object_getattr(o, name)
         if ptr_is_null(result) == 0 or py_err_occurred() != 0:
             return result
-        return _raise_attribute_error(name)
+        return _raise_attribute_error(o, name)
 
     if _cstr_is_pop(name) != 0:
         if tag == PY_TYPE_LIST:  # PY_TYPE_LIST
@@ -1914,14 +1979,14 @@ def py_obj_getattr(o, name):
             return result
         if py_err_occurred() != 0:
             return result
-        return _raise_attribute_error(name)
+        return _raise_attribute_error(o, name)
     if tag == PY_TYPE_CLASS:  # PY_TYPE_CLASS
         result = py_class_getattr(o, name)
         if ptr_is_null(result) == 0:
             return result
         if py_err_occurred() != 0:
             return result
-        return _raise_attribute_error(name)
+        return _raise_attribute_error(o, name)
     if tag == PY_TYPE_FUNC:  # PY_TYPE_FUNC
         attrs = pcc_gc_load_ptr(o, ptr_add(o, 88))
         if ptr_is_null(attrs) == 0:
@@ -1958,7 +2023,7 @@ def py_obj_getattr(o, name):
             if ptr_is_null(self_obj) == 0:
                 py_incref(self_obj)
                 return self_obj
-        return _raise_attribute_error(name)
+        return _raise_attribute_error(o, name)
     if tag == PY_TYPE_WEAKREF:  # PY_TYPE_WEAKREF
         target = py_weakref_call(o)
         if ptr_is_null(target) != 0:
@@ -1990,7 +2055,7 @@ def py_obj_getattr(o, name):
             return result
         if py_err_occurred() != 0:
             return result
-        return _raise_attribute_error(name)
+        return _raise_attribute_error(o, name)
     if tag == PY_TYPE_CONTINUATION:
         result = null()
         if _cstr_is_dunder_class(name) != 0:
@@ -2000,13 +2065,13 @@ def py_obj_getattr(o, name):
             return result
         if py_err_occurred() != 0:
             return result
-        return _raise_attribute_error(name)
+        return _raise_attribute_error(o, name)
     if tag == PY_TYPE_COMPLEX:  # PY_TYPE_COMPLEX
         if _cstr_is_real(name) != 0:
             return py_complex_real(o)
         if _cstr_is_imag(name) != 0:
             return py_complex_imag(o)
-        return _raise_attribute_error(name)
+        return _raise_attribute_error(o, name)
     if tag == PY_TYPE_EXC:  # PY_TYPE_EXC
         result = null()
         if _cstr_is_dunder_class(name) != 0:
@@ -2033,7 +2098,7 @@ def py_obj_getattr(o, name):
                 if ptr_is_null(result) != 0:
                     result = global_load_ptr("py_None")
             else:
-                return _raise_attribute_error(name)
+                return _raise_attribute_error(o, name)
         elif _cstr_is_args(name) != 0:
             # args tuple. Only args[0] is stored (as `message` at offset 24);
             # capturing args[1:] needs a dedicated field (documented follow-up,
@@ -2061,20 +2126,20 @@ def py_obj_getattr(o, name):
             return result
         if py_err_occurred() != 0:
             return result
-        return _raise_attribute_error(name)
-    return _raise_attribute_error(name)
+        return _raise_attribute_error(o, name)
+    return _raise_attribute_error(o, name)
 
 
 @c_abi_export("py_obj_getattr_default")
 def py_obj_getattr_default(o, name):
     if ptr_is_null(o) != 0:
-        return _raise_attribute_error(name)
+        return _raise_attribute_error(o, name)
     if ptr_is_null(name) != 0:
-        return _raise_attribute_error(name)
+        return _raise_attribute_error(o, name)
     if _cstr_is_dunder_class(name) != 0:
         return py_type_builtin(o)
     if is_tagged_int(o) != 0:
-        return _raise_attribute_error(name)
+        return _raise_attribute_error(o, name)
 
     tag: int = load_i32(o, 8)
     pcc_runtime_log_event_code(7, 5, tag, 1, o)
@@ -2085,14 +2150,14 @@ def py_obj_getattr_default(o, name):
             return result
         if py_err_occurred() != 0:
             return result
-        return _raise_attribute_error(name)
+        return _raise_attribute_error(o, name)
     if tag == PY_TYPE_CLASS:  # PY_TYPE_CLASS
         result = py_class_getattr(o, name)
         if ptr_is_null(result) == 0:
             return result
         if py_err_occurred() != 0:
             return result
-        return _raise_attribute_error(name)
+        return _raise_attribute_error(o, name)
     return py_obj_getattr(o, name)
 
 
@@ -2138,11 +2203,11 @@ def py_obj_getattr_maybe(o, name):
 @c_abi_export("py_obj_setattr")
 def py_obj_setattr(o, name, v) -> int:
     if ptr_is_null(o) != 0:
-        return _raise_attribute_status(name)
+        return _raise_attribute_status(o, name)
     if ptr_is_null(name) != 0:
-        return _raise_attribute_status(name)
+        return _raise_attribute_status(o, name)
     if is_tagged_int(o) != 0:
-        return _raise_attribute_status(name)
+        return _raise_attribute_status(o, name)
     tag: int = load_i32(o, 8)
     pcc_runtime_log_event_code(7, 6, tag, 0, o)
 
@@ -2152,14 +2217,14 @@ def py_obj_setattr(o, name, v) -> int:
             return rc
         if py_err_occurred() != 0:
             return rc
-        return _raise_attribute_status(name)
+        return _raise_attribute_status(o, name)
     if _is_instance_tag(tag) != 0:
         rc: int = py_instance_setattr(o, name, v)
         if rc == 0:
             return rc
         if py_err_occurred() != 0:
             return rc
-        return _raise_attribute_status(name)
+        return _raise_attribute_status(o, name)
     if tag == PY_TYPE_CLASS:  # PY_TYPE_CLASS
         rc: int = py_class_setattr(o, name, v)
         if rc == 0:
@@ -2172,20 +2237,20 @@ def py_obj_setattr(o, name, v) -> int:
         if ptr_is_null(attrs) != 0:
             attrs = py_dict_new()
             if ptr_is_null(attrs) != 0:
-                return _raise_attribute_status(name)
+                return _raise_attribute_status(o, name)
             pcc_gc_store_ptr(o, ptr_add(o, 88), attrs)
             attrs_created = 1
         key = py_str_new(name, strlen(name))
         if ptr_is_null(key) != 0:
             if attrs_created != 0:
                 py_decref(attrs)
-            return _raise_attribute_status(name)
+            return _raise_attribute_status(o, name)
         py_dict_set(attrs, key, v)
         py_decref(key)
         if attrs_created != 0:
             py_decref(attrs)
         return 0
-    return _raise_attribute_status(name)
+    return _raise_attribute_status(o, name)
 
 
 @c_abi_export("py_obj_delattr")

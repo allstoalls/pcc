@@ -8,6 +8,7 @@ from pcc.llvm_capi.compat import ir
 
 from ..py_ast import (
     Attr,
+    BinOp,
     BoolType,
     ByteArrayType,
     BytesType,
@@ -241,13 +242,46 @@ def class_is_subclass_impl(host, sub_name: str, sup_name: str) -> bool:
     return False
 
 
+def _isinstance_classinfo_as_tuple(class_arg: Expr) -> Expr:
+    """Rewrite a PEP 604 ``A | B`` classinfo into the equivalent ``(A, B)``.
+
+    ``isinstance(x, int | str)`` has been accepted by CPython since 3.10 and
+    means exactly ``isinstance(x, (int, str))``; the union object is built and
+    then thrown away.  The tuple branch below already ORs each member's test,
+    so flattening here is the whole feature -- ``pcc/package/uv_lock_sync.py``
+    reached the "second argument must be a bare class name..." error on
+    ``isinstance(node, ast.List | ast.Tuple)``.
+
+    Only a ``|`` chain is flattened.  Anything else is returned untouched so
+    an unrecognized classinfo still reaches the existing diagnostics.
+    """
+    if not isinstance(class_arg, BinOp) or class_arg.op != "|":
+        return class_arg
+    members: list = []
+    work: list = [class_arg]
+    while work:
+        node = work.pop()
+        if isinstance(node, BinOp) and node.op == "|":
+            # Right first, so popping yields left-to-right source order.
+            work.append(node.rhs)
+            work.append(node.lhs)
+            continue
+        members.append(node)
+    elems = tuple(members)
+    return TupleExpr(
+        span=class_arg.span,
+        ty=TupleType(name="tuple", elems=tuple(m.ty for m in elems)),
+        elems=elems,
+    )
+
+
 def emit_isinstance_call_impl(
     host,
     expr: Call,
 ) -> ir.Value:
     if len(expr.args) != 2:
         raise L1CodegenError("isinstance expects exactly two arguments")
-    class_arg = expr.args[1]
+    class_arg = _isinstance_classinfo_as_tuple(expr.args[1])
 
     def class_name_from_expr(e: Expr) -> tuple[Optional[str], Optional[str]]:
         ir_symbol = host._ir_scaffold_class_symbol(e)

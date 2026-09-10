@@ -1145,6 +1145,91 @@ def emit_uadd_overflow_intrinsic_call(
     return lines
 
 
+def emit_signed_addsub_overflow_intrinsic_call(
+    func: ParsedFunction,
+    dest: str | None,
+    ret_type: TypeDesc,
+    callee: str,
+    args: tuple[tuple[TypeDesc, str], ...],
+    module_symbols: PreparedModuleSymbols,
+    *,
+    mnemonic: str,
+) -> list[str]:
+    """Lower ``llvm.s{add,sub}.with.overflow.{i32,i64}``.
+
+    ``adds``/``subs`` set the AArch64 V flag on signed overflow, so the
+    overflow element is ``cset vs``; the unsigned pair above uses the carry
+    flag (``hs``) and is otherwise identical. The i32 form packs the i1 into
+    the high half of x11 so the ``{i32, i1}`` value slot stores in one chunk.
+    """
+    if dest is None or not parsed_function_has_value_slot(func, dest):
+        return []
+    if len(args) != 2:
+        raise BackendUnavailable(
+            f"self backend {callee} intrinsic expects 2 args in {func.name!r}"
+        )
+    lhs_type, lhs = args[0]
+    rhs_type, rhs = args[1]
+    if (
+        lhs_type.describe() != rhs_type.describe()
+        or not lhs_type.is_int
+        or lhs_type.width not in (32, 64)
+    ):
+        raise BackendUnavailable(
+            f"self backend {callee} intrinsic currently expects i32/i64 same-width integer args in {func.name!r}"
+        )
+    if not ret_type.is_struct or len(ret_type.fields) != 2:
+        raise BackendUnavailable(
+            f"self backend {callee} intrinsic expected {{ value, overflow }} return in {func.name!r}"
+        )
+    value_type, overflow_type = ret_type.fields
+    if (
+        value_type.describe() != lhs_type.describe()
+        or not overflow_type.is_int
+        or overflow_type.width != 1
+    ):
+        raise BackendUnavailable(
+            f"self backend {callee} intrinsic return shape mismatch in {func.name!r}: {ret_type.describe()}"
+        )
+    lines = materialize_value(func, lhs, lhs_type, 9, module_symbols)
+    lines.extend(materialize_value(func, rhs, rhs_type, 10, module_symbols))
+    if lhs_type.width == 64:
+        lines.append(f"  {mnemonic} x11, x9, x10")
+        lines.append(emitted_cset_line("w12", "vs"))
+    else:
+        lines.append(f"  {mnemonic} w11, w9, w10")
+        lines.append(emitted_cset_line("w12", "vs"))
+        lines.append("  orr x11, x11, x12, lsl #32")
+    lines.extend(store_value_regs_to_value_slot(func, dest, 11))
+    return lines
+
+
+def emit_sadd_overflow_intrinsic_call(
+    func: ParsedFunction,
+    dest: str | None,
+    ret_type: TypeDesc,
+    callee: str,
+    args: tuple[tuple[TypeDesc, str], ...],
+    module_symbols: PreparedModuleSymbols,
+) -> list[str]:
+    return emit_signed_addsub_overflow_intrinsic_call(
+        func, dest, ret_type, callee, args, module_symbols, mnemonic="adds"
+    )
+
+
+def emit_ssub_overflow_intrinsic_call(
+    func: ParsedFunction,
+    dest: str | None,
+    ret_type: TypeDesc,
+    callee: str,
+    args: tuple[tuple[TypeDesc, str], ...],
+    module_symbols: PreparedModuleSymbols,
+) -> list[str]:
+    return emit_signed_addsub_overflow_intrinsic_call(
+        func, dest, ret_type, callee, args, module_symbols, mnemonic="subs"
+    )
+
+
 def emit_smul_overflow_intrinsic_call(
     func: ParsedFunction,
     dest: str | None,
@@ -2326,6 +2411,14 @@ def emit_call_instruction(
         )
     if not is_indirect and callee.startswith("llvm.uadd.with.overflow."):
         return emit_uadd_overflow_intrinsic_call(
+            func, dest, ret_type, callee, args, module_symbols
+        )
+    if not is_indirect and callee.startswith("llvm.sadd.with.overflow."):
+        return emit_sadd_overflow_intrinsic_call(
+            func, dest, ret_type, callee, args, module_symbols
+        )
+    if not is_indirect and callee.startswith("llvm.ssub.with.overflow."):
+        return emit_ssub_overflow_intrinsic_call(
             func, dest, ret_type, callee, args, module_symbols
         )
     if not is_indirect and callee.startswith("llvm.smul.with.overflow."):

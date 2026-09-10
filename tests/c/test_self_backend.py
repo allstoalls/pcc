@@ -3073,6 +3073,31 @@ entry:
         "  ldr x10, [x10, _external@GOTPAGEOFF]",
     ]
     assert emit_indexed_pointer_add(func, "3", 8) == ["  add x11, x9, #24"]
+    # A dynamic index scales by the element size. Dropping that shift made
+    # every `arr[i]` with a variable `i` address the wrong element, which is
+    # what crashed the pcc-C runtime archive.
+    assert emit_indexed_pointer_add(func, "idx", 8) == [
+        "  ldur w10, [x29, #-4]",
+        "  sxtw x10, w10",
+        "  add x11, x9, x10, lsl #3",
+    ]
+    assert (
+        emit_indexed_pointer_add(func, "idx", 4)[-1]
+        == "  add x11, x9, x10, lsl #2"
+    )
+    assert (
+        emit_indexed_pointer_add(func, "idx", 2)[-1]
+        == "  add x11, x9, x10, lsl #1"
+    )
+
+    import struct
+
+    from pcc.backend.arm64_encode import assemble_text
+
+    (scaled_word,) = struct.unpack(
+        "<I", assemble_text("\tadd\tx11, x9, x10, lsl #3\n").code
+    )
+    assert scaled_word == 0x8B0A0D2B
     assert materialize_index_to_x10(func, "idx") == [
         "  ldur w10, [x29, #-4]",
         "  sxtw x10, w10",
@@ -6035,6 +6060,80 @@ entry:
     assert "  sxtw x13, w11" in smul32_lines
     assert "  cmp x11, x13" in smul32_lines
     assert "  orr x11, x11, x12, lsl #32" in smul32_lines
+
+
+def test_self_backend_aarch64_call_helpers_cover_signed_addsub_overflow_intrinsics():
+    """The signed add/sub overflow pair had no lowering at all.
+
+    The emitted i32 packing is also the only user of the shifted-register
+    ``orr``, which the encoder used to encode unshifted. A text-only assertion
+    would have missed that the overflow bit never reached the ``{i32, i1}``
+    slot's high half, so the packed word is checked too.
+    """
+    ir_text = """
+target triple = "arm64-apple-darwin23.6.0"
+
+declare { i64, i1 } @llvm.sadd.with.overflow.i64(i64, i64)
+declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64)
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32)
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32)
+
+define i64 @main(i64 %lhs, i64 %rhs, i32 %lhs32, i32 %rhs32) {
+entry:
+  %add64 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %lhs, i64 %rhs)
+  %sub64 = call { i64, i1 } @llvm.ssub.with.overflow.i64(i64 %lhs, i64 %rhs)
+  %add32 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %lhs32, i32 %rhs32)
+  %sub32 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %lhs32, i32 %rhs32)
+  %a = extractvalue { i64, i1 } %add64, 0
+  %b = extractvalue { i64, i1 } %sub64, 0
+  %c = extractvalue { i32, i1 } %add32, 0
+  %d = extractvalue { i32, i1 } %sub32, 0
+  %cext = sext i32 %c to i64
+  %dext = sext i32 %d to i64
+  %s1 = add i64 %a, %b
+  %s2 = add i64 %s1, %cext
+  %s3 = add i64 %s2, %dext
+  ret i64 %s3
+}
+""".strip()
+    module = parse_self_backend_module(ir_text)
+    symbols = prepare_module_symbols(
+        ir_text, list(module.globals_), list(module.functions)
+    )
+    func = module.functions[0]
+    prepare_parsed_function(func)
+    assign_stack_slots(func, aggregate_returned_indirect=lambda _ty: False)
+    (
+        add64_instr,
+        sub64_instr,
+        add32_instr,
+        sub32_instr,
+        *_rest,
+    ) = func.blocks[0].instructions
+
+    add64_lines = emit_call_instruction(func, *add64_instr.data, symbols)
+    sub64_lines = emit_call_instruction(func, *sub64_instr.data, symbols)
+    add32_lines = emit_call_instruction(func, *add32_instr.data, symbols)
+    sub32_lines = emit_call_instruction(func, *sub32_instr.data, symbols)
+
+    assert "  adds x11, x9, x10" in add64_lines
+    assert "  cset w12, vs" in add64_lines
+    assert "  subs x11, x9, x10" in sub64_lines
+    assert "  cset w12, vs" in sub64_lines
+    assert "  adds w11, w9, w10" in add32_lines
+    assert "  cset w12, vs" in add32_lines
+    assert "  orr x11, x11, x12, lsl #32" in add32_lines
+    assert "  subs w11, w9, w10" in sub32_lines
+    assert "  orr x11, x11, x12, lsl #32" in sub32_lines
+
+    import struct
+
+    from pcc.backend.arm64_encode import assemble_text
+
+    (packed,) = struct.unpack(
+        "<I", assemble_text("\torr\tx11, x11, x12, lsl #32\n").code
+    )
+    assert packed == 0xAA0C816B
 
 
 def test_self_backend_aarch64_call_helpers_cover_fshl_intrinsic():
@@ -10185,3 +10284,71 @@ bb0:
     asm_text = emit_aarch64_darwin_asm(ir_text)
 
     assert "  csel x13, x10, x11, ne" in asm_text
+
+
+def test_self_backend_float_nan_constant_keeps_nan_bits_in_ir(tmp_path):
+    # LLVM writes a floating constant with no exact decimal form as the DOUBLE
+    # bit pattern even for a `float` operand. The indexed materializer used to
+    # take the low 32 bits of that token as the float's own bits; the low half
+    # of a quiet-NaN double is zero, so `float f = NAN` reached the program as
+    # 0.0. Read the bits back and compare against the float quiet-NaN pattern.
+    ir_text = """
+target triple = "arm64-apple-darwin23.6.0"
+target datalayout = "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-n32:64-S128-Fn32"
+
+define i32 @main() {
+bb0:
+  %slot = alloca float
+  store float 0x7FF8000000000000, ptr %slot
+  %bits = load i32, ptr %slot
+  %is_qnan = icmp eq i32 %bits, 2143289344
+  %f = load float, ptr %slot
+  %is_nan = fcmp uno float %f, %f
+  %is_qnan32 = zext i1 %is_qnan to i32
+  %is_nan32 = zext i1 %is_nan to i32
+  %s1 = shl i32 %is_nan32, 1
+  %mask = or i32 %is_qnan32, %s1
+  %ret = sub i32 %mask, 3
+  ret i32 %ret
+}
+"""
+
+    asm_path = tmp_path / "float_nan_constant.s"
+    asm_path.write_text(emit_aarch64_darwin_asm(ir_text), encoding="utf-8")
+
+    run = _assemble_and_run(asm_path, tmp_path)
+
+    assert run.returncode == 0
+
+
+def test_self_backend_runs_c_float_nan_builtin_as_math_h_nan(tmp_path):
+    # `NAN` in utils/fake_libc_include/math.h expands to `__builtin_nanf("")`
+    # and `isnan` to `__builtin_isnan`; the own preprocessor drops system
+    # headers, so spell the expansions out. The constant reaches the backend
+    # as `bitcast (i32 2143289344 to float)`, both stored directly into a
+    # float and widened through `fpext`. Execute the changed shape: the float
+    # must be a NaN with the quiet-NaN bit pattern, not 0.0.
+    source = (
+        "static unsigned int float_bits(float f) {\n"
+        "    unsigned int bits;\n"
+        "    __builtin_memcpy(&bits, &f, 4);\n"
+        "    return bits;\n"
+        "}\n"
+        "int main(void) {\n"
+        "    float f = __builtin_nanf(\"\");\n"
+        "    double d = __builtin_nanf(\"\");\n"
+        "    if (!__builtin_isnan(f)) return 1;\n"
+        "    if (!__builtin_isnan(d)) return 2;\n"
+        "    if (float_bits(f) != 0x7fc00000u) return 3;\n"
+        "    if (f == f) return 4;\n"
+        "    if (f == 0.0f) return 5;\n"
+        "    return 0;\n"
+        "}\n"
+    )
+    ev, compiled_units = _compile_units(source, tmp_path)
+    obj_path = tmp_path / "float_nan.o"
+
+    ev.emit_compiled_units(compiled_units, emit_obj=str(obj_path), optimize=0)
+
+    run = _link_object_and_run(obj_path, tmp_path)
+    assert run.returncode == 0, run.stderr

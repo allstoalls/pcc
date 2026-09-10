@@ -72,12 +72,16 @@ class LinkError(Exception):
     """The link job is outside what this linker proves."""
 
 
+# A string, not a PEP 604 union. This alias sits at module scope, so the union
+# was evaluated at import time -- and pcc1's closed-world object model has no
+# `|` between class objects, which made the whole owned linker unimportable
+# under self-host. It surfaced as "unsupported operand type(s) for |" from
+# inside the link step (and, before the guarded reporting fix, as the single
+# word "returncode"). Every use is `list[LinkInput]` or `value: LinkInput`, so
+# nothing evaluates it as a type at runtime.
 LinkInput = (
-    bytes
-    | NativeObject
-    | NativeObjectView
-    | PackedNativeObject
-    | spec.MachOObject
+    "bytes | NativeObject | NativeObjectView | PackedNativeObject"
+    " | spec.MachOObject"
 )
 
 
@@ -273,7 +277,15 @@ def _native_section_payload(
             raise NativeObjectError(
                 "section-target value does not fit relocation width"
             )
-        payload[start:start + width] = target_value.to_bytes(width, "little")
+        # pcc's Layer 1 frontend does not lower ``bytearray`` slice assignment
+        # yet, and this module must compile under pcc so an installed native
+        # pcc1 can link without a host Python. Store the fixed-width field one
+        # byte at a time instead.
+        field = target_value.to_bytes(width, "little")
+        byte_index = 0
+        while byte_index < width:
+            payload[start + byte_index] = field[byte_index]
+            byte_index += 1
     return payload
 
 

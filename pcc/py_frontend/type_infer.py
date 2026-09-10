@@ -993,6 +993,10 @@ class _InferCtx:
         # ``_extern_bindings``; without this frontend mirror a libm call emits
         # ``double`` IR while the typed AST still claims it is a class object.
         self.extern_factory_aliases: set[str] = set()
+        # Local names bound to ``pcc.extern.ExternFn``.  Used as an annotation
+        # it is a declaration marker like ``extern`` itself, not the result
+        # type of calling the declared symbol.
+        self.extern_fn_type_aliases: set[str] = set()
         self.extern_ctype_aliases: dict[str, str] = {}
         # ``from weakref import ref/proxy as ...`` names are identity
         # observers just like ``weakref.ref``/``weakref.proxy``. Track
@@ -3233,6 +3237,8 @@ def _infer_stmt(ctx: _InferCtx, scope: _Scope, stmt: Stmt) -> Stmt:
                 local_name = as_name or attr_name
                 if attr_name == "extern":
                     ctx.extern_factory_aliases.add(local_name)
+                elif attr_name == "ExternFn":
+                    ctx.extern_fn_type_aliases.add(local_name)
                 elif attr_name.startswith("c_"):
                     ctx.extern_ctype_aliases[local_name] = attr_name
         _bind_ir_compat_module_alias(ctx, scope, resolved, stmt.names)
@@ -5103,14 +5109,20 @@ def _infer_assign(ctx: _InferCtx, scope: _Scope, stmt: Assign) -> Assign:
     extern_marker_annotation = (
         isinstance(value.ty, FuncType)
         and isinstance(ann_ty, ClassType)
-        and ann_ty.name == "extern"
+        and (
+            ann_ty.name == "extern"
+            or ann_ty.name in ctx.extern_fn_type_aliases
+        )
         and isinstance(stmt.value, Call)
         and isinstance(stmt.value.func, Name)
         and _name_ident(stmt.value.func) in ctx.extern_factory_aliases
     )
     if extern_marker_annotation:
-        # ``x: extern = extern(...)`` uses ``extern`` as a declaration marker,
-        # not as the runtime result type of calling ``x``.
+        # ``x: extern = extern(...)`` and ``x: ExternFn = extern(...)`` both
+        # use the annotation as a declaration marker, not as the runtime
+        # result type of calling ``x``.  ``pcc/llvm_capi/__init__.py`` spells
+        # every one of its ~200 LLVM-C declarations the second way, which is
+        # the accurate annotation -- ``extern()`` does return an ``ExternFn``.
         bind_ty = value.ty
     elif existing_raw_ty is not None:
         bind_ty = existing_raw_ty

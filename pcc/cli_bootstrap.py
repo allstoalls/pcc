@@ -118,7 +118,14 @@ def _restart_with_locked_environment_defaults(raw_argv, applied_defaults):
         _bootstrap_subprocess_run(command, check=True)
         return 0
     except subprocess.CalledProcessError as exc:
-        return exc.returncode
+        try:
+            return exc.returncode
+        except Exception:
+            _write_text(
+                "Error: pcc1 locked-environment resource restart failed",
+                err=True,
+            )
+            return 1
     except Exception:
         _write_text(
             "Error: pcc1 locked-environment resource restart failed",

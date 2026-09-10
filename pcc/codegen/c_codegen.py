@@ -9,6 +9,7 @@ from itertools import count
 # Route C frontend codegen through compat.ir_c. pcc.llvm_capi is the default;
 # PCC_USE_LLVMLITE_C=1 selects the legacy llvmlite compatibility path.
 from pcc.llvm_capi.compat import ir_c as ir
+from pcc.py_frontend.pipeline_targets import host_target_triple
 from pcc.llvm_capi.compat import add_raw_function_attribute
 from pcc.c_abi_layout import (
     floating_scalar_layout,
@@ -244,18 +245,26 @@ class LLVMCodeGenerator(
 
     def __init__(self, translation_unit_name=None, emit_debug=False, pass_ctx=None):
         self.module = ir.Module()
-        # Set proper data layout for struct padding/alignment
-        import llvmlite.binding as _llvm
-
-        _llvm.initialize_native_target()
-        _triple = _llvm.get_default_triple()
-        _tm = _llvm.Target.from_default_triple().create_target_machine()
-        self.module.triple = _triple
-        self.module.data_layout = str(_tm.target_data)
-        # Cache a real TargetData handle so `type.get_abi_size(...)`
-        # (used by the SSA pointer-difference lowering) can query element
-        # sizes without parsing the layout string itself.
-        self._target_data = _tm.target_data
+        # Module header defaults. LLVM is consulted only when it is available:
+        # this ran unconditionally at construction, so *constructing* a C
+        # codegen required llvmlite even though the self backend needs none of
+        # it -- the caller overwrites both fields immediately via
+        # `set_target_text`/`set_target_machine`, and the sole consumer of a
+        # real TargetData (the SSA pointer-difference lowering) already falls
+        # back when it is absent. Without the guard a stage lacking llvmlite
+        # reported the whole C driver as unowned instead of naming the gap.
+        self.module.triple = host_target_triple()
+        self._target_data = None
+        try:
+            import llvmlite.binding as _llvm
+        except ImportError:
+            self.module.data_layout = ""
+        else:
+            _llvm.initialize_native_target()
+            _tm = _llvm.Target.from_default_triple().create_target_machine()
+            self.module.triple = _llvm.get_default_triple()
+            self.module.data_layout = str(_tm.target_data)
+            self._target_data = _tm.target_data
         self.emit_debug = emit_debug
         self._di_file = None
         self._di_compile_unit = None
@@ -449,6 +458,18 @@ class LLVMCodeGenerator(
         flag = self.builder.extract_value(agg, 1, "ubsan.ovfflag")
         self._emit_ubsan_trap_branch(flag, kind="arith")
 
+    def set_target_text(self, triple, data_layout_text):
+        """Set the module header from strings, with no LLVM handle.
+
+        This is the self-backend path: the triple and the layout are only ever
+        written back into the emitted IR text, and the one consumer of a real
+        ``TargetData`` (the SSA pointer-difference lowering) already falls back
+        when it is absent.
+        """
+        self.module.triple = triple
+        self.module.data_layout = data_layout_text
+        self._target_data = None
+
     def set_target_machine(self, triple, target_machine):
         self.module.triple = triple
         self.module.data_layout = str(target_machine.target_data)
@@ -579,6 +600,17 @@ class LLVMCodeGenerator(
             )
         if linkage == "internal":
             if existing_state is not None and existing_state.linkage == "internal":
+                return existing_state.symbol_name
+            if (
+                isinstance(existing_state, FileScopeFunctionState)
+                and existing_state.implicit
+                and not existing_state.defined
+            ):
+                # The prior record is a fabricated use, not a declaration, and
+                # its call sites already spell this name. Settling the real
+                # definition under that same name keeps them bound; mangling
+                # here left them referencing an undefined external symbol
+                # (py_obj.c's pcc_gc_store_plan_commit_locked_impl).
                 return existing_state.symbol_name
             return self._file_scope_symbol_name(
                 name, storage=storage, funcspec=funcspec, linkage=linkage
@@ -773,14 +805,19 @@ class LLVMCodeGenerator(
             # declaration is reached; treating the fabricated `extern` as
             # binding rejected translation units that cc compiles cleanly
             # (py_obj.c's pcc_gc_store_plan_commit_locked_impl, which broke
-            # every pcc-C runtime archive build). A real declaration still
-            # conflicts, because only implicit records are settled here.
+            # every pcc-C runtime archive build). Only the fabricated record
+            # is settled: the symbol name is kept so references already
+            # emitted stay bound, and a real declaration that preceded the
+            # definition still conflicts because it clears ``implicit``
+            # below before the definition is seen.
             if state.implicit and not state.defined:
                 state.linkage = linkage
                 state.symbol_name = symbol_name
-                state.implicit = False
             else:
                 raise SemanticError(f"conflicting linkage for function '{name}'")
+        # The source has now spoken about this name; any later linkage change
+        # is a real conflict, not a fabricated use to settle.
+        state.implicit = False
         if state.symbol_name != symbol_name:
             raise SemanticError(f"conflicting symbol binding for function '{name}'")
         if is_definition:

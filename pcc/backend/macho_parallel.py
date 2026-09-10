@@ -20,11 +20,22 @@ positive ``PCC_MACHO_LINK_JOBS`` value supplies an explicit worker bound.
 
 from __future__ import annotations
 
-import mmap
 import os
 import threading
 from dataclasses import dataclass
 from typing import BinaryIO, Callable, Sequence, TypeVar, cast
+
+try:
+    import mmap as _mmap
+except ImportError:  # pragma: no cover - exercised by the self-hosted stage
+    # pcc1's closed-world stdlib has no `mmap` provider, so importing it at
+    # module scope made the whole owned in-process link unavailable: the
+    # failure surfaced as `No module named 'mmap'` from inside the linker, and
+    # (before the guarded reporting fix) as the single word "returncode".
+    # Nothing here needs the mapping itself -- the chunk writer only does
+    # slice assignment -- so the file-backed path degrades to a buffered
+    # read/patch/write that preserves the same bytes.
+    _mmap = None
 
 
 PARALLEL_JOBS_ENV = "PCC_MACHO_LINK_JOBS"
@@ -365,7 +376,7 @@ def _output_chunks(regions: Sequence[OutputRegion]) -> list[_OutputChunk]:
 
 
 def _write_output_chunks(
-    destination: bytearray | mmap.mmap,
+    destination: "bytearray | _mmap.mmap",
     chunks: Sequence[_OutputChunk],
     *,
     total_bytes: int,
@@ -428,7 +439,25 @@ def write_mmap_output(
         file.flush()
         if size == 0:
             return
-        image = mmap.mmap(file.fileno(), size, access=mmap.ACCESS_WRITE)
+        if _mmap is None:
+            # No mapping available: read the truncated file back, patch it
+            # with the same writer, and write it out. Same resulting bytes,
+            # one image held in memory instead of a mapping.
+            file.seek(0)
+            buffered = bytearray(file.read(size))
+            if len(buffered) < size:
+                buffered.extend(bytes(size - len(buffered)))
+            _write_output_chunks(
+                buffered,
+                chunks,
+                total_bytes=size,
+                jobs=worker_count,
+            )
+            file.seek(0)
+            file.write(bytes(buffered))
+            file.flush()
+            return
+        image = _mmap.mmap(file.fileno(), size, access=_mmap.ACCESS_WRITE)
     except (OSError, ValueError) as exc:
         raise ParallelLinkError(
             "could not create the file-backed Mach-O output mapping"

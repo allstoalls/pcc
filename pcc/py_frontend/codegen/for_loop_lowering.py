@@ -83,6 +83,125 @@ _I64 = ir.IntType(64)
 _CSTR = _I8.as_pointer()
 
 
+def _for_target_binds_ident(target, ident: str) -> bool:
+    """True when a for-loop target binds ``ident`` as a bare name."""
+    if isinstance(target, Name):
+        return target.ident == ident
+    if isinstance(target, TupleExpr):
+        i = 0
+        while i < len(target.elems):
+            if _for_target_binds_ident(target.elems[i], ident):
+                return True
+            i += 1
+    return False
+
+
+def _for_target_scan_reads(node, ident: str, in_binding_body: bool, state) -> None:
+    """Count reads of ``ident`` that could observe a pre-loop binding.
+
+    ``for x in it:`` stores the target at the top of every iteration, so a
+    read of ``x`` inside the body of a loop that binds ``x`` always sees that
+    loop's own element.  A read that cannot execute after the loop cannot
+    observe its zero-iteration edge either.  What is left -- a read after the
+    loop, in a sibling ``while`` body, or inside a nested function that
+    captures the name -- is what forces the pre-loop value to be preserved.
+
+    ``state["outside"]`` counts those reads.  Counting starts at
+    ``state["target"]`` (the ``For`` being lowered) and runs to the end of the
+    function; before the marker is reached nothing is counted, and with no
+    marker the whole body counts, which is the conservative answer for a
+    normalised loop that is no longer the node the function body holds.
+
+    ``state["nested"]`` records a binding loop lexically inside another
+    binding loop's body: reads in the outer body are then attributable to
+    either loop, so no read is exempt and the answer is unusable.
+    ``state["depth"]`` tracks enclosing loops -- a back edge can re-reach a
+    read that precedes the target loop, so a target inside any loop also
+    falls back to counting everything.
+
+    Store positions are not reads.  Only ``Assign`` and ``For`` introduce a
+    bare-``Name`` store, so only those two are special-cased; anything else
+    holding a ``Name`` is counted, which keeps an unrecognized shape on the
+    conservative side.  Written in the bootstrap-safe dialect (no generators,
+    no genexprs, no reflection).
+    """
+    if node is None:
+        return
+    if isinstance(node, str):
+        return
+    if isinstance(node, list) or isinstance(node, tuple):
+        i = 0
+        while i < len(node):
+            _for_target_scan_reads(node[i], ident, in_binding_body, state)
+            i += 1
+        return
+    if isinstance(node, Name):
+        if (
+            node.ident == ident
+            and not in_binding_body
+            and state["counting"] != 0
+        ):
+            state["outside"] = state["outside"] + 1
+        return
+    if isinstance(node, While):
+        state["depth"] = state["depth"] + 1
+        _for_target_scan_reads(node.cond, ident, in_binding_body, state)
+        _for_target_scan_reads(node.body, ident, in_binding_body, state)
+        _for_target_scan_reads(node.else_body, ident, in_binding_body, state)
+        state["depth"] = state["depth"] - 1
+        return
+    if isinstance(node, For):
+        binds = _for_target_binds_ident(node.target, ident)
+        if binds and in_binding_body:
+            state["nested"] = 1
+        is_target = node is state["target"]
+        if is_target:
+            state["found"] = 1
+            if state["depth"] != 0:
+                # An enclosing loop's back edge re-reaches the reads written
+                # before this one, so its position carries no information.
+                state["in_loop"] = 1
+        # The iterable is evaluated before the target is bound, so a read
+        # there observes the pre-loop value even in a binding loop.
+        _for_target_scan_reads(node.iter, ident, in_binding_body, state)
+        body_exempt = in_binding_body
+        if binds:
+            body_exempt = True
+        state["depth"] = state["depth"] + 1
+        _for_target_scan_reads(node.body, ident, body_exempt, state)
+        state["depth"] = state["depth"] - 1
+        if is_target:
+            state["counting"] = 1
+        # ``else`` runs after the loop; the target may be unbound there.
+        _for_target_scan_reads(node.else_body, ident, in_binding_body, state)
+        return
+    if isinstance(node, Assign):
+        _for_target_scan_reads(node.value, ident, in_binding_body, state)
+        i = 0
+        while i < len(node.targets):
+            tgt = node.targets[i]
+            i += 1
+            if isinstance(tgt, Name):
+                continue
+            if isinstance(tgt, TupleExpr):
+                j = 0
+                while j < len(tgt.elems):
+                    el = tgt.elems[j]
+                    j += 1
+                    if isinstance(el, Name):
+                        continue
+                    _for_target_scan_reads(el, ident, in_binding_body, state)
+                continue
+            _for_target_scan_reads(tgt, ident, in_binding_body, state)
+        return
+    i = 0
+    while i < len(_CPY_SCAN_FIELDS):
+        child = getattr(node, _CPY_SCAN_FIELDS[i], None)
+        if child is not None:
+            _for_target_scan_reads(child, ident, in_binding_body, state)
+        i += 1
+
+
 def _for_loop_has_attr(obj, name: str) -> bool:
     return hasattr(obj, name)
 
@@ -247,14 +366,24 @@ def _for_prepare_owned_object_target(host, target_ident: str, target_ty: Type):
         return host.env[target_ident]
 
     initial_obj = None
-    if existing is not None:
+    # A flag, not ``existing = None``: rebinding the name to ``None`` makes
+    # pcc1 infer it as NoneType and reject the tuple-unpack below.
+    dropped_cpy_binding = False
+    if existing is not None and target_ident in getattr(host, "_cpy_env_flags", {}):
+        # A raw CPython pointer cannot be preserved into a GC-rooted pcc
+        # object slot, and one name carries one compile-time domain flag.
+        # When nothing can observe the pre-loop value the loop simply drops
+        # the CPython binding and rebinds in its own domain.
+        if not host._for_target_pre_value_is_dead(target_ident):
+            raise L1CodegenError(
+                "cannot join a CPython-backed for-target with a native "
+                f"object binding for {target_ident!r}"
+            )
+        host._for_drop_dead_target_binding(target_ident)
+        dropped_cpy_binding = True
+    if existing is not None and not dropped_cpy_binding:
         old_alloca, old_ir_ty, old_decl_ty = existing
         if isinstance(old_ir_ty, ir.PointerType):
-            if target_ident in getattr(host, "_cpy_env_flags", {}):
-                raise L1CodegenError(
-                    "cannot join a CPython-backed for-target with a native "
-                    f"object binding for {target_ident!r}"
-                )
             old_value = host.builder.call(
                 host.runtime["pcc_gc_load_ptr"],
                 [
@@ -349,6 +478,111 @@ class ForLoopLoweringMixin:
         """Native for-target rebinding must overwrite CPython local state."""
         if hasattr(self, "_cpy_env_flags"):
             self._cpy_env_flags.pop(target_ident, None)
+
+    def _for_target_pre_value_is_dead(self, target_ident: str) -> bool:
+        """True when no read can observe what ``target_ident`` held before a
+        loop that binds it.
+
+        A CPython pointer and a native pcc object are both ``i8*`` but live in
+        different ownership domains, and a name carries one compile-time
+        domain flag.  The zero-iteration edge is the only reason a for-target
+        needs its pre-loop value at all, so when that value is dead the two
+        representations never have to join: the loop may drop the old binding
+        and rebind in its own domain.  Proving it dead is what keeps that from
+        being a silent mis-tag.
+        """
+        fd = self.current_func_def
+        if fd is None:
+            # Module scope: the name may be a module global read by any
+            # function in the closure.
+            return False
+        if target_ident in getattr(self, "_current_global_names", set()):
+            return False
+        if target_ident in getattr(self, "_module_globals", {}):
+            return False
+        target_stmt = None
+        if len(self._for_join_stmt_stack) > 0:
+            target_stmt = self._for_join_stmt_stack[-1]
+        state = {
+            "outside": 0,
+            "nested": 0,
+            "depth": 0,
+            "counting": 0,
+            "found": 0,
+            "in_loop": 0,
+            "target": target_stmt,
+        }
+        if target_stmt is None:
+            state["counting"] = 1
+        _for_target_scan_reads(fd.body, target_ident, False, state)
+        if state["nested"] != 0:
+            return False
+        if target_stmt is not None and (
+            state["found"] == 0 or state["in_loop"] != 0
+        ):
+            # Either the loop was normalised (enumerate/zip/tuple
+            # target/for-else) and is no longer the node the function body
+            # holds, or it sits inside another loop whose back edge re-reaches
+            # the reads written before it.  Both make the position unusable:
+            # count every read in the function instead.
+            state["outside"] = 0
+            state["counting"] = 1
+            state["depth"] = 0
+            state["target"] = None
+            _for_target_scan_reads(fd.body, target_ident, False, state)
+            if state["nested"] != 0:
+                return False
+        return state["outside"] == 0
+
+    def _for_drop_dead_target_binding(self, target_ident: str) -> None:
+        """Unbind a for-target whose pre-loop value is dead.
+
+        The GC root is the part that matters: a slot registered as holding a
+        pcc object must not be left rooted when the loop is about to store a
+        raw CPython pointer into a fresh slot, and vice versa.  Releasing the
+        owned pcc value follows the same recipe as ``del``.  A CPython-backed
+        local carries no slot-level reference to release -- the non-generator
+        CPython loop stores each item without releasing the previous one, and
+        the iterator owns them -- so only compiler state is dropped there.
+        """
+        slot_info = self.env.get(target_ident)
+        if (
+            slot_info is not None
+            and target_ident in getattr(self, "_owned_local_names", set())
+            and target_ident not in getattr(self, "_cpy_env_flags", {})
+        ):
+            # Indexed, not unpacked: ``env.get`` is Optional, so pcc1 infers
+            # the binding as NoneType and rejects a tuple-unpack of it.
+            alloca = slot_info[0]
+            ir_ty = slot_info[1]
+            if isinstance(ir_ty, ir.PointerType) and self._ir_type_matches(
+                ir_ty, _CSTR
+            ):
+                if target_ident in self._owned_local_has_value:
+                    old = self.builder.load(
+                        alloca,
+                        name=self._fresh("for.join.drop." + target_ident),
+                    )
+                    self._gc_release(
+                        old,
+                        self._release_context_label(
+                            "for-target-join:" + target_ident
+                        ),
+                    )
+                    self.builder.store(ir.Constant(_CSTR, None), alloca)
+                self._discard_owned_local_gc_root(target_ident, alloca)
+        self._owned_local_names.discard(target_ident)
+        self._owned_local_has_value.discard(target_ident)
+        if hasattr(self, "_for_target_owned_names"):
+            self._for_target_owned_names.discard(target_ident)
+        self.env.pop(target_ident, None)
+        if hasattr(self, "env_class_hint"):
+            self.env_class_hint.pop(target_ident, None)
+        if hasattr(self, "env_class_object_hint"):
+            self.env_class_object_hint.pop(target_ident, None)
+        if hasattr(self, "_exact_int_env_flags"):
+            self._exact_int_env_flags.pop(target_ident, None)
+        self._clear_cpy_for_target_binding(target_ident)
 
     def _cpy_for_scan_node(self, node, events: list) -> bool:
         """Append ordered events for the cross-yield read check to
@@ -515,13 +749,18 @@ class ForLoopLoweringMixin:
                 or (gen_ctx is None and not pre_is_cpy)
             ):
                 # Raw CPython pointers and native pcc objects/scalars cannot
-                # share one slot or one compile-time domain flag.  Refuse this
-                # mixed-domain zero/nonzero join rather than storing a pointer
-                # into a scalar slot or mis-tagging a preserved native value.
-                raise L1CodegenError(
-                    "CPython for-target representation join requires an "
-                    f"already-CPython binding for {target_name!r}"
-                )
+                # share one slot or one compile-time domain flag.  The join is
+                # only needed to carry the pre-loop value across a
+                # zero-iteration edge, so when no read can observe that value
+                # the native binding is dropped and the loop rebinds in the
+                # CPython domain.  Otherwise refuse, rather than store a
+                # pointer into a scalar slot or mis-tag a preserved value.
+                if not self._for_target_pre_value_is_dead(target_name):
+                    raise L1CodegenError(
+                        "CPython for-target representation join requires an "
+                        f"already-CPython binding for {target_name!r}"
+                    )
+                self._for_drop_dead_target_binding(target_name)
         fn = self.current_function
         iter_obj = self.builder.call(
             self.runtime["py_cpy_iter"],
@@ -1734,6 +1973,15 @@ class ForLoopLoweringMixin:
         self.builder.position_at_end(end_bb)
 
     def _emit_for(self, stmt: For) -> None:
+        """Push the loop under lowering so the for-target join analysis can
+        locate its position in the enclosing function body, then lower it."""
+        self._for_join_stmt_stack.append(stmt)
+        try:
+            self._emit_for_body(stmt)
+        finally:
+            self._for_join_stmt_stack.pop()
+
+    def _emit_for_body(self, stmt: For) -> None:
         if stmt.else_body:
             # Desugar for-else into a flag-guarded post-loop if:
             #

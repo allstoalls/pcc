@@ -2439,6 +2439,132 @@ def py_bytearray_del_slice(o, lo, hi, step) -> int:
     return _bytearray_delete_selected(o, lo_v, hi_v, step_v, length)
 
 
+@c_abi_export("py_bytearray_set_slice")
+def py_bytearray_set_slice(o, lo, hi, step, replacement) -> int:
+    """``ba[lo:hi:step] = replacement``, in place.
+
+    A bytearray keeps its bytes inline at offset 24 behind an exact-fit
+    allocation (``_bytearray_new_raw``), so the stored length can shrink but
+    cannot grow.  A step-1 replacement longer than the span it replaces would
+    need a reallocation this slot cannot publish -- every other reference
+    would keep pointing at the old object -- so it is refused loudly instead
+    of silently truncating.  Equal-length and shrinking step-1 stores, and
+    extended slices (which CPython requires to match exactly), are all exact.
+    """
+    if _type_of(o) != PY_TYPE_BYTEARRAY:
+        py_raise_owned(
+            py_exc_new(
+                3, cstr("bytearray slice assignment target must be bytearray")
+            )
+        )  # PY_EXC_TYPEERROR
+        return -1
+    length: int = load_i64(o, 16)
+    step_v: int = 1
+    if _bytes_is_none_or_null(step) == 0:
+        step_v = py_int_value_i64(step)
+        if step_v == 0:
+            py_raise_owned(
+                py_exc_new(2, cstr("slice step cannot be zero"))
+            )  # PY_EXC_VALUEERROR
+            return -1
+
+    src = _bytes_data(replacement)
+    tmp = null()
+    src_n: int = 0
+    if ptr_is_null(src) != 0:
+        tag: int = _type_of(replacement)
+        if tag == PY_TYPE_LIST or tag == PY_TYPE_TUPLE:
+            tmp = _bytes_from_int_sequence(replacement, 1)
+            if ptr_is_null(tmp) == 0:
+                src = _bytes_data(tmp)
+                src_n = py_bytes_len(tmp)
+        if ptr_is_null(src) != 0:
+            if ptr_is_null(tmp) == 0:
+                py_decref(tmp)
+            py_raise_owned(
+                py_exc_new(
+                    3,
+                    cstr("can assign only bytes-like or an int sequence"),
+                )
+            )  # PY_EXC_TYPEERROR
+            return -1
+    else:
+        src_n = py_bytes_len(replacement)
+
+    lo_v: int = _bytes_slice_lo(lo, length, step_v)
+    hi_v: int = _bytes_slice_hi(hi, length, step_v)
+    lo_v = _bytes_normalize_lo(lo_v, length, step_v)
+    hi_v = _bytes_normalize_hi(hi, hi_v, length, step_v)
+
+    if step_v == 1:
+        span: int = hi_v - lo_v
+        if span < 0:
+            span = 0
+        if src_n > span:
+            if ptr_is_null(tmp) == 0:
+                py_decref(tmp)
+            py_raise_owned(
+                py_exc_new(
+                    11,
+                    cstr(
+                        "bytearray slice assignment cannot grow the object "
+                        "in place"
+                    ),
+                )
+            )  # PY_EXC_NOTIMPLEMENTEDERROR
+            return -1
+        i: int = 0
+        while i < src_n:
+            store_i8(o, 24 + lo_v + i, load_i8(src, i))
+            i = i + 1
+        if src_n < span:
+            tail: int = length - hi_v
+            j: int = 0
+            while j < tail:
+                store_i8(o, 24 + lo_v + src_n + j, load_i8(o, 24 + hi_v + j))
+                j = j + 1
+            new_len: int = length - (span - src_n)
+            store_i64(o, 16, new_len)
+            store_i8(o, 24 + new_len, 0)
+        if ptr_is_null(tmp) == 0:
+            py_decref(tmp)
+        return 0
+
+    # Extended slice.  Walk the positions in slice order -- for a negative
+    # step that is descending, and the replacement's first byte belongs at the
+    # first position visited, not at the lowest index.
+    count: int = 0
+    pos: int = lo_v
+    if step_v > 0:
+        while pos < hi_v:
+            count = count + 1
+            pos = pos + step_v
+    else:
+        while pos > hi_v:
+            count = count + 1
+            pos = pos + step_v
+    if src_n != count:
+        if ptr_is_null(tmp) == 0:
+            py_decref(tmp)
+        py_raise_owned(
+            py_exc_new(
+                2,
+                cstr("attempt to assign bytes of the wrong size to extended slice"),
+            )
+        )  # PY_EXC_VALUEERROR
+        return -1
+    pos = lo_v
+    k: int = 0
+    while k < count:
+        if pos >= 0 and pos < length:
+            store_i8(o, 24 + pos, load_i8(src, k))
+        k = k + 1
+        pos = pos + step_v
+    if ptr_is_null(tmp) == 0:
+        py_decref(tmp)
+    return 0
+
+
 def _hex_digit(v: int) -> int:
     if v < 10:
         return 48 + v

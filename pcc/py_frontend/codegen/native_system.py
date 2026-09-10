@@ -14,6 +14,7 @@ from pcc.python_target import (
 
 from ..py_ast import Attr, BoolLit, Call, Expr, Name, StrLit, StrType
 from . import marshal
+from .layer1_support import _native_stdlib_semantic_provider
 
 _I8 = ir.IntType(8)
 _I32 = ir.IntType(32)
@@ -106,6 +107,15 @@ class NativeSystemLoweringMixin:
         export_info = native_exports.get(module_name or "", {}).get(
             "CalledProcessError"
         )
+        if not isinstance(export_info, dict) or export_info.get("kind") != "class":
+            # The module-level static-native export table is keyed by which
+            # module is being compiled, which says nothing about whether this
+            # lowering fires: every module split out of pipeline.py since that
+            # allow-list was written reached here without the declaration.
+            # The provider is admitted on its own.
+            export_info = _native_stdlib_semantic_provider(
+                module_name, "CalledProcessError"
+            )
         if not isinstance(export_info, dict) or export_info.get("kind") != "class":
             raise NotImplementedError(
                 "native subprocess check=True requires the "

@@ -326,7 +326,12 @@ def provenance_codegen_stale(
         )
     except Exception:
         return True
-    return result.returncode != 0
+    try:
+        return result.returncode != 0
+    except Exception:
+        # A compiled stage that cannot read ``returncode`` must not treat an
+        # unverified manifest as valid.
+        return True
 
 
 def target_matches(archive: str, expected_target_id: str) -> bool:

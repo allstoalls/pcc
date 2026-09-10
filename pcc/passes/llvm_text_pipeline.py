@@ -22,8 +22,6 @@ import re
 import shutil
 import subprocess
 
-import llvmlite.binding as llvm
-
 from .llvm_builtin_registry import (
     LLVM_DEFAULT_PROFILE_PASSES,
     LLVM_DEFAULT_PROFILE_VERSION,
@@ -235,6 +233,13 @@ def _parse_version(text: str) -> tuple[int, int, int] | None:
 
 
 def _llvmlite_version() -> tuple[int, int, int]:
+    # Bound on use, not at module scope. This module only needs llvmlite to
+    # report its LLVM version when matching an external `opt` binary, but the
+    # module-scope import made every importer -- including the C compile
+    # driver -- depend on llvmlite being installed. A stage without it then
+    # reported the whole C driver as unowned instead of naming the gap.
+    import llvmlite.binding as llvm
+
     version = tuple(int(piece) for piece in llvm.llvm_version_info)
     if len(version) >= 3:
         return version[:3]

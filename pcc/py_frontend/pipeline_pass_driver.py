@@ -35,6 +35,30 @@ from .pipeline_pass_config import (
 from .pipeline_paths import join_strings
 
 
+def _pcc_debug_write_exc(path: str, label: str, exc: BaseException, cmd: Optional[list] = None) -> None:
+    """Capture CalledProcessError/FileNotFoundError details without touching .returncode."""
+    try:
+        with open(path, "w", encoding="utf-8") as stream:
+            stream.write(f"label={label}\n")
+            stream.write(f"exc_type={type(exc).__module__}.{type(exc).__name__}\n")
+            try:
+                stream.write(f"exc_args={exc.args!r}\n")
+            except Exception as e:
+                stream.write(f"exc_args=<unreadable: {e!r}>\n")
+            try:
+                stream.write(f"returncode={exc.returncode!r}\n")
+            except Exception as e:
+                stream.write(f"returncode=<unreadable: {type(e).__name__}: {e}>\n")
+            if cmd is not None:
+                try:
+                    stream.write(f"cmd={cmd!r}\n")
+                except Exception as e:
+                    stream.write(f"cmd=<unreadable: {e!r}>\n")
+    except Exception:
+        pass
+
+
+
 class PassDriverError(RuntimeError):
     """The isolated IR-pass process failed its orchestration contract."""
 
@@ -263,6 +287,7 @@ def apply_passes(
                 + small_int_decimal(len(str(ir_text)))
             ) from exc
         except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+            _pcc_debug_write_exc("/tmp/pcc_pass_driver_exc.txt", "single", exc, cmd)
             detail = f" (exit {exc.returncode})" if hasattr(exc, "returncode") else ""
             raise PassDriverError(
                 "Python IR pass pipeline failed for module "
@@ -396,6 +421,7 @@ def apply_passes_many(
                 + python_ir_pass_batch_size_summary(normalized)
             ) from exc
         except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+            _pcc_debug_write_exc("/tmp/pcc_pass_driver_exc.txt", "batch", exc, args)
             detail = f" (exit {exc.returncode})" if hasattr(exc, "returncode") else ""
             raise PassDriverError("Python IR pass batch pipeline failed" + detail) from exc
         try:

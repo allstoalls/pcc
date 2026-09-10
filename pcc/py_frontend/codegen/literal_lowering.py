@@ -585,12 +585,11 @@ class LiteralLoweringMixin:
                 and el.func.ident in ("*", "__starred__")
                 and len(el.args) == 1
             ):
-                if el_index + 1 < len(expr.elems):
-                    raise NotImplementedError(
-                        "iterable splat cannot precede following literal "
-                        "operands until expansion is lowered at its source "
-                        "position"
-                    )
+                # No position restriction: every operand is evaluated here in
+                # source order and recorded as an ``extend``/``append`` op, and
+                # both consumers below replay ``ops`` in that same order.  A
+                # splat is therefore expanded where it is written, so
+                # ``[a, *b, c]`` and ``[*b, *c]`` need no special case.
                 inner = self._emit_expr_with_cpy_operand_cleanup(
                     el.args[0],
                     tuple(live_cpy_owned),
@@ -1187,12 +1186,12 @@ class LiteralLoweringMixin:
             if k_is_cpy:
                 has_cpy_key = True
         if has_cpy_key:
-            if len(items) > 1:
-                raise NotImplementedError(
-                    "multi-pair CPython-key dict literal cannot preserve "
-                    "per-pair insertion errors before later operand "
-                    "evaluation"
-                )
+            # No pair-count restriction: the loop above evaluates every key
+            # and value operand, in source order, before a single
+            # ``_emit_cpython_dict_items`` inserts them -- which is what
+            # CPython's dict display does too (all operands are pushed, then
+            # one ``BUILD_MAP``), so an unhashable key raises only after the
+            # later operands have run.
             result = self._emit_cpython_dict_items(
                 [
                     (k, k_ty, v, v_ty)
@@ -1969,12 +1968,11 @@ class LiteralLoweringMixin:
                 and el.func.ident in ("*", "__starred__")
                 and len(el.args) == 1
             ):
-                if el_index + 1 < len(expr.elems):
-                    raise NotImplementedError(
-                        "iterable splat cannot precede following literal "
-                        "operands until expansion is lowered at its source "
-                        "position"
-                    )
+                # No position restriction: every operand is evaluated here in
+                # source order and recorded as an ``extend``/``append`` op, and
+                # both consumers below replay ``ops`` in that same order.  A
+                # splat is therefore expanded where it is written, so
+                # ``[a, *b, c]`` and ``[*b, *c]`` need no special case.
                 inner = self._emit_expr_with_cpy_operand_cleanup(
                     el.args[0],
                     tuple(live_cpy_owned),

@@ -4,8 +4,6 @@ import hashlib
 import inspect
 import time
 from ctypes.util import find_library
-import llvmlite.ir as ir
-import llvmlite.binding as llvm
 import os
 import multiprocessing
 import subprocess
@@ -15,6 +13,33 @@ import tempfile
 import platform
 from concurrent.futures import ProcessPoolExecutor
 from itertools import repeat
+
+
+try:
+    import llvmlite.binding as llvm
+except ImportError:  # pragma: no cover - exercised by the self-hosted stage
+    # Allowed to be absent, not deferred out of the module surface.
+    #
+    # This module holds both halves of the C toolchain: the compile driver
+    # (`_compile_translation_units` and friends, which `--emit-obj` uses) and
+    # the MCJIT evaluator. A hard module-scope import coupled them, so
+    # *compiling* C required LLVM's execution engine -- and a stage without
+    # llvmlite reported the whole C driver as unowned instead of naming the
+    # gap. Keeping the name bound (to None when unavailable) preserves
+    # `c_evaluator.llvm` for the callers and tests that legitimately want the
+    # real binding, while the compile path no longer needs it at all.
+    llvm = None
+
+
+def _llvm():
+    """The llvmlite binding, or a clear error naming what is missing."""
+    if llvm is None:
+        raise ImportError(
+            "llvmlite is required for this C toolchain path "
+            "(MCJIT evaluation, the LLVM backend, or an external opt pipeline)"
+        )
+    return llvm
+from ..py_frontend.pipeline_targets import host_target_triple
 from ..backend import (
     BackendUnavailable,
     backend_request_allows_unimplemented,
@@ -449,7 +474,7 @@ def _resolve_external_llvm_pipeline(opt_level, pass_ctx=None):
     if not opt_binary:
         raise RuntimeError(
             f"{_LLVM_TEXT_PIPELINE_ENV} requires an LLVM opt binary matching "
-            f"llvmlite's LLVM {'.'.join(str(x) for x in llvm.llvm_version_info)}; "
+            f"llvmlite's LLVM {'.'.join(str(x) for x in _llvm().llvm_version_info)}; "
             f"set {_LLVM_OPT_BIN_ENV} explicitly or install llvm@20"
         )
 
@@ -716,7 +741,7 @@ def _build_native_cache(
         ir_text, external_mode = _apply_external_llvm_pipeline_to_text(
             ir_text, opt_level
         )
-        llvmmod = llvm.parse_assembly(ir_text)
+        llvmmod = _llvm().parse_assembly(ir_text)
         if external_mode is None:
             _apply_llvm_optimizations(
                 llvmmod, target_machine, opt_level, cheap_passes=cheap_passes
@@ -953,7 +978,7 @@ def _resolve_dynamic_link_libraries(link_args):
 
 def _load_mcjit_link_libraries(link_args):
     for library in _resolve_dynamic_link_libraries(link_args):
-        llvm.load_library_permanently(library)
+        _llvm().load_library_permanently(library)
 
 
 def _normalize_simple_typeof_identifiers(codestr):
@@ -1319,10 +1344,20 @@ def _compile_preprocessed_translation_unit_artifact(
         pass_ctx=pass_ctx,
     )
     if target_triple:
-        llvm.initialize_all_targets()
-        llvm.initialize_all_asmprinters()
-        target_machine = llvm.Target.from_triple(target_triple).create_target_machine()
-        codegen.set_target_machine(target_triple, target_machine)
+        # An LLVM target machine only carries the data layout and the
+        # TargetData handle into the codegen; the self backend reads neither,
+        # so a stage without llvmlite sets the header from strings instead of
+        # reporting the whole C driver as unowned.
+        try:
+            _llvm().initialize_all_targets()
+            _llvm().initialize_all_asmprinters()
+            target_machine = _llvm().Target.from_triple(
+                target_triple
+            ).create_target_machine()
+        except ImportError:
+            codegen.set_target_text(target_triple, "")
+        else:
+            codegen.set_target_machine(target_triple, target_machine)
     # SEC-P1-UBSAN: opt-in `-fsanitize=undefined`-style trapping. OFF unless a
     # non-empty check set is threaded down from evaluate()/build().
     if fsanitize:
@@ -1513,7 +1548,7 @@ def _run_linked_mcjit_worker(
             optimize=optimize,
             llvmdump=llvmdump,
         )
-        ee = llvm.create_mcjit_compiler(llvmmod, target_machine)
+        ee = _llvm().create_mcjit_compiler(llvmmod, target_machine)
         ee.finalize_object()
 
         return_type = get_c_type_from_serialized_ir(main_return_type)
@@ -1545,6 +1580,28 @@ def _run_linked_mcjit_worker(
         _write_result_and_exit({"ok": False, "error": repr(exc)}, 1)
 
 
+def _host_data_layout_text() -> str:
+    """The data-layout string pcc echoes into emitted IR.
+
+    Nothing on the self-backend path reads it -- ``pcc.llvm_capi.ir`` only
+    writes it back out to match llvmlite's module header -- so resolving it
+    must not require LLVM. When llvmlite is present (LLVM backend, MCJIT) the
+    real string is used; otherwise the module header carries an empty layout,
+    exactly as ``pcc.llvm_capi.ir`` already defaults it.
+    """
+    try:
+        import llvmlite.binding as binding
+    except ImportError:
+        return ""
+    try:
+        binding.initialize_all_targets()
+        binding.initialize_all_asmprinters()
+        machine = binding.Target.from_default_triple().create_target_machine()
+        return str(machine.target_data)
+    except Exception:
+        return ""
+
+
 class CEvaluator(object):
 
     def __init__(
@@ -1553,9 +1610,6 @@ class CEvaluator(object):
         backend=None,
         allow_unimplemented_backend=False,
     ):
-
-        llvm.initialize_all_targets()
-        llvm.initialize_all_asmprinters()
 
         allow_unimplemented_backend = (
             allow_unimplemented_backend
@@ -1571,13 +1625,20 @@ class CEvaluator(object):
         self.codegen = LLVMCodeGenerator()
         from ..parse import make_c_parser
         self.parser = make_c_parser()
-        self.target_triple = target_triple or llvm.get_default_triple()
-        self.target = llvm.Target.from_triple(self.target_triple)
-        self.codegen.set_target_machine(
-            self.target_triple,
-            self.target.create_target_machine(),
-        )
-        self.is_cross = target_triple is not None and target_triple != llvm.get_default_triple()
+        # The triple comes from pcc's own host resolution, not LLVM's. Building
+        # an LLVM target machine here made *compiling* C depend on llvmlite,
+        # even though the self backend needs none of it: the codegen consumes a
+        # triple string, a data-layout string that is only echoed into the IR
+        # text, and a TargetData handle whose single consumer already falls
+        # back when it is absent. A stage without llvmlite therefore reported
+        # the whole C driver as unowned instead of naming what it lacked.
+        # `self.target` stays available for the LLVM backend and the MCJIT
+        # paths, built on first access.
+        host_triple = host_target_triple()
+        self.target_triple = target_triple or host_triple
+        self._llvm_target = None
+        self.codegen.set_target_text(self.target_triple, _host_data_layout_text())
+        self.is_cross = target_triple is not None and target_triple != host_triple
         self.ee = None
         self._bound_modules = []
         self._bound_target_machine = None
@@ -1585,6 +1646,20 @@ class CEvaluator(object):
         # (execution_engine, target_machine, module, func_addr, return_type, fptr)
         # Keeps the engine alive so the function pointer stays valid.
         self._jit_cache = {}
+
+    @property
+    def target(self):
+        """LLVM target, built on first use.
+
+        Only the LLVM backend and the MCJIT/native-cache paths need it; the
+        self-backend compile path never touches it, which is what lets a stage
+        without llvmlite still compile C.
+        """
+        if self._llvm_target is None:
+            _llvm().initialize_all_targets()
+            _llvm().initialize_all_asmprinters()
+            self._llvm_target = _llvm().Target.from_triple(self.target_triple)
+        return self._llvm_target
 
     def _detach_execution_engine(self):
         leaked = []
@@ -1762,7 +1837,7 @@ class CEvaluator(object):
             pass_ctx=pass_ctx,
         )
         try:
-            llvmmod = llvm.parse_assembly(ir_text)
+            llvmmod = _llvm().parse_assembly(ir_text)
         except Exception:
             # Dump the faulty IR to a per-TU file so we can inspect
             # which translation unit / function triggered the error.
@@ -1794,7 +1869,7 @@ class CEvaluator(object):
             )
         _load_mcjit_link_libraries(link_args)
 
-        self.ee = llvm.create_mcjit_compiler(llvmmod, target_machine)
+        self.ee = _llvm().create_mcjit_compiler(llvmmod, target_machine)
         self.ee.finalize_object()
 
         if llvm_dump_dir:
@@ -1911,7 +1986,7 @@ class CEvaluator(object):
             ir_text, opt_level
         )
         try:
-            llvmmod = llvm.parse_assembly(ir_text)
+            llvmmod = _llvm().parse_assembly(ir_text)
         except Exception:
             import os as _os
             dump_dir = _os.environ.get("PCC_DUMP_BAD_IR")
@@ -2155,7 +2230,7 @@ class CEvaluator(object):
             optimize=optimize,
             llvmdump=llvmdump,
         )
-        self.ee = llvm.create_mcjit_compiler(llvmmod, target_machine)
+        self.ee = _llvm().create_mcjit_compiler(llvmmod, target_machine)
         self._bound_modules = [llvmmod]
         self._bound_target_machine = target_machine
 

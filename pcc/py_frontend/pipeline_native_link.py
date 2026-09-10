@@ -7,6 +7,7 @@ import subprocess
 import sys
 from typing import Optional
 
+from .pipeline_modes import failed_process_detail
 from .pipeline_paths import join_strings
 
 
@@ -219,5 +220,5 @@ def link_with_clang(
         ) from exc
     except subprocess.CalledProcessError as exc:
         raise NativeLinkError(
-            f"clang link failed (exit {exc.returncode})"
+            "clang link failed: " + failed_process_detail(exc)
         ) from exc

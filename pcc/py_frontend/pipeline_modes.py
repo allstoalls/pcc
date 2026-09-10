@@ -30,11 +30,47 @@ class PyPipelineError(RuntimeError):
     def __init__(self, message: str = "") -> None:
         # Preserve the exact CPython args shape: no-arg construction must
         # keep args == (), not ('',).
-        if message:
-            RuntimeError.__init__(self, message)
-        else:
-            RuntimeError.__init__(self)
+        #
+        # ``super().__init__`` rather than ``RuntimeError.__init__(self, ...)``:
+        # pcc's runtime does not expose ``__init__`` on builtin exception type
+        # objects, so the unbound form raised ``AttributeError: __init__``
+        # while *formatting* a link failure. That masked the real error and
+        # made every installed-pcc1 compile fail
+        # (tests/integration/test_installed_pcc1_repl_debug_profile.py).
+        # The runtime gap is separate work; this call is the only site of the
+        # unbound form in the tree.
         self.pcc_message = str(message)
+        if message:
+            super().__init__(message)
+        else:
+            super().__init__()
+
+
+def failed_process_detail(exc) -> str:
+    """Describe a failed child process without trusting its attributes.
+
+    A compiled pcc1 stage has been observed losing ``returncode`` on a caught
+    ``CalledProcessError``; ``f"... (exit {exc.returncode})"`` then raised
+    ``AttributeError('returncode')`` while *reporting* the failure, replacing
+    every real link error with the single word "returncode". Read each field
+    behind its own guard so the underlying message always survives.
+
+    This lives beside ``PyPipelineError`` because every "report a child process
+    failure" site needs it, not only the self-backend linker: an unguarded read
+    on any of them erases the diagnosis it was meant to deliver.
+    """
+    parts = [type(exc).__name__]
+    try:
+        parts.append("exit=" + str(exc.returncode))
+    except Exception:
+        parts.append("exit=<unreadable>")
+    try:
+        message = str(exc)
+    except Exception:
+        message = ""
+    if message:
+        parts.append(message)
+    return "; ".join(parts)
 
 
 def normalize_gpu_backend_name(value: Optional[str]) -> str:

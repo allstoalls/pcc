@@ -6,11 +6,16 @@ import os
 import subprocess
 import sys
 import tempfile
+
+from .pipeline_modes import failed_process_detail
 from typing import Optional
 
 
 class SelfBackendLinkError(RuntimeError):
     """The selected self-backend link contract could not be completed."""
+
+
+_failed_process_detail = failed_process_detail
 
 
 def link_paths(
@@ -109,6 +114,94 @@ def finish_executable(
     profile_end(profile, "link_self_publish_barrier", started)
 
 
+def _owned_macho_link_covers_surface(
+    *,
+    asm_path,
+    pcc_asm_inputs,
+    pcc_native_object_inputs,
+    pcc_internal_input_manifest,
+    semantic_layout_policy,
+    link_profile_path,
+) -> bool:
+    """True when the in-process owned Mach-O link covers this request.
+
+    The owned in-process entry assembles one or more internal inputs, adds
+    caller object inputs and one runtime archive, and links an executable.
+    Surfaces owned only by ``scripts/pcc_link_macho.py`` (ordered mixed-input
+    manifests, the opt-in semantic layout policy, incremental publishing and
+    link profiles) keep the subprocess seam.
+    """
+    if pcc_internal_input_manifest:
+        return False
+    if semantic_layout_policy:
+        return False
+    if link_profile_path:
+        return False
+    if pcc_asm_inputs and pcc_native_object_inputs:
+        return False
+    if not asm_path and not pcc_asm_inputs and not pcc_native_object_inputs:
+        return False
+    return True
+
+
+def _owned_macho_link_in_process(
+    *,
+    asm_path,
+    pcc_asm_inputs,
+    pcc_native_object_inputs,
+    runtime_archive,
+    extra_link_inputs,
+    tmp_out_path,
+) -> None:
+    """Link with pcc's owned Mach-O toolchain in this process.
+
+    The Mach-O implementation is imported here rather than at module import so
+    a stage that never links pcc-owned output does not pull it in. Removing
+    the host-Python link seam is the point: an installed native pcc1 has no
+    interpreter to run ``scripts/pcc_link_macho.py``.
+    """
+    from pcc.backend.arm64_asm_driver import assemble_file
+    from pcc.backend.macho_exec import link_executable
+    from pcc.backend.native_object import NativeObject, decode_native_object
+
+    try:
+        objects = []
+        if asm_path:
+            with open(asm_path, "r", encoding="utf-8") as stream:
+                sections, undefined = assemble_file(stream.read())
+            objects.append(
+                NativeObject.from_sections(sections, undefined=undefined)
+            )
+        for path in pcc_native_object_inputs:
+            with open(path, "rb") as stream:
+                objects.append(decode_native_object(stream.read()))
+        for path in pcc_asm_inputs:
+            with open(path, "r", encoding="utf-8") as stream:
+                sections, undefined = assemble_file(stream.read())
+            objects.append(
+                NativeObject.from_sections(sections, undefined=undefined)
+            )
+        for path in extra_link_inputs or ():
+            with open(path, "rb") as stream:
+                objects.append(stream.read())
+        archives = []
+        if runtime_archive is not None:
+            with open(runtime_archive, "rb") as stream:
+                archives.append(stream.read())
+        image = link_executable(objects, archives=archives, entry="_main")
+        temporary = str(tmp_out_path) + ".owned.tmp"
+        with open(temporary, "wb") as stream:
+            stream.write(image)
+        os.chmod(temporary, 0o755)
+        os.replace(temporary, str(tmp_out_path))
+    except SelfBackendLinkError:
+        raise
+    except Exception as exc:
+        raise SelfBackendLinkError(
+            "owned in-process link failed: " + _failed_process_detail(exc)
+        ) from exc
+
+
 def run_link_command(
     cmd,
     asm_path: Optional[str],
@@ -151,6 +244,34 @@ def run_link_command(
         needs_native_extension_exports=needs_native_extension_exports,
     )
     linux_elf = sys.platform.startswith("linux")
+    if not linux_elf and _owned_macho_link_covers_surface(
+        asm_path=asm_path,
+        pcc_asm_inputs=pcc_asm_inputs,
+        pcc_native_object_inputs=pcc_native_object_inputs,
+        pcc_internal_input_manifest=pcc_internal_input_manifest,
+        semantic_layout_policy=semantic_layout_policy,
+        link_profile_path=link_profile_path,
+    ):
+        log(verbose, "pcc link (in-process owned Mach-O): " + str(tmp_out_path))
+        _owned_macho_link_in_process(
+            asm_path=asm_path,
+            pcc_asm_inputs=tuple(str(path) for path in pcc_asm_inputs),
+            pcc_native_object_inputs=tuple(
+                str(path) for path in pcc_native_object_inputs
+            ),
+            runtime_archive=(
+                None if runtime_archive is None else str(runtime_archive)
+            ),
+            extra_link_inputs=tuple(
+                str(path) for path in (extra_link_inputs or ())
+            ),
+            tmp_out_path=str(tmp_out_path),
+        )
+        if not os.path.isfile(tmp_out_path) or not os.access(tmp_out_path, os.X_OK):
+            raise SelfBackendLinkError(
+                "owned in-process link produced no executable output"
+            )
+        return
     driver_name = "pcc_link_elf.py" if linux_elf else "pcc_link_macho.py"
     driver = os.path.join(repo_root_for_link(), "scripts", driver_name)
     if not os.path.isfile(driver):
@@ -368,7 +489,7 @@ def link_ir_texts_run(
             ) from exc
         except subprocess.CalledProcessError as exc:
             raise SelfBackendLinkError(
-                f"self backend link failed (exit {exc.returncode})"
+                "self backend link failed: " + _failed_process_detail(exc)
             ) from exc
         return
 
@@ -429,8 +550,10 @@ def link_ir_texts_run(
             f"{cc} not found on PATH; cannot link Python frontend output"
         ) from exc
     except subprocess.CalledProcessError as exc:
+        # Guarded read: an unguarded `exc.returncode` here raised
+        # AttributeError while reporting the failure under pcc1.
         raise SelfBackendLinkError(
-            f"self backend link failed (exit {exc.returncode})"
+            "self backend link failed: " + _failed_process_detail(exc)
         ) from exc
 
 

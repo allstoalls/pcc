@@ -455,6 +455,11 @@ def _runtime_signatures_part_7():
     "py_bytearray_pop": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
     "py_bytearray_setitem": (_I64, [_PYOBJ, _PYOBJ, _PYOBJ], False),
     "py_bytearray_del_slice": (_I64, [_PYOBJ, _PYOBJ, _PYOBJ, _PYOBJ], False),
+    "py_bytearray_set_slice": (
+        _I64,
+        [_PYOBJ, _PYOBJ, _PYOBJ, _PYOBJ, _PYOBJ],
+        False,
+    ),
     # ---- Str -------------------------------------------------------
     "py_str_new": (_PYOBJ, [_CSTR, _I64], False),
     }

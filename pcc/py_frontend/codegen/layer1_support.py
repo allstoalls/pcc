@@ -1653,13 +1653,23 @@ def _populate_static_native_exports_7(out):
             ),
         ),
     }
-    # Raw per-module self-host diagnostics compile ``pipeline.py`` and
-    # ``cli_bootstrap.py`` without assembling the recursive stdlib closure.
-    # They still need the same forward declaration used by the real closure
-    # when native subprocess lowering constructs a typed check=True failure.
-    # The executable no-libpython path supplies the definition from
-    # pcc/py_stdlib/subprocess.py; this entry is metadata only.
-    out["subprocess"] = {
+    # ``subprocess.CalledProcessError`` is a stdlib semantic provider, not one
+    # of pcc's own frontend exports, so it also lives in the module-independent
+    # provider table below and is merged in here for the modules that get the
+    # full static table.
+    out["subprocess"] = _PCC_NATIVE_STDLIB_SEMANTIC_PROVIDERS["subprocess"]
+
+
+# Stdlib classes that native lowering instantiates by name.  Native
+# ``subprocess.run(..., check=True)`` builds a typed ``CalledProcessError``
+# rather than a second subprocess exception model in the C runtime, and it
+# emits that call mid-block -- the forward declaration cannot be missing and
+# then recovered from.  Which module is being compiled says nothing about
+# whether that lowering fires, so this table is looked up independently of
+# ``_PCC_FRONTEND_STATIC_NATIVE_MODULES``.  The definition comes from
+# ``pcc/py_stdlib/subprocess.py`` in the link closure; this is metadata only.
+_PCC_NATIVE_STDLIB_SEMANTIC_PROVIDERS = {
+    "subprocess": {
         "CalledProcessError": {
             "kind": "class",
             "owning_module": "subprocess",
@@ -1694,7 +1704,23 @@ def _populate_static_native_exports_7(out):
             ),
             "box_int_abi": False,
         },
-    }
+    },
+}
+
+
+def _native_stdlib_semantic_provider(module_name, export_name):
+    """The forward declaration for a stdlib class native lowering needs.
+
+    Admitted independently of whether the module being compiled is one of
+    pcc's own static-native modules: the older module allow-list silently
+    dropped every ``pipeline.py`` split-out (``pipeline_native_link``,
+    ``pipeline_pass_driver``, ``pipeline_runtime_archive``,
+    ``pipeline_self_backend_*``) as those files were created.
+    """
+    providers = _PCC_NATIVE_STDLIB_SEMANTIC_PROVIDERS.get(module_name or "", None)
+    if providers is None:
+        return None
+    return providers.get(export_name, None)
 
 
 def _build_static_native_exports():

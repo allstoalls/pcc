@@ -713,13 +713,24 @@ class IrScaffoldLoweringMixin:
                     f"{sorted(self._SCAFFOLD_IGNORABLE_KWARGS)} kwargs; "
                     f"got {key!r}"
                 )
-        if len(expr.args) != 2:
+        # llvmlite's signature is ``call(fn, args, name='', cconv=None,
+        # tail=False, ...)``, so the SSA name hint may arrive as the third
+        # positional -- ``self.builder.call(intrinsic, [lhs, rhs],
+        # "ubsan.ovf")`` in c_codegen.  The scaffold discards the hint in
+        # either spelling (see ``_SCAFFOLD_IGNORABLE_KWARGS``), so drop it
+        # here instead of refusing the call.  Only the name is dropped: a
+        # fourth positional would be ``cconv``, which is not ignorable.
+        pos_args = list(expr.args)
+        if len(pos_args) == 3:
+            pos_args = pos_args[:2]
+        if len(pos_args) != 2:
             raise ScaffoldUnsupportedError(
-                f"builder.call expects (fn, args); got " f"{len(expr.args)}"
+                f"builder.call expects (fn, args[, name]); got "
+                f"{len(expr.args)}"
             )
         receiver = self._scaffold_to_handle(expr.func.obj)
-        fn_handle = self._scaffold_to_handle(expr.args[0])
-        args_expr = expr.args[1]
+        fn_handle = self._scaffold_to_handle(pos_args[0])
+        args_expr = pos_args[1]
         if _is_scaffold_list_or_tuple(args_expr):
             arg_handles = [self._scaffold_to_handle(a) for a in args_expr.elems]
             n = len(arg_handles)
@@ -1539,11 +1550,21 @@ class IrScaffoldLoweringMixin:
         )
 
     def _emit_scaffold_irbuilder_ctor(self, expr: Call) -> ir.Value:
-        if expr.kwargs or len(expr.args) != 1:
+        """``ir.IRBuilder(block)`` and the detached ``ir.IRBuilder()``.
+
+        The provider's signature is ``__init__(self, block=None)`` and the C
+        frontend builds one detached builder up front
+        (``c_codegen.CCodeGen.global_builder``) before any block exists, so the
+        no-arg form is passed the None object rather than being refused.
+        """
+        if expr.kwargs or len(expr.args) > 1:
             raise ScaffoldUnsupportedError(
-                "ir.IRBuilder scaffold expects one block arg"
+                "ir.IRBuilder scaffold expects at most one block arg"
             )
-        block = self._scaffold_to_handle(expr.args[0])
+        if len(expr.args) == 1:
+            block = self._scaffold_to_handle(expr.args[0])
+        else:
+            block = self._emit_none_literal()
         fn = self._declare_external_function(
             f"{self._IR_TOPLEVEL_SYMBOL_PREFIX}scaffold_IRBuilder",
             _CSTR,
@@ -1611,15 +1632,23 @@ class IrScaffoldLoweringMixin:
                 + ("'name' " if accepts_name else "")
                 + f"kwarg{'s' if accepts_name else ''}; got {key!r}"
             )
-        if len(expr.args) != arity:
+        pos_args = list(expr.args)
+        if accepts_name and name_arg is None and len(pos_args) == arity + 1:
+            # llvmlite takes the name positionally too
+            # (``GlobalVariable(module, typ, name)``, ``Module(name)``), and
+            # the C frontend spells it that way -- see
+            # ``c_initializer_lowering._make_global_string_constant``.
+            name_arg = pos_args.pop()
+        if len(pos_args) != arity:
             raise ScaffoldUnsupportedError(
-                f"ir.{symbol} expects {arity} positional args; got " f"{len(expr.args)}"
+                f"ir.{symbol} expects {arity} positional args; got "
+                f"{len(pos_args)}"
             )
         if symbol == "GlobalVariable" and name_arg is None:
             raise ScaffoldUnsupportedError(
-                "ir.GlobalVariable scaffold requires name=..."
+                "ir.GlobalVariable scaffold requires a name"
             )
-        lowered = [self._scaffold_to_handle(a) for a in expr.args]
+        lowered = [self._scaffold_to_handle(a) for a in pos_args]
         if name_arg is not None:
             name_h = self._scaffold_to_handle(name_arg)
             extern_name = f"{self._IR_TOPLEVEL_SYMBOL_PREFIX}{symbol}___init___named"

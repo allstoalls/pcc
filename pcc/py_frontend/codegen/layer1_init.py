@@ -31,6 +31,12 @@ class Layer1InitMixin:
         # make the stack real constructor state so pcc1 observes handler
         # pushes performed by exception lowering.
         self._active_handler_excs: list = []
+        # The for-loop currently being lowered, so the for-target
+        # representation-join analysis can find its position in the
+        # enclosing function body.  Real constructor state for the
+        # same reason as the handler stack above: pcc1's L1CodeGen has
+        # a fixed layout and cannot grow the attribute lazily.
+        self._for_join_stmt_stack: list = []
         self._emitting_finally = False
         self._prefer_native_callable_values = False
         self._cpy_values = set()

@@ -13,6 +13,7 @@ import re
 from . import BackendUnavailable
 from .self_backend_float_bits import float32_to_bits, float64_to_bits
 from .self_backend_kernel import IndexedFunctionSeed, get_indexed_function_kernel
+from .self_backend_float_bits import bits_to_float32, float64_to_bits
 from .self_backend_literals import (
     _is_float_token,
     _is_hex_token,
@@ -947,26 +948,32 @@ def _decode_parenthesized_constant_cast(token: str) -> str | None:
         # (PyObject *)&py_none_storage;`). Nothing has to be materialized.
         if src_type.is_ptr and dst_type.is_ptr:
             return decoded_value
-        # An integer-to-float bitcast is NOT folded here, deliberately.
-        #
+        # An integer-to-float bitcast of a constant is exactly representable
+        # in LLVM's own textual form for a floating literal: the double bit
+        # pattern in hex, which is what LLVM writes for a `float` operand too.
         # `NAN` from <math.h> reaches the backend as
         # `fpext float bitcast (i32 2143289344 to float) to double`, and
-        # returning LLVM's own exact form for that constant -- the double bit
-        # pattern `0x7FF8000000000000` -- compiles but produces 0.0 at
-        # runtime. `emit_fp_hex_constant` does read a hex token as a double
-        # pattern and narrows it correctly, but a probe shows it is never
-        # reached for this operand: the live materializer truncates the token
-        # to the value's own 32 bits, and the low half of a quiet NaN's double
-        # pattern is exactly zero. The two consumers disagree about the
-        # convention, and this backend carries two parallel op lowerings
-        # (`src_type.describe()` and the `TYPE_KIND_*` kernel path), so which
-        # one is live is not something to guess at.
+        # folding it here keeps the value bit-exact. The `cexpr:` path cannot
+        # carry it -- its materializer only knows ptrtoint/inttoptr/trunc.
         #
-        # Folding it therefore replaced a loud, correct build failure with a
-        # silently wrong floating-point constant, which is strictly worse.
-        # Until the hex-float convention is reconciled between those
-        # materializers, this returns None and the caller reports
-        # "unsupported value syntax" as before.
+        # This only became correct once the indexed/kernel materializer was
+        # taught the same convention; it had been taking the token's low
+        # natural-width half, and a quiet NaN's low half is exactly zero.
+        if src_type.is_int and dst_type.is_fp and src_type.width == dst_type.width:
+            try:
+                bits = int(decoded_value)
+            except (TypeError, ValueError):
+                return None
+            if bits < 0 or bits >= (1 << src_type.width):
+                return None
+            # `pcc.stdlib._float_bits`, not `struct`: pcc1 runs this module
+            # without libpython and its owned `struct` rejects float codes.
+            if src_type.width == 64:
+                # A double's bit pattern is already the token LLVM writes.
+                return "0x%016X" % bits
+            if src_type.width == 32:
+                return "0x%016X" % float64_to_bits(bits_to_float32(bits))
+            return None
         return None
     if op in {"trunc", "zext", "sext"}:
         if not dst_type.is_int:

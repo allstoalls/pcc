@@ -28,10 +28,10 @@ Mirrors the ABI documented in Section 3 of
 
 from __future__ import annotations
 
-import struct
 from typing import Mapping
 
 from pcc.llvm_capi.compat import ir
+from pcc.stdlib._float_bits import _float64_to_bits
 
 from ..py_ast import (
     BoolType,
@@ -230,7 +230,13 @@ def _float_literal_object(module: ir.Module, value: float) -> ir.Value:
     caused the leak becomes harmless rather than merely fixed at one caller,
     and every evaluation now costs a pointer instead of an allocation.
     """
-    bits = struct.unpack("<q", struct.pack("<d", value))[0]
+    # NOT `struct`: pcc1 executes this module without libpython, and its owned
+    # `struct` provider deliberately rejects the float format codes until a
+    # shared float-bit implementation is wired in. That implementation already
+    # exists and is the canonical one, so using it here is what keeps the
+    # frontend self-hostable -- the struct call broke codegen of every module
+    # containing a float literal under pcc1.
+    bits = _float64_to_bits(value)
     pool = float_literal_pool(module)
     existing = pool.get(bits)
     if existing is not None:

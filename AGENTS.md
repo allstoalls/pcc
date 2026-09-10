@@ -15,10 +15,12 @@ they do not prove the current implementation. User instructions take priority.
 2. Search `docs/investigations/INDEX.md` or `docs/knowledge/` by the concrete
    symbol/symptom. Read the matching experiment and its later corrections only;
    expand when needed. Do not preload all knowledge pages or whole handoffs.
-3. Check a historical claim's source revision, command, options and artifacts
-   against current code before reusing it. `[CONFIRMED]`, `[DENIED]`, "current"
-   and "uncommitted" describe that recorded run, not today's worktree. If the
-   prerequisite changed, record the difference and re-test the relevant claim.
+3. Check a claim's source revision, command, options and artifacts against
+   current code before reusing or certifying it. A commit message or handoff is
+   a claim; certifying a behavior change means executing its changed shape
+   yourself. `[CONFIRMED]`, `[DENIED]`, "current" and "uncommitted" describe
+   that recorded run, not today's worktree. If the prerequisite changed,
+   record the difference and re-test the relevant claim.
 4. Continue the user's active task. GitHub issues in `allstoalls/pcc` and the
    sibling repositories track work; dated handoffs and retired goal documents
    are not task queues. Preserve unfinished scope when handling a short subtask.
@@ -122,8 +124,15 @@ These are required outcomes, not assertions that migration is complete. See
   Long runs need durable live node/failure logs and a process-group watchdog;
   stop/clean up only your own children after timeout. Never report dots as green.
 - First run the smallest regression, then the original integration scenario and
-  sensitive subsystem checks. A pcc1 fix requires native emitted execution of
-  the changed shape (include a function, compile with `-o`, then run).
+  sensitive subsystem checks. Execute the changed shape, not a nearby one: a
+  change to a value, constant, layout, encoding or diagnostic is verified only
+  by compiling and running a program that exercises it and reading the result.
+  A successful compile, archive build or link proves none of these. For pcc1
+  that means native emitted execution (include a function, compile with `-o`,
+  then run).
+- A green suite is evidence only for the shapes its corpus executes. Name the
+  test that runs the changed shape; if none exists, add it before claiming
+  green. Green without it is a false green, not a pass.
 - Heavy builds and performance runs share `build/.pcc-performance.lock` and
   require a tree-RSS cap, frozen inputs and isolated outputs. Do not edit their
   input closure or run contending bootstrap/runtime builds during measurement.
@@ -153,6 +162,7 @@ gtimeout 1800s env -u LC_ALL uv run pytest -x -vv -m integration tests/python/gc
 | GC/ABI | `pcc/py_runtime/py/`, `src/`, `include/`, `tests/python/gc/`; verify layouts/barriers in code, consult relevant upstream reference |
 | Bootstrap/performance | `scripts/run_pcc_*`, current receipts and tests; [tool index](docs/development-tools.md) |
 | Investigation history | Search [INDEX](docs/investigations/INDEX.md); use [investigation workflow](docs/investigation-workflow.md) when recording an experiment |
+| Review/certify a commit or claimed fix | The diff and its tests, not the message; execute each changed shape and read the result; list the shapes you did not execute |
 
 When editing an investigation, keep commands, source/artifact identities,
 observations, corrections and current open questions together. Regenerate:

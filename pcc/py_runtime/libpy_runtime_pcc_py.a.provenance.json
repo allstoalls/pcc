@@ -451,8 +451,8 @@
   "member_count": 170,
   "members": [
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "c412ee7a325ec9ef7176cbeeac75fe872383ca9f422fcd28e4b6969a02461b55",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "5d568207b430ed08446f1d1174f44bdd17de4f3c0a45275eaa1fb39d6bf2db13",
       "member": "py_tuple.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "a1d907fe715249b2fedcf93d94a3994a93a32640f071ccd45f0369fe77d784ca",
@@ -465,8 +465,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "ab73012672b22eb5ff6c4ace0577fe3cfb384c68e40b2199211ecaaafcb34892",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "01288c2648b6c3126901e53dcc175948380570956e417f02edff80bebacd72f1",
       "member": "py_tuple_slice.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "6834e09bf275c00d56d62b0023e3fca1b3f719a08912a4556f27c9ce68ba92d9",
@@ -479,22 +479,22 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "a4c0b59988bbd01cf19ac01024d794e000b801cd1af9a03848aa6e8ff43472a6",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "ff86fc31ac337cd03da784389d534f54814615a718c09271a183e2a526b5cae6",
       "member": "py_obj_stubs.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "b9c661d6d41355592bca6049abbd25944caafeb3e1bc5cc5e2c2a37dbda40b2f",
+      "object_sha256": "0d184cd22d7db63785b2bf04cacc02d35238be8e9469e03dfb7cd7eb5d030522",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_obj_stubs.py",
       "source_kind": "pcc-python",
-      "source_sha256": "9866cf9e2598e48cae7f129d646ca305957536ecf7f70b278d31492f31fcd5f0",
+      "source_sha256": "50c4770897bf71cc30c453ac7f1aab1b03b8ab4d47e61c19912d0195bfbff8c4",
       "target_triple": "arm64-apple-darwin25.5.0",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "0c53b884b405ede8a15d6f850932904e2855d2813181211197d06ff17ba7ed97",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "7cc6c712f1c4b4ab6e477262345a76e35982c455d9a8c695e5e72c070215aa31",
       "member": "py_exc_tls.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "5f00834dbe45888d0d44a423c01e566f08abc7c3fdabfb17e757b9f5867b76eb",
@@ -507,8 +507,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "30689e5700c1a8b6c1555634aa924865c2817d52596184efeef446082672cb50",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "7aac3babf9bc3a1f057e4005f0d8c2d1f1b06ed8273fd975ccda3c62840273f7",
       "member": "py_exc_objects.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "3a171035d65f71e53c14ff2fcf3f4963ceaaa29ebaccf0e6322ceba004bf4b90",
@@ -521,8 +521,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "43233af6a2495a37a8fd5770e570b9f598bd306ffcde5ab2fb7304c830164e59",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "f5d159841fdf5822515f484c24fb5e119cb49b98d6fa20c3b3e74a5ecdddc931",
       "member": "py_exc_match.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "f37d59fdc33e3776a45e30cb388dc1d77fb97a2055f8da3c3f3e68319fce4cf0",
@@ -535,8 +535,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "20b232b3b1291b433dc1f722ba0dc56ad95daae3ca457f469f0a3dc114982c94",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "0e50ee1dc86a27155e6b44047d9adef78e225ca04db19252f10b25d1f1730615",
       "member": "py_exc_table.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "5f5111daf57f91c7dd2cc1e8eb92f3de0789053a8d0c25b2a75ac4e1535e9f79",
@@ -549,8 +549,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "f367c4d49e36f4e05240a5bedb05c2757d96b88b59a421a163a7947fd9e17468",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "c33273a80e667e2601975251dcd3c6bbdcf677757b1ad515ad9d885c64083c69",
       "member": "py_exc_traceback.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "5237da25db6f41fddd9d7499b56cdc19419028b1935d036376e62bd1f45c6848",
@@ -563,8 +563,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "1cfe6e11b65caf48f614419ba11eb5cbb8664a27a5d48c96d9c19e2930d1014d",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "67852c203ffd48e7286df391b04d39a2ead948e7b2dbbd312395608f4d08bf82",
       "member": "py_obj_gc.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "80d1812c14f77f76566482e9745e36034009e5715c24588c8fe9173e3fad41b0",
@@ -577,8 +577,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "ac25020b0b8787a50f2f4649cbf44d64d5218c704b6223e705661847f6deec7e",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "8010d4657f26bb19258b36f1aeef72ab2975dfa2ce1f07b5478b3f809097ffc5",
       "member": "py_gc_telemetry.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "360155e0894d58e32f369080148b3d31865624a75ce3e96d40dff8f026b3faf6",
@@ -591,8 +591,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "12a2d590d392be3d4cb77d6b8188a42cd7869632d1e3e65128307c4f8f125b6b",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "ed1cfb354d53b56f0c48de84e2cf40be47f5356c8a66053da39c6e5fb88d30af",
       "member": "py_gc_backend.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "6cea477c9b29b17dfef78cbc9d5a684d75156d890d1c33e18837416a47124191",
@@ -605,8 +605,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "3cfbbf63abea33bc5f3562ec7d03399907e7bfc91ae7c4967d72ed7e5f46a1b5",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "bfb09a5c59316fb4d8734b0a5746b7711b63797c72b821ccb328cbd7e85b4466",
       "member": "py_set.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "fed42b490d3e01b251400f5635067133898355d7fddf542b3dfd46838cecd370",
@@ -619,8 +619,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "f17ac7343df49349c581af7993f7c888f091ce0c2b0468c057bae58b954c150b",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "8bc3932936070a9d6f1faba9de9eb6befe68b4505ebc9df262055dee91883ed4",
       "member": "py_os_env.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "19a895c64e10d758fa449dc89d90e9d52f6468748a56facde51c4f05b2e92a05",
@@ -633,8 +633,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "373f9ac8ebb742639701938e0b278b34f852fdfc24ef0c22e9c083b543c5d6db",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "27d8c48063e5fa44ff7e54ff2d0a1a73a196be32a247c18cc687e6598bf1d0a2",
       "member": "py_os_system.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "0aff3a376013306afbc5a24c7b63be547de80fb0ccb3bd4cc12b9d8088133c05",
@@ -647,8 +647,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "f1736b71e2dbbfe2e105bb1442161499a3f04692d1ff7d405f158c2e84aed63a",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "d3260a9165437469a5052aa5b2240d382850bd59d9ee8ef087dab132d4341cf2",
       "member": "py_os_path.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "3ce0ce80168b43c7ed4c907c95121ed925336769b671a5e33e02d73d550a2da1",
@@ -661,8 +661,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "f456c5b8d9a2d359f03ecd1df29c919914386b8e8a202650aa967c118029e73d",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "97229a9fe4d143b5cd10fb6d6e4d2e173d324af6fc148bb49b004052e0e79062",
       "member": "py_os_substrate.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "8e88dffdfef06d5f3e19949616eca5d3efc4e49265c066ff40c6e39952d74aa6",
@@ -675,8 +675,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "0edbe257029d3d71deb6369e62e862f2537bd0e7f901f2bb81c64fa9d16d0a0d",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "0825e5dbac2fd685ba82fe7e2c79ada4f438b7cfa3e6ca305c04daa892ac57a6",
       "member": "py_process.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "0e30585fa4eff3508e0d9721abc24b555c31a79f3517af4a58d9911688c376c7",
@@ -689,8 +689,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "4b5c45aeaf353053f5da0a9ccfb6c7f0724f4f1817ee89a90b595098d921c696",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "633660392e44746bbf06988aae4c8d0fa290057990191cfe975f61727f4a71d1",
       "member": "py_process_substrate.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "37ca0d3c655944c6f872077a15a617a8e74e4b1bffba9ca118fbfe5a5359297f",
@@ -703,8 +703,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "8dd3e406023923d78118370d81eb991ff426cd3d6737fa6bcd1b68b8dceebe63",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "580a6051bacb1c0fd4ed9360dc0fe10d9adfb685db93624666d1a7dfbb91a1c9",
       "member": "py_process_timeout.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "c529fe6f769dd5fbb2df7810cb11b5a077470be4b207111abe2c909f1b0104c4",
@@ -717,8 +717,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "9e2b993981ae0f61fba5d69aed931b324c0f2f6ca0beedb66089ec6beb0ff431",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "b81997e124c08c77b3a460ab316b88786b270d26f734f6b731da3b691553024a",
       "member": "py_print_sys.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "91f0940c10646313eec01f08164921007f7edb0ee87959b581fce6f3720d58d2",
@@ -731,8 +731,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "e671d21f58fe9135220dcc0e00f6d761c8a095f06d45d877821b664be2f4f348",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "9254f979b5d9a656f2a23969971d64a98daee0dce18cb5e38c407f3a77ce1352",
       "member": "py_print_fmt.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "f13eb4d7ed6b14bc8b188e0658b273158c7e5351c3e94f60202cbb47f04f7979",
@@ -745,8 +745,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "72381ec2472eff09e0221714d202503f5404d8a6ff30cb4066724673ea5f4db1",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "0548147a4d552ea7312c14a786d1acabbc553e64f04ea7695e303ee748c8a103",
       "member": "py_format_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "b78cf321e42af31347c0eca3d50cf875f21711911e46f454873207ad0426369a",
@@ -759,8 +759,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "0a729e7d346e2de7ffbdad759b34c4762bb5608c79e8550ea6ba8c3630ef5e23",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "86b489dc434306ec6d9f6e1d3821aadab95e473f61b45e97b0471984b2d78b63",
       "member": "py_obj.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "fe5a4af6e6db4874b96ec46055c8385240ed62353c5113a914f2a973a3d7f8b2",
@@ -773,8 +773,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "35b6dc24cbf470586a961b6c8d8a1046943752602b230f0404ee70742edeac6f",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "7014eef512d25dc84e24e0a0799a2be7163f15fbfbee5b420a9de5eded5c08be",
       "member": "py_obj_dealloc.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "2f086219d8bb7046ef01c4d356cc77e0dfa85d96015dac061863b8057ce992df",
@@ -787,8 +787,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "6a6431c87cb6b464a01e2f4b412e81de385c48eb1f914b4ef57e03a59c153182",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "49b4c95660ac3322864ce39a5e9a0aaa9dc08b654b429e851c3d067db9ec5ea4",
       "member": "py_dict.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "f9309b073b00bc4869d4290edd23df50cd294aaba4d9f718004ee55fa01e2843",
@@ -801,8 +801,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "0b3aa197badcb0d880826d2d211837b05537ab4e871c6da4b8a24ddcb830e0f7",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "d940f4875ad54fc1f13ed6362081bcc06f09ef61ba9cc4031b14e0f0b0a2b82b",
       "member": "py_list.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "f9799d902336953b83d44e2203637eb34125be4668bca904b8b523ae519dc22e",
@@ -815,8 +815,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "0aa44bc53d22457fdad0e1a328219015b93948acc8070eee8359a1997ce835ab",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "4fbc70c3203335eb48aa0f787e711f64e7d3891c759bf21e861bb90981c8c824",
       "member": "py_list_set_slice.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "3acc11cf703ea5e092cb7e9123bab8b576e3385874dfdfbdb23880faf56950b2",
@@ -829,8 +829,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "bb3436184c661a53238aff3f55d30ab7542e7cb8959f380f92f21b5acaea85e1",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "8d66d4e22381de8121940f7a64671b28b095e01ede6c7f0606998a7518bfa8d9",
       "member": "py_iter.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "d735ca56e5e9238c1a531004d87a6bf95765a9e07ae96079c19b6a8a75133ef8",
@@ -843,8 +843,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "2d4c647acec6227afecce3d1a3ac5a5e610ba9f26fa8db4cea1d3d54e55e6954",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "907a60d03676e43021374f693ef9952e30a5faed701be9d6a71f096c9f1d9249",
       "member": "py_gen.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "2fd70daa85bb40bc921c24784d95c4d666e286c1e4e7ea78fd6412bfb365d518",
@@ -857,8 +857,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "c155e85a00c82e284ef8a4f6d6acd94d3f3bb9475398078022d98d598f20b60d",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "d49743573f7ee457d743d44da43ec2172df68c80b2e4185291d177cb5ca853da",
       "member": "py_coroutine.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "176e12b4bbc3bec124f4787629d517f21cc9f668c19bd3e957a6306c4afeacf8",
@@ -871,8 +871,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "4c1647455f5750225a2160976931bb90a9c1226026845e7018dc8beccf7956d2",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "81a4fa5c09757d9da40bcd99c6b353a515c2c2d1cae7a0ccba354e931c5daba5",
       "member": "py_context_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "bdd2f3004efa8649954699ad0e8e4ec1991395c6d32f67809c052e35be6ffaca",
@@ -885,8 +885,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "f11bfb8a083f3b188dd3a73aa237e6c88bd74e0e6acc430955aa758e6ee28f9e",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "00ace40802cec35e30844dd394f8204adc19d3c032052646e569e7425a92610b",
       "member": "py_call_splat_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "1a9efb38c3085338ff4ec234d582072d3c8293e335045c9d5699889fc5b7bafb",
@@ -899,8 +899,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "e09ce402e0e4f0bc5a76e5b5084976b8db8aae4f331f5e380ab9848a1eb76f19",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "6430429744d75d8595be3a9eee010bf0585ecbcf2605b29a1a82a333be103257",
       "member": "py_module_attrs_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "9f9adca7feeecabec5f246725c6580adbc6f3d915b232718dd301e92e0398f7f",
@@ -913,8 +913,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "aa76e5e16d079fd48a9c6d04813abc37f2b1b9d2220db096d51a0a553be79c3c",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "a3458f2dbaddd8699fdb642deac7ee0939b7874181a14583a1a44f3e41d2beaf",
       "member": "py_compiled_module_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "1348a8cd075bccb57909d3b2ee5b0a1662d8f53f6186f72feeb82b21c51a967e",
@@ -927,8 +927,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "776a610d21a82abf01800d580867c48788adf0c7586634bccd750114e717fb68",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "0cfeb4e365131c4a0303e2bd1de74d6b2975e9e0e95255ef45c38f726ec8be5a",
       "member": "py_dlpack_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "197e3ca778c176fa5e41665383260c1bb2b97e2bf4abb8fa3561b3a5415ff78c",
@@ -941,8 +941,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "6d4e5545a1d4075905328f2211223c514f99a06b34b9d913742f01e82b78c925",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "8c3347e5ca1ae6945a409adbda4b9e39c3198764761442a41fe3f774e2f6c1de",
       "member": "py_runtime_log.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "f2bd7e3a4309b97267e0b70953b23124b809e678326c792ac71e453b76a386d5",
@@ -955,8 +955,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "c04510d97cec926f4e34a86f5b10c19dafce14d9b8785093cf5d5c7fba47403e",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "46ccfac068a76d518b2393c0047d4efef52a4e3c0e0bca0e2b2949ad53a7d6d8",
       "member": "py_json_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "4d8a5fd5fd80e5a8c7c71aab9a6e987189fe002701a7cc5f61e83e3a52ae8660",
@@ -969,8 +969,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "acc806ea22299f355ed05e7da11a73dccc27a5e4eb1b0425c5e28065beba1840",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "cdd7a1c5ffd673f24d7375e5caaadf3e390316bb6936d7ef9f98c28e07a0e97c",
       "member": "py_pickle_copy_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "3cbaf6b4fc0447b8e5d5969fa742135e573a3b3cfb7006067f2ba7b1baf74260",
@@ -983,8 +983,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "063627b3e8b25c70edbf4dd86613c82891424e7e78b7b3dcf7869ab6c8378f8f",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "c3a4102ac2addb7c7ce652a7de4e7ac3662bc9d5d34c121c8f9e04d05d3a1779",
       "member": "py_protocol_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "c1ce6c09ceaaa82f0c2c41316fc7d632dc6e60a2e685c2fad8dade5faebc518a",
@@ -997,8 +997,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "1fabd51c5cc2a21b74043490d657cd5c9005edd6bb8d237d1a7f279bf0538f2b",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "d8b21416a222037c27c0f2aed0b35a15ce8b81612e3827a2b5a1756e26397f81",
       "member": "py_extension_loader_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "2bc83aea687bf5aa9702b53c79953b6c2fb744da539b46918033ee3bc0c0e441",
@@ -1011,8 +1011,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "fff45b0c7c29436a5c233a34786dd1174e9182eb7cfb7bde252880ffeb26dfa7",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "56e68e2e3b719dab70d8e98e83cbccb16a809adb2cfed4f0f9e062419eb3f21a",
       "member": "py_http_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "6b2cb8ffdf5338cc2133102315e28751757c1a88aea4843d1a830b194a1e5b4b",
@@ -1025,8 +1025,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "f8255e0d7f91d361c700b1fbb3360fee18a7b1c66f48d7516bf97a9ab47549f3",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "2f8d3772e31b60e90facd5cfa5b41a7f16680f09be28bf7b5e3f8d8a5d8a70ae",
       "member": "py_asyncio_io_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "43ffd93ed61057283a45d801164d4393c1712019a5e1fae834a40e69009c18b8",
@@ -1039,8 +1039,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "946ab1892f24cfdf260f63f837c5913e672685f35fa24d895186d77079f70bb3",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "e761773b623e615c9b09116bdf5b8321e51f26411bc626e87a4f9bb92f9585cc",
       "member": "py_re_engine_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "c0139579b6f731d06989461928a8e9f66f8fd4aef8e26bb449ea1a999e4a4f03",
@@ -1053,8 +1053,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "baa13dce5e596aef5f58d72e1234cca2cb5a8b7519b7c3dc19d0e1f9ae4af444",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "3efdb13aae73fd959c4a9b75a7c72bf8ea7579667fc6b54e556ad522e5828e44",
       "member": "freestanding_io_waitset.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "b55f41e98482620934df40a927d827771788646baddc6a85256b69894487e2c3",
@@ -1067,8 +1067,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "83d5b3195db0fe88013c51b2c46e1bd4cf0f3afd7d872c64d9647c62c0da024a",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "0df5cc319066d0ecdca2fbf2f208532c25faad11d75f51df22a1e794a1a2bb88",
       "member": "py_func.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "dd52e295cfc0a79c6f19e15057601faa138b67fbd4ada2f06865baf01be0f540",
@@ -1081,8 +1081,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "02eaeb96671dafdb68bbe700bfe73b93bf634c4c6096b065596c6cfd98babde6",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "f723fab2cbdad5113f36c9a77a99a20585690da13696e0e9510ef5e1e49832f0",
       "member": "py_re.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "a0c408645f09ecd5eed05c6808da880ccc089aa32757b05bd494716500328985",
@@ -1095,8 +1095,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "ca2b2e87e33cee7310268b7431e06a35856a5f9f4a2888274b86968e000e2ab0",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "fef3f92f5789765de6f647be01dfee5665a32c75b3bc15178317020899ba328e",
       "member": "py_dunder.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "c77da965e45c6de30b037ffe7ed8f960318bb3ed9b6ac9058cf6f8e260e7c238",
@@ -1109,8 +1109,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "d5226e8186e1de26ff16c45db39c5586438de98b28dd5aa703842621e5436f93",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "7b9a2f6282483b976b9bc9d73f12ef014a0efdd2c0101cf1d1d6c22530752eb8",
       "member": "py_weakref.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "fe8627cf864c2c4013cb1df205b80b97330453b420ba19cf442e7944e6c62dc4",
@@ -1123,8 +1123,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "8e7d3326f365f7f52bfe74743b0435564b97b4ff6ef51fa6156529f55c3dacf0",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "4152e49f4a0069ca63e3a9daee7ca41a1453c157ab2ff422f96bde42f68ff73d",
       "member": "py_file.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "ce6287733ef3d589cd33a57b3afe943a31505031508b6061d03729a2e774103d",
@@ -1137,8 +1137,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "fd6c5638bef4d8528f9757171d6b88bf944d9e35b43728bb65116f355dd4fa71",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "8723a87876e8a82aeed97cac146138158a694d2f45ad2ed7780c920cf9805c36",
       "member": "py_threading.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "9a9caf1232a98e0eb79c4ffe4468ed505dd7281418bb6f92b430ca80ee99ce2b",
@@ -1151,8 +1151,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "1993b378ab8a7aea7de39529e64b6757a5b1c84075f93ccc835608ca45f2adb9",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "b51ac912f9106049aa9c883d915a753c944a58bda88f2ad9779fd76aa8517670",
       "member": "py_class.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "1dd6458b576c814a8d5504477abea3c14a6c7d0c6faa088614c078f0d5cacc92",
@@ -1165,22 +1165,22 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "8872d553c2127904acf98aef851f2de80541d3b8ecbf8a6124c4cfd818bbce05",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "f55d8984f3bc14282d60a85c770b1d7b370289e375401cbfcacd3febd6b7478b",
       "member": "py_obj_ops_dispatch.o",
       "object_emitter": "llvmlite-target-machine",
-      "object_sha256": "ce09fae8baa083c95b239a6f1110e670288c0144295e538bdfb4e1767345d20a",
+      "object_sha256": "e890285f86f8d632e860b956c7122518b287f82c4379f1005601c7347788ea8d",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_obj_ops_dispatch.py",
       "source_kind": "pcc-python",
-      "source_sha256": "bf82015673a4bff1ca6309c2eeac8e8577ee5c816c931ae5fd57b6b0534e84b1",
+      "source_sha256": "8428d09f1fe02b80ffe5419a006205b00c32df87c7e856d4bbc7a870864cf052",
       "target_triple": "arm64-apple-darwin25.5.0",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "a354b6852ef75ff2b10a29edaabb364f95fe4145d84b40f40fdd0a2ca7f00d1b",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "e27f01c5a25ae1e9f60f87603d69eac02a3ff63c777e360b9a1c787b22fb8ee4",
       "member": "py_obj_ops_slice.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "876442bf70b3377e18d5f4a79bd603271b6b47777dd9aad0aead0f73ff9387d7",
@@ -1193,8 +1193,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "c86e64fca77fa7a82a36831c1c55749626e65726716ac86f2eed9d660eb093b5",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "5b67c5c372e94a62d3b9ef8fc1f9916b3cf31736c1347847eb1e8f486b95a1cf",
       "member": "py_obj_ops_set_slice.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "943120cf95e7782afcc2ee5560976ac917db90281a6eeba4637804baa6952a86",
@@ -1207,8 +1207,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "cb9f044671ccd3128767469a000d40088ee76149960a18297c3f47df710327c8",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "7ad4db43229d22504c8bfbd35d5822c0e195b86b134c2610043104440cd55f34",
       "member": "py_obj_ops_mod.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "752a916fbc7fc890cc794d486aa7bb1a0fd0f3e34a4943eb01d50e8b55ae7770",
@@ -1221,8 +1221,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "8131b3cc8f5984eda47926a931c7a1b5e0483df6000f168ed7b8521d6b142967",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "cc7e89e9535fa6d495e1a818c24a222c301268762437f7992a74e18bd623154f",
       "member": "py_obj_ops_compare.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "77c801d16fd440958ffd7ee44566215147e2a282c400c24831d9222d9d02c3a6",
@@ -1235,8 +1235,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "fb640fffd0b0acb3a35bcf9f283a2484de600e7d32ba3759f75a2fb6cf721b80",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "61901f54f83a0bd92a599c86704dabfee5efe663f4fd75f0dd0735784dc60c91",
       "member": "py_str.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "6ece539bdeb92b43cc887c1d9c5feae2c484aad6111138c889abf448c2326c85",
@@ -1249,8 +1249,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "730ebdb5cfd79926c9f6609dbe65baf62333fd5fe498b8a8b3cd2d23c2f1bbb7",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "46344e985ca2e7ec852bbb60476d6df0d9e1c98697f546f3f862a2dbfd221aa3",
       "member": "py_str_accessors.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "01ac62e1a249d2b57322521f1d7f785abdddf2fb1924d783d96beeed5b6952ef",
@@ -1263,8 +1263,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "8ec66d4b837eafebba8996d7ab76d7e3206ee6751cdc4371c191298f2dec61fb",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "4f2652654bbc4e5aa2590435f9dd391c4238cee47f40bd99f428ddb7ab13fdaf",
       "member": "py_str_slice.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "8e63d8be836b812d54995c8ca0a2dde10f6ac38e2d09b3e847850ff7a55a4309",
@@ -1277,8 +1277,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "1e2e78d505de0bb4f95f9c9338f807ef7e99d72498800f9b35147b764ee9c7b2",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "77b79e1444716601ce2655a9f14dddf79fb1bb2358e35ee343baedfc77e38e61",
       "member": "py_int_core.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "d9e7746222177546e09b8828255d5d1dbfdf472ceee2e7795c8c53244e4dbb2a",
@@ -1291,8 +1291,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "925ddabf1f9e73fb1002cf5fd903b671dafeab81d191818c2cab4988053ee868",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "29b4afd3e18c9c63512f9f7cc7e57b8511c76afb1822ba3cf21b85532d269ab0",
       "member": "py_int_decimal.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "dcc699e085ed4914d3641c8abc051eebcd57225f1b51ea647fa746701c366bf8",
@@ -1305,8 +1305,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "62c63c42d7fde4c7a056f59cea76364f9d8b592a85e682a66235157918cfaa32",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "912fc00fff7e7f6faaa627e87fa650cb461440d85ff374fe368b0e7e22dba033",
       "member": "py_int_shift.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "3b83f005c27ac2e625b80b9ddc8865b6685a23d464f9f12c1f8545a5d825550f",
@@ -1319,8 +1319,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "0946f9b4140305cd65250c6de767ffe3d48f54cee411feb488c3f58a2ee3240e",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "d079fb98d804e5bed680e5a4235595e634ca9ee0690a458a308b29654949dc4d",
       "member": "py_int_bitwise.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "a584f62de2729ffbc1e5a4d211e6561410b6e54530f16220b0c24d04d3d46568",
@@ -1333,8 +1333,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "6e393022964ed1eb178f6ebc72088c326f8d996ee6c2a9791fca1e48ac72018e",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "b67a10861929c5cef8c7a3b91bad13c9e5bcbdcb18138461e0f24b4541c72cbf",
       "member": "py_int_addsub.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "dfb695f73040c98bb05157c496d02cf3c0b76c9b874f00cb63710ae50f9396dc",
@@ -1347,8 +1347,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "e284a6593357fb8be343a0e8315ad38b5437e6a80449ba333bec44119b01fda0",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "cc4435e41318fb1147b16b1f1dfdf2d9204ded6c715825a6e1a85dfe7234d0f4",
       "member": "py_int_mul.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "32527c0b6b34649ee9b6c4e79b8d93cebbc18f0905f9d4e7ce9d70b6255e1142",
@@ -1361,8 +1361,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "acadef2d3b0fddbde16732784b11caae651f8946bd3872a100e4905256af5acb",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "aa4f7a576e90b14914ecd107b0ba4195c262eb6628dafca89d712dedd9514a7a",
       "member": "py_int_bigint_pow.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "2b0121df107060e54809f50af1214e3d6fb83801b0739b648b75e6f5d29a2aab",
@@ -1375,8 +1375,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "1a1665f437b44de5f22573023907ae933edfe25f7770eb79a2f263a6c2d05d60",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "f6f923b3a0545852527707245ba8dc2f10349de178835490bc3f5ca364a1b39e",
       "member": "py_int_ops.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "981c42bd6040ff397b7db4f0b9672e08bcbaceb43c179992e6cfb6d8db7f628d",
@@ -1389,8 +1389,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "4f0833e7147d92961fe8451e24262274d7615bf52a2d56061c557785137626b0",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "65af4c96918126c3681f09fea8f66e4a85e240e411f152be940f014fb070dadf",
       "member": "py_int.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "f8804f0f087ddb0ad0001b9ad61488559687d238e96b8c97bfe00bf163408586",
@@ -1403,8 +1403,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "df2f7f6948d00af5f1e97bb53df9c0efea66a83e525225b8492e64798b65a821",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "18bf8e603765aa364c1ce05923b4170599053ba1cdffb6ad90087c43e7ded6a4",
       "member": "py_int_parse.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "99a644c91ea61132d6f4c64c21ae09193936c346350f567fa5446e2ac21b244b",
@@ -1417,8 +1417,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "b20669f7cecdef9c07eba692e02202690c4f707622f6282de574f62df1347d10",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "01cc6d0bb41236938dae50fa1c960472c82c54b8b736635d9dbb8edc82d135d9",
       "member": "py_int_convert.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "82e68167d7f0fa1808ee9371e3c7a00bc6c5b222a73cde6a4fd01eabe6a444e0",
@@ -1431,8 +1431,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "98fc91a5362ad385698eb5b77fa9b3c840a5a754fa21909c95cf02659af73c27",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "07549e72c9990c7b8eb4aeb99f6424c9bdde46c7ee486ea471b91aa78b54a4e4",
       "member": "py_int_bigint_convert.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "32e7716f858e04445dc3cdfc038896051dc11680e3517051d0a9658d4a47d341",
@@ -1445,8 +1445,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "1300c68376919452aee7d3a2865a5ed5ca03ca2fed2eb00993f7a64871356371",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "157ad6b5756fa8509690aeb977c65f182373a3750d14e6ff145255f02855e283",
       "member": "py_substrate.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "ba54c8f944750eeec49d25cddc42ea0cc0799303349302efe8bea3c7e3d3eeac",
@@ -1459,8 +1459,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "7adcc608e5fa56915c88cee836c0c4d746f559d34f0b9c962ecef2cdf9a24e50",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "7f5f54c8cbe843e033816ea33203fdcc14b98bc52d275c21bee16463a085b4e3",
       "member": "py_virtual_thread_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "752f89e39e22819da50694e983b3e525b147d1debbae92b36d3edf45b6ba0875",
@@ -1473,8 +1473,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "4579eebe3ce445432a8c8af5b3cc1b3acae51e0509573e791bf6b884f472dcde",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "b85db68418372186893dc35f33ec0a94018a4ce2abc75ee7b02f2ade3e3a77c3",
       "member": "freestanding_runtime_debug.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "4075b3a1e4038120fbd84dbc4761cb29b8bd193aaf8b75e0dc3cd2b97a5690d8",
@@ -1487,8 +1487,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "c52bebf96a8384fd41d6d0df2ef61d41053631ec34ffff14e149ffb0f05a75b6",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "f8cf630b417a908a56aca21aaedbe88a1905840a35ab2c185a7d3bc70a7ff0b6",
       "member": "py_capi_core_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "a77145b8e390a8e1cc14803af741fe92f90cb09045c0d6a02f65b12f86127c30",
@@ -1501,8 +1501,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "b52e3f37dcc7bdb67ddfac11fbca1de3457c3c80c5210085624e2b9609c02be3",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "67f3845b621933deb689fcecca37df6057cc29d5be79716deb2f214e1cd243a8",
       "member": "py_capi_memory_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "2978c8cb55e49ea61709848eae87a7cfb7fcaf5b8ecbd61e7d3a367369310ce3",
@@ -1515,8 +1515,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "48033293c48f385a9c115c847ae50cb939d59a6563c8dea2cdb3436c434da0d6",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "06c00e1e8bd6b26c9af1f24b531b0ff7557d4e0ce47fcafc9c99807e406a7234",
       "member": "py_capi_stdio_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "d3c434a45e515fa58bbbf3479a9e264a5181943155ec5e4ee222fedf89d0de7c",
@@ -1529,8 +1529,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "699fe8961d376039e2e675f37530b477e30b79754fce7a1dc47673ea249a0792",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "21e72d34521469c3bea813e2dbef20736f4d2dee1f3720ba5cc555ca5f773d72",
       "member": "py_capi_numeric_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "a1ebb5d038dc66c85cfb4094e4fdd897169ca8a51e399c0ad681fc3ff8d1614a",
@@ -1543,8 +1543,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "f4f375ef657405d9bcc190693a377e781c9b71798bb259b516c5be0ad6724e54",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "dd5977ccc8096f4ac73ae5aca9b55157f3f7ed5c1aea1fafc3b49729f5e68b8e",
       "member": "py_capi_collections_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "8b27b5ec324063570a7c231f0e4c43aec2cb9136f1ff3f46ecdc97ffe940d45e",
@@ -1557,8 +1557,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "c0db0f67de710d6a4c41a489133e435a19b9dbade2dc62b78582ae276a5847a9",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "d43c8a3611c2d60fc3ea3d87118c7eb8b95951d2fc40022eaa12a180a916ca80",
       "member": "py_capi_exc_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "5456678ebd83c1ca457ca26d3de9101fd1d59b0264a03e5b84e3587d1d9b1420",
@@ -1571,8 +1571,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "9b345000da7544cce6b36aad5450b72d28581ad1fc28e1484b40a05caf6486f9",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "afa50af23c4d229e7ce62e64b95b4cb17020a83fea70102666032dbfd4add0a3",
       "member": "py_capi_dict_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "be870f3e217a940282d22f77922d859965f643a7b64c757c3fa661fa911662df",
@@ -1585,8 +1585,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "f51ab4f7e6caafbe02b4509a5be5edb02021bc5e7c667174340c0ce61dc6c807",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "473531c44d6e4f6e60c26be7a959095a6c75fc8601c1d9147c14a715827a9cb1",
       "member": "py_capi_object_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "ba0bb7cba451e96bfed205ba1d9c39b253fc2f16c4904004d92d2dc9f5901d4c",
@@ -1599,8 +1599,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "fc6422e5b5dfe9e6f168f7c1c3fe3b1025214c2f364a0c5e78a15a4f92b11e2a",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "6f8799c1211f3eedcef2a932976d004dfc7a015c61cd8b0ef49c686e346294e2",
       "member": "py_capi_type_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "7e9036610d0ba7b1b4f44c811a6d187b0703c5a9fe0940feef5ebc436427641a",
@@ -1613,8 +1613,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "120d97697b39e290ab13ba5c0f54e104cfba641974a5168996f95161f7f496e1",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "53093f2c36684da6b2955c8c33892791b18ff7c0af2de06417006ca9a557b775",
       "member": "py_capi_unicode_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "1d2b53e11b713a50d6ecd9ae2d7e0875f593a5c57639bdd1ad7ca4cd4977bbc6",
@@ -1627,8 +1627,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "9f42f860f736546b07a774c5b0bf262df4a335261bff8885a128fb60aa101078",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "0f57302523f4b53e1425115c063bc1e4db2f5e275a3ed1a9cc8dd0d6f2fb9ff5",
       "member": "py_capi_capsule_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "a0a3cf28a5948d2a8645ea5cba658aa59da4892ee66a18eeb3addabf79af7fe6",
@@ -1641,8 +1641,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "ec81c41ced313ed6acbd38f200d6549345adfa51320f1d8b21e8eed0f7280a8c",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "d6d85e799bbbf7f9d26eca3a891ca731c977c25a9aecc4dece28f17651d48a96",
       "member": "py_capi_set_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "53ca137c8a6ad3b4f3c6093a16f447cc00f90ce5a4bb7ec495a00f2cf338754b",
@@ -1655,8 +1655,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "74c412a5e98c3fdc2cf3f733ca63573ac0412f087e89c47361f7bc5d0b573125",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "e303b5dd40eb8b9d42bfac0e51fc47a24aaac4d98b831929f5a1bfdaeb1660f0",
       "member": "py_capi_misc_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "658124d9b1dd8f1f3416c26c45c6684bdc61371e69a41c40cbeede9cc0153de3",
@@ -1669,8 +1669,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "e4d1546b50d1c77c0606a0de62ef17df494b6c1d5662319d0ddc051da895aaf8",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "2dfd1aedea6bd4cef7c9a68b95fd71ce8156cb769a4bb1a125bb2186802c6c9a",
       "member": "py_capi_cfunction_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "27cf203088a796ded850af8173221e9905d6b1300bcf91cab24dd18aa183d487",
@@ -1683,8 +1683,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "49bd626f5aa831b103b5c0478ee1a63caa067af5e27ebb4d76eb9a45aeac7092",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "0d5822b2f456384528d82f4f7271cbd4dc25334046701223f31b8a31d7c0a8ed",
       "member": "py_capi_object_call_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "66c4495dd89735ec11f0f5911232337e31cbc0d6e418238255d1ea2e3d73d477",
@@ -1697,8 +1697,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "77357ea4fd105643415e72e8eacd2cbbbdcd648535a379c974aeb74dff4df0b8",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "203a24363cabb95f3a6ebd71917f3aa2231ab3fcfbdd0b2f149e5f4f445203ed",
       "member": "py_capi_method_bridge_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "ee68126f469e2de7decb6b825d0a614290d5d738aee419580404114b6b2e651c",
@@ -1711,8 +1711,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "2199a0f8c63ebb0c1bd61519887ad6e5dceceb5936b5c13ca389190fd545a37a",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "ddf0e7b0177e5f5b4aa900d3deec2bb8e0e23db20eb938bc968d19974f526621",
       "member": "py_capi_object_attr_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "a51eefed8d7a1b720f918d0d7eadfcd612436ecee6a6ade9e6637c1365e70070",
@@ -1725,8 +1725,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "9beb18f392af739468aa436a1cbb760f8ab079acd9ccad44b9ded087cd11683a",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "e6c212ebe052bee31e230edf6f3af1bdc4fe8e833a3d79d5e348ce2faa538180",
       "member": "py_capi_number_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "49c2c42e3a15592ab494f511584224a4f6018e617291f92f71b92b9446965adb",
@@ -1739,8 +1739,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "3d33096965240aaa205b1d95b7694b0d7dace76d84ea750bd52468be6545c092",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "578d80e71a78c51303018aaaf3872cd64b16db8c08ee6dbb0f321d555c78c690",
       "member": "py_capi_sequence_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "85e3b830a812e3b5cf300b8f67966d0b497e606e345ab9c6cc90939d9aaef9c1",
@@ -1753,8 +1753,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "c90724c3e810f7d686bd961661e61e20fce3371e9cee95faa1c676e5fe3e5572",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "4597f5ab638c7015dc4fd1ccced76206d74308f7aecfbdec9fa70276e9dd256a",
       "member": "py_capi_mapping_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "5b82d175d0a26322b0ca6fae5f3fc3658c605aef267e848e6c33be5fbf56aa17",
@@ -1767,8 +1767,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "860e62245e54fbb723e9829fc57029e0e0486f5ecbd4e30be06dd9b4b7c08cd6",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "c7e6d1c768d20e8e535d5a5653118809f46b49a4e9727365ca47bc8802bb55ca",
       "member": "py_capi_import_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "11316267983b0584f40c23e3ad96bef2857447fea71173c705f41f30547d8b00",
@@ -1781,8 +1781,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "4a5be802de3792f6db28650924cb4713442cf4ba73323420d5ec5a4b00be2925",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "73505114fb6b99ed944f7b3739d42e5af30f933c123380a03ffd419e2ac479e9",
       "member": "py_capi_unicode_search_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "c8de43a78efd54b2216e4dc506a6bd5fee28b7ee158b0c4df592447d7844d8a7",
@@ -1795,8 +1795,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "b7de1f230be81cac3c31271362f5b56b46f0a498e4e8a262fd7f72793c6e3292",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "f5e6da38f18dc0ce948e62814290ff752996ce0be8f776f1b7cae31a22010b65",
       "member": "py_capi_unicode_writer_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "faffad04fccc8427eb808ee0eff7a617040a4b322e5189588bc13e308670d9c7",
@@ -1809,8 +1809,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "8c28f16881a1414a7e1eadde13c41baca7f8457edfe2fea5996b1f072d90cd04",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "598044c84addfa9f9ee42585792b8327f35f991abb9ff2b4cf739dedde767df9",
       "member": "py_capi_buffer_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "1f71ea695b252d5faf64496f0b5f3f3a02cec694bdb3e61454f312e78f07f0a7",
@@ -1823,8 +1823,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "dbf4cd0039aace0608db82ba6b0c5f0bc8386b48111dc0af8fd36a041f6ee378",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "27cc73ce5280c37f79c78fa3947f709e3842d38cdfa7ba2c3ef82f9bf31099c7",
       "member": "py_capi_module_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "b76342309385d5e6c8e3815709765470e88bbdcd9526b408f9c712329fc6a455",
@@ -1837,8 +1837,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "6773a2e37cfa9b6db4d8eae7ad59ee741d49a75a9381a5f18c843c000ccd5bbe",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "733f221e4fba8663396fec57b01c4cb878e4098dad3071eab960da0183cbea8e",
       "member": "py_capi_cext_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "4a445ebd1aa71cb39080a3f5081e48fc1d025aaef250170d49812145fb5c3b9b",
@@ -1851,8 +1851,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "4bf1d0ae21f33d17a7aabd4d939755346a7aa92bc070d481eb939ebfd4e71528",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "8f7e30218d365deeb52917cd2ec88ba00ca760d2f8518b95460afa0969519801",
       "member": "py_capi_module_state_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "159c4f17031e812a2027f8ec1040e3e1b84e6b84745f1c63423215656c247b81",
@@ -1865,8 +1865,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "1809159e8e857b071ef00cec6a48b15ff21bc1e39ade403ed525a528a5252d31",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "52c650c3c2e812a1e4df7dce69eeec420b2c313401042d4e7869bfae3b23b2a0",
       "member": "py_capi_private_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "2c10529aeeb42cbf286f12d1ed6e070fd1f036e239bac567fa3efe84fa87475e",
@@ -1879,8 +1879,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "0bfd801c16484921dbf0505dd3f75e012da44033b1763ba586b995400a213369",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "624b9f939cbed307f4e15bfa6a020c8cf41f3d07e89f0d94b59bbd79810aed4a",
       "member": "py_capi_slice_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "4fc89e36829277ed9c0de4e3eb4db82799570c353818bff78459ade2f547891b",
@@ -1893,8 +1893,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "bf63a5e57bc014ea3509567ee05a31ec3d3ace15d0d7664e0d2c94740e830ef5",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "bb47ce296096fbc97d4a033d26e5ef9d07ad0929b70945036cfc66a0e01b32e3",
       "member": "py_capi_seqiter_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "2ae145f0e6d981ba31d59663ba69ce0b7022a29cabace34d5a52d430d75d9aa6",
@@ -1907,8 +1907,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "39c173c7f402bd75abc174381967b213ebff81bf89e25674178b22ee13347255",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "a90148a965106eb2b42a91ab072f8fc064efcc14a00ba6ce851b6128707fff0a",
       "member": "py_capi_contextvar_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "3e7075aa54f4beb4768d509ac68bfd4de839363b0205ec163a6ad9d09aa3a7a0",
@@ -1921,8 +1921,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "d76a952680819664e016417c3a48cb47e187c8c35184e263eb3072381138fcf7",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "82460667d26dee3b36a872c9d093a44e9c2e13aba5823197aa8d57ab1371ec36",
       "member": "py_capi_call_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "cb432e751e9c9a627fde609313b4819db94318482fa5a575038579b647ad4d98",
@@ -1935,8 +1935,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "3fd79682a8e4684e66fad91bf47f1032cfb5c2fe40814b4c3655d9a08259e3d5",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "4bc42e6722448fbdf5989b691f2d9ecbbd420141ece0b87182b4f0c1f4f7f169",
       "member": "py_capi_arg_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "d7fb4439964c6a99b087c915ee09c381063185e83e0ae93a406b2a6a180410c5",
@@ -1949,8 +1949,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "a9801a72090582d953c320cb7327b5bea63ea6f2568e2538f71680ea3731a880",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "e4c88954afcdb29cdce497987b983bb53676272a5184d34b042b63d220d65035",
       "member": "py_capi_str_conv_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "db3c6d8be7f1abd5e11b79f5ed50ee12e917d1863d21e5f002655fe073cbf145",
@@ -1963,8 +1963,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "d82ec8579e0849e3f2d3cdccf35c6fbc50b708b905fa813b496b209b7e905a86",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "b9914cffd5783e32741aada6a5dfc162dd4f5587c782554b51ba5d06ca482afe",
       "member": "py_capi_buildvalue_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "cfd6e3be9a6d0b03e841c65aa4d860d31dd4733be2e36316b8d19eba81fe5ced",
@@ -1977,8 +1977,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "38c5c657862f2b463b017ff0ee85f74d23983de0895f3b1fd41f61e4dd786c2c",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "d843565d9a82ac50f3ad70ff0ec9e1dc0abd18b2111b226c1c4a288220f36e36",
       "member": "py_capi_type_descriptor_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "187697a70948d05a293739c4278795ad12508dbf6e238c15d355498d1f6420ac",
@@ -1991,8 +1991,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "3089549a292656156770dc6121108c818734237d0880675fe87bed2290be5d0e",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "39f6e13558edb5a94ce642fc76ef09e91f140385030b8df0e52afc19c869cc19",
       "member": "py_capi_visit_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "b55ce364dad586908121162ffe7e17e3c3c6cc9a234801f3b0414f656098e7cc",
@@ -2005,8 +2005,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "22bdfcbf853e717d8dd440df1ca5abe1505c6878b8c52e90daee6bdaeb1f3baf",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "3637d2727dcb86cac1f35a57ea8bd5b2f7be59c086edd00721b4d7d3b8408d5f",
       "member": "freestanding_mem_str.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "719df5a935d8ca6a68e85e84fa673b2a8ce80b6c68bf4b2f13e68789e7f48dd0",
@@ -2019,8 +2019,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "2e99245ddc59c68e07fa729b1212828c5012d96aa03309916e399ba4b4ec6853",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "43bf814232bbc039f04e6719083048274ecce45372c7a53eac5f8054a3682b90",
       "member": "freestanding_lfq_spsc.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "7dd7d56174a04990e4fe9bc32ee96765a9a430b981a739ccde19805a5fec335e",
@@ -2033,8 +2033,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "9bfda05c6ee410ec9dcb1d9277ae2f88c04e9e6dc02149e91f17f5107458dc94",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "64fbe18418cb5ff31d4a1942e44a08df897cd269221bd6e03edaf8557b238353",
       "member": "freestanding_iobuf_pool.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "1b3de0b7126d4fb56c063948836aa831572e9cc66f5da3f4e4fbc2969fc795a6",
@@ -2047,8 +2047,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "8ec27bc850f7892796651755dc82255b394ff72cead3631ea8184a4234a0fad3",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "4c80e2fe893c33780ed39c458fbf59d1cbae6e5cff57a754530ec17bcdc73e50",
       "member": "freestanding_uring.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "7b71452afdc320723ff4e14b4f56afdc89a396b5ed8ca3ee94e57e6a14dece4c",
@@ -2061,8 +2061,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "c2103c914e17f85ed23cf9dd6b13b16cd6985b374cc9202563c7ed14c090a31a",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "a1fee8194e570ee55e9ceb6f21b25a58fd3fb9c98cad4b077b48a627c059b63e",
       "member": "freestanding_libc_numeric.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "3ecae57c720768d9ef211bde43e245281593fa39278cf98ed9e1c534a6c232e1",
@@ -2075,8 +2075,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "70a09cb8d50573c0191851105da49f66eefecd6a8da055e7204f4a77233b3357",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "758ee2c5f897e863c62d05bdbdd817705dc87c835ee5c773831d75210197579c",
       "member": "freestanding_strtoint.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "3a8420c351f48c971a0d8f5a7be8254e3b3d926e6b5aa9bd8d3736a7fe63f932",
@@ -2089,8 +2089,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "7fa53971896603fc091c684e2fe19dd86579a702ae9dd012e872d14bbc71db22",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "572451653ec357325daaa6679709e83dd123c7f1fa76d835bbc8ba503ebba6a0",
       "member": "freestanding_re_engine.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "5673d7fca5ea96fcb8c06d2688654ffd999f1490d35eef89be5535fff76b3d80",
@@ -2103,8 +2103,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "017d336515f65ada4a4ad5e95bac5dad0eb711b24f56d5fc50e7b6d40aef7ebf",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "6027d474cec5913563bc35af2f9345597e4c35e4044291f44335a2c245fd64b7",
       "member": "freestanding_allocator.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "c94a6250337f13c0fd5ac75262de4145786af40294172adeae6ef5a08df508a1",
@@ -2117,8 +2117,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "176efe5f296f7e85ec1b98c6da61881303dbde246420690c8c62c7fdcc89c5a1",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "4eb62c4ef373162d3a8b0631627851778e398dc528ab0ef83aeecb0c3027be58",
       "member": "freestanding_timer_heap.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "f5834ad2336677c10ce5210057ef537c3968b464ee898e5e37f0053037955676",
@@ -2131,8 +2131,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "b46a2ba95eb9827a98d67a70c59722e43a0ec3d9a080007bc525ba0e000e2c60",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "536af9bd989a9f1a3d72da2d03167b03a124fbaa35d44091951736fd28cfce19",
       "member": "freestanding_runtime_high_substrate.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "95f551595c16a757fee740c28b9ad60b1fc3d36b518bcbc4bffe4b2d893ace97",
@@ -2145,8 +2145,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "7b7e1c370e2a8efbb90f26a7fc74351d6445cc3231b9a5906100d6942a5c31e5",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "e50cf8f24e3a8766494443b1b2756ffa054b83ab7eddf8d3db1d3fd01e2550d8",
       "member": "freestanding_gc_index_table.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "831d3f586967c538c76395422812a537bc0bdee8e1b66bdcf813427ba9124575",
@@ -2159,8 +2159,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "32b2243e38fbd538c83ae28c62dae2f82c101d1b098eb7b0428a07c8a6b15327",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "dd203d82cd352640edc7acf045f16a62a36d9c638eb60cbc1b78e5fd2a94fa3f",
       "member": "freestanding_gc_external_resource.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "05abd670da8c9e0084b58f0c994ad89e4d16d5d1020c79a2111d2ca78e35482e",
@@ -2173,8 +2173,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "55d67ca0ee24cd0942297ee52b34b914ac2ee54aa262b78a18b8ee4e8ca553a2",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "2a0a6b1b6f8430c61be9d60e6a479d134b16171a3674b645841151397ea5d80e",
       "member": "freestanding_gc_state.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "92a799657ae901bdf1898cacd157cda353d19a8f41d3895d33da64efa9c2408e",
@@ -2187,8 +2187,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "89738b489e71c15b2140f504c4b3d63941063b500bd711915e72f8d54f187b5f",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "6266cdf7581acd7dfc811131a28b31f8199e00d1cf4b09e1febf75086d384a76",
       "member": "freestanding_gc_control.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "5ee07bf04eff9baf31a21e0b4102083ba25252d06f60b98ef3b5de87ffe1eb0d",
@@ -2201,8 +2201,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "0b439220b3038f20e09522a1615ffa36e67407747d8a080c004e78f690cd1741",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "1ceb96a7fbda91133c680deff48f3543e210524bd607728b6e5be2565ed11844",
       "member": "freestanding_gc_tracking.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "434a1c7518ea013ee2d2aebb2a81e215293388b019389266ffdce79ff9e470d9",
@@ -2215,8 +2215,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "13954de8f2144abeb8c1e826114ab3d6c33c0fafef20fcfa239d43bf58d8cf11",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "10a8fb49a6daa4a75e16a856bce8ccfa86e0af0935c0fba9da855e43a07572c2",
       "member": "freestanding_gc_root_registry.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "a6c3a905bf58760032d8b71d330da7d5d3e0b2e7dcd6bc5ecb86535adb83bbdd",
@@ -2229,8 +2229,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "af01be0ece72563d8254187a02c35c759bb88da65452e1ac62c13cb08dabcf97",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "4c5453162ffe78a7dd8d517a6d12319c49a5062e3db58046ddca7e01599f5455",
       "member": "freestanding_gc_frame_registry.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "eee17892071fd7d55c066f2ca22d25f40c905f86be7c15229601111be608e3be",
@@ -2243,8 +2243,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "feaae843db2314995870f6a79259a0c98ba966bbdb10184efce212e5426ab6bb",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "cf991d950bf743fb1e2bde143ce41f38fd2cd630a4157af5fa8ff642c61a0097",
       "member": "freestanding_gc_root_operations.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "aa780d207289a0f45a0ee25418e9009fa6508d5fe4dbed43e605157c271cb30e",
@@ -2257,8 +2257,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "88f2d470e0e44ec105ecd0c8c6976030672de8ecae7894b3763dcce0710a4dce",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "054ea52f5912cb49ee0552ffa011541b3005b40775c15df27b2e64bdb686f989",
       "member": "freestanding_gc_mapped_roots.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "7d13c66a0b9aea2b25c3eab1a8ecf094c50d1f46034ef08fba4410d819f02e25",
@@ -2271,8 +2271,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "432a52bcdc752e7049d0ff49aeafa56398bc78b3d6d3fabac32d8d32d3bda397",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "6da63c8c1fa7cf0e3cdce5a766a61e8bac294bb35b3f9b115652f4bfc4f74b2d",
       "member": "freestanding_gc_object_root_seeding.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "07e502136f12c668365a0956e8080b54a1ab8f5a50e860084e1581fe2be59fe1",
@@ -2285,8 +2285,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "bdd7ff959b401e6bcd4c96e209e4f3b76e3e4937f5de286d24f1f3de0a005895",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "df084283fca27e70fa490b9f9d905ca2e9b6e1f9d8ed0436b90ddd9d5cab0635",
       "member": "freestanding_gc_refcount_roots.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "0b20a48bff8d473bcfbd3ed7752ee57899db8ae5e6d5fa0581d3ff3a429e1e4f",
@@ -2299,8 +2299,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "2ad97083bf95062623f1b0e1e42738f36618fe71d87f12ec0f8c64b2d4718cce",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "81abe67b92bc3c912371e7b31f19dfa2eb09948ab3d5b1100ca60ac7761207e7",
       "member": "freestanding_gc_object_slots.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "9e7c874fad3ad7695ee2cc621a2dca768acb6e5b1207733172ceb453afcbf0e1",
@@ -2313,8 +2313,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "4ae0661ec2f76c4b9b511b87e83a51de60a071bcc05657aca0927f16950ba9d8",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "b61e3f726340ef72be8e15260ecc7dad4e529617aa046614484b2bf757f8a42e",
       "member": "freestanding_gc_common_mark_cycle.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "4a8dbd949ae463fa9c10aaa3a71bb2ebeca7c106736229429e0ec7fa88aa805a",
@@ -2327,8 +2327,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "7f419f7a8d48a3f8a5f509be2f23a688acde7d39b69fbe52829256433bd6e541",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "c16fbc5ddebdc4dfff73db9d5da2142398cc6af354004ac57799d1a2b41ec2f6",
       "member": "freestanding_gc_backend0_slots.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "0169ece039d25d31aedc8b398c18a20773c427b884fd3df1908e8b164ade258e",
@@ -2341,8 +2341,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "a40f28961e0584e3f6ff93c361df8cc9e447822748f6686dd71678c265dd9224",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "1d82d237838611a7537d88310c832d93eb0741b790d5eb1d2d1f84e7b6431ca9",
       "member": "freestanding_gc_sweep_slots.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "9752aa07a9df58bbbe348fcc03be3be8f06e38407802b5612b84925e680d61e6",
@@ -2355,8 +2355,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "7f40847887b406986423dbc718be3696f32d1a04c4a3fa5cb0026d321cd325d4",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "edcc6b137a84681e001100ef82536c95b47046a8284c336280e6f16223bca81b",
       "member": "freestanding_gc_tracing_sweep_collector.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "4fc3e077619dca427a26b4cea72a8938057e4c1cea6976b3d02dd3fd29d3757d",
@@ -2369,8 +2369,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "20036bc8e223e7bf3e9f6abd2f8c0d8c80703370d58c58083b09323f596a4cbc",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "2ebaa7f85c2696609f74aa0e5b05bb11f024cc431609f6f53942174087754d7c",
       "member": "freestanding_gc_public_collection.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "eb00a1624fe1e2d6ed3d0c2de3c311a0b6c909494ce41a824decb26bd61d2610",
@@ -2383,8 +2383,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "f113dd9152b484b0f361010be3125315dcf160c2b30cccfbf6e1001e4fbadc60",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "8a969590fb90c626c9371a8e9fe513872c718461a420860ef686113d6d17f424",
       "member": "freestanding_gc_incremental_concurrent_scheduler.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "c2ed71367479ab7469a20f41ffd4f2e0b09ce234f6434c129ea50782166a26e6",
@@ -2397,8 +2397,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "b3c813446e3182447ba35790849b375ee360b76b1814fc049e565473ba8a7546",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "ed2c4230c33fbe13a2880d939c4dcf0438e0e908b488a2c4f68b18bd62db0ce1",
       "member": "freestanding_gc_forwarding_identity.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "aaf0586892e58d42775a5037f99776cd3406b77c4c273afa90f612f20d954a6d",
@@ -2411,8 +2411,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "52cfb8a20a25bb11139e8e1104a9b2a0be474d047d38b41bb021ff6dc9e59163",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "6ebbafeb4eb6f0d813d34da71f3ad33dce660a44f845957dd267fbe04888c372",
       "member": "freestanding_gc_object_nodes.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "5acc892e94f1c069a26c88c915027a0f3a628325766f19793b460c051ae5f6c3",
@@ -2425,8 +2425,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "20d835f1cfa58562640cb9c6c7b8a074dfb84addceaf4a81ba12013f6f80b852",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "8806220bc5226497d1153f1503cfb3f81af208a3c23fa6b0fbd9ba4cf7b6ad87",
       "member": "freestanding_gc_generational_oldification.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "27c82ef40064e2b398f662f8c42a02dd4bb5464c8c30b38e77fe5649101142ec",
@@ -2439,8 +2439,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "93fe6180c3bb5b5ac760495be657975fa6def59b274cf8d2420701dfed7947c9",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "dbcd9708edef3a7cb4b138ace295bd723a5ea3943144092b10828521f232d4f7",
       "member": "freestanding_gc_generational_remembered_owners.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "6c2d0feff01e51ca0e7539376c8c6da348c34919606bcab164ca0eee273f1eb1",
@@ -2453,8 +2453,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "79a05496b459ecc411f53823fb955ac4275b2dca06c2d9802c5ea436b7f26997",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "0b5903526b8975b5726e703b50056b2912ae39e091918875b15cbd850ebd2d2a",
       "member": "freestanding_gc_generational_promotion.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "a5ddf994a6a99f9b55e70496d30977af19d89b54d814e4b79c551b17feaffbc4",
@@ -2467,8 +2467,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "f96c8807f4d9ca36caacae915b84b5d8f60538b629afa082dcb37bb9d9c52162",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "29dce0035dc1010b272881ed995fa344f22bd8cf4f800788c6b1449791958fee",
       "member": "freestanding_gc_generational_scheduler.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "8797fc77b2d1391fdc5380f3ba73b750333e1c4d9f842cd372a45260e7a28f95",
@@ -2481,8 +2481,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "befa0d5593d7457c53efdb03498968bea00e445b00702c04be3a9d480764ffbc",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "70f971a7cd7b6986bc2ee00a6f1ca9a8da0f0c400d08d9f7f401163c48a22cd5",
       "member": "freestanding_gc_relocation_remap.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "93877a4f37125aec39a9b32777914d8ddfcd30d74784588602cf2762aaca64c9",
@@ -2495,8 +2495,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "224fb2d4feeec66afd283eb37b596c43f6a545d3251fe4b65fe182f534d59938",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "3066d4b709ea05353b1df73a45f19bf512201156cba03806b4a02ef362db4af9",
       "member": "freestanding_gc_relocation_payload.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "9d354e748266c54a47821b78e81931e4b7932bab5c679e75f17fe5aa0d697d43",
@@ -2509,8 +2509,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "d23f30747163f1233a05a682e3db5edbf5cfe0c689bc95c39795b84037252590",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "dd70b06fb4868cb84b8daa1e46f5619fca1d43ed71799685ffcaeadee73df581",
       "member": "freestanding_gc_relocation_copy.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "80d1dd8568f0f8b1422bcf6769594ff19145265e9cfc99db65bc894d701ae3ac",
@@ -2523,8 +2523,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "f44550c767c7c915169e23adf254647a03e14a50e0654b2cdf1ac5de4ca167ec",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "44b13c77f1194d0b3875a02045200b8787dd59da2b67949ef9e08ba24bb4e4ae",
       "member": "freestanding_gc_relocation_selector.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "76d84cad4b59219becfcbbe83424d160c2d7836ae2c617c752f3446056c32067",
@@ -2537,8 +2537,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "03c80ca3655be577cef6d38d4d9a58d1f660a4d5d30c08b8bb29a37651a64a84",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "66d5aeb8321f8bc6d3d7dc06a9ce92a234cf3fb7ef16832347a2a16b53ccf373",
       "member": "freestanding_gc_relocation_drain.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "d3d7dc773d46533c882590db1604fb371f7ed8da78469291ac4c48a44fbba77e",
@@ -2551,8 +2551,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "7a3cade8ce1e2623b81f6034c463eff96404a6abda2665c9caf014732b24f96d",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "7bd3982c133bf3250a513bdca560d3e1e4d259889c976da27fc5921fd1de6cc0",
       "member": "freestanding_gc_zpage_mechanics.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "3b41063aba7463f9725ca2a93ad02cf2240e4c95e6ede38cced31e54649f4859",
@@ -2565,8 +2565,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "9e869f591160fba020b1977d7ec548e119720768d91c9db367d12adbfb620470",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "e3b3702ba341f8bd37f58e917ffee56dccef3fdf4e9f19de64bb509fd2621cea",
       "member": "freestanding_gc_zpage_lifecycle.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "444b74e376b08216863c80758bdc0b5b7d79cb9f61a239767f1128c4f3acf364",
@@ -2579,8 +2579,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "145b999712324a620ab359bc024d640f281dee968ec850d382e6cdfefdf37d29",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "0c882f11925943a7a4f9dac7deb46d5c409843c1a23cc8d20d1c28d74cd76653",
       "member": "freestanding_gc_forwarding_retirement.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "05a0a8186946d1450396ac290f9439e4a06d4ef1ee4e46270b50b39e3604c84c",
@@ -2593,8 +2593,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "11daed45d686e7ef948e5864e7dab0da6b5aef102caee554ace975da185e45a5",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "6e9c544ddaac0df475ad175fb3f3a3ea84e1b4badd7816a7019864dddd9c1f1a",
       "member": "freestanding_gc_barrier_dispatcher.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "afc91cf8145e3253b656affa968c670889cc8467680865f1994b1dcc3b700de8",
@@ -2607,8 +2607,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "e14d0f75d356333633bbb4846a6edfea02babf95c4d7ed860f5d3c5f0e26aed2",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "4d22ca43ca21cef1ea3b6a4d5464bdb9353357a53ba285b78ac57c9c1e4ba9ed",
       "member": "freestanding_gc_zpage_allocation.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "5b40801a8c76181636ff81769f894fde8cc12d200e7503493cde8151b5253257",
@@ -2621,8 +2621,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "9be1967e2459526ea53648927367da380a801046882ad67e51f3078585afccd1",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "24737f67ffecd8c4cd1bb4fc1f66f94e241511bf67e3587e61be2082078ef9d5",
       "member": "freestanding_gc_backend0_collector.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "3aaf1e0bf844231635116d9aef0cc1d6705e81480d55cd1fe865ddb47c2b78a8",
@@ -2635,8 +2635,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "50f409c33d843c287e4005ffa7dc698a2548d06df58ecc64f561b03b3a1f7ae5",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "7ef89fe4e35fd5aa0d9c895fa0181f21eafe59fab605dd2fd00dcd733bf2135e",
       "member": "freestanding_gc_root_introspection.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "d1484ea74752fcb6b49a6e4376b76ab31d67d1c00286a776b115f7dd65c89d7b",
@@ -2649,8 +2649,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "31d3072ee5cca8b7716c976616d3f807e0e0c85a6e0e3d98e46c518686e9489a",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "87b2901bb836bc7cbc4663db9b66325bd0b5309ae8f9017ef171854bc9b7a6b4",
       "member": "freestanding_platform_io.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "37fa4cc941458feecc6674875b8a67f1e8bac7e30446921ffd04986df4a8691e",
@@ -2663,8 +2663,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "c5ce37784f65710f62c10239660c67228f8d232ee25872f2213aacedcdc2ac29",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "596a13659750fcf99feca086e9ad543012ebfd7dc1809b4c3278eb862ba13553",
       "member": "freestanding_platform_fs.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "524577170a226f886cd4950232007aa27b93be5d94e8300e25b4807364689a93",
@@ -2677,8 +2677,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "bcc6062de761787e3822f4bde7849be28a0999d39f9c85c98e99b6eb3e7e0cf2",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "ee0749b45fe7dbfff73b254943d23df4dc5855503e34d678c3a08a671771c6cb",
       "member": "freestanding_platform_env.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "84358c0c8145df45e1a63f8b4e44af402c4799b76ec8acc4cec4a8fa494f499c",
@@ -2691,8 +2691,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "fb24facc3f4ecbe07fac3f9cebe95c56c7ef2c789eabeed637d9cec033a67b26",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "3a54e2ee2953f0f4ead7986fb8770a2b93102da8a962821053f7b01077f31efe",
       "member": "freestanding_platform_system.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "d722af932cc993acd36ab40c106aa06d55d3a0c859dc09ce90f3442183d7b1b2",
@@ -2705,8 +2705,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "ea716a92612086d01f91d33d37add15c63a1ffa488d4bf5dc642c81953c5eb1f",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "9d65a4b58796bf320b84acbf324ede5374394d8bcf5a2f2ad6d2e8a1fd350204",
       "member": "freestanding_platform_time.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "01193021413628d25f3cd6b12dd393562abd506f6ca5b99b1684136b31436325",
@@ -2719,8 +2719,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "a9b40e57bd7959158aa16ee92a30fcabd282c5dfb9f06e8ee4f9f11ffaddc3b3",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "70a5cab599d9be5e971c3093f49ae47815bc8c41f49ccc069cad69e3b30fd7be",
       "member": "freestanding_platform_process.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "0cacac42fbd40ac72a2227e3789ee3e28bb1596dc5d5d856025ef00e56e30e69",
@@ -2733,8 +2733,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "6287361789fbf31f1fbbbf3c9879573e96d56004e8ce6412a66d38a8f6a87cac",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "52ec2d9c577181943ae8bbda0f2e54efbcee10c7e7612d0b2a2e71aaf5ecc96c",
       "member": "freestanding_platform_socket.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "e7616196a5f9a8fe06545637dbac94eac26ca5e550b5d7af53c221ff0e3756e2",
@@ -2747,8 +2747,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "64ca8a593053264e8fb7aa6c58a80cf5a63f028a6c3da6b31facef6625c20f39",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "ac1394c8ac5e4b01e22a15479f8e982aa5ded230b227b0bef53468ea3314bd20",
       "member": "freestanding_platform_rss.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "ff42ee0e405f1deb161a1cedb8a59ab5794fd27b7a0b30b70c77824b7c3f7dbd",
@@ -2761,8 +2761,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "15b0323748bd51548a8a44e399a8d86013a5b9df07717cd84d71e5449cab5d0f",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "3fcf8231cf7e813e6285cf21d2d737659078f236e0dd8575137d424162357c04",
       "member": "freestanding_errno.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "f096dcba910434ff550a007a083501530b1b2b505b982980508ae46dbb4eda9d",
@@ -2775,8 +2775,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "cccbe437a3c280f6775caf2d968d1c53477aec3341f7c526d8050c4854d50045",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "3fb8c13bf9c65f41fde7c63804f9b45e6120f806c141fa9353d1635cd994452d",
       "member": "freestanding_metal_runtime.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "1a845dc2a842b97568eb3b83d6794d91578c61c00abd83beb0c2cbe6be8871f2",
@@ -2789,8 +2789,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "331cd15e6026459bf648581658493e4531bff57daaed603493b75e6c9f34bff1",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "7fc8d8a94ea88341449f2a38307e6d485a5d607fefe87407745dbc513e0348e1",
       "member": "freestanding_stdio.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "e3dbde80b6a1017c7ba5a4866255c2f881794c88deca2917b0e2cd4fa5692a6f",
@@ -2803,8 +2803,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "3c801b2d6b03e4f9e153d31d82b58766826845752fd0d8cb2565a84ccd757e87",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "fc1ef110c380d58f1e833bda480521e96e44a053195694754812a003213b28fa",
       "member": "freestanding_gateway_control.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "b72f6e5cdf37fb1b4f94afa9cc0d33fc219cfa557670b38a9c55c5899bd57d81",
@@ -2817,8 +2817,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "1e04ab9e15800f9db4d0ef3af6fd20d5e3e97b02c3d0c22d23471d2eb625c499",
-      "ir_sha256": "9162bf44e002b592185d9ecb35815791d1c0fc5bfefd35b7643431404b14982e",
+      "codegen_checksum": "99ccb9259e18fd7fb23e27934fa6af3157c54f9d11915af6c6c31b2a475c0644",
+      "ir_sha256": "fda4ed78d52bfa942b53d6550f128dcaae14e7865da0311b0a2bdbbf05e196d4",
       "member": "freestanding_thread_kernel.o",
       "object_emitter": "llvmlite-target-machine",
       "object_sha256": "da8ca3af54f1f399733ac4fb790e031ea5f58b53ff48bd66774266801e0a88bd",
@@ -2831,7 +2831,7 @@
       "uses_host_cc": false
     }
   ],
-  "members_sha256": "6a3553924ee7e7dbf8d5113b75d5ed1f96a0faad2aef706cb437ce1bc0cf72f0",
+  "members_sha256": "1eb21f1c1501f4aba03792fe839c2cdb59179329cf0d0a72568c46510b4ed4f3",
   "policy": "pcc-production-no-handwritten-c.v1",
   "schema": "pcc.runtime-archive-provenance.v2",
   "target_triple": "arm64-apple-darwin25.5.0"

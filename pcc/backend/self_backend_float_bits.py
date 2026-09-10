@@ -9,6 +9,7 @@ self backend cannot drift independently.
 """
 
 from pcc.stdlib._float_bits import (
+    _bits_to_float32,
     _bits_to_float64,
     _float32_to_bits,
     _float64_to_bits,
@@ -25,3 +26,7 @@ def bits_to_float64(bits: int) -> float:
 
 def float32_to_bits(value: float) -> int:
     return _float32_to_bits(value)
+
+
+def bits_to_float32(bits: int) -> float:
+    return _bits_to_float32(bits)

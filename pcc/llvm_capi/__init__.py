@@ -21,7 +21,7 @@ from __future__ import annotations
 from pcc.extern import (
     ExternFn, extern,
     c_int, c_int32, c_int64, c_void, c_ptr, c_str, c_bool,
-    c_double,
+    c_double, c_rawptr,
 )
 
 # ---------------------------------------------------------------------------
@@ -66,7 +66,10 @@ LLVMDisposeModule: ExternFn = extern(
     "LLVMDisposeModule", argtypes=(LLVMModuleRef,), restype=c_void,
 )
 LLVMPrintModuleToString: ExternFn = extern(
-    "LLVMPrintModuleToString", argtypes=(LLVMModuleRef,), restype=c_str,
+    # ``char *`` owned by LLVM and released with ``LLVMDisposeMessage``: a raw
+    # address, not a Python object, so ``c_rawptr`` rather than the ambiguous
+    # ``c_str``.
+    "LLVMPrintModuleToString", argtypes=(LLVMModuleRef,), restype=c_rawptr,
 )
 LLVMParseIRInContext: ExternFn = extern(
     "LLVMParseIRInContext",

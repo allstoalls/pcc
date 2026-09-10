@@ -50,6 +50,9 @@ def test_live_cpython_native_target_join_remains_fail_closed():
     host = SimpleNamespace(
         env={"item": (object(), ir.IntType(8).as_pointer(), object())},
         _cpy_env_flags={"item": True},
+        # A live pre-loop value is the whole reason the two representations
+        # would have to join; the drop below is only reachable for a dead one.
+        _for_target_pre_value_is_dead=lambda _ident: False,
     )
 
     with pytest.raises(
@@ -57,6 +60,167 @@ def test_live_cpython_native_target_join_remains_fail_closed():
         match="cannot join a CPython-backed for-target with a native object binding",
     ):
         _for_prepare_owned_object_target(host, "item", object())
+
+
+# ``fnmatch.filter`` is the CPython-domain iterable these cases need: it has
+# no native provider, so its result is a raw libpython object, and its answer
+# is short and deterministic.  A native ``list`` parameter supplies the other
+# domain.
+_JOIN_CASES = {
+    "cpython_binding_then_native_loop": (
+        """
+        token = fnmatch.filter(values, "*.py")
+        total = 0
+        for token in values:
+            total = total + 1
+        return total
+        """,
+        True,
+    ),
+    "native_loop_then_cpython_loop": (
+        """
+        total = 0
+        for token in values:
+            total = total + 1
+        for token in fnmatch.filter(values, "*.py"):
+            total = total + 1
+        return total
+        """,
+        True,
+    ),
+    "read_only_before_the_loop": (
+        """
+        token = fnmatch.filter(values, "*.py")
+        total = len(token)
+        for token in values:
+            total = total + 1
+        return total
+        """,
+        True,
+    ),
+    "read_after_the_loop_is_live": (
+        """
+        token = fnmatch.filter(values, "*.py")
+        for token in values:
+            pass
+        return len(token)
+        """,
+        False,
+    ),
+    "binding_loop_nested_in_binding_loop": (
+        """
+        total = 0
+        for token in values:
+            for token in fnmatch.filter(values, "*.py"):
+                total = total + 1
+        return total
+        """,
+        False,
+    ),
+    "read_reachable_through_an_enclosing_back_edge": (
+        """
+        token = fnmatch.filter(values, "*.py")
+        total = 0
+        n = 0
+        while n < 2:
+            total = total + len(token)
+            for token in values:
+                total = total + 1
+            n = n + 1
+        return total
+        """,
+        False,
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(_JOIN_CASES))
+def test_mixed_domain_for_target_joins_only_when_the_pre_value_is_dead(
+    tmp_path, case
+):
+    """A for-target may cross representation domains iff nothing observes it.
+
+    ``for x in it:`` rebinds ``x``; the pre-loop value survives only along the
+    zero-iteration edge.  A CPython pointer and a native pcc object are both
+    ``i8*`` but carry different ownership, and the name holds one compile-time
+    domain flag, so preserving one representation into the other's slot is
+    what has to be refused -- not the rebinding itself.  When no read can
+    reach the zero-iteration edge the old binding is simply dropped.
+
+    The last three cases are the ones that keep the analysis honest: a read
+    after the loop, a binding loop nested in another (whose body reads belong
+    to either loop), and a read that an enclosing ``while`` back edge makes
+    reachable again after the loop.
+    """
+    body, should_compile = _JOIN_CASES[case]
+    source = "import fnmatch\n\n\ndef probe(values: list) -> int:" + textwrap.dedent(
+        body
+    ).replace("\n", "\n    ")
+    if should_compile:
+        _compile_to_ll(tmp_path, source, "join_" + case)
+        return
+    with pytest.raises(L1CodegenError, match="for-target"):
+        _compile_to_ll(tmp_path, source, "join_" + case)
+
+
+def test_mixed_domain_for_target_join_matches_cpython_at_runtime(tmp_path):
+    """Both join directions, on the zero- and nonzero-iteration edge.
+
+    Compiled against libpython so the CPython arm actually runs rather than
+    being replaced by a fail-closed stub, and compared to CPython on the same
+    file -- the drop is only correct if the observable answer is unchanged.
+    """
+    from pcc.py_frontend.pipeline import compile_python
+
+    source = textwrap.dedent(
+        '''
+        import fnmatch
+
+
+        def native_after_cpython(values: list) -> list:
+            token = fnmatch.filter(["x.py", "y.txt"], "*.py")
+            out = []
+            for token in values:
+                out.append(token)
+            return out
+
+
+        def cpython_after_native(values: list) -> list:
+            out = []
+            for token in values:
+                out.append(token)
+            for token in fnmatch.filter(["p.py", "q.txt"], "*.py"):
+                out.append(token)
+            return out
+
+
+        def main() -> None:
+            print(native_after_cpython(["a", "b"]))
+            print(cpython_after_native(["a"]))
+            print(native_after_cpython([]))
+            print(cpython_after_native([]))
+
+
+        main()
+        '''
+    )
+    src = tmp_path / "for_target_join_domains.py"
+    exe = tmp_path / "for_target_join_domains.out"
+    src.write_text(source, encoding="utf-8")
+    compile_python(str(src), str(exe), libpython_mode="on")
+    run = subprocess.run(
+        [str(exe)], text=True, capture_output=True, timeout=180, check=True
+    )
+    reference = subprocess.run(
+        ["python3", str(src)], text=True, capture_output=True, timeout=180, check=True
+    )
+    assert run.stdout == reference.stdout
+    assert run.stdout.splitlines() == [
+        "['a', 'b']",
+        "['a', 'p.py']",
+        "[]",
+        "['p.py']",
+    ]
 
 
 def test_zero_iteration_preserves_prior_target_and_owned_root(tmp_path):
@@ -86,8 +250,14 @@ def test_zero_iteration_preserves_prior_target_and_owned_root(tmp_path):
     # dynamic ownership flag to a literal true.  Either representation must
     # retain the error-exit release; requiring the pre-folded SSA name made
     # this test reject stronger constant ownership evidence.
-    assert "item.owned" in body or re.search(
-        r"%item\.err\.release\.value[^=]*=\s*select\s+i1\s+true",
+    # The for-target error cleanup is named ``<ident>.for.err.*`` (see
+    # ``_for_target_error_cleanup``); the bare ``<ident>.err.*`` release in the
+    # same body belongs to the ordinary local unwind and is a literal-false
+    # select here, so anchoring on it tested nothing.  The slot is always
+    # owned in this shape, so the optimizer may fold the dynamic ownership
+    # flag to a literal true; either representation must retain the release.
+    assert "item.for.err.owned" in body or re.search(
+        r"%item\.for\.err\.release\.value[^=]*=\s*select\s+i1\s+true",
         body,
     ), body
     assert not re.search(

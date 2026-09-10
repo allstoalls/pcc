@@ -16,6 +16,7 @@ from .self_backend_aarch64_darwin_regs import (
     pick_scratch_gpr,
 )
 from .self_backend_aarch64_darwin_regalloc import allocated_register_name
+from .self_backend_float_bits import bits_to_float64, float32_to_bits
 from .self_backend_aarch64_darwin_slots import (
     copy_slot_to_slot,
     copy_slot_to_slot_parts,
@@ -832,7 +833,17 @@ def materialize_scalar_value_indexed(
 
     if type_header.first == TYPE_KIND_FP:
         if value.startswith("0x"):
+            # LLVM writes a floating constant with no exact decimal form as the
+            # DOUBLE bit pattern -- for `float` operands too. This path used the
+            # token as the value's own natural-width bits, so a 32-bit float
+            # took the low half, and the low half of a quiet NaN's double
+            # pattern is exactly zero. `NAN` from <math.h> therefore reached the
+            # program as 0.0 rather than a NaN, silently. `emit_fp_hex_constant`
+            # in ..._regs.py already reads the token correctly; this is the
+            # indexed/kernel materializer and the two disagreed.
             fp_bits = int(value, 16)
+            if type_header.second <= 32:
+                fp_bits = float32_to_bits(bits_to_float64(fp_bits))
         elif value in {"poison", "undef", "zeroinitializer"} or is_float_literal(
             value
         ) and float(value) == 0.0:

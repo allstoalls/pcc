@@ -396,6 +396,16 @@ class SubscriptLoweringMixin:
                     )
                     release_rhs()
                     return
+                if isinstance(obj_ty, ByteArrayType):
+                    self.builder.call(
+                        self.runtime["py_bytearray_set_slice"],
+                        [obj, lo_obj, hi_obj, step_obj, rhs_obj],
+                    )
+                    # The store reports a bad replacement type/size through
+                    # the pending-exception channel.
+                    self._emit_post_call_err_check(target.span)
+                    release_rhs()
+                    return
                 if isinstance(obj_ty, (ClassType, DynType)):
                     self.builder.call(
                         self.runtime["py_obj_set_slice"],

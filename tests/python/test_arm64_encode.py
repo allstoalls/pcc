@@ -47,20 +47,30 @@ _LLVM_MC_PROVENANCE = (
     "binding.TargetMachine.emit_object"
 )
 if not _IS_ARM64_DARWIN:
-    _GATE = "needs Darwin arm64"
+    _AS_GATE = "needs Darwin arm64"
 elif _CC is None or _OTOOL is None:
-    _GATE = "needs cc and otool"
+    _AS_GATE = "needs cc and otool"
+else:
+    _AS_GATE = None
+
+# The as(1) and LLVM MC oracles are separate gates. The llvmlite pin is
+# provenance for the MC comparison only; gating the whole module on it
+# deselected the as(1) differential too, so an encoder change shipped with no
+# oracle running at all whenever the installed wheel differed from the pin.
+if _AS_GATE is not None:
+    _MC_GATE = _AS_GATE
 elif _LLVMLITE_VERSION != _PINNED_LLVMLITE_VERSION:
-    _GATE = (
+    _MC_GATE = (
         "LLVM MC oracle provenance changed: expected llvmlite=="
         + _PINNED_LLVMLITE_VERSION
         + ", got "
         + _LLVMLITE_VERSION
     )
 else:
-    _GATE = None
+    _MC_GATE = None
 
-pytestmark = pytest.mark.pcc_gate(unavailable=_GATE)
+_as_oracle = pytest.mark.pcc_gate(unavailable=_AS_GATE)
+_mc_oracle = pytest.mark.pcc_gate(unavailable=_MC_GATE)
 
 
 def test_line_input_api_matches_string_projection() -> None:
@@ -139,6 +149,12 @@ def _disassembled_instructions(path: Path) -> list[str]:
 # Every operand shape measured from real self-backend output
 # (docs/goal/evidence/2026-08-01-obj-switch-encoder-sized.md), plus local
 # branch flavors in both directions.
+#
+# The single-precision FP block was added when the pcc-C runtime build started
+# emitting it: scalar FP had been encoded for double precision only, so the
+# encoder's fail-closed guards were the only thing standing between a wrong
+# `s`-register word and a silent miscompile. The guards are relaxed now, and
+# these lines are the coverage that replaces them.
 CORPUS = """\
 _f:
 Lback:
@@ -148,6 +164,10 @@ Lback:
 	paciasp
 	sub	x9, x29, #32
 	sub	x10, x9, x11
+	add	x11, x9, x10, lsl #3
+	add	w11, w9, w10, lsl #2
+	sub	x11, x9, x10, lsl #3
+	add	x0, x1, x2, lsr #7
 	add	x0, x1, x2
 	sub	sp, sp, x15
 	add	sp, sp, x15
@@ -209,6 +229,11 @@ Lback:
 	and	w8, w8, #0xff
 	orr	x9, x9, x10
 	eor	x9, x9, x10
+	orr	x11, x11, x12, lsl #32
+	orr	w11, w11, w12, lsl #3
+	and	x9, x10, x11, lsr #7
+	and	w8, w9, w10, asr #5
+	eor	w3, w4, w5, lsl #31
 	asrv	x9, x9, x10
 	lslv	x9, x9, x10
 	cset	w8, eq
@@ -293,6 +318,36 @@ Lfwd:
 	fcmp	d0, d1
 	fcmp	d0, #0.0
 	fcsel	d0, d1, d2, ne
+	fadd	s0, s1, s2
+	fsub	s0, s1, s2
+	fmul	s0, s1, s2
+	fdiv	s0, s1, s2
+	fneg	s0, s1
+	fabs	s0, s1
+	fsqrt	s0, s1
+	frintn	s0, s1
+	frintp	s0, s1
+	frintm	s0, s1
+	frintz	s0, s1
+	fmov	s9, s10
+	fmov	s9, w10
+	fmov	w9, s10
+	scvtf	s9, w10
+	scvtf	s9, x10
+	ucvtf	s9, w10
+	ucvtf	s9, x10
+	fcvtzs	w9, s10
+	fcvtzs	x9, s10
+	fcvtzu	w9, s10
+	fcvtzu	x9, s10
+	fcmp	s0, s1
+	fcmp	s0, #0.0
+	fcsel	s0, s1, s2, ne
+	fadd	s9, s10, s11
+	fmul	s9, s10, s11
+	fneg	s9, s10
+	fsqrt	s9, s10
+	fcsel	s9, s10, s11, gt
 	adds	x11, x9, x10
 	adds	w11, w9, w10
 	subs	x11, x9, x10
@@ -346,6 +401,7 @@ def _as_reference(tmp_path: Path) -> tuple[bytes, list]:
     return code, sorted(relocs)
 
 
+@_as_oracle
 def test_every_instruction_word_matches_as(tmp_path):
     ref_code, _ = _as_reference(tmp_path)
     ours = assemble_text(CORPUS)
@@ -371,6 +427,7 @@ def test_every_instruction_word_matches_as(tmp_path):
     )
 
 
+@_mc_oracle
 def test_every_instruction_word_matches_pinned_llvm_mc():
     ref_code = _text_bytes(_llvm_mc_object(CORPUS, symbol="_f"))
     ours = assemble_text(CORPUS)
@@ -397,6 +454,7 @@ def test_every_instruction_word_matches_pinned_llvm_mc():
     )
 
 
+@_mc_oracle
 def test_llvm_mc_and_pcc_objects_disassemble_to_the_same_instructions(tmp_path):
     """Second oracle: both byte streams survive Mach-O disassembly equally."""
     from pcc.backend import macho_obj
@@ -439,6 +497,7 @@ _roundtrip:
     ), "pcc and LLVM MC objects do not round-trip through otool identically"
 
 
+@_as_oracle
 def test_relocations_match_as(tmp_path):
     _, ref_relocs = _as_reference(tmp_path)
     ours = assemble_text(CORPUS)
@@ -452,6 +511,7 @@ def test_relocations_match_as(tmp_path):
     assert ours.undefined == ["_extern_data", "_extern_fn", "_extern_got"]
 
 
+@_as_oracle
 def test_assembled_output_plugs_into_the_object_writer(tmp_path):
     """End-to-end: encoder -> macho_obj -> system ld -> runs."""
     from pcc.backend import macho_obj
@@ -498,6 +558,7 @@ def test_madd_has_the_proven_four_gpr_encoding():
     assert assembled.relocations == []
 
 
+@_mc_oracle
 def test_mov_register_31_uses_zero_register_width_not_sp_alias(tmp_path):
     asm = "_mov_zero:\n\tmov\txzr, x0\n\tmov\twzr, w0\n"
     assembled = assemble_text(asm)

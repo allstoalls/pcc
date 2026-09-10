@@ -247,9 +247,51 @@ def _sf(is64: bool) -> int:
     return 1 << 31 if is64 else 0
 
 
-def _enc_addsub_reg(op_sub: int, rd, rn, rm, is64: bool, set_flags=0) -> int:
+_REGISTER_SHIFT_KINDS = {"lsl": 0, "lsr": 1, "asr": 2, "ror": 3}
+
+
+def _shifted_register_operand(ops, index: int, line: str, allowed):
+    """Parse an optional ``<kind> #<amount>`` register-shift operand.
+
+    Returns ``(shift, shift_kind)``; ``(0, 0)`` when the operand is absent.
+    Anything outside the proven subset raises instead of being ignored: a
+    dropped shift silently encoded the unshifted word, which turned the self
+    backend's scaled GEP adds (``add x11, x9, x10, lsl #3``) into unscaled
+    ones on every dynamically indexed array.
+    """
+    if len(ops) <= index:
+        return 0, 0
+    if len(ops) > index + 1:
+        raise EncodeError(f"too many operands: {line!r}")
+    text = ops[index].strip().lower()
+    head, sep, amount = text.partition("#")
+    head = head.strip()
+    if not sep or head not in allowed or head not in _REGISTER_SHIFT_KINDS:
+        raise EncodeError(f"shift {ops[index]!r} not in the proven subset")
+    return int(amount, 0), _REGISTER_SHIFT_KINDS[head]
+
+
+def _enc_addsub_reg(
+    op_sub: int,
+    rd,
+    rn,
+    rm,
+    is64: bool,
+    set_flags=0,
+    shift: int = 0,
+    shift_kind: int = 0,
+) -> int:
+    # shift_kind: 0 lsl, 1 lsr, 2 asr (ror is reserved for add/sub). The shift
+    # type packs into bits 23-22 and imm6 into bits 15-10 of the shifted-
+    # register form; callers that pass no shift keep the unshifted encoding.
+    limit = 63 if is64 else 31
+    if not 0 <= shift <= limit:
+        raise EncodeError(f"add/sub register shift {shift} out of range")
+    if not 0 <= shift_kind <= 2:
+        raise EncodeError(f"add/sub register shift kind {shift_kind} invalid")
     return (
         _sf(is64) | (op_sub << 30) | (set_flags << 29) | 0x0B000000
+        | (shift_kind << 22) | (shift << 10)
         | (rm << 16) | (rn << 5) | rd
     )
 
@@ -282,9 +324,28 @@ def _enc_addsub_imm(op_sub: int, rd, rn, imm: int, is64: bool, set_flags=0) -> i
     )
 
 
-def _enc_logical_reg(opc: int, rd, rn, rm, is64: bool) -> int:
+def _enc_logical_reg(
+    opc: int, rd, rn, rm, is64: bool, shift: int = 0, shift_kind: int = 0
+) -> int:
     # opc: 0 and, 1 orr, 2 eor, 3 ands
-    return _sf(is64) | (opc << 29) | 0x0A000000 | (rm << 16) | (rn << 5) | rd
+    # shift_kind: 0 lsl, 1 lsr, 2 asr, 3 ror.  The shift type packs into bits
+    # 23-22 and the amount into imm6 at bits 15-10 of the shifted-register
+    # form.  Callers that pass no shift keep the unshifted encoding.
+    limit = 63 if is64 else 31
+    if not 0 <= shift <= limit:
+        raise EncodeError(f"logical register shift {shift} out of range")
+    if not 0 <= shift_kind <= 3:
+        raise EncodeError(f"logical register shift kind {shift_kind} invalid")
+    return (
+        _sf(is64)
+        | (opc << 29)
+        | 0x0A000000
+        | (shift_kind << 22)
+        | (shift << 10)
+        | (rm << 16)
+        | (rn << 5)
+        | rd
+    )
 
 
 def _enc_movewide(opc: int, rd, imm16: int, shift: int, is64: bool) -> int:
@@ -2679,8 +2740,15 @@ def _encode_one(line, at, labels, resolve_branch, relocations, undefined,
             return _enc_addsub_imm(op_sub, rd, rn, _imm(third), d64, set_flags)
         rm, _ = _reg(third)
         if _is_sp_token(ops[0]) or _is_sp_token(ops[1]):
+            if len(ops) > 3:
+                raise EncodeError(f"{mn} with SP does not take a shift: {line!r}")
             return _enc_addsub_ext(op_sub, rd, rn, rm, d64, set_flags)
-        return _enc_addsub_reg(op_sub, rd, rn, rm, d64, set_flags)
+        shift, shift_kind = _shifted_register_operand(
+            ops, 3, line, allowed=("lsl", "lsr", "asr")
+        )
+        return _enc_addsub_reg(
+            op_sub, rd, rn, rm, d64, set_flags, shift, shift_kind
+        )
 
     if mn == "cmp":
         rn, n64 = _reg(ops[0])
@@ -2704,7 +2772,10 @@ def _encode_one(line, at, labels, resolve_branch, relocations, undefined,
                 | (immr << 16) | (imms << 10) | (rn << 5) | rd
             )
         rm, _ = _reg(ops[2])
-        return _enc_logical_reg(opc, rd, rn, rm, d64)
+        shift, shift_kind = _shifted_register_operand(
+            ops, 3, line, allowed=("lsl", "lsr", "asr", "ror")
+        )
+        return _enc_logical_reg(opc, rd, rn, rm, d64, shift, shift_kind)
 
     if mn == "mov":
         rd_tok = ops[0].strip().lower()

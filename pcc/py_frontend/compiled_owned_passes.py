@@ -65,28 +65,44 @@ def run_owned_passes(text: str, names: list[str], strict_no_libpython: bool) -> 
     index = 0
     while index < len(names):
         name = names[index]
-        if name == "mem2reg" and index + 1 < len(names) and names[index + 1] == "sroa":
-            current, _changed = mem2reg_text(current)
-            current = run_compiled_default_tier(
-                current, ["mem2reg", "sroa"], strict_no_libpython=strict_no_libpython
-            )
-            index += 1
-        elif name == "mem2reg":
-            current, _changed = mem2reg_text(current)
-            current = _single_scalar_pass(current, name)
-        elif name == "sroa":
-            current = _single_scalar_pass(current, name)
-        elif name == "instsimplify":
-            current, changed = simplify_module_text(current)
-        elif name == "simplifycfg":
-            current, changed = simplify_cfg_text(current)
-        elif name == "instcombine":
-            current, changed = instcombine_text(current)
-        elif name == "dce":
-            current, changed = dce_module_text(current)
-        elif name == "inline":
-            current, changed = inline_module(current)
-        elif name == "inline-defined":
-            current, changed = inline_module(current, include_definitions=True)
+        try:
+            if name == "mem2reg" and index + 1 < len(names) and names[index + 1] == "sroa":
+                current, _changed = mem2reg_text(current)
+                current = run_compiled_default_tier(
+                    current, ["mem2reg", "sroa"], strict_no_libpython=strict_no_libpython
+                )
+                index += 1
+            elif name == "mem2reg":
+                current, _changed = mem2reg_text(current)
+                current = _single_scalar_pass(current, name)
+            elif name == "sroa":
+                current = _single_scalar_pass(current, name)
+            elif name == "instsimplify":
+                current, changed = simplify_module_text(current)
+            elif name == "simplifycfg":
+                current, changed = simplify_cfg_text(current)
+            elif name == "instcombine":
+                current, changed = instcombine_text(current)
+            elif name == "dce":
+                current, changed = dce_module_text(current)
+            elif name == "inline":
+                current, changed = inline_module(current)
+            elif name == "inline-defined":
+                current, changed = inline_module(current, include_definitions=True)
+        except Exception as exc:
+            _write_owned_pass_exc(name, index, exc)
+            raise
         index += 1
     return current
+
+
+def _write_owned_pass_exc(name: str, index: int, exc: BaseException) -> None:
+    try:
+        with open("/tmp/owned_passes_exc.txt", "w", encoding="utf-8") as stream:
+            stream.write("pass=" + str(name) + "\n")
+            stream.write("index=" + str(index) + "\n")
+            stream.write("type=" + str(type(exc).__module__) + "." + str(type(exc).__name__) + "\n")
+            stream.write("args=" + repr(exc.args) + "\n")
+            stream.write("message=" + str(exc) + "\n")
+    except Exception:
+        pass

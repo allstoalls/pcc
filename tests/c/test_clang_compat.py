@@ -419,6 +419,56 @@ def test_builtin_overflow_helpers_track_result_and_flag():
     assert _evaluate(source) == 0
 
 
+def test_builtin_signed_overflow_helpers_track_result_and_flag():
+    """`llvm.s{add,sub}.with.overflow` must reach the self backend.
+
+    The signed pair is a distinct intrinsic from the unsigned one and had no
+    lowering at all, so these calls survived into the object as undefined
+    `_llvm.sadd.with.overflow.i64`-style symbols and dyld rejected the image.
+    """
+    source = r"""
+        int main(void) {
+            long long add = 0;
+            long long sub = 0;
+            int add32 = 0;
+            int sub32 = 0;
+
+            if (__builtin_add_overflow(9223372036854775807LL, 1LL, &add) != 1)
+                return 1;
+            if (add != (long long)0x8000000000000000ULL)
+                return 2;
+
+            if (__builtin_sub_overflow((-9223372036854775807LL - 1), 1LL, &sub) != 1)
+                return 3;
+            if (sub != 9223372036854775807LL)
+                return 4;
+
+            if (__builtin_add_overflow(-5LL, 3LL, &add) != 0)
+                return 5;
+            if (add != -2LL)
+                return 6;
+
+            if (__builtin_add_overflow(2147483647, 1, &add32) != 1)
+                return 7;
+            if (add32 != (int)0x80000000U)
+                return 8;
+
+            if (__builtin_sub_overflow((int)0x80000000U, 1, &sub32) != 1)
+                return 9;
+            if (sub32 != 2147483647)
+                return 10;
+
+            return 0;
+        }
+    """
+
+    result = _run_with_system_link(source)
+
+    assert (
+        result.returncode == 0
+    ), f"signed overflow builtin lowering failed:\n{result.stdout}\n{result.stderr}"
+
+
 def test_builtin_alloca_allocates_runtime_stack_storage():
     source = r"""
         int main(void) {
@@ -1282,6 +1332,28 @@ def test_implicit_zero_arg_function_definition_compiles_under_gnu89_rules():
     assert (
         result.returncode == 0
     ), f"implicit zero-arg function compat failed:\n{result.stdout}\n{result.stderr}"
+
+
+def test_static_helper_used_before_its_definition_links_and_runs():
+    """The settled definition and the early use must name one symbol.
+
+    A ``static`` helper used before its definition leaves a fabricated
+    implicit ``extern`` record. Settling that record by renaming the
+    definition to the internal symbol kept early calls on the plain external
+    name, so the object carried an undefined symbol and linking failed
+    (py_obj.c's pcc_gc_store_plan_commit_locked_impl).
+    """
+    source = r"""
+        int use(void) { return helper(1); }
+        static int helper(int x) { return x + 1; }
+        int main(void) { return use() == 2 ? 0 : 1; }
+    """
+
+    result = _run_with_system_link(source)
+
+    assert (
+        result.returncode == 0
+    ), f"static-before-definition link failed:\n{result.stdout}\n{result.stderr}"
 
 
 def test_gnu_builtins_map_to_runtime_equivalents():

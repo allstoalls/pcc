@@ -4,6 +4,7 @@ from __future__ import annotations
 from pcc.llvm_capi.compat import ir
 
 from ..py_ast import (
+    Assign,
     BoolLit,
     BytesLit,
     Call,
@@ -11,6 +12,7 @@ from ..py_ast import (
     DictType,
     Expr,
     FloatLit,
+    For,
     FuncType,
     IntLit,
     Lambda,
@@ -20,6 +22,11 @@ from ..py_ast import (
     StrLit,
     TupleExpr,
 )
+
+# The audited AST-bearing field table.  Shared rather than re-listed so a new
+# structural field in py_ast cannot be added to one walker and missed by the
+# other.
+from .for_loop_lowering import _CPY_SCAN_FIELDS
 
 
 _I8 = ir.IntType(8)
@@ -92,19 +99,109 @@ def _expr_cannot_raise(expr) -> bool:
         return True
     return False
 
+def _name_is_stored_in(node, ident: str) -> bool:
+    """True when ``ident`` appears as a bare-``Name`` store in the subtree.
+
+    Only ``Assign`` targets and ``For`` targets introduce one, so only those
+    are inspected; every other node is walked structurally.  Written in the
+    bootstrap-safe dialect (no generators, no genexprs, no reflection).
+    """
+    if node is None:
+        return False
+    if isinstance(node, str):
+        return False
+    if isinstance(node, list) or isinstance(node, tuple):
+        i = 0
+        while i < len(node):
+            if _name_is_stored_in(node[i], ident):
+                return True
+            i += 1
+        return False
+    if isinstance(node, Assign):
+        i = 0
+        while i < len(node.targets):
+            target = node.targets[i]
+            i += 1
+            if isinstance(target, Name) and target.ident == ident:
+                return True
+            if isinstance(target, TupleExpr):
+                j = 0
+                while j < len(target.elems):
+                    element = target.elems[j]
+                    j += 1
+                    if isinstance(element, Name) and element.ident == ident:
+                        return True
+        return _name_is_stored_in(node.value, ident)
+    if isinstance(node, For):
+        if isinstance(node.target, Name) and node.target.ident == ident:
+            return True
+        if isinstance(node.target, TupleExpr):
+            j = 0
+            while j < len(node.target.elems):
+                element = node.target.elems[j]
+                j += 1
+                if isinstance(element, Name) and element.ident == ident:
+                    return True
+        if _name_is_stored_in(node.iter, ident):
+            return True
+        if _name_is_stored_in(node.body, ident):
+            return True
+        return _name_is_stored_in(node.else_body, ident)
+    i = 0
+    while i < len(_CPY_SCAN_FIELDS):
+        child = getattr(node, _CPY_SCAN_FIELDS[i], None)
+        if child is not None:
+            if _name_is_stored_in(child, ident):
+                return True
+        i += 1
+    return False
+
+
 class CpyCallLoweringMixin:
+    def _cpy_kw_mapping_is_own_kwargs_param(self, kwargs_expr: Expr) -> bool:
+        """True when the ``**`` operand is this function's ``**kwargs`` name.
+
+        A ``**kwargs`` parameter is a real ``dict`` on entry -- the caller's
+        keywords are collected into one -- so splatting it needs no mapping
+        protocol even though its inferred type is ``dyn``.  ``pcc/lex/c_lexer``
+        reaches here through ``lex.lex(object=self, **kwargs)``.
+
+        Rebinding the name in the body would break that guarantee, so a
+        function that stores to it anywhere is not accepted.
+        """
+        if not isinstance(kwargs_expr, Name):
+            return False
+        fd = self.current_func_def
+        if fd is None:
+            return False
+        ident = kwargs_expr.ident
+        found = False
+        i = 0
+        while i < len(fd.args):
+            arg = fd.args[i]
+            i += 1
+            if arg.kind == "**kwargs" and arg.name == ident:
+                found = True
+        if not found:
+            return False
+        return not _name_is_stored_in(fd.body, ident)
+
     def _require_supported_cpy_kw_mapping(self, kwargs_expr: Expr) -> None:
-        """Accept only statically dict-shaped ``**`` operands for now.
+        """Accept ``**`` operands that are known to be a real dict.
 
         CPython expands an arbitrary mapping at the mapping's source position
         (running ``keys``/``__getitem__`` before later operands).  The current
         libpython helper accepts an already-materialized dict and would defer
         or reject that protocol.  A conservative compile-time boundary keeps
         ordering and error behavior honest until there is a mapping-expansion
-        bridge ABI.
+        bridge ABI -- but a statically dict-typed operand is not the only
+        thing that is already a dict: so is the enclosing function's own
+        ``**kwargs`` parameter.
         """
         kwargs_ty = getattr(kwargs_expr, "ty", None)
         if isinstance(kwargs_ty, DictType) or type(kwargs_ty).__name__ == "DictType":
+            return
+        if self._cpy_kw_mapping_is_own_kwargs_param(kwargs_expr):
             return
         raise NotImplementedError(
             "CPython fallback **mapping requires a statically dict-typed "
