@@ -27,6 +27,7 @@ import sys
 from typing import Optional
 
 from ..py_frontend import py_ast as pa
+from ..py_frontend.freestanding_constants import fold_module_int_constants
 from . import py_parse as pp
 
 _DYN = pa.DynType("dyn")
@@ -1315,4 +1316,10 @@ def parse_and_lift(src: str, filename: str, module_name: str) -> pa.Module:
             + ": "
             + str(ex)
         )
-    return lifted
+    # A freestanding module cannot hold a runtime global, so its lifecycle tags
+    # and header offsets are spelled as bare literals at each use.  Resolving a
+    # module-scope integer constant is a compile-time binding, so it belongs
+    # here rather than at one of the several parse call sites: every path into
+    # the frontend comes through this function.  Non-freestanding modules are
+    # returned untouched.
+    return fold_module_int_constants(lifted)

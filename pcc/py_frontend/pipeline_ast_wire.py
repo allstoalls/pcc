@@ -583,6 +583,27 @@ def _py_ast_wire_bool_field(fields, name: str, default: bool):
     return default if value is None else value
 
 
+def _py_ast_node_replace(node, changes):
+    """Rebuild ``node`` with ``changes`` applied, without dataclass reflection.
+
+    ``dataclasses.replace`` needs the host dataclass implementation plus ``**``
+    expansion of a dynamically built mapping, and neither is available to the
+    self-hosted compiler -- which is why nothing in the closed-world frontend
+    uses ``dataclasses.fields``. The wire schema already names every field of
+    every node in a stable order, and ``_py_ast_node_from_wire`` already builds
+    a node from a field mapping, so an AST rewrite is a read of the old fields
+    plus that constructor.
+    """
+
+    fields = {}
+    for field_name in _py_ast_field_names(node):
+        if field_name in changes:
+            fields[field_name] = changes[field_name]
+        else:
+            fields[field_name] = _py_ast_field_value(node, field_name, None)
+    return _py_ast_node_from_wire(_closed_world_node_kind(node), fields)
+
+
 def _py_ast_from_wire(value):
     if isinstance(value, dict):
         if _PY_AST_WIRE_BYTES_KEY in value:

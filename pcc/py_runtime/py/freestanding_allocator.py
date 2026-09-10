@@ -46,6 +46,27 @@ from pcc.unsafe import (
 __pcc_freestanding__ = True
 
 
+# Lifecycle word at ``GRANULE_STATE_OFFSET``. All three share a
+# ``PCA\xfd[\xdd\xdf`` tag and differ only in their last byte, so neither a
+# torn word nor foreign memory can be mistaken for one. ``publish`` moves
+# RESERVED to LIVE, ``retire`` moves either back to FREE, and the hot
+# object-start predicate admits LIVE alone.
+GC_STATE_FREE = 5783538902897647427
+GC_STATE_LIVE = 5783538902897647428
+GC_STATE_RESERVED = 5783538902897647429
+
+# The 48-byte header ahead of every user pointer, addressed by negative offset
+# from it. BACKING holds the owning slab for a slab allocation and the mapping
+# base for a direct page mapping; MAPPING_SIZE is zero for the former and the
+# mapped extent for the latter.
+GRANULE_STATE_OFFSET = -48
+GRANULE_BACKING_OFFSET = -40
+GRANULE_MAPPING_SIZE_OFFSET = -32
+GRANULE_REQUESTED_SIZE_OFFSET = -24
+GRANULE_USABLE_SIZE_OFFSET = -16
+GRANULE_ALIGNMENT_OFFSET = -8
+
+
 define_global_i8("pcc_allocator_lock", 0)
 define_global_i64("pcc_allocator_mapped", 0)
 # Direct-mapped span cache in front of the granule radix.
@@ -871,12 +892,12 @@ def pcc_allocator_put_small(ptr, usable: i64) -> None:
 
 @c_abi_export("pcc_allocator_initialize_small")
 def pcc_allocator_initialize_small(user, slab, usable: i64) -> None:
-    store_i64(user, -48, 5783538902897647427)
-    store_ptr(user, -40, slab)
-    store_i64(user, -32, 0)
-    store_i64(user, -24, 0)
-    store_i64(user, -16, usable)
-    store_i64(user, -8, 16)
+    store_i64(user, GRANULE_STATE_OFFSET, GC_STATE_FREE)
+    store_ptr(user, GRANULE_BACKING_OFFSET, slab)
+    store_i64(user, GRANULE_MAPPING_SIZE_OFFSET, 0)
+    store_i64(user, GRANULE_REQUESTED_SIZE_OFFSET, 0)
+    store_i64(user, GRANULE_USABLE_SIZE_OFFSET, usable)
+    store_i64(user, GRANULE_ALIGNMENT_OFFSET, 16)
 
 
 
@@ -1484,7 +1505,7 @@ def pcc_allocator_put_small_object(ptr, usable: i64) -> None:
     # Retire the slot before the payload becomes a free-list link.  Managed
     # readers acquire-load this state, so none can observe overwritten object
     # bytes while the slot still advertises LIVE.
-    atomic_store_i64(ptr, -48, 5783538902897647427, "release")
+    atomic_store_i64(ptr, GRANULE_STATE_OFFSET, GC_STATE_FREE, "release")
     if usable == 16:
         store_ptr(ptr, 0, global_load_ptr("pcc_allocator_free_obj_16"))
         global_store_ptr("pcc_allocator_free_obj_16", ptr)
@@ -1700,12 +1721,12 @@ def pcc_allocator_allocate_raw(size: i64, alignment: i64) -> c_ptr:
     user = ptr_add(base, aligned_address - ptr_diff(base, null()))
     usable: i64 = mapping_size - ptr_diff(user, base)
 
-    store_i64(user, -48, 5783538902897647427)
-    store_ptr(user, -40, base)
-    store_i64(user, -32, mapping_size)
-    store_i64(user, -24, requested)
-    store_i64(user, -16, usable)
-    store_i64(user, -8, alignment)
+    store_i64(user, GRANULE_STATE_OFFSET, GC_STATE_FREE)
+    store_ptr(user, GRANULE_BACKING_OFFSET, base)
+    store_i64(user, GRANULE_MAPPING_SIZE_OFFSET, mapping_size)
+    store_i64(user, GRANULE_REQUESTED_SIZE_OFFSET, requested)
+    store_i64(user, GRANULE_USABLE_SIZE_OFFSET, usable)
+    store_i64(user, GRANULE_ALIGNMENT_OFFSET, alignment)
     pcc_allocator_account_allocate(requested, usable, mapping_size)
     return user
 
@@ -1760,13 +1781,13 @@ def pcc_gc_granule_object_publish(ptr) -> i64:
         return 0
     observed: i64 = atomic_cas_i64(
         slot,
-        -48,
-        5783538902897647429,
-        5783538902897647428,
+        GRANULE_STATE_OFFSET,
+        GC_STATE_RESERVED,
+        GC_STATE_LIVE,
         "release",
         "relaxed",
     )
-    if observed == 5783538902897647429 or observed == 5783538902897647428:
+    if observed == GC_STATE_RESERVED or observed == GC_STATE_LIVE:
         # The structural validation above -- span kind, validated carve count,
         # 4 KiB-aligned base, slab bounds, exact cell alignment -- is exactly
         # what the hot predicate recomputes when it first probes this address.
@@ -1808,20 +1829,20 @@ def pcc_gc_granule_object_retire(ptr) -> i64:
     slot = _granule_object_slot(ptr)
     if ptr_is_null(slot) != 0:
         return 0
-    state: i64 = atomic_load_i64(slot, -48, "acquire")
-    if state == 5783538902897647427:
+    state: i64 = atomic_load_i64(slot, GRANULE_STATE_OFFSET, "acquire")
+    if state == GC_STATE_FREE:
         return 1
-    if state != 5783538902897647428 and state != 5783538902897647429:
+    if state != GC_STATE_LIVE and state != GC_STATE_RESERVED:
         return -1
     observed: i64 = atomic_cas_i64(
         slot,
-        -48,
+        GRANULE_STATE_OFFSET,
         state,
-        5783538902897647427,
+        GC_STATE_FREE,
         "release",
         "relaxed",
     )
-    if observed == state or observed == 5783538902897647427:
+    if observed == state or observed == GC_STATE_FREE:
         return 1
     return -1
 
@@ -1871,7 +1892,7 @@ def pcc_gc_granule_is_object_start(ptr) -> i64:
     object_slot: i64 = ((logical_shift_right_i64(object_bits, 4) ^ logical_shift_right_i64(object_bits, 12)) & 8191) * 8
     object_cache = global_addr("pcc_allocator_exact_object_cache")
     if atomic_load_i64(object_cache, object_slot, "relaxed") == object_bits:
-        if atomic_load_i64(ptr, -48, "acquire") == 5783538902897647428:
+        if atomic_load_i64(ptr, GRANULE_STATE_OFFSET, "acquire") == GC_STATE_LIVE:
             return 1
         return -1
     return _granule_object_start_uncached(ptr, object_bits, object_slot)
@@ -1950,7 +1971,7 @@ def _granule_object_start_uncached(ptr, object_bits: i64, object_slot: i64) -> i
     cell: i64 = carve_offset // stride
     if cell * stride != carve_offset or cell >= count:
         return -1
-    if atomic_load_i64(ptr, -48, "acquire") != 5783538902897647428:
+    if atomic_load_i64(ptr, GRANULE_STATE_OFFSET, "acquire") != GC_STATE_LIVE:
         return -1
     atomic_store_i64(object_cache, object_slot, object_bits, "relaxed")
     return 1
@@ -1996,11 +2017,11 @@ def pcc_allocator_alloc_object(size: i64) -> c_ptr:
             # Allocation reserves the slot but does not make it managed.
             # pcc_gc_alloc initializes the complete PyObject header and only
             # then publishes LIVE through pcc_gc_pointer_register.
-            atomic_store_i64(user, -48, 5783538902897647429, "release")
+            atomic_store_i64(user, GRANULE_STATE_OFFSET, GC_STATE_RESERVED, "release")
         pcc_allocator_lock_release()
         if ptr_is_null(user):
             return null()
-        store_i64(user, -24, size)
+        store_i64(user, GRANULE_REQUESTED_SIZE_OFFSET, size)
         pcc_allocator_account_allocate(size, usable, 0)
         return user
     return pcc_allocator_allocate_raw(size, 16)
@@ -2032,7 +2053,7 @@ def pcc_malloc(size: i64) -> c_ptr:
         pcc_allocator_lock_release()
         if ptr_is_null(user):
             return null()
-        store_i64(user, -24, size)
+        store_i64(user, GRANULE_REQUESTED_SIZE_OFFSET, size)
         pcc_allocator_account_allocate(size, usable, 0)
         return user
     return pcc_allocator_allocate_raw(size, 16)
@@ -2042,9 +2063,9 @@ def pcc_malloc(size: i64) -> c_ptr:
 def pcc_free(ptr) -> None:
     if ptr_is_null(ptr):
         return
-    requested: i64 = load_i64(ptr, -24)
-    usable: i64 = load_i64(ptr, -16)
-    mapping_size: i64 = load_i64(ptr, -32)
+    requested: i64 = load_i64(ptr, GRANULE_REQUESTED_SIZE_OFFSET)
+    usable: i64 = load_i64(ptr, GRANULE_USABLE_SIZE_OFFSET)
+    mapping_size: i64 = load_i64(ptr, GRANULE_MAPPING_SIZE_OFFSET)
     pcc_allocator_account_free(requested, usable)
     if mapping_size == 0:
         pcc_allocator_lock_acquire()
@@ -2075,7 +2096,7 @@ def pcc_free(ptr) -> None:
                     )
         pcc_allocator_lock_release()
         return
-    base = load_ptr(ptr, -40)
+    base = load_ptr(ptr, GRANULE_BACKING_OFFSET)
     if page_free(base, mapping_size) == 0:
         atomic_rmw_i64(
             "sub",
@@ -2090,7 +2111,7 @@ def pcc_free(ptr) -> None:
 def pcc_malloc_usable_size(ptr) -> i64:
     if ptr_is_null(ptr):
         return 0
-    return load_i64(ptr, -16)
+    return load_i64(ptr, GRANULE_USABLE_SIZE_OFFSET)
 
 
 @c_abi_export("calloc")
@@ -2128,10 +2149,10 @@ def pcc_realloc(ptr, size: i64) -> c_ptr:
         return null()
     if size < 0:
         return null()
-    usable: i64 = load_i64(ptr, -16)
+    usable: i64 = load_i64(ptr, GRANULE_USABLE_SIZE_OFFSET)
     if size <= usable:
-        old_size: i64 = load_i64(ptr, -24)
-        store_i64(ptr, -24, size)
+        old_size: i64 = load_i64(ptr, GRANULE_REQUESTED_SIZE_OFFSET)
+        store_i64(ptr, GRANULE_REQUESTED_SIZE_OFFSET, size)
         atomic_rmw_i64(
             "add",
             global_addr("pcc_allocator_live_requested"),
@@ -2141,14 +2162,14 @@ def pcc_realloc(ptr, size: i64) -> c_ptr:
         )
         return ptr
 
-    alignment: i64 = load_i64(ptr, -8)
+    alignment: i64 = load_i64(ptr, GRANULE_ALIGNMENT_OFFSET)
     if alignment == 16 and size <= 2048:
         replacement = pcc_malloc(size)
     else:
         replacement = pcc_allocator_allocate_raw(size, alignment)
     if ptr_is_null(replacement):
         return null()
-    old_size = load_i64(ptr, -24)
+    old_size = load_i64(ptr, GRANULE_REQUESTED_SIZE_OFFSET)
     copy_size: i64 = old_size
     if copy_size > size:
         copy_size = size

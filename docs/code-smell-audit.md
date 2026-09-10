@@ -268,9 +268,36 @@
 
 ## 修复优先级建议
 
-### 阶段 1 (P0, 立即): 魔数具名化
-1. `freestanding_allocator.py`: 提取 `GC_STATE_FREE/UNINIT/LIVE/RESERVED` + `_HEADER_*_OFFSET`, 替换 13 处魔数
-2. 全局审查 `16392`、`4095`、`4294967295` 等高频魔数, 能具名则具名
+### 阶段 1 (P0, 立即): 魔数具名化 — **前置条件未满足, 已核实**
+
+1. `freestanding_allocator.py`: 提取 `GC_STATE_FREE/LIVE/RESERVED` + `GRANULE_*_OFFSET`,
+   替换 13 处魔数 — **当前语言层做不到**。freestanding 模块不允许任何模块作用域可执行
+   语句, 所以模块级常量赋值直接被前端拒绝:
+
+   ```
+   error: PCC-PY-COMPILE-001: [python-frontend] freestanding modules do not
+   support executable module-scope statements: Assign
+   ```
+
+   (`codegen/generation_lowering.py:693`。实测过一次: 加上
+   `GC_STATE_LIVE: i64 = 5783538902897647428` 等 9 个常量后该模块无法编译。)
+
+   现有的两条模块作用域豁免都不适用: `extern(...)` 是符号声明, `define_global_i64(...)`
+   造的是**可变全局**, 读它要走一次内存加载 —— 而这些魔数全部位于分配器最热的
+   provenance 判定路径上, 换成加载会直接吃掉 60096706 那一轮拿到的 +5.62% 配对吞吐。
+
+   **解锁它需要的改动**: 前端支持 freestanding 模块作用域的**编译期整型常量**
+   (`NAME: i64 = <整型字面量>`), 在使用点折叠为字面量, 不产生任何全局符号。判据很干净:
+   改造后重新 emit 的模块 IR 应与 `build_py/freestanding_allocator.ll` **逐字节相同**,
+   相同即证明纯属重命名, 无需重新测量。这项改动对全部 60+ 个 freestanding 运行时模块
+   同样有效 —— 它们的魔数都源于同一个限制。
+
+   在此之前, 三个生命周期字的含义只由 `pcc_gc_granule_object_publish` /
+   `pcc_gc_granule_object_retire` 的 docstring 承载 (FREE / LIVE / RESERVED, 共享
+   `PCA\xfd[\xdd\xdf` 前缀, 仅末字节 C/D/E 不同)。
+
+2. 全局审查 `16392`、`4095`、`4294967295` 等高频魔数, 能具名则具名 — 非 freestanding
+   模块不受上述限制, 可以直接做
 
 ### 阶段 2 (P0, 高价值): 巨型函数拆分
 1. `_emit_call` (1811 行 / CC407) — 按调用形态拆分为 5-8 个路由函数

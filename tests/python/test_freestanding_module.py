@@ -766,11 +766,16 @@ def test_freestanding_cross_object_gc_registry_is_a_static_pcc1_import():
 
 
 def test_freestanding_rejects_module_execution_and_exception_ir(tmp_path):
+    # ``value = 1`` is no longer rejected: a module-scope integer literal is a
+    # compile-time constant, folded into its uses before inference, so it needs
+    # no module init to execute. See test_freestanding_module_constants.py,
+    # which gates that on the renamed module emitting byte-identical IR.
+    # Anything that would actually have to run at import time still fails here.
     with pytest.raises(RuntimeError, match="module-scope statements: Assign"):
         _compile_freestanding(
             tmp_path,
             "__pcc_freestanding__ = True\n"
-            "value = 1\n",
+            "value = 1 + 1\n",
         )
 
     with pytest.raises(
