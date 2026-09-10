@@ -648,16 +648,28 @@ class OwnershipLoweringMixin:
     ) -> bool:
         if is_cpy:
             return True
-        # Native method dispatch may prove a NEW result even when inference
-        # leaves the expression dynamic. Preserve that fact at insertion.
-        if value is not None and self._value_is_owned_object(value):
-            return True
         if isinstance(expr, (BoolLit, NoneLit, StrLit)):
             # Literal strings are internal immortal globals; bool and None
             # box/load the runtime's immortal singleton globals.  A container
             # borrows those stable addresses, so there is no fresh temporary
             # owner to consume.
             return False
+        # Native method dispatch may prove a NEW result even when inference
+        # leaves the expression dynamic, and only the emitter knows it. Kept
+        # to the case its own reasoning describes -- a DYNAMIC expression --
+        # because as an unconditional first answer it also overrode every
+        # deliberate False below. That over-released a container literal's
+        # value when the store had already consumed the owner: a module
+        # registering itself as `{"source": <self>}` then reached refcount 0
+        # while its own slot still pointed at it, and `py_dealloc_dict` tripped
+        # the fail-closed `pcc_debug_bad_dict_slot` guard on every from-scratch
+        # runtime build.
+        if (
+            value is not None
+            and isinstance(value_ty, DynType)
+            and self._value_is_owned_object(value)
+        ):
+            return True
         if self._expr_returns_owned_object(expr):
             return True
         if isinstance(value_ty, IntType) and isinstance(expr, Name):
