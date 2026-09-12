@@ -4,11 +4,11 @@ from pcc.py_frontend import pipeline
 
 
 def test_darwin_self_backend_signs_temp_executable_before_publish_move():
-    src = Path("pcc/py_frontend/pipeline.py").read_text(encoding="utf-8")
+    src = Path("pcc/py_frontend/pipeline_self_backend_link.py").read_text(encoding="utf-8")
 
     sign_tmp = '["/usr/bin/codesign", "--force", "-s", "-", tmp_out_path]'
     verify_tmp = '["/usr/bin/codesign", "--verify", tmp_out_path]'
-    publish_move = '["/bin/mv", "-f", tmp_out_path, out_path]'
+    publish_move = 'os.replace(tmp_out_path, out_path)'
     verify_final = '["/usr/bin/codesign", "--verify", out_path]'
 
     sign_idx = src.index(sign_tmp)

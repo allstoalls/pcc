@@ -10,6 +10,7 @@ an encoder differential.
 from __future__ import annotations
 
 import struct
+import re
 from dataclasses import dataclass, field
 
 from .elf_x86_64 import (
@@ -65,6 +66,13 @@ class _SymbolData:
 
 
 @dataclass(frozen=True)
+class _SymbolDifference:
+    left: str
+    right: str
+    width: int
+
+
+@dataclass(frozen=True)
 class _Instruction:
     text: str
 
@@ -107,6 +115,7 @@ _SECTION_SPECS = {
     ".text": (SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 1),
     ".rodata": (SHT_PROGBITS, SHF_ALLOC, 1),
     ".data": (SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 1),
+    ".pcc_stackmaps": (SHT_PROGBITS, SHF_ALLOC, 1),
     ".tdata": (SHT_PROGBITS, SHF_ALLOC | SHF_WRITE | SHF_TLS, 1),
     ".tbss": (SHT_NOBITS, SHF_ALLOC | SHF_WRITE | SHF_TLS, 1),
     ".note.GNU-stack": (SHT_PROGBITS, 0, 1),
@@ -162,15 +171,22 @@ def _section_from_directive(line: str) -> str:
     if not parts or not parts[0]:
         raise X86EncodeError(f"bad section directive {line!r}")
     name = parts[0]
-    expected = {
-        ".tdata": ('.tdata', '"awT"', '@progbits'),
-        ".tbss": ('.tbss', '"awT"', '@nobits'),
-        ".note.GNU-stack": ('.note.GNU-stack', '""', '@progbits'),
-    }.get(name)
-    if expected is None:
-        if len(parts) != 1 or name not in _SECTION_SPECS:
-            raise X86EncodeError(f"section shape not proven: {line!r}")
-    elif tuple(parts) != expected:
+    if name not in _SECTION_SPECS or len(parts) not in (1, 3):
+        raise X86EncodeError(f"section shape not proven: {line!r}")
+    if len(parts) == 1:
+        return name
+    section_type, flags, _alignment = _SECTION_SPECS[name]
+    expected_flags = ""
+    for letter, bit in (("a", SHF_ALLOC), ("w", SHF_WRITE), ("x", SHF_EXECINSTR), ("T", SHF_TLS)):
+        if flags & bit:
+            expected_flags += letter
+    expected_type = "@nobits" if section_type == SHT_NOBITS else "@progbits"
+    spelled_flags = parts[1]
+    if (
+        not (spelled_flags.startswith('"') and spelled_flags.endswith('"'))
+        or set(spelled_flags[1:-1]) != set(expected_flags)
+        or parts[2] != expected_type
+    ):
         raise X86EncodeError(f"section attributes not proven: {line!r}")
     return name
 
@@ -279,6 +295,10 @@ def _parse_file(asm_text: str):
                 try:
                     value = int(item, 0)
                 except ValueError:
+                    difference = re.fullmatch(r"([.$A-Za-z_][.$\w]*)\s*-\s*([.$A-Za-z_][.$\w]*)", item)
+                    if difference:
+                        current.entries.append(_SymbolDifference(difference.group(1), difference.group(2), width))
+                        continue
                     if width != 8:
                         raise X86EncodeError(
                             f"symbol-valued {directive} is not proven: {line!r}"
@@ -357,6 +377,10 @@ def _measure_sections(plans, order, symbols):
                 if plan.type == SHT_NOBITS:
                     raise X86EncodeError(f"NOBITS section {name!r} has a relocation")
                 offset += 8
+            elif isinstance(entry, _SymbolDifference):
+                if plan.type == SHT_NOBITS:
+                    raise X86EncodeError(f"NOBITS section {name!r} has file data")
+                offset += entry.width
             elif isinstance(entry, _Instruction):
                 encoded = encode_instruction(
                     entry.text, pc=offset, labels={}, section_name=name,
@@ -437,6 +461,13 @@ def assemble_file(asm_text: str) -> ElfObject:
                 ))
                 payload.extend(b"\0" * 8)
                 memory_size += 8
+            elif isinstance(entry, _SymbolDifference):
+                left = labels.get(entry.left)
+                right = labels.get(entry.right)
+                if left is None or right is None or left[0] != right[0]:
+                    raise X86EncodeError("symbol difference requires definitions in the same section: " + entry.left + " - " + entry.right)
+                payload.extend(_integer_payload(left[1] - right[1], entry.width, owner="symbol difference"))
+                memory_size += entry.width
             elif isinstance(entry, _Instruction):
                 encoded = encode_instruction(
                     entry.text,

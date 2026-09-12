@@ -48,6 +48,17 @@ class NativeOsLoweringMixin:
         assert isinstance(attr, Attr)
         if expr.kwargs or not self._is_os_environ_attr(attr.obj):
             return None
+        if attr.name in ("keys", "values", "items") and not expr.args:
+            # The snapshot is a real dict, so its own method lowering takes
+            # it from here; every caller of these wants a materialised view.
+            snapshot = self._emit_native_os_environ_snapshot()
+            result = self.builder.call(
+                self.runtime["py_dict_" + attr.name],
+                [snapshot],
+                name=self._fresh("os.environ." + attr.name),
+            )
+            self._gc_release(snapshot)
+            return result
         if attr.name == "get" and 1 <= len(expr.args) <= 2:
             default_obj = (
                 self._emit_none_literal()
@@ -60,6 +71,28 @@ class NativeOsLoweringMixin:
                 name=self._fresh("os.environ.get"),
             )
         return None
+
+    def _emit_native_os_environ_snapshot(self) -> ir.Value:
+        """``dict(os.environ)`` -- materialise the special form as a dict."""
+        return self.builder.call(
+            self.runtime["py_os_environ_snapshot"],
+            [],
+            name=self._fresh("os.environ.snapshot"),
+        )
+
+    def _maybe_emit_native_os_environ_dict(self, expr: Call) -> Optional[ir.Value]:
+        """``dict(os.environ)``.
+
+        `run_runtime_make` opens with exactly this, and without a lowering
+        the call fell through to CPython, which under
+        ``--python-libpython=off`` stubbed the whole function -- leaving
+        pcc1 unable to rebuild its own runtime archive.
+        """
+        if expr.kwargs or len(expr.args) != 1:
+            return None
+        if not self._is_os_environ_attr(expr.args[0]):
+            return None
+        return self._emit_native_os_environ_snapshot()
 
     def _emit_native_os_environ_subscript(self,
         expr: Subscript,
@@ -304,9 +337,9 @@ class NativeOsLoweringMixin:
                 _I64,
                 name=self._fresh("os.write.res"),
             )
-        if name in ("unlink", "remove") and len(expr.args) == 1:
+        if name in ("unlink", "remove", "rmdir") and len(expr.args) == 1:
             result = self.builder.call(
-                self.runtime["py_os_unlink"],
+                self.runtime["py_os_rmdir" if name == "rmdir" else "py_os_unlink"],
                 [self._emit_os_path_arg_object(expr.args[0])],
                 name=self._fresh("os." + name),
             )

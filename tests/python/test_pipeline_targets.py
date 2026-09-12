@@ -10,6 +10,30 @@ from pcc.py_frontend import pipeline
 from pcc.py_frontend import pipeline_targets
 
 
+@pytest.mark.parametrize("system,machine,expected", [
+    ("darwin", "arm64", "arm64-apple-darwin"),
+    ("darwin", "aarch64", "arm64-apple-darwin"),
+    ("linux", "AMD64", "x86_64-unknown-linux-gnu"),
+])
+def test_host_target_is_owned_and_matches_object_emission(
+    monkeypatch, system, machine, expected,
+):
+    import platform
+    import subprocess
+    import sys
+
+    from pcc.tools.ir_to_obj import _host_target_triple
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("host target discovery invoked an external compiler")
+
+    monkeypatch.setattr(sys, "platform", system)
+    monkeypatch.setattr(platform, "machine", lambda: machine)
+    monkeypatch.setattr(subprocess, "check_output", forbidden)
+    assert pipeline_targets.host_target_triple() == expected
+    assert _host_target_triple() == expected
+
+
 def test_module_target_text_is_inserted_replaced_and_idempotent(tmp_path: Path):
     path = tmp_path / "module.ll"
     path.write_text("define i32 @f() { ret i32 0 }\n", encoding="utf-8")

@@ -819,7 +819,20 @@ class MethodCallExpressionLoweringMixin:
                         delegates_to_object = True
                         break
                     base_info = self.class_lowering.classes.get(base_name)
-                    if base_info is None or "__new__" in base_info.methods:
+                    if base_info is None:
+                        # The base is not registered in this module -- the
+                        # usual case for a cross-module class reached through
+                        # an imported module object, where only the leaf is
+                        # declared extern.  Falling through left the generic
+                        # super path to resolve ``__new__`` by name, which
+                        # found the *current* class again: pcc1 recursed at
+                        # pcc/llvm_capi/ir.py:207 until ``cls`` decayed to a
+                        # bare object.  An invisible base cannot show a user
+                        # ``__new__``, so delegate to the allocator, which is
+                        # what ``object.__new__`` does.
+                        delegates_to_object = True
+                        break
+                    if "__new__" in base_info.methods:
                         break
                     candidate = base_info
                 if delegates_to_object and len(expr.args) == 1 and not expr.kwargs:
@@ -1079,11 +1092,27 @@ class MethodCallExpressionLoweringMixin:
                 receiver_info = self.class_lowering.classes.get(
                     receiver_class_name
                 )
-                if (
-                    receiver_info is not None
+                # This body is emitted once and shared by ``current_class``
+                # and every subclass that inherits it, so the runtime
+                # receiver is any class in that subtree -- not just the one
+                # inference pinned to ``self``.  ``_SHA256.hexdigest`` was
+                # lowered with ``self`` inferred as ``_SHA224`` (which
+                # inherits it), passed the override check because nothing
+                # derives from ``_SHA224``, and emitted a direct
+                # ``bl _SHA224.digest``.  A ``_SHA256`` receiver then ran it
+                # and got a 28-byte digest where 32 was due -- silently, and
+                # for every caller of ``hashlib.sha256(...).hexdigest()``.
+                # Direct dispatch is sound only when every class the body can
+                # run under resolves the name to the same function.
+                override_roots = [receiver_info]
+                if current_class is not None and current_class is not receiver_info:
+                    override_roots.append(current_class)
+                if any(
+                    root is not None
                     and self.class_lowering.method_overridden_by_subclass(
-                        receiver_info, attr.name
+                        root, attr.name
                     )
+                    for root in override_roots
                 ):
                     return self._emit_callable_attribute_call(
                         attr.obj,
@@ -1092,6 +1121,18 @@ class MethodCallExpressionLoweringMixin:
                         expr.kwargs,
                         expr.span,
                     )
+                if current_class is not None and current_class is not receiver_info:
+                    lexical_info = self._resolve_method_mro(
+                        current_class.name, attr.name
+                    )
+                    if lexical_info is not method_info:
+                        return self._emit_callable_attribute_call(
+                            attr.obj,
+                            attr.name,
+                            expr.args,
+                            expr.kwargs,
+                            expr.span,
+                        )
                 kind = method_info.method_kinds.get(attr.name, "instance")
                 if kind == "static":
                     # ``self.static_method(args)`` — Python lets you
@@ -1865,7 +1906,7 @@ class MethodCallExpressionLoweringMixin:
             return result
         if (
             isinstance(obj_ty, (BytesType, ByteArrayType))
-            and attr.name in ("find", "rfind")
+            and attr.name == "rfind"
             and len(expr.args) == 1
             and not expr.kwargs
         ):
@@ -1877,6 +1918,37 @@ class MethodCallExpressionLoweringMixin:
                 [recv, needle],
                 name=self._fresh(f"bytes.{attr.name}"),
             )
+        if (
+            isinstance(obj_ty, (BytesType, ByteArrayType))
+            and attr.name == "find"
+            and 1 <= len(expr.args) <= 3
+            and not expr.kwargs
+        ):
+            recv = self._emit_expr(attr.obj)
+            arguments = [self._emit_as_object(arg) for arg in expr.args]
+            live = [(recv, attr.obj)] + list(zip(arguments, expr.args))
+            owned = tuple(value for value, source in live if self._owned_release_needed(value, source))
+            begin = ir.Constant(_I64, 0)
+            end = ir.Constant(_I64, 9223372036854775807)
+            # Evaluate every argument before invoking __index__, matching
+            # ordinary call evaluation even when a bound has side effects.
+            if len(arguments) >= 2:
+                begin = self.builder.call(self.runtime["py_slice_index_i64"],
+                                          [arguments[1], begin], name=self._fresh("bytes.find.start"))
+                self._emit_post_call_err_check(expr.span, release_on_error=owned)
+            if len(arguments) == 3:
+                end = self.builder.call(self.runtime["py_slice_index_i64"],
+                                        [arguments[2], end], name=self._fresh("bytes.find.end"))
+                self._emit_post_call_err_check(expr.span, release_on_error=owned)
+            result = self.builder.call(
+                self.runtime["py_bytes_find_range"],
+                [recv, arguments[0], begin, end],
+                name=self._fresh("bytes.find.range"),
+            )
+            for value, source in live:
+                self._gc_release_if_owned(value, source)
+            self._emit_post_call_err_check(expr.span)
+            return result
         if (
             isinstance(obj_ty, (BytesType, ByteArrayType))
             and attr.name == "count"
@@ -2012,16 +2084,40 @@ class MethodCallExpressionLoweringMixin:
             )
         if (
             isinstance(obj_ty, (BytesType, ByteArrayType))
-            and attr.name == "strip"
+            and attr.name in ("strip", "lstrip", "rstrip")
             and not expr.args
             and not expr.kwargs
         ):
-            # no-arg strip (ASCII whitespace); strip(chars) still falls back.
+            # No-arg ASCII-whitespace strip, all three sides.  `lstrip`/
+            # `rstrip` used to fall through to the generic attribute path and
+            # die with "'bytes' object has no attribute 'rstrip'" -- which is
+            # how the self-hosted archive reader (`macho_archive` trims a
+            # 16-byte ar member name with `header[0:16].rstrip()`) failed once
+            # pcc1 reached it.  `strip(chars)` still falls back.
             recv = self._emit_expr(attr.obj)
             return self.builder.call(
-                self.runtime["py_bytes_strip"],
+                self.runtime["py_bytes_" + attr.name],
                 [recv],
-                name=self._fresh("bytes.strip"),
+                name=self._fresh("bytes." + attr.name),
+            )
+        if (
+            isinstance(obj_ty, (BytesType, ByteArrayType))
+            and attr.name in ("strip", "lstrip", "rstrip")
+            and len(expr.args) == 1
+            and not expr.kwargs
+        ):
+            # strip(chars): trim any byte in `chars` from the chosen side(s).
+            # pcc1 reaches this through its own archive reader, which trims a
+            # member name with `.rstrip(b"/")` and a long-name entry with
+            # `.rstrip(b"\0")`; without it the call fell through to the
+            # dynamic attribute path and raised "'bytes' object has no
+            # attribute 'rstrip'".
+            recv = self._emit_expr(attr.obj)
+            chars = self._emit_expr(expr.args[0])
+            return self.builder.call(
+                self.runtime["py_bytes_" + attr.name + "_chars"],
+                [recv, chars],
+                name=self._fresh("bytes." + attr.name + ".chars"),
             )
         if (
             isinstance(obj_ty, (BytesType, ByteArrayType))
@@ -2038,6 +2134,49 @@ class MethodCallExpressionLoweringMixin:
                 self.runtime["py_bytes_split"],
                 [recv, sep],
                 name=self._fresh("bytes.split"),
+            )
+            self._emit_post_call_err_check(expr.span)
+            return result
+        if (
+            isinstance(obj_ty, (BytesType, ByteArrayType))
+            and attr.name in ("ljust", "rjust")
+            and len(expr.args) in (1, 2)
+            and not expr.kwargs
+        ):
+            # `bytes.ljust(width[, fill])`: pcc1 writes every Mach-O segment
+            # and section name with `name.encode().ljust(16, b"\0")`, which
+            # had no lowering and reached the dynamic attribute path as
+            # "'bytes' object has no attribute 'ljust'".
+            recv = self._emit_expr(attr.obj)
+            width = self._emit_expr_as_i64(expr.args[0])
+            if len(expr.args) == 2:
+                fill = self._emit_as_object(expr.args[1])
+            else:
+                fill = ir.Constant(ir.PointerType(ir.IntType(8)), None)
+            result = self.builder.call(
+                self.runtime["py_bytes_" + attr.name],
+                [recv, width, fill],
+                name=self._fresh("bytes." + attr.name),
+            )
+            self._emit_post_call_err_check(expr.span)
+            return result
+        if (
+            isinstance(obj_ty, (BytesType, ByteArrayType))
+            and attr.name == "split"
+            and len(expr.args) == 2
+            and not expr.kwargs
+        ):
+            # .split(sep, maxsplit): stop after `maxsplit` cuts.  pcc1 reads
+            # its own Mach-O members through `raw.split(b"\0", 1)[0]`, which
+            # fell through to the dynamic attribute path and raised
+            # "'bytes' object has no attribute 'split'".
+            recv = self._emit_expr(attr.obj)
+            sep = self._emit_as_object(expr.args[0])
+            limit = self._emit_as_object(expr.args[1])
+            result = self.builder.call(
+                self.runtime["py_bytes_split_max"],
+                [recv, sep, limit],
+                name=self._fresh("bytes.split.max"),
             )
             self._emit_post_call_err_check(expr.span)
             return result

@@ -19,10 +19,13 @@ from pcc.py_runtime.py.py_abi_constants import (
 from pcc.extern import extern, c_abi_export, c_ptr, c_int64, c_void
 from pcc.unsafe import (
     cstr,
+    free,
     global_load_ptr,
     is_tagged_int,
     load_i32,
+    load_i8,
     null,
+    ptr_add,
     ptr_is_null,
     strlen,
 )
@@ -30,6 +33,14 @@ from pcc.unsafe import (
 getenv = extern("pcc_platform_getenv", (c_ptr,), c_ptr)
 setenv = extern("pcc_platform_setenv", (c_ptr, c_ptr, c_int64), c_int64)
 unsetenv = extern("pcc_platform_unsetenv", (c_ptr,), c_int64)
+env_snapshot_count = extern(
+    "pcc_platform_env_snapshot_count", (), c_int64
+)
+env_snapshot_entry = extern(
+    "pcc_platform_env_snapshot_entry", (c_int64,), c_ptr
+)
+py_dict_new = extern("py_dict_new", (), c_ptr)
+py_dict_set = extern("py_dict_set", (c_ptr, c_ptr, c_ptr), c_void)
 
 py_decref = extern("py_decref", (c_ptr,), c_void)
 py_str_new = extern("py_str_new", (c_ptr, c_int64), c_ptr)
@@ -81,6 +92,48 @@ def py_os_getenv(key, default_value):
         return default_value
     n: int = strlen(raw)
     return py_str_new(raw, n)
+
+
+@c_abi_export("py_os_environ_snapshot")
+def py_os_environ_snapshot():
+    """``dict(os.environ)`` -- a real dict of the current environment.
+
+    ``os.environ`` is a compiler-recognised special form with no object
+    behind it, so iteration, ``keys``/``items`` and ``dict(...)`` had no
+    lowering at all and fell through to CPython.  Under
+    ``--python-libpython=off`` that stubbed out every enclosing function,
+    including ``run_runtime_make`` -- which is why pcc1 could not rebuild
+    its own runtime archive.
+
+    Entries are copied out one at a time so no lock is held across the
+    allocations this makes.
+    """
+    result = py_dict_new()
+    if ptr_is_null(result) != 0:
+        return null()
+    count: int = env_snapshot_count()
+    index: int = 0
+    while index < count:
+        entry = env_snapshot_entry(index)
+        index = index + 1
+        if ptr_is_null(entry) != 0:
+            continue
+        # Split at the first '='; an entry without one is not a variable.
+        offset: int = 0
+        while load_i8(entry, offset) != 0 and load_i8(entry, offset) != 61:
+            offset = offset + 1
+        if load_i8(entry, offset) != 61:
+            free(entry)
+            continue
+        key = py_str_new(entry, offset)
+        value_start = ptr_add(entry, offset + 1)
+        value = py_str_new(value_start, strlen(value_start))
+        free(entry)
+        if ptr_is_null(key) == 0 and ptr_is_null(value) == 0:
+            py_dict_set(result, key, value)
+        py_decref(key)
+        py_decref(value)
+    return result
 
 
 @c_abi_export("py_os_environ_contains")

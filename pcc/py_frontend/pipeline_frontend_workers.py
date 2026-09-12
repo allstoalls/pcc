@@ -610,66 +610,6 @@ def run_worker_commands(commands, max_parallel=None) -> None:
     if max_parallel > len(commands):
         max_parallel = len(commands)
 
-    # Sliding window, not waves.  The wave shape below launches `max_parallel`
-    # children, then waits for ALL of them before launching any more, so each
-    # wave costs as long as its slowest member while finished workers idle.  A
-    # cold stage1 emits 525 objects in batches of 4 -- 132 children over 17
-    # waves -- and with 8 configured workers the measured peak was 3 alive.
-    #
-    # Everything here is plain `/bin/sh` text.  This module is compiled into the
-    # no-libpython closure, so it may use only `os` and `subprocess`: an earlier
-    # attempt built the window from `tempfile.TemporaryDirectory` + `os.mkfifo`
-    # and pcc1 answered "no-libpython function unavailable:
-    # ...run_worker_commands", turning the whole function into an unavailable
-    # stub.  That failure was silent -- stage2's export phase simply did
-    # nothing, produced zero IR modules, and the first visible symptom was the
-    # linker reporting no inputs.  Keep new primitives out of this file.
-    #
-    # `wait -n` is also unavailable: macOS ships bash 3.2 where it does not
-    # exist.  Instead each child records its status as a file in a directory
-    # the caller already owns, and the launcher polls the count -- one `sh`
-    # process, no FIFO, no temp module.
-    if max_parallel > 1 and len(commands) > max_parallel:
-        window_lines = [
-            "set -u",
-            "status=0",
-            'done_dir="$(mktemp -d)"',
-            "started=0",
-        ]
-        for index, command in enumerate(commands):
-            window_lines.append(
-                'while [ "$(ls "$done_dir" | wc -l)" -le '
-                "$((started - " + str(max_parallel) + ")) ]; do sleep 0.02; done"
-            )
-            window_lines.append(
-                "( if (" + command + "); then : > \"$done_dir/ok."
-                + str(index) + "\"; else : > \"$done_dir/bad." + str(index)
-                + "\"; fi ) &"
-            )
-            window_lines.append("started=$((started + 1))")
-        window_lines.append("wait")
-        window_lines.append(
-            'if ls "$done_dir" | grep -q "^bad"; then status=1; fi'
-        )
-        window_lines.append('rm -rf "$done_dir"')
-        window_lines.append("exit $status")
-        subprocess.run(["/bin/sh", "-c", "\n".join(window_lines)], check=True)
-        return
+    from .worker_process_pool import run_worker_processes
 
-    shell_lines = ["set -u", "status=0", "batch_pids=''", "batch_count=0"]
-    for command in commands:
-        shell_lines.append("(" + command + ") &")
-        shell_lines.append('batch_pids="$batch_pids $!"')
-        shell_lines.append("batch_count=$((batch_count + 1))")
-        shell_lines.append('if [ "$batch_count" -ge ' + str(max_parallel) + " ]; then")
-        shell_lines.append("  for pid in $batch_pids; do")
-        shell_lines.append('    wait "$pid" || status=1')
-        shell_lines.append("  done")
-        shell_lines.append("  batch_pids=''")
-        shell_lines.append("  batch_count=0")
-        shell_lines.append("fi")
-    shell_lines.append("for pid in $batch_pids; do")
-    shell_lines.append('  wait "$pid" || status=1')
-    shell_lines.append("done")
-    shell_lines.append("exit $status")
-    subprocess.run(["/bin/sh", "-c", "\n".join(shell_lines)], check=True)
+    run_worker_processes(commands, max_parallel)

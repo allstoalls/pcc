@@ -2,6 +2,69 @@ from pathlib import Path
 import re
 
 
+def test_warning_siblings_have_distinct_native_identity_and_handlers(
+    tmp_path, pcc_py_runtime_archive,
+):
+    import os
+    import subprocess
+    import sys
+
+    from pcc.py_frontend.pipeline import compile_python
+
+    source = tmp_path / "warning_identity.py"
+    source.write_text('''
+import gc
+import warnings
+def main():
+    def check_class(cls):
+        print(isinstance(cls, type))
+        print(isinstance(cls, (type, str)))
+        print(isinstance(cls, type(UserWarning)))
+    check_class(UserWarning)
+    check_class(UserWarning("instance"))
+    print(UserWarning is DeprecationWarning)
+    print(UserWarning.__name__)
+    print(DeprecationWarning.__name__)
+    print(issubclass(UserWarning, Warning))
+    print(issubclass(UserWarning, DeprecationWarning))
+    try:
+        raise UserWarning("probe")
+    except DeprecationWarning:
+        print("wrong-handler")
+    except UserWarning:
+        print("correct-handler")
+    ResourceWarning("warm")
+    gc.collect()
+    print(ResourceWarning.__name__)
+    try:
+        raise ResourceWarning("last tag")
+    except Warning:
+        print("base-handler")
+    warnings.simplefilter("error", UserWarning)
+    try:
+        warnings.warn("default category")
+    except UserWarning:
+        print("default-warning-handler")
+main()
+''', encoding="utf-8")
+    reference = subprocess.run(
+        [sys.executable, str(source)], capture_output=True, text=True, timeout=10,
+    )
+    assert reference.returncode == 0, reference.stderr
+    output = tmp_path / "warning_identity"
+    compile_python(
+        str(source), str(output), backend="self", libpython_mode="off",
+        runtime_archive=str(pcc_py_runtime_archive),
+    )
+    for backend in range(5):
+        result = subprocess.run(
+            [str(output)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
+            capture_output=True, text=True, timeout=15,
+        )
+        assert result.returncode == 0, f"GC{backend}: {result.stderr}"
+        assert result.stdout == reference.stdout, f"GC{backend}: {result.stdout}"
+
+
 def _find_repo_root() -> Path:
     here = Path(__file__).resolve()
     for parent in (here, *here.parents):
@@ -16,6 +79,16 @@ _CODEGEN_DIR = _REPO_ROOT / "pcc" / "py_frontend" / "codegen"
 
 def _read(rel: str) -> str:
     return (_REPO_ROOT / rel).read_text(encoding="utf-8")
+
+
+def test_all_builtin_type_cache_slots_have_matching_c_and_python_gc_roots():
+    py = _read("pcc/py_runtime/py/py_obj_ops_dispatch.py")
+    c = _read("pcc/py_runtime/src/py_obj_ops_dispatch.c")
+    declared = re.findall(r'define_global_ptr_null\("(pcc_type_cls_\w+|pcc_slice_cls)"\)', py)
+    visitor = py.split('"pcc_builtin_type_root_slots",', 1)[1].split('\n)', 1)[0]
+    assert re.findall(r'"(\w+)"', visitor) == declared
+    c_visitor = c.split('void **pcc_builtin_type_root_slots[] = {', 1)[1].split('\n}', 1)[0]
+    assert re.findall(r'&(pcc_type_cls_\w+|pcc_slice_cls)', c_visitor) == declared
 
 
 def test_builtin_exception_tag_metadata_has_one_authoritative_source():
@@ -81,11 +154,15 @@ def test_memory_error_runtime_tables_match_c_and_pcc_python():
     assert "PY_EXC_MEMORYERROR       = 19" in c_header
     assert "PY_EXC_IMPORTERROR       = 20" in c_header
     assert "PY_EXC_MODULENOTFOUNDERROR = 21" in c_header
-    assert "PY_EXC_N_BUILTIN         = 22" in c_header
+    assert "PY_EXC_WARNING           = 22," in c_header
+    assert "PY_EXC_N_BUILTIN         = 34" in c_header
     assert '"MemoryError",' in c_substrate
     assert "[PY_EXC_MEMORYERROR]       = PY_EXC_EXCEPTION" in c_substrate
+    assert "[PY_EXC_WARNING]           = PY_EXC_EXCEPTION" in c_substrate
+    assert '"Warning",' in c_substrate
     assert 'define_global_cstr("PY_EXC_NAME_19", "MemoryError")' in py_substrate
-    assert 'define_global_null_ptr_array("py_exc_classes", 22)' in py_substrate
-    assert "def py_subs_exc_n_builtin() -> int:\n    return 22" in py_substrate
+    assert 'define_global_cstr("PY_EXC_NAME_22", "Warning")' in py_substrate
+    assert 'define_global_null_ptr_array("py_exc_classes", 34)' in py_substrate
+    assert "def py_subs_exc_n_builtin() -> int:\n    return 34" in py_substrate
     assert "def pcc_gc_visit_builtin_exception_cache_slots" in py_gc
-    assert "pcc_gc_visit_mapped_root_slots(\n        22," in py_gc
+    assert "pcc_gc_visit_mapped_root_slots(\n        34," in py_gc

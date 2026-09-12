@@ -113,9 +113,11 @@ py_list_new = extern("py_list_new", (c_int64,), c_ptr)
 py_list_append = extern("py_list_append", (c_ptr, c_ptr), c_void)
 py_list_len = extern("py_list_len", (c_ptr,), c_int64)
 py_list_get = extern("py_list_get", (c_ptr, c_int64), c_ptr)
+py_list_extend = extern("py_list_extend", (c_ptr, c_ptr), c_void)
 py_tuple_new = extern("py_tuple_new", (c_int64,), c_ptr)
 py_tuple_set_item = extern("py_tuple_set_item", (c_ptr, c_int64, c_ptr), c_void)
 py_exc_new_with_value = extern("py_exc_new_with_value", (c_int64, c_ptr), c_ptr)
+py_exc_new = extern("py_exc_new", (c_int64, c_ptr), c_ptr)
 py_raise = extern("py_raise", (c_ptr,), c_void)
 # py_raise increfs the exception it stores in TLS, so a caller that created
 # it still owns a reference.  py_raise_owned raises and releases that
@@ -123,6 +125,9 @@ py_raise = extern("py_raise", (c_ptr,), c_void)
 py_raise_owned = extern("py_raise_owned", (c_ptr,), c_void)
 py_obj_iter = extern("py_obj_iter", (c_ptr,), c_ptr)
 py_obj_next = extern("py_obj_next", (c_ptr,), c_ptr)
+py_obj_getattr = extern("py_obj_getattr", (c_ptr, c_ptr), c_ptr)
+py_obj_getitem = extern("py_obj_getitem", (c_ptr, c_ptr), c_ptr)
+py_obj_call = extern("py_obj_call", (c_ptr, c_ptr, c_ptr), c_ptr)
 py_err_occurred = extern("py_err_occurred", (), c_int64)
 py_current_exception = extern("py_current_exception", (), c_ptr)
 py_exc_builtin_class = extern("py_exc_builtin_class", (c_int64,), c_ptr)
@@ -1059,6 +1064,167 @@ def py_dict_set(d, key, value) -> None:
     _dict_rooted_op(d, key, value, 2, null())
 
 
+@c_abi_export("py_dict_from_static_pairs")
+def py_dict_from_static_pairs(pairs, count: int):
+    """Build a dict from a static ``[k0, v0, k1, v1, ...]`` pointer array.
+
+    A module-level constant table lowered to one ``py_dict_set`` per pair
+    *plus* the rooted-temporary protocol around each one.  Measured on
+    ``pcc/parse/c_parsetab.py`` (561-entry ACTION map, 16,213 pairs): 300,891
+    calls in the module initialiser, of which 16,213 were the inserts and
+    263,032 -- 87% -- were pin/store_root/load_ptr/frame_leave/unpin/release
+    bookkeeping around temporaries.  301 KB of source became 37.5 MB of IR
+    and 4.4 MB of machine code.
+
+    Every element here is a compile-time constant: keys are pooled static
+    literal objects, small-int values are tagged immediates.  The array is
+    immortal data, so the loop needs no rooting at all and the pairs are
+    handed straight to the insert path.
+    """
+    d = py_dict_new()
+    if ptr_is_null(d) != 0:
+        return null()
+    if count <= 0:
+        return d
+    # No pre-sizing: _alloc_tables overwrites the indices/entries pointers
+    # without freeing what py_dict_new already allocated, and it re-registers
+    # the zpage owner payload span.  Growth through the normal insert path is
+    # a startup-only cost; the win here is the ~18x drop in *emitted* calls,
+    # not in rehashing.
+    index: int = 0
+    while index < count:
+        key = load_ptr(pairs, index * 16)
+        value = load_ptr(pairs, index * 16 + 8)
+        py_dict_set(d, key, value)
+        index = index + 1
+    return d
+
+
+def _static_agg_header_kind(word) -> int:
+    """2 = dict, 4 = tuple, 6 = list, 0 = a leaf.
+
+    Leaves are tagged ints (odd) or 8-aligned object pointers, so the even,
+    non-8-aligned values 2/4/6 are unambiguous header markers.
+    """
+    bits: int = ptr_to_int(word)
+    if bits == 2 or bits == 4 or bits == 6:
+        return bits
+    return 0
+
+
+def _static_agg_element(desc, cursor, owned_slot):
+    """Next element at *cursor*: a borrowed leaf, or a new nested aggregate.
+
+    owned_slot receives 1 when the result is a new reference the caller must
+    release after storing it, 0 for an immortal leaf.
+    """
+    index: int = load_i64(cursor, 0)
+    word = load_ptr(desc, index * 8)
+    if _static_agg_header_kind(word) != 0:
+        store_i64(owned_slot, 0, 1)
+        return _static_agg_at(desc, cursor)
+    store_i64(cursor, 0, index + 1)
+    store_i64(owned_slot, 0, 0)
+    return word
+
+
+def _static_agg_dict(desc, cursor, count: int):
+    backend: int = pcc_gc_backend()
+    dict_slot = stack_alloc(8)
+    owned_slot = stack_alloc(8)
+    d = py_dict_new()
+    if ptr_is_null(d) != 0:
+        return null()
+    dict_handle = _dict_read_prepare_root(dict_slot, d, backend)
+    if _dict_read_root_failed(d, backend, dict_handle) != 0:
+        py_decref(d)
+        return null()
+    index: int = 0
+    while index < count:
+        key = _static_agg_element(desc, cursor, owned_slot)
+        value = _static_agg_element(desc, cursor, owned_slot)
+        value_owned: int = load_i64(owned_slot, 0)
+        if ptr_is_null(value) != 0:
+            _dict_read_finish_root(dict_handle)
+            return null()
+        # The nested build above may have allocated and moved the container.
+        d = _dict_read_reload_root(dict_slot, dict_handle)
+        py_dict_set(d, key, value)
+        if value_owned != 0:
+            py_decref(value)
+        index = index + 1
+    d = _dict_read_reload_root(dict_slot, dict_handle)
+    _dict_read_finish_root(dict_handle)
+    return d
+
+
+def _static_agg_sequence(desc, cursor, count: int, is_tuple: int):
+    backend: int = pcc_gc_backend()
+    seq_slot = stack_alloc(8)
+    owned_slot = stack_alloc(8)
+    if is_tuple != 0:
+        seq = py_tuple_new(count)
+    else:
+        seq = py_list_new(count)
+    if ptr_is_null(seq) != 0:
+        return null()
+    seq_handle = _dict_read_prepare_root(seq_slot, seq, backend)
+    if _dict_read_root_failed(seq, backend, seq_handle) != 0:
+        py_decref(seq)
+        return null()
+    index: int = 0
+    while index < count:
+        value = _static_agg_element(desc, cursor, owned_slot)
+        value_owned: int = load_i64(owned_slot, 0)
+        if ptr_is_null(value) != 0:
+            _dict_read_finish_root(seq_handle)
+            return null()
+        seq = _dict_read_reload_root(seq_slot, seq_handle)
+        if is_tuple != 0:
+            py_tuple_set_item(seq, index, value)
+        else:
+            py_list_append(seq, value)
+        if value_owned != 0:
+            py_decref(value)
+        index = index + 1
+    seq = _dict_read_reload_root(seq_slot, seq_handle)
+    _dict_read_finish_root(seq_handle)
+    return seq
+
+
+def _static_agg_at(desc, cursor):
+    index: int = load_i64(cursor, 0)
+    kind: int = _static_agg_header_kind(load_ptr(desc, index * 8))
+    count: int = untag_int(load_ptr(desc, (index + 1) * 8))
+    store_i64(cursor, 0, index + 2)
+    if kind == 2:
+        return _static_agg_dict(desc, cursor, count)
+    if kind == 4:
+        return _static_agg_sequence(desc, cursor, count, 1)
+    if kind == 6:
+        return _static_agg_sequence(desc, cursor, count, 0)
+    return null()
+
+
+@c_abi_export("py_static_aggregate_build")
+def py_static_aggregate_build(desc):
+    """Build a nested constant dict/tuple/list from a static descriptor.
+
+    Codegen emits the descriptor as one read-only global holding only tagged
+    ints, pooled static str objects and header markers -- no heap pointers --
+    plus this single call.  Every level is constructed here, with the
+    container under construction held in the same moving-root protocol
+    `_dict_rooted_op` uses, so nothing the collector cannot see ever holds a
+    live object.  On c_parsetab this replaces ~18 emitted calls per outer
+    pair with 16 bytes of data.
+    """
+    if ptr_is_null(desc) != 0:
+        return null()
+    cursor = stack_alloc(8)
+    store_i64(cursor, 0, 0)
+    return _static_agg_at(desc, cursor)
+
+
 @c_abi_export("py_dict_get")
 def py_dict_get(d, key):
     if not _ptr_is_dict(d):
@@ -1388,6 +1554,136 @@ def py_dict_items(d):
     return out
 
 
+def _dict_update_hold(slots, handles, index: int, value, backend: int) -> int:
+    slot = ptr_add(slots, index * 8)
+    handle = _dict_read_prepare_root(slot, value, backend)
+    store_ptr(handles, index * 8, handle)
+    if _dict_read_root_failed(value, backend, handle) != 0:
+        py_raise_owned(py_exc_new(19, cstr("dict.update: cannot root temporary")))
+        return 0
+    return 1
+
+
+def _dict_update_load(slots, handles, index: int):
+    return _dict_read_reload_root(
+        ptr_add(slots, index * 8), load_ptr(handles, index * 8)
+    )
+
+
+def _dict_update_drop(slots, handles, index: int) -> None:
+    value = _dict_update_load(slots, handles, index)
+    _dict_read_finish_root(load_ptr(handles, index * 8))
+    store_ptr(handles, index * 8, null())
+    store_ptr(slots, index * 8, null())
+    # Destination and source are borrowed. Every later slot owns its result.
+    if index >= 2:
+        py_decref(value)
+
+
+def _dict_update_protocol(dst, src) -> None:
+    # Slots: destination, source, iterator, item/method, pair/arguments,
+    # key/keys-result, value. Keep every live owner across user callbacks.
+    slots = stack_alloc(56)
+    handles = stack_alloc(56)
+    memset(slots, 0, 56)
+    memset(handles, 0, 56)
+    backend: int = pcc_gc_backend()
+    ok: int = _dict_update_hold(slots, handles, 0, dst, backend)
+    if ok != 0:
+        ok = _dict_update_hold(slots, handles, 1, src, backend)
+    mapping: int = 0
+    if ok != 0:
+        method = py_obj_getattr(_dict_update_load(slots, handles, 1), cstr("keys"))
+        if ptr_is_null(method) != 0:
+            if py_err_occurred() != 0:
+                if py_exc_matches(py_current_exception(), py_exc_builtin_class(6)) != 0:
+                    py_clear_exception()
+                else:
+                    ok = 0
+        else:
+            mapping = 1
+            ok = _dict_update_hold(slots, handles, 3, method, backend)
+    if ok != 0 and mapping != 0:
+        args = py_tuple_new(0)
+        ok = _dict_update_hold(slots, handles, 4, args, backend)
+        if ptr_is_null(args) != 0:
+            ok = 0
+        if ok != 0:
+            keys = py_obj_call(_dict_update_load(slots, handles, 3),
+                               _dict_update_load(slots, handles, 4), null())
+            ok = _dict_update_hold(slots, handles, 5, keys, backend)
+            if ptr_is_null(keys) != 0:
+                ok = 0
+    if ok != 0:
+        source = _dict_update_load(slots, handles, 1)
+        if mapping != 0:
+            source = _dict_update_load(slots, handles, 5)
+        iterator = py_obj_iter(source)
+        ok = _dict_update_hold(slots, handles, 2, iterator, backend)
+        if ptr_is_null(iterator) != 0:
+            ok = 0
+    _dict_update_drop(slots, handles, 5)
+    _dict_update_drop(slots, handles, 4)
+    _dict_update_drop(slots, handles, 3)
+    while ok != 0:
+        item = py_obj_next(_dict_update_load(slots, handles, 2))
+        if ptr_is_null(item) != 0:
+            if py_err_occurred() != 0:
+                if py_exc_matches(py_current_exception(), py_exc_builtin_class(8)) != 0:
+                    py_clear_exception()
+            else:
+                py_runtime_error_if_unset(cstr("py_obj_next"),
+                                          cstr("dict.update iterator returned NULL"))
+            ok = 0
+        else:
+            ok = _dict_update_hold(slots, handles, 3, item, backend)
+            if ok != 0 and mapping == 0:
+                pair = py_list_new(2)
+                ok = _dict_update_hold(slots, handles, 4, pair, backend)
+                if ptr_is_null(pair) != 0:
+                    ok = 0
+                if ok != 0:
+                    py_list_extend(_dict_update_load(slots, handles, 4),
+                                   _dict_update_load(slots, handles, 3))
+                    if py_err_occurred() != 0:
+                        ok = 0
+                    elif py_list_len(_dict_update_load(slots, handles, 4)) != 2:
+                        py_raise_owned(py_exc_new(2, cstr(
+                            "dictionary update sequence element must have length 2")))
+                        ok = 0
+            if ok != 0:
+                key = _dict_update_load(slots, handles, 3)
+                if mapping != 0:
+                    py_incref(key)
+                else:
+                    key = py_list_get(_dict_update_load(slots, handles, 4), 0)
+                ok = _dict_update_hold(slots, handles, 5, key, backend)
+            if ok != 0:
+                value = null()
+                if mapping != 0:
+                    value = py_obj_getitem(_dict_update_load(slots, handles, 1),
+                                           _dict_update_load(slots, handles, 5))
+                else:
+                    value = py_list_get(_dict_update_load(slots, handles, 4), 1)
+                ok = _dict_update_hold(slots, handles, 6, value, backend)
+                if ptr_is_null(value) != 0:
+                    ok = 0
+            if ok != 0:
+                py_dict_set(_dict_update_load(slots, handles, 0),
+                            _dict_update_load(slots, handles, 5),
+                            _dict_update_load(slots, handles, 6))
+                if py_err_occurred() != 0:
+                    ok = 0
+            index: int = 6
+            while index >= 3:
+                _dict_update_drop(slots, handles, index)
+                index = index - 1
+    index: int = 6
+    while index >= 0:
+        _dict_update_drop(slots, handles, index)
+        index = index - 1
+
+
 @c_abi_export("py_dict_update")
 def py_dict_update(dst, src) -> None:
     # Snapshot the source before invoking destination hash/equality callbacks.
@@ -1398,6 +1694,7 @@ def py_dict_update(dst, src) -> None:
     if not _ptr_is_dict(dst):
         return
     if not _ptr_is_dict(src):
+        _dict_update_protocol(dst, src)
         return
     backend: int = pcc_gc_backend()
     dst_slot = stack_alloc(8)

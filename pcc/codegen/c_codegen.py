@@ -245,26 +245,11 @@ class LLVMCodeGenerator(
 
     def __init__(self, translation_unit_name=None, emit_debug=False, pass_ctx=None):
         self.module = ir.Module()
-        # Module header defaults. LLVM is consulted only when it is available:
-        # this ran unconditionally at construction, so *constructing* a C
-        # codegen required llvmlite even though the self backend needs none of
-        # it -- the caller overwrites both fields immediately via
-        # `set_target_text`/`set_target_machine`, and the sole consumer of a
-        # real TargetData (the SSA pointer-difference lowering) already falls
-        # back when it is absent. Without the guard a stage lacking llvmlite
-        # reported the whole C driver as unowned instead of naming the gap.
+        # Frontend layout is owned by CLayout. An explicit reference backend
+        # may supply TargetData later; installed libraries never select it.
         self.module.triple = host_target_triple()
+        self.module.data_layout = ""
         self._target_data = None
-        try:
-            import llvmlite.binding as _llvm
-        except ImportError:
-            self.module.data_layout = ""
-        else:
-            _llvm.initialize_native_target()
-            _tm = _llvm.Target.from_default_triple().create_target_machine()
-            self.module.triple = _llvm.get_default_triple()
-            self.module.data_layout = str(_tm.target_data)
-            self._target_data = _tm.target_data
         self.emit_debug = emit_debug
         self._di_file = None
         self._di_compile_unit = None

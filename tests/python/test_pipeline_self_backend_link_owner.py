@@ -9,6 +9,53 @@ from pcc.py_frontend import pipeline_self_backend_link as self_link
 from pcc.py_frontend import pipeline_self_link as link_contract
 
 
+@pytest.mark.parametrize("manifest_input", [False, True])
+@pytest.mark.parametrize("sync", [False, True])
+def test_profiled_packed_native_link_executes_without_a_host_interpreter(tmp_path, monkeypatch, manifest_input, sync):
+    import json
+    import subprocess
+    from pcc.backend.arm64_asm_driver import assemble_file
+    from pcc.backend.native_object import encode_native_object_from_sections
+
+    sections, undefined = assemble_file(".section __TEXT,__text,regular,pure_instructions\n.globl _main\n_main:\n  movz x0, #42\n  ret\n")
+    packed = tmp_path / "main.pco"
+    packed.write_bytes(encode_native_object_from_sections(sections, undefined=undefined))
+    output, profile = tmp_path / "program", tmp_path / "profile.json"
+    manifest = tmp_path / "inputs.txt"
+    manifest.write_text("pcc.macho-internal-inputs.v1\n1\nPCO\t" + str(packed) + "\n")
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("profiled owned link attempted external delegation")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(self_link.subprocess, "run", forbidden)
+        self_link.run_link_command(
+            [], None, str(output), None, (), False,
+            pcc_native_object_inputs=() if manifest_input else (str(packed),),
+            pcc_internal_input_manifest=str(manifest) if manifest_input else None,
+            link_profile_path=str(profile),
+            resolve_self_link_mode=lambda: "pcc",
+            validate_pcc_self_link_surface=lambda **kwargs: None,
+            repo_root_for_link=forbidden, host_python_command=forbidden,
+            build_pcc_link_command=forbidden, log=lambda *args: None,
+            join_strings=lambda values, sep: sep.join(values),
+        )
+        final = tmp_path / "published"
+        self_link.finish_executable(
+            str(output), str(final), None, signature_owned_by_pcc=True,
+            profile_begin=lambda profile: 0, profile_end=lambda *args: None,
+            publish_sync_enabled=lambda: sync,
+        )
+    result = subprocess.run([str(final)], capture_output=True, timeout=10)
+    assert result.returncode == 42, result.stderr
+    receipt = json.loads(profile.read_text())
+    assert receipt["inputs"] == {"asm": 0, "native_object": 1, "object": 0, "archive": 0}
+    assert receipt["phases_ms"]["prepare_link"] > 0
+    assert receipt["phases_ms"]["sign"] > 0
+    assert receipt["phases_ms"]["validate"] > 0
+    pipeline._record_macho_link_profile({}, str(profile))
+
+
 def test_explicit_repo_root_owns_self_link_driver_resolution(monkeypatch, tmp_path):
     frozen = tmp_path / "frozen-source"
     frozen.mkdir()
@@ -193,7 +240,9 @@ def test_semantic_layout_rejects_split_module_before_emission(
     assert policies == []
 
 
-def test_pcc_link_selection_fails_before_silent_cc_fallback(tmp_path):
+def test_pcc_link_selection_fails_before_silent_cc_fallback(tmp_path, monkeypatch):
+    monkeypatch.setattr(self_link.sys, "platform", "darwin")
+    monkeypatch.setattr(self_link.subprocess, "run", lambda *a, **k: pytest.fail("external fallback"))
     try:
         self_link.run_link_command(
             ["cc", "input.s"],
@@ -211,9 +260,10 @@ def test_pcc_link_selection_fails_before_silent_cc_fallback(tmp_path):
             join_strings=lambda values, sep: sep.join(values),
         )
     except self_link.SelfBackendLinkError as exc:
-        assert "driver is missing" in str(exc)
+        assert "FileNotFoundError" in str(exc)
+        assert "input.s" in str(exc)
     else:
-        raise AssertionError("missing pcc driver must fail closed")
+        raise AssertionError("missing owned linker input must fail closed")
 
 
 def test_linux_pcc_link_route_uses_owned_elf_driver_and_internal_assembly(

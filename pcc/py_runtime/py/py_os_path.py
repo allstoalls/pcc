@@ -180,6 +180,21 @@ def py_os_unlink(path):
     return global_load_ptr("py_None")
 
 
+@c_abi_export("py_os_rmdir")
+def py_os_rmdir(path):
+    item, owned = _coerce_path_str(path)
+    if ptr_is_null(item) != 0:
+        py_decref(owned)
+        py_raise_owned(py_exc_new(3, cstr("path must be string-like")))
+        return null()
+    result: int = unlinkat(py_str_utf8(item), 1)
+    py_decref(owned)
+    if result != 0:
+        py_raise_owned(py_exc_new(14, cstr("could not remove directory")))
+        return null()
+    return global_load_ptr("py_None")
+
+
 @c_abi_export("py_os_replace")
 def py_os_replace(source, destination):
     source_item, source_owned = _coerce_path_str(source)

@@ -47,7 +47,7 @@ def _extern_default_expr(arg: dict, span: SourceSpan):
         if owning_module and name:
             default_expr = Call(
                 span=span,
-                ty=DynType(name="dyn"),
+                ty=decode_type(gref.get("value_ty")) or DynType(name="dyn"),
                 func=Name(span, DynType(name="dyn"), _NATIVE_DEFAULT_GLOBAL_SENTINEL),
                 args=(
                     StrLit(span, StrType(name="str"), str(owning_module)),

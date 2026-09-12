@@ -1,7 +1,7 @@
 """C preprocessor for pcc.
 
 Supports:
-  #include <stdio.h>                - system headers: silently ignored
+  #include <stdio.h>                - owned platform headers
   #include "file.h"                 - user headers: read and inline
   #define NAME VALUE                - object-like macros
   #define NAME(a,b) ((a)+(b))       - function-like macros
@@ -17,9 +17,49 @@ Supports:
 
 import re
 import os
+import platform
 import warnings
 
 IDENTIFIER_RE = re.compile(r"[a-zA-Z_]\w*")
+_CPP_TOKEN_RE = re.compile(
+    r'''(?:u8|u|U|L)?"(?:\\.|[^"\\])*"|(?:u|U|L)?'(?:\\.|[^'\\])*'|'''
+    r"[A-Za-z_]\w*|(?:\d|\.\d)[\w.]*(?:[eEpP][+-][\w.]*)?|##|\S",
+)
+
+
+def _source_lines(source):
+    """Translation-phase splicing and comments, preserving literal contents."""
+    source = source.replace("\\\r\n", "").replace("\\\n", "")
+    pieces = []
+    i = 0
+    while i < len(source):
+        ch = source[i]
+        if ch in ('"', "'"):
+            start = i
+            i += 1
+            while i < len(source):
+                if source[i] == "\\":
+                    i += 2
+                elif source[i] == ch:
+                    i += 1
+                    break
+                else:
+                    i += 1
+            pieces.append(source[start:i])
+        elif source.startswith("/*", i):
+            end = source.find("*/", i + 2)
+            if end < 0:
+                raise RuntimeError("owned preprocessor: unterminated comment")
+            pieces.append(" " + "\n" * source[i:end + 2].count("\n"))
+            i = end + 2
+        elif source.startswith("//", i):
+            end = source.find("\n", i + 2)
+            i = len(source) if end < 0 else end
+            pieces.append(" ")
+        else:
+            pieces.append(ch)
+            i += 1
+    return "".join(pieces).splitlines()
 
 # System headers silently ignored (libc functions auto-declared from LIBC_FUNCTIONS)
 SYSTEM_HEADERS = {
@@ -57,8 +97,8 @@ BUILTIN_DEFINES = {
     "EXIT_SUCCESS": "0",
     "EXIT_FAILURE": "1",
     "RAND_MAX": "2147483647",
-    "INT_MAX": "9223372036854775807",
-    "INT_MIN": "(-9223372036854775807-1)",
+    "INT_MAX": "2147483647",
+    "INT_MIN": "(-2147483647-1)",
     "CHAR_BIT": "8",
     "CHAR_MAX": "127",
     "UCHAR_MAX": "255",
@@ -201,7 +241,7 @@ class _CppExprParser:
 
     def _peek_tok(self, tok: str) -> bool:
         self.skip_ws()
-        return self.src.startswith(tok, self.pos)
+        return self.src[self.pos:self.pos + len(tok)] == tok
 
     def _eat(self, tok: str) -> bool:
         if self._peek_tok(tok):
@@ -389,29 +429,119 @@ class Macro:
 
 
 class Preprocessor:
-    def __init__(self, base_dir=None, defines=None):
+    def __init__(self, base_dir=None, defines=None, include_dirs=None, cpp_args=None):
         self.base_dir = base_dir or "."
+        self.include_dirs = list(include_dirs or [])
+        self.system_include_dirs = [os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "utils", "fake_libc_include",
+        )]
+        self.forced_includes = []
         self.macros = {}
         self._expand_cache = {}
         self._identifier_cache = {}
-        self.included_files = set()
+        self.once_files = set()
+        self._include_depth = 0
         self._line_no = 0
         self._file = "<string>"
 
-        # Load built-in defines as object-like macros
-        for name, value in BUILTIN_DEFINES.items():
+        # Language/platform predefines only. Library names and typedefs come
+        # from headers, so an undeclared name cannot acquire a fake definition.
+        predefines = {
+            "__STDC__": "1", "__STDC_VERSION__": "201112L",
+            "__LP64__": "1", "_LP64": "1",
+            "__ORDER_LITTLE_ENDIAN__": "1234", "__ORDER_BIG_ENDIAN__": "4321",
+            "__BYTE_ORDER__": "1234", "__SIZEOF_POINTER__": "8",
+        }
+        machine = platform.machine().lower()
+        if machine in ("aarch64", "arm64"):
+            predefines["__aarch64__"] = "1"
+        elif machine in ("x86_64", "amd64"):
+            predefines["__x86_64__"] = "1"
+        if platform.system() == "Darwin":
+            predefines["__APPLE__"] = "1"
+            predefines["__MACH__"] = "1"
+            predefines["__PCC_HOST_DARWIN__"] = "1"
+        elif platform.system() == "Linux":
+            predefines["__linux__"] = "1"
+        for name, value in predefines.items():
             self.macros[name] = Macro(name, value)
         if defines:
             for name, value in defines.items():
                 self.macros[name] = Macro(name, str(value))
+        self._apply_cpp_args(list(cpp_args or []))
+
+    def _apply_cpp_args(self, args):
+        i = 0
+        while i < len(args):
+            arg = args[i]
+            i += 1
+            if arg in ("-D", "-U", "-I", "-isystem", "-include"):
+                if i == len(args):
+                    raise ValueError("missing argument for " + arg)
+                option, value = arg, args[i]
+                i += 1
+            elif arg[:2] in ("-D", "-U", "-I"):
+                option, value = arg[:2], arg[2:]
+            elif arg == "-nostdinc":
+                self.system_include_dirs.clear()
+                continue
+            else:
+                raise ValueError("unsupported owned preprocessor option: " + arg)
+            if option == "-D":
+                name, sep, body = value.partition("=")
+                self._handle_directive("define " + name + " " + (body if sep else "1"), [], [], False, self.base_dir)
+            elif option == "-U":
+                self.macros.pop(value, None)
+                self._invalidate_expand_cache()
+            elif option == "-I":
+                self.include_dirs.append(value)
+            elif option == "-isystem":
+                self.system_include_dirs.insert(0, value)
+            else:
+                self.forced_includes.append(value)
 
     def preprocess(self, source):
-        # Inject type preamble for common typedefs
         self._expand_cache.clear()
         self._identifier_cache.clear()
-        source = TYPE_PREAMBLE + source
-        lines = source.splitlines()
-        return self._process_lines(lines, self.base_dir)
+        prefix = []
+        for filename in self.forced_includes:
+            self._include('"' + filename + '"', prefix, self.base_dir)
+        prefix.append(self._process_lines(_source_lines(source), self.base_dir))
+        return "\n".join(prefix)
+
+    def _include(self, spelling, output, base_dir):
+        spelling = spelling.strip()
+        if not spelling.startswith(('"', '<')):
+            spelling = self._expand_line(spelling).strip()
+        quoted = spelling.startswith('"') and spelling.endswith('"')
+        angled = spelling.startswith('<') and spelling.endswith('>')
+        if not (quoted or angled):
+            raise RuntimeError("malformed #include: " + spelling)
+        filename = spelling[1:-1]
+        paths = ([base_dir] if quoted else []) + self.include_dirs + self.system_include_dirs
+        filepath = ""
+        for directory in paths:
+            candidate = os.path.abspath(os.path.join(directory, filename))
+            if os.path.isfile(candidate):
+                filepath = candidate
+                break
+        if not filepath:
+            raise RuntimeError("owned preprocessor: header not found: " + filename)
+        if filepath in self.once_files:
+            return
+        if self._include_depth >= 100:
+            raise RuntimeError("owned preprocessor: include nesting limit: " + filepath)
+        with open(filepath, "r", encoding="utf-8", errors="surrogateescape") as stream:
+            source = stream.read()
+        old_file, old_line = self._file, self._line_no
+        self._file = filepath
+        self._include_depth += 1
+        try:
+            output.append(self._process_lines(_source_lines(source), os.path.dirname(filepath)))
+        finally:
+            self._file, self._line_no = old_file, old_line
+            self._include_depth -= 1
 
     def _invalidate_expand_cache(self):
         self._expand_cache.clear()
@@ -436,10 +566,11 @@ class Preprocessor:
             skipping = any(s[0] for s in skip_stack)
 
             if stripped.startswith("#"):
-                # Strip inline C comments from directives
-                directive = re.sub(r"/\*.*?\*/", "", stripped[1:]).strip()
-                directive = re.sub(r"//.*$", "", directive).strip()
-                handled = self._handle_directive(
+                directive = stripped[1:].strip()
+                parts = directive.split(None, 1)
+                if len(parts) == 2:
+                    directive = parts[0] + " " + parts[1]
+                self._handle_directive(
                     directive, output, skip_stack, skipping, base_dir
                 )
                 i += 1
@@ -454,6 +585,8 @@ class Preprocessor:
             output.append(processed)
             i += 1
 
+        if skip_stack:
+            raise RuntimeError("owned preprocessor: unterminated conditional in " + self._file)
         return "\n".join(output)
 
     def _handle_directive(self, directive, output, skip_stack, skipping, base_dir):
@@ -488,7 +621,7 @@ class Preprocessor:
         if directive.startswith("elif "):
             expr = directive[5:].strip()
             if not skip_stack:
-                return
+                raise RuntimeError("owned preprocessor: #elif without #if")
             parent_skip = (
                 any(s[0] for s in skip_stack[:-1]) if len(skip_stack) > 1 else False
             )
@@ -501,6 +634,8 @@ class Preprocessor:
             return
 
         if directive.startswith("else"):
+            if not skip_stack:
+                raise RuntimeError("owned preprocessor: #else without #if")
             if skip_stack:
                 parent_skip = (
                     any(s[0] for s in skip_stack[:-1]) if len(skip_stack) > 1 else False
@@ -515,6 +650,8 @@ class Preprocessor:
         if directive.startswith("endif"):
             if skip_stack:
                 skip_stack.pop()
+            else:
+                raise RuntimeError("owned preprocessor: #endif without #if")
             return
 
         if skipping:
@@ -522,27 +659,9 @@ class Preprocessor:
 
         # --- Non-conditional directives (only when not skipping) ---
 
-        # #include <header>
-        m = re.match(r"include\s*<(.+?)>", directive)
+        m = re.match(r"include\b(.*)", directive)
         if m:
-            return  # System header: silently skip
-
-        # #include "header"
-        m = re.match(r'include\s*"(.+?)"', directive)
-        if m:
-            filename = m.group(1)
-            filepath = os.path.join(base_dir, filename)
-            filepath = os.path.normpath(filepath)
-            if filepath not in self.included_files:
-                self.included_files.add(filepath)
-                try:
-                    with open(filepath, "r") as f:
-                        header_lines = f.read().splitlines()
-                    header_dir = os.path.dirname(filepath)
-                    result = self._process_lines(header_lines, header_dir)
-                    output.append(result)
-                except FileNotFoundError:
-                    pass
+            self._include(m.group(1), output, base_dir)
             return
 
         # #define NAME(params) body   -- function-like macro
@@ -571,7 +690,14 @@ class Preprocessor:
             self._invalidate_expand_cache()
             return
 
-        # #error, #warning, #pragma, #line: silently ignore
+        if directive == "pragma once":
+            self.once_files.add(self._file)
+        elif directive.startswith("error"):
+            raise RuntimeError("owned preprocessor: #" + directive)
+        elif directive.startswith("warning"):
+            warnings.warn(directive[7:].strip(), stacklevel=2)
+        elif directive and not directive.startswith("pragma "):
+            raise RuntimeError("unsupported preprocessor directive: #" + directive)
         return
 
     def _eval_condition(self, expr):
@@ -601,12 +727,9 @@ class Preprocessor:
         try:
             return bool(_eval_cpp_expr(expanded))
         except _CppExprError as exc:
-            warnings.warn(
-                f"preprocessor: failed to evaluate #if expression: "
-                f"{expanded!r} ({exc})",
-                stacklevel=2,
-            )
-            return False
+            raise RuntimeError(
+                f"owned preprocessor: failed to evaluate #if expression: {expanded!r} ({exc})"
+            ) from exc
 
     def _expand_line(self, line):
         """Expand all macros in a line, handling both object and function macros."""
@@ -616,35 +739,51 @@ class Preprocessor:
             prev = line
             line = self._expand_once(line)
             iterations += 1
+        if line != prev:
+            raise RuntimeError("owned preprocessor: macro expansion did not converge")
         return line
 
     def _expand_once(self, line):
         """One pass of macro expansion — optimized."""
         original_line = line
-        cached = self._expand_cache.get(line)
+        dynamic = "__LINE__" in line or "__FILE__" in line
+        cached = None if dynamic else self._expand_cache.get(line)
         if cached is not None:
             return cached
 
-        # Extract identifiers from the line once
-        ids_in_line = self._identifier_cache.get(line)
-        if ids_in_line is None:
-            ids_in_line = frozenset(IDENTIFIER_RE.findall(line))
-            self._identifier_cache[line] = ids_in_line
-        # Only check macros that appear in the line
-        matching = [self.macros[name] for name in ids_in_line if name in self.macros]
-        if not matching:
-            self._expand_cache[line] = line
-            return line
-        # Sort by name length (longest first) for correct replacement
-        matching.sort(key=lambda m: len(m.name), reverse=True)
-        for macro in matching:
-            if macro.is_function:
-                line = self._expand_func_macro(line, macro)
+        pieces = []
+        pos = 0
+        for token in _CPP_TOKEN_RE.finditer(line):
+            if token.start() < pos:
+                continue
+            name = token.group()
+            macro = self.macros.get(name)
+            end = token.end()
+            if name == "__LINE__":
+                body = str(self._line_no)
+            elif name == "__FILE__":
+                body = '"' + self._file.replace("\\", "\\\\").replace('"', '\\"') + '"'
+            elif macro is None:
+                continue
+            elif not macro.is_function:
+                body = macro.body
             else:
-                # Use a callback replacement so Python's regex engine does not
-                # interpret C string escapes like \xNN or \n in macro bodies.
-                line = macro._pattern.sub(lambda _m, body=macro.body: body, line)
-        self._expand_cache[original_line] = line
+                opening = end
+                while opening < len(line) and line[opening].isspace():
+                    opening += 1
+                if opening == len(line) or line[opening] != "(":
+                    continue
+                args, end = self._find_macro_args(line, opening + 1)
+                if args is None:
+                    raise RuntimeError("unterminated macro invocation: " + name)
+                body = self._substitute_params(macro, args)
+            pieces.append(line[pos:token.start()])
+            pieces.append(body)
+            pos = end
+        pieces.append(line[pos:])
+        line = "".join(pieces)
+        if not dynamic:
+            self._expand_cache[original_line] = line
         return line
 
     def _expand_func_macro(self, line, macro):
@@ -765,7 +904,7 @@ class Preprocessor:
         return body
 
 
-def preprocess(source, base_dir=None, defines=None):
+def preprocess(source, base_dir=None, defines=None, include_dirs=None, cpp_args=None):
     """Preprocess C source code."""
-    pp = Preprocessor(base_dir=base_dir, defines=defines)
+    pp = Preprocessor(base_dir=base_dir, defines=defines, include_dirs=include_dirs, cpp_args=cpp_args)
     return pp.preprocess(source)

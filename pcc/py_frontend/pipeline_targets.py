@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import sys
-import os
-import subprocess
+import platform
 
 from typing import Optional
 
@@ -22,28 +21,17 @@ def platform_link_flags(platform: Optional[str] = None) -> list[str]:
 
 
 def host_target_triple() -> str:
-    cc = str(os.environ.get("CC", "") or "").strip() or "cc"
-    try:
-        return str(
-            subprocess.check_output(
-                [cc, "-dumpmachine"],
-                text=True,
-            ).strip()
-        )
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        import platform
-
-        if sys.platform == "darwin":
-            machine = platform.machine().lower()
-            if machine == "aarch64":
-                machine = "arm64"
-            return f"{machine}-apple-darwin{platform.release()}"
-        if sys.platform.startswith("linux"):
-            machine = platform.machine().lower()
-            if machine in ("amd64", "x64"):
-                machine = "x86_64"
-            return f"{machine}-unknown-linux-gnu"
-        return "unknown-unknown-unknown"
+    """Canonical host ABI shared by frontend and object emission, without cc."""
+    machine = platform.machine().lower()
+    if machine in ("amd64", "x64"):
+        machine = "x86_64"
+    if sys.platform == "darwin":
+        if machine == "aarch64":
+            machine = "arm64"
+        return machine + "-apple-darwin"
+    if sys.platform.startswith("linux"):
+        return machine + "-unknown-linux-gnu"
+    return "unknown-unknown-unknown"
 
 
 def replace_module_target_text(ir_text: str, triple: str) -> tuple[str, bool]:

@@ -1,5 +1,15 @@
-"""pcc.py_stdlib.hashlib — small pure Python SHA-256 subset."""
+"""pcc.py_stdlib.hashlib — small pure Python SHA-256 subset.
+
+The pure-Python compression below stays the fallback for incremental hashing.
+One-shot ``sha256(data).digest()`` routes to the runtime's native transform:
+signing one 6.6 MiB Mach-O image walks ~1600 pages, and the boxed-integer
+inner loop made that a 28-minute, 5 GiB step under self-host.
+"""
 from __future__ import annotations
+
+from pcc.extern import c_obj, extern
+
+_native_sha256_digest = extern("py_sha256_bytes_digest", (c_obj,), c_obj)
 
 _K = [
     0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
@@ -46,18 +56,40 @@ class _SHA256:
         ]
         self._buf = b""
         self._counter = 0
+        self._oneshot = b""
+        # Only plain SHA-256 has a native transform; subclasses with a
+        # different IV or truncation must keep the Python path.  A
+        # `self.name` check is not enough: the compiled MRO lookup
+        # resolves the class attribute through the subclass.
+        self._native_digest = True
         if data:
-            self.update(data)
+            # Defer: a caller that only wants one digest never runs the
+            # Python compression loop at all.
+            self._oneshot = _as_bytes(data)
 
     def copy(self):
         other = _SHA256()
         other._h = list(self._h)
         other._buf = self._buf
         other._counter = self._counter
+        other._oneshot = self._oneshot
+        other._native_digest = self._native_digest
         return other
 
     def update(self, data):
         data = _as_bytes(data)
+        pending = self._oneshot
+        if pending:
+            # Incremental use after one-shot construction: fold the deferred
+            # payload into the Python state first, then continue as before.
+            self._oneshot = b""
+            self._counter += len(pending)
+            merged = self._buf + pending
+            index = 0
+            while index + 64 <= len(merged):
+                self._compress(merged[index:index + 64])
+                index += 64
+            self._buf = merged[index:]
         self._counter += len(data)
         data = self._buf + data
         i = 0
@@ -105,6 +137,8 @@ class _SHA256:
         ]
 
     def digest(self):
+        if self._oneshot and self._native_digest:
+            return _native_sha256_digest(self._oneshot)
         clone = self.copy()
         bit_len = clone._counter * 8
         clone.update(b"\x80")
@@ -136,6 +170,8 @@ class _SHA224(_SHA256):
         ]
         self._buf = b""
         self._counter = 0
+        self._oneshot = b""
+        self._native_digest = False
         if data:
             self.update(data)
 
@@ -182,6 +218,8 @@ class _SHA1:
         ]
         self._buf = b""
         self._counter = 0
+        self._oneshot = b""
+        self._native_digest = False
         if data:
             self.update(data)
 

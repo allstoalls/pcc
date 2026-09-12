@@ -14,9 +14,10 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
-import subprocess
 import tempfile
 from typing import Iterable, Sequence
+
+from pcc.backend.ar import ArchiveFormatError, read_members
 
 RECEIPT_SCHEMA = "pcc.runtime-object-provenance.v1"
 MANIFEST_SCHEMA = "pcc.runtime-archive-provenance.v2"
@@ -28,8 +29,18 @@ CAPI_INVENTORY_SUFFIX = ".capi_syms"
 _PCC_PYTHON_SOURCE_KIND = "pcc-python"
 _PCC_PYTHON_PRODUCER = "pcc-python-library-ir-to-obj"
 _LLVM_OBJECT_EMITTER = "llvmlite-target-machine"
+# pcc's own assembler + Mach-O object writer.  The runtime archive's members
+# are what pcc1 links, so emitting them through llvmlite made an
+# llvmlite-free pcc1 depend on llvmlite to exist at all.
+_PCC_OBJECT_EMITTER = "pcc-self-backend-object-writer"
+# Receipts name which one ran; both are legitimate, and `PCC_IR_TO_OBJ_EMITTER`
+# selects the llvmlite oracle for differential runs.
+_OBJECT_EMITTERS = frozenset({_LLVM_OBJECT_EMITTER, _PCC_OBJECT_EMITTER})
+_EMITTER_BY_IR_TO_OBJ_NAME = {
+    "pcc": _PCC_OBJECT_EMITTER,
+    "llvmlite": _LLVM_OBJECT_EMITTER,
+}
 _LOGICAL_RUNTIME_ROOT = PurePosixPath("pcc/py_runtime")
-_AR_METADATA_MEMBERS = {"/", "//", "__.SYMDEF", "__.SYMDEF SORTED"}
 _REGULAR_AR_MAGIC = b"!<arch>\n"
 _RECEIPT_REQUIRED_FIELDS = frozenset(
     {
@@ -264,6 +275,7 @@ def write_pcc_python_receipt(
     source_path: Path,
     runtime_root: Path,
     target_triple: str,
+    object_emitter: str = _PCC_OBJECT_EMITTER,
     object_bytes: bytes | None = None,
     output_path: Path | None = None,
     member: str | None = None,
@@ -294,7 +306,9 @@ def write_pcc_python_receipt(
         "source_sha256": _sha256_bytes(source_path.read_bytes()),
         "source_kind": _PCC_PYTHON_SOURCE_KIND,
         "producer_kind": _PCC_PYTHON_PRODUCER,
-        "object_emitter": _LLVM_OBJECT_EMITTER,
+        "object_emitter": _EMITTER_BY_IR_TO_OBJ_NAME.get(
+            object_emitter, object_emitter
+        ),
         "uses_host_cc": False,
         "target_triple": target_triple,
         "codegen_checksum": codegen_checksum(),
@@ -309,7 +323,19 @@ _CODEGEN_CHECKSUM_CACHE: dict = {}
 def _runtime_emitter_source_identity() -> str:
     # A freshness check is not an object-emission request. In particular,
     # checking a prebuilt runtime must not import llvmlite or load LLVM.
-    return _sha256_bytes(Path(__file__).with_name("ir_to_obj.py").read_bytes())
+    #
+    # pcc now writes these objects with its own assembler and Mach-O object
+    # writer, so that surface is part of "which emitter produced this object"
+    # exactly as ir_to_obj.py is.  `macho_linker_source_identity` already
+    # enumerates it for the link action; reuse it rather than restate it.
+    from pcc.backend.self_backend_cache_identity import (
+        macho_linker_source_identity,
+    )
+
+    digest = hashlib.sha256()
+    digest.update(Path(__file__).with_name("ir_to_obj.py").read_bytes())
+    digest.update(macho_linker_source_identity().encode("ascii"))
+    return digest.hexdigest()
 
 
 def codegen_checksum() -> str:
@@ -399,22 +425,6 @@ def manifest_is_stale_for_current_codegen(manifest: object) -> bool:
     return False
 
 
-def _run_ar(ar: str, arguments: Sequence[str], *, cwd: Path | None = None) -> str:
-    process = subprocess.run(
-        [ar, *arguments],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if process.returncode != 0:
-        raise ProvenanceError(
-            f"{ar} {' '.join(arguments)} failed: "
-            + (process.stderr or process.stdout).strip()
-        )
-    return process.stdout
-
-
 def _require_regular_archive(archive_path: Path) -> None:
     with archive_path.open("rb") as stream:
         magic = stream.read(len(_REGULAR_AR_MAGIC))
@@ -425,25 +435,25 @@ def _require_regular_archive(archive_path: Path) -> None:
 
 
 def _archive_members(archive_path: Path, *, ar: str) -> list[str]:
-    _require_regular_archive(archive_path)
-    members = [
-        member
-        for member in _run_ar(ar, ["t", str(archive_path)]).splitlines()
-        if member not in _AR_METADATA_MEMBERS
-    ]
-    for member in members:
-        _validate_archive_member_name(member)
-    if len(members) != len(set(members)):
-        raise ProvenanceError("runtime archive contains duplicate member names")
-    return members
+    return list(_extract_archive_members(archive_path, ar=ar))
 
 
 def _extract_archive_members(archive_path: Path, *, ar: str) -> dict[str, bytes]:
-    members = _archive_members(archive_path, ar=ar)
-    with tempfile.TemporaryDirectory(prefix="pcc-runtime-provenance-") as tmp:
-        root = Path(tmp)
-        _run_ar(ar, ["x", str(archive_path.resolve())], cwd=root)
-        return {member: (root / member).read_bytes() for member in members}
+    # Keep the former tool-selection argument source-compatible while callers
+    # migrate. Archive verification always uses the owned parser in process.
+    del ar
+    _require_regular_archive(archive_path)
+    try:
+        members = read_members(archive_path.read_bytes())
+    except ArchiveFormatError as exc:
+        raise ProvenanceError(str(exc)) from exc
+    extracted: dict[str, bytes] = {}
+    for member, payload in members:
+        _validate_archive_member_name(member)
+        if member in extracted:
+            raise ProvenanceError("runtime archive contains duplicate member names")
+        extracted[member] = payload
+    return extracted
 
 
 def _load_json_object(path: Path) -> dict[str, object]:
@@ -480,8 +490,11 @@ def _validate_member_record(
         raise ProvenanceError(f"{member}: source is not pcc-Python")
     if record.get("producer_kind") != _PCC_PYTHON_PRODUCER:
         raise ProvenanceError(f"{member}: object was not produced by pcc ir_to_obj")
-    if record.get("object_emitter") != _LLVM_OBJECT_EMITTER:
-        raise ProvenanceError(f"{member}: unexpected object emitter")
+    if record.get("object_emitter") not in _OBJECT_EMITTERS:
+        raise ProvenanceError(
+            f"{member}: unexpected object emitter "
+            f"{record.get('object_emitter')!r}"
+        )
     if record.get("uses_host_cc") is not False:
         raise ProvenanceError(f"{member}: host-CC objects are forbidden")
     target_triple = record.get("target_triple")
@@ -541,12 +554,12 @@ def assemble_runtime_archive_manifest(
     if not object_paths:
         raise ProvenanceError("production runtime archive requires at least one member")
     expected = [Path(path).name for path in object_paths]
-    actual = _archive_members(archive_path, ar=ar)
+    extracted = _extract_archive_members(archive_path, ar=ar)
+    actual = list(extracted)
     if actual != expected:
         raise ProvenanceError(
             f"runtime archive inventory mismatch: expected={expected!r} actual={actual!r}"
         )
-    extracted = _extract_archive_members(archive_path, ar=ar)
     records: list[dict[str, object]] = []
     target_triples: set[str] = set()
     for object_path, member in zip(object_paths, expected, strict=True):
@@ -635,13 +648,13 @@ def verify_runtime_archive_manifest(
     typed_records: list[dict[str, object]] = list(records)
     if not typed_records:
         raise ProvenanceError("production runtime archive requires at least one member")
-    members = _archive_members(archive_path, ar=ar)
+    extracted = _extract_archive_members(archive_path, ar=ar)
+    members = list(extracted)
     expected = [str(record.get("member", "")) for record in typed_records]
     if members != expected:
         raise ProvenanceError(
             f"runtime archive inventory mismatch: expected={expected!r} actual={members!r}"
         )
-    extracted = _extract_archive_members(archive_path, ar=ar)
     target_triples: set[str] = set()
     for record, member in zip(typed_records, members, strict=True):
         target_triples.add(

@@ -53,6 +53,38 @@ class NativeTextModulesLoweringMixin:
             return 11
         return ord(ch)
 
+    def _native_re_split_inline_flags(self, pattern: str):
+        """Split a leading ``(?imsx)`` group off a literal pattern.
+
+        ``re.compile(r"(?m)^...")`` means exactly ``re.compile(r"^...",
+        re.MULTILINE)``: the inline group sets global flags and contributes
+        nothing to matching.  Without this the pattern reached the engine's
+        subset checker with the group still attached, failed it, and the whole
+        ``re.compile`` fell back to CPython -- three of ``c_evaluator``'s
+        module-level patterns do this, and module-level code is outside the
+        strict no-libpython stub projection, so those three alone made the
+        module need libpython.
+
+        Returns ``(stripped_pattern, extra_flags)``, or ``None`` when the
+        group names a flag the engine does not model, so the caller keeps its
+        existing fallback rather than dropping a flag silently.
+        """
+        if not pattern.startswith("(?"):
+            return pattern, 0
+        end = pattern.find(")")
+        if end < 0:
+            return pattern, 0
+        letters = pattern[2:end]
+        if not letters or not letters.isalpha():
+            return pattern, 0
+        bits = {"i": 2, "m": 8, "s": 16, "x": 64}
+        extra = 0
+        for letter in letters:
+            if letter not in bits:
+                return None
+            extra |= bits[letter]
+        return pattern[end + 1 :], extra
+
     def _native_re_strip_verbose_pattern(self, pattern: str) -> str:
         """Apply the lexical part of ``re.X`` to a literal pattern."""
         out = []
@@ -577,6 +609,13 @@ class NativeTextModulesLoweringMixin:
         stack = [0]
         depth = 0
         seen_names = []
+        # 1 at a depth that is inside a lookahead assertion.  A capturing
+        # group there would have to survive a failed negative assertion, which
+        # the engine refuses, so the checker must refuse it too.
+        inside_lookahead = [0]
+        # Capturing groups opened so far, so a backreference can be checked
+        # against the same bound the engine enforces.
+        group_count = 0
         i = 0
         while i < n:
             c = pattern[i]
@@ -626,8 +665,12 @@ class NativeTextModulesLoweringMixin:
                 i += 1
                 continue
             if c == "(":
+                opened_lookahead = 0
                 if i + 1 < n and pattern[i + 1] == "?":
                     if pattern[i : i + 3] == "(?:":
+                        i += 3
+                    elif pattern[i : i + 3] == "(?=" or pattern[i : i + 3] == "(?!":
+                        opened_lookahead = 1
                         i += 3
                     elif pattern[i : i + 4] == "(?P<":
                         j = i + 4
@@ -656,17 +699,26 @@ class NativeTextModulesLoweringMixin:
                     else:
                         return False
                 else:
+                    # A capturing group.
+                    if inside_lookahead[depth] != 0:
+                        return False
+                    group_count += 1
                     i += 1
                 depth += 1
                 if depth > 30:
                     return False
                 stack.append(0)
+                if opened_lookahead != 0 or inside_lookahead[depth - 1] != 0:
+                    inside_lookahead.append(1)
+                else:
+                    inside_lookahead.append(0)
                 continue
             if c == ")":
                 if depth == 0:
                     return False
                 depth -= 1
                 stack.pop()
+                inside_lookahead.pop()
                 stack[depth] = 2
                 i += 1
                 continue
@@ -792,6 +844,13 @@ class NativeTextModulesLoweringMixin:
                     stack[depth] = 1
                     i += 4
                     continue
+                elif "1" <= e <= "9":
+                    # ``\1``..``\9`` -- a backreference to a numbered group.
+                    # The engine models it (opcode 21); the group has to exist
+                    # by this point, which is also CPython's rule.
+                    if int(e) > len(seen_names) + group_count:
+                        return False
+                    stack[depth] = 1
                 elif e in literal_escapes:
                     stack[depth] = 1
                 else:
@@ -840,6 +899,13 @@ class NativeTextModulesLoweringMixin:
             pattern_value = (
                 pattern_expr.value if isinstance(pattern_expr, StrLit) else None
             )
+            if pattern_value is not None and flags_value is not None:
+                split = self._native_re_split_inline_flags(pattern_value)
+                if split is None:
+                    pattern_value = None  # keep the existing fallback
+                else:
+                    pattern_value, inline_flags = split
+                    flags_value |= inline_flags
             if (
                 pattern_value is not None
                 and flags_value is not None

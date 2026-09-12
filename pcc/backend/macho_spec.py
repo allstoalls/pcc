@@ -296,6 +296,7 @@ NLIST_64 = MachOStruct(
 RELOCATION_INFO = MachOStruct(
     "relocation_info", (("r_address", "i"), ("r_info", "I")),
 )
+_RELOCATION_READER = struct.Struct(RELOCATION_INFO.format)
 
 BUILD_VERSION_COMMAND = MachOStruct(
     "build_version_command",
@@ -351,18 +352,32 @@ ALL_STRUCTS = (
 # --- relocation bitfield ---------------------------------------------------
 
 
-def unpack_relocation(r_info: int) -> dict[str, int]:
+def unpack_relocation(r_info: int, r_address: int | None = None) -> dict[str, int]:
     """Split relocation_info's packed word.
 
     Little-endian bitfield order from `mach-o/reloc.h`:
     symbolnum:24, pcrel:1, length:2, extern:1, type:4.
     """
+    symbolnum = r_info & 0x00FFFFFF
+    pcrel = (r_info >> 24) & 0x1
+    length = (r_info >> 25) & 0x3
+    external = (r_info >> 27) & 0x1
+    kind = (r_info >> 28) & 0xF
+    if r_address is not None:
+        return {
+            "r_address": r_address,
+            "r_symbolnum": symbolnum,
+            "r_pcrel": pcrel,
+            "r_length": length,
+            "r_extern": external,
+            "r_type": kind,
+        }
     return {
-        "r_symbolnum": r_info & 0x00FFFFFF,
-        "r_pcrel": (r_info >> 24) & 0x1,
-        "r_length": (r_info >> 25) & 0x3,
-        "r_extern": (r_info >> 27) & 0x1,
-        "r_type": (r_info >> 28) & 0xF,
+        "r_symbolnum": symbolnum,
+        "r_pcrel": pcrel,
+        "r_length": length,
+        "r_extern": external,
+        "r_type": kind,
     }
 
 
@@ -453,12 +468,13 @@ class MachOObject:
     def relocations(self, section: dict[str, Any]) -> list[dict[str, Any]]:
         out = []
         for i in range(section["nreloc"]):
-            raw = RELOCATION_INFO.unpack(
+            # Read the two wire words once and build the final row directly.
+            # The former path built two intermediate dicts and snapshotted
+            # another mapping in dict.update for every eight-byte record.
+            address, info = _RELOCATION_READER.unpack_from(
                 self.data, section["reloff"] + i * RELOCATION_INFO.size
             )
-            entry = {"r_address": raw["r_address"]}
-            entry.update(unpack_relocation(raw["r_info"]))
-            out.append(entry)
+            out.append(unpack_relocation(info, address))
         return out
 
     def data_in_code(self) -> list[dict[str, Any]]:

@@ -99,6 +99,287 @@ def retention_enabled() -> bool:
     )
 
 
+# Cache trees pcc writes under the user's cache dir, with the depth at which
+# one *entry* lives.  Depth is explicit rather than inferred: `macho-
+# incremental-link` has only `image/`, `merged/` and `native/` at the top, so
+# an entry-per-top-level sweep would delete a whole subtree instead of
+# evicting its least-recently-used members.
+USER_CACHE_TREES: tuple[tuple[str, int], ...] = (
+    ("macho-incremental-link/image", 2),
+    ("macho-incremental-link/native", 2),
+    ("macho-incremental-link/merged", 2),
+    ("python-ir-pass-cache", 2),
+    ("compile-cache", 2),
+    ("installations", 1),
+    ("test-artifacts/runtime-builds", 1),
+    ("test-artifacts/self-host-oracle", 1),
+    ("test-artifacts/self-host-objects/frontend-ir", 2),
+    ("test-artifacts/self-host-objects/macho-incremental-v1/image", 2),
+    ("test-artifacts/self-host-objects/macho-incremental-v1/native", 2),
+    ("self-backend-object-cache/frontend-ir/module-actions", 1),
+)
+
+
+def user_cache_roots(
+    home: str | os.PathLike | None = None,
+) -> tuple[tuple[Path, int], ...]:
+    """Every unmanaged pcc cache tree, paired with its entry depth.
+
+    `maintain_cache` only understands the self-backend object cache's entry
+    shapes, so these trees were never counted and never evicted.  Measured on
+    one developer machine: 70 GiB under ~/.cache/pcc, none of it reclaimable
+    by the existing policy.
+    """
+    base = Path(home) if home is not None else Path.home()
+    root = base / ".cache" / "pcc"
+    return tuple((root / rel, depth) for rel, depth in USER_CACHE_TREES)
+
+
+def _entries_at_depth(root: Path, depth: int) -> list[tuple[float, int, Path]]:
+    """Cache entries at exactly ``depth`` levels below ``root``."""
+    level = [root]
+    for _ in range(depth - 1):
+        nxt: list[Path] = []
+        for parent in level:
+            try:
+                nxt.extend(c for c in parent.iterdir() if c.is_dir())
+            except OSError:
+                continue
+        level = nxt
+    rows: list[tuple[float, int, Path]] = []
+    for parent in level:
+        try:
+            children = sorted(parent.iterdir(), key=lambda item: item.name)
+        except OSError:
+            continue
+        for child in children:
+            if (
+                child.is_symlink()
+                or child.name.startswith(".")
+                or child.name.endswith((".sha256", ".lock", _LAST_USED_SUFFIX, _EVICT_SUFFIX))
+                or _LEASE_INFIX in child.name
+                or ".tmp." in child.name
+            ):
+                continue
+            size = 0
+            latest = 0.0
+            try:
+                if child.is_dir():
+                    for walk_root, _dirs, files in os.walk(child):
+                        for name in files:
+                            try:
+                                st = os.stat(os.path.join(walk_root, name))
+                            except OSError:
+                                continue
+                            size += st.st_size
+                            latest = max(latest, st.st_mtime)
+                else:
+                    st = child.stat()
+                    size = st.st_size
+                    latest = st.st_mtime
+                    sidecar = Path(str(child) + ".sha256")
+                    if sidecar.is_file():
+                        size += sidecar.stat().st_size
+            except OSError:
+                continue
+            if size > 0:
+                rows.append((latest, size, child))
+    rows.sort(key=lambda row: row[0])
+    return rows
+
+
+def _sweep_victims(root, victims, *, dry_run, now, protected_paths=()):
+    """Use the same exclusion marker and lease protocol as ordinary pruning."""
+    timestamp = int(now * 1_000_000_000)
+    protected = {str(Path(path).expanduser().resolve()) for path in protected_paths}
+    removed = 0
+    reclaimed = 0
+    lock = _acquire_maintenance_lock(root, timestamp)
+    if lock is None:
+        return removed, reclaimed
+    try:
+        for used, size, path in victims:
+            if _entry_is_protected(path, timestamp, protected):
+                continue
+            entry = CacheEntry(
+                kind="directory" if path.is_dir() else "object",
+                path=path,
+                relative_path=path.relative_to(root).as_posix(),
+                size_bytes=size,
+                last_used_ns=_read_timestamp_ns(path, int(used * 1_000_000_000)),
+                protected=False,
+            )
+            if dry_run or _quarantine_entry(root, entry, timestamp):
+                removed += 1
+                reclaimed += size
+    finally:
+        _release_maintenance_lock(lock)
+    return removed, reclaimed
+
+
+def sweep_tree(
+    root: Path,
+    policy: RetentionPolicy,
+    depth: int,
+    *,
+    dry_run: bool = False,
+    now: float | None = None,
+) -> dict:
+    """Evict least-recently-used entries until ``root`` fits the low mark.
+
+    Deliberately shape-agnostic: these trees are pure caches keyed by a
+    content hash, so "oldest unused first" is the whole policy.  Entries
+    unused for longer than ``max_unused_days`` go regardless of size.
+    """
+    now = time.time() if now is None else now
+    rows = _entries_at_depth(root, depth)
+    total = sum(size for _used, size, _path in rows)
+    report = {
+        "root": str(root),
+        "entries": len(rows),
+        "bytes_before": total,
+        "removed": 0,
+        "reclaimed_bytes": 0,
+        "dry_run": bool(dry_run),
+    }
+    if not rows:
+        report["bytes_after"] = 0
+        return report
+
+    stale_cutoff = now - policy.max_unused_days * 86400.0
+    victims = [row for row in rows if row[0] < stale_cutoff]
+    keep = [row for row in rows if row[0] >= stale_cutoff]
+
+    remaining = sum(size for _u, size, _p in keep)
+    if remaining > policy.high_bytes:
+        for row in keep:                      # already oldest-first
+            if remaining <= policy.low_bytes:
+                break
+            victims.append(row)
+            remaining -= row[1]
+
+    report["removed"], report["reclaimed_bytes"] = _sweep_victims(
+        root, victims, dry_run=dry_run, now=now,
+    )
+    report["bytes_after"] = total - report["reclaimed_bytes"]
+    return report
+
+
+def user_cache_budget_bytes() -> tuple[int, int]:
+    """Total byte budget for every pcc cache tree combined.
+
+    A per-tree budget is the wrong unit: twelve trees at the 10 GiB mark is a
+    120 GiB footprint on a user's machine, which is how ~/.cache/pcc reached
+    70 GiB here.  `PCC_CACHE_TOTAL_HIGH_BYTES` / `_LOW_BYTES` override it.
+    """
+    high = _env_int("PCC_CACHE_TOTAL_HIGH_BYTES", 10 * 1024 * 1024 * 1024)
+    low = _env_int("PCC_CACHE_TOTAL_LOW_BYTES", 8 * 1024 * 1024 * 1024)
+    if low >= high:
+        low = max(1, high // 2)
+    return high, low
+
+
+def _sweep_stamp_path(home: str | os.PathLike | None = None) -> Path:
+    base = Path(home) if home is not None else Path.home()
+    return base / ".cache" / "pcc" / ".user-cache-sweep-stamp"
+
+
+def _sweep_due(stamp: Path, interval: float, now: float) -> bool:
+    if interval <= 0:
+        return True
+    try:
+        return now - stamp.stat().st_mtime >= interval
+    except OSError:
+        return True
+
+
+def sweep_user_caches(
+    *,
+    dry_run: bool = False,
+    home: str | os.PathLike | None = None,
+    now: float | None = None,
+    automatic: bool = False,
+    protected_paths: Iterable[os.PathLike[str] | str] = (),
+) -> dict:
+    """Hold every pcc cache tree to one combined budget, evicting oldest first.
+
+    `automatic=True` is the compile-time path: it runs at most once per
+    `auto_interval_seconds`, so an ordinary build never pays a full cache walk.
+    """
+    policy = policy_from_environment()
+    if automatic and not retention_enabled():
+        return {
+            "schema": "pcc.user-cache-sweep.v1", "skipped_reason": "disabled",
+            "removed": 0, "reclaimed_bytes": 0,
+        }
+    high, low = user_cache_budget_bytes()
+    when = time.time() if now is None else now
+    stamp = _sweep_stamp_path(home)
+    if automatic and not _sweep_due(stamp, policy.auto_interval_seconds, when):
+        return {
+            "schema": "pcc.user-cache-sweep.v1",
+            "skipped_reason": "interval",
+            "removed": 0,
+            "reclaimed_bytes": 0,
+        }
+    stale_cutoff = when - policy.max_unused_days * 86400.0
+
+    pooled: list[tuple[float, int, Path]] = []
+    per_tree: dict[str, int] = {}
+    for root, depth in user_cache_roots(home):
+        if not root.is_dir():
+            continue
+        rows = _entries_at_depth(root, depth)
+        per_tree[str(root)] = sum(size for _u, size, _p in rows)
+        pooled.extend(rows)
+    pooled.sort(key=lambda row: row[0])          # globally oldest first
+
+    total = sum(size for _u, size, _p in pooled)
+    victims = [row for row in pooled if row[0] < stale_cutoff]
+    remaining = total - sum(size for _u, size, _p in victims)
+    if remaining > high:
+        for row in pooled:
+            if remaining <= low:
+                break
+            if row[0] < stale_cutoff:
+                continue
+            victims.append(row)
+            remaining -= row[1]
+
+    removed = 0
+    reclaimed = 0
+    for root, _depth in user_cache_roots(home):
+        # Installed toolchains are executable artifacts, not disposable cache
+        # entries. Keep their footprint visible but leave their removal to the
+        # installation owner, which knows the active/default selection.
+        if root.name == "installations" or not root.is_dir():
+            continue
+        selected = [row for row in victims if row[2].is_relative_to(root)]
+        count, size = _sweep_victims(
+            root, selected, dry_run=dry_run, now=when, protected_paths=protected_paths,
+        )
+        removed += count
+        reclaimed += size
+    if not dry_run:
+        try:
+            stamp.parent.mkdir(parents=True, exist_ok=True)
+            stamp.write_text(str(int(when)), encoding="utf-8")
+        except OSError:
+            pass
+    return {
+        "schema": "pcc.user-cache-sweep.v1",
+        "dry_run": bool(dry_run),
+        "high_bytes": high,
+        "low_bytes": low,
+        "entries": len(pooled),
+        "bytes_before": total,
+        "removed": removed,
+        "reclaimed_bytes": reclaimed,
+        "bytes_after": total - reclaimed,
+        "per_tree_bytes": per_tree,
+    }
+
+
 def policy_from_environment() -> RetentionPolicy:
     return RetentionPolicy(
         high_bytes=_env_int(
@@ -395,7 +676,18 @@ def _candidate_batch(
     rows: list[tuple[str, Path]] = []
     nested_frontend = root / "frontend-ir"
     frontend = nested_frontend if nested_frontend.is_dir() else root
-    categories = (("frontend-ir", frontend), ("object", root))
+    # The incremental Mach-O caches are shard/<digest>.<ext> + a .sha256
+    # sibling -- exactly the "object" entry shape -- but they live under their
+    # own version directory and were never scanned.  They therefore grew
+    # without bound while the policy reported the cache as under its low-water
+    # mark: 7.2 GiB unaccounted for in one checkout.
+    incremental = root / "macho-incremental-v1"
+    categories = (
+        ("frontend-ir", frontend),
+        ("object", root),
+        ("object", incremental / "image"),
+        ("object", incremental / "native"),
+    )
     for kind, base in categories:
         order = "0" if kind == "frontend-ir" else "1"
         if cursor and order < cursor[:1]:
@@ -409,6 +701,8 @@ def _candidate_batch(
                 continue
             terminal_name = "f" * 64
             if kind == "object":
+                # Highest accepted suffix, so the shard cursor still bounds
+                # every object-shaped entry (.o/.s/.pco/.macho).
                 terminal_name += ".s"
             shard_max_key = order + "\t" + shard_relative + "/" + terminal_name
             if cursor and shard_max_key <= cursor:
@@ -432,8 +726,13 @@ def _candidate_batch(
                             and (entry / "ir.bundle").is_file()
                         )
                     else:
+                        # `.o`/`.s` are the self-backend object cache; `.pco`
+                        # and `.macho` are the incremental link caches, which
+                        # share this entry shape (digest name + a `.sha256`
+                        # sibling) but were rejected here as incomplete and so
+                        # never counted, never evicted.
                         complete = (
-                            entry.suffix in (".o", ".s")
+                            entry.suffix in (".o", ".s", ".pco", ".macho")
                             and _is_digest(entry.stem)
                             and entry.is_file()
                         )
@@ -1109,7 +1408,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     lease.add_argument("--path", required=True)
     release = subparsers.add_parser("lease-release")
     release.add_argument("--path", required=True)
+    # `sweep` covers every pcc cache tree under ~/.cache against one combined
+    # budget; `prune` only knows the object cache's own root.
+    sweep = subparsers.add_parser("sweep")
+    sweep.add_argument("--dry-run", action="store_true")
+    sweep.add_argument("--home", default=None)
     args = parser.parse_args(argv)
+
+    if args.command == "sweep":
+        report = sweep_user_caches(dry_run=args.dry_run, home=args.home)
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0
 
     if args.command == "touch":
         return 0 if record_successful_access(args.path) else 1

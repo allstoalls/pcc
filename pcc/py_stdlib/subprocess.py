@@ -26,6 +26,11 @@ py_subprocess_run_timeout = extern(
     (c_ptr, c_int, c_int64),
     c_int64,
 )
+py_subprocess_run_env = extern(
+    "py_subprocess_run_env",
+    (c_ptr, c_int, c_obj),
+    c_int64,
+)
 
 _TIMEOUT_RETURN_CODE = -124
 
@@ -85,10 +90,15 @@ def run(
 ) -> CompletedProcess:
     if input is not None or stdout is not None or stderr is not None:
         raise NotImplementedError("subprocess stream redirection is not implemented")
-    if env is not None or cwd is not None or kwargs:
+    if cwd is not None or kwargs:
         raise NotImplementedError("subprocess advanced options are not implemented")
+    if env is not None and timeout is not None:
+        raise NotImplementedError("subprocess env= with timeout= is not implemented")
     capture = 1 if capture_output else 0
-    if timeout is None:
+    if env is not None:
+        # CPython replaces the environment rather than extending it.
+        rc = py_subprocess_run_env(args, capture, env)
+    elif timeout is None:
         rc = py_subprocess_run(args, capture)
     else:
         timeout_ms = int(timeout) * 1000

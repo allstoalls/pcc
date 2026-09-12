@@ -814,6 +814,26 @@ PyObject *py_bytes_strip(PyObject *o) {
     return bytes_new_same_family(o, data + lo, hi - lo);
 }
 
+/* bytes/bytearray .lstrip()/.rstrip(): the one-sided forms of the same
+ * no-arg ASCII-whitespace rule as py_bytes_strip. */
+PyObject *py_bytes_lstrip(PyObject *o) {
+    int64_t n = 0;
+    const char *data = bytes_data(o, &n);
+    if (data == NULL) return NULL;
+    int64_t lo = 0;
+    while (lo < n && hex_space((unsigned char)data[lo])) lo++;
+    return bytes_new_same_family(o, data + lo, n - lo);
+}
+
+PyObject *py_bytes_rstrip(PyObject *o) {
+    int64_t n = 0;
+    const char *data = bytes_data(o, &n);
+    if (data == NULL) return NULL;
+    int64_t hi = n;
+    while (hi > 0 && hex_space((unsigned char)data[hi - 1])) hi--;
+    return bytes_new_same_family(o, data, hi);
+}
+
 PyObject *py_bytes_fromhex(PyObject *text) {
     const char *data = NULL;
     int64_t n = 0;
@@ -1084,34 +1104,63 @@ PyObject *py_i64_buffer_dot_scalar(PyObject *left, PyObject *right,
     return accumulator;
 }
 
-int64_t py_bytes_find(PyObject *src, PyObject *needle) {
+int64_t py_bytes_find_range(
+    PyObject *src, PyObject *needle, int64_t begin, int64_t end
+) {
+    int64_t needle_n = 0;
+    const char *needle_data = bytes_data(needle, &needle_n);
+    int64_t byte = -1;
+    if (needle != NULL && (PY_IS_TAGGED_INT(needle)
+        || py_type_of(needle) == PY_TYPE_INT || py_type_of(needle) == PY_TYPE_BOOL)) {
+        byte = py_slice_index_i64(needle, 0);
+        if (byte < 0 || byte > 255) {
+            py_raise_owned(py_exc_new(PY_EXC_VALUEERROR, "byte must be in range(0, 256)"));
+            return -1;
+        }
+    } else if (needle_data == NULL) {
+        py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "argument must be an integer or bytes-like object"));
+        return -1;
+    }
     int64_t n = 0;
     const char *data = bytes_data(src, &n);
     if (data == NULL) return -1;
+    if (begin < 0) {
+        begin += n;
+        if (begin < 0) begin = 0;
+    }
+    if (end < 0) {
+        end += n;
+        if (end < 0) end = 0;
+    }
+    if (end > n) end = n;
+    if (begin > n || begin > end) return -1;
 
-    int64_t byte = 0;
-    if (byte_from_obj(needle, &byte) == 0) {
-        if (byte < 0 || byte > 255) return -1;
+    if (byte >= 0) {
         unsigned char target = (unsigned char)byte;
-        for (int64_t i = 0; i < n; i++) {
+        for (int64_t i = begin; i < end; i++) {
             if ((unsigned char)data[i] == target) return i;
         }
         return -1;
     }
 
-    int64_t needle_n = 0;
-    const char *needle_data = bytes_data(needle, &needle_n);
-    if (needle_data == NULL) return -1;
-    if (needle_n == 0) return 0;
-    if (needle_n > n) return -1;
-    int64_t last = n - needle_n;
-    for (int64_t i = 0; i <= last; i++) {
+    if (needle_n == 0) return begin;
+    if (needle_n > end - begin) return -1;
+    int64_t last = end - needle_n;
+    for (int64_t i = begin; i <= last; i++) {
         if (data[i] == needle_data[0]
             && memcmp(data + i, needle_data, (size_t)needle_n) == 0) {
             return i;
         }
     }
     return -1;
+}
+
+int64_t py_bytes_find(PyObject *src, PyObject *needle) {
+    return py_bytes_find_range(src, needle, 0, INT64_MAX);
+}
+
+int64_t py_bytes_find_from(PyObject *src, PyObject *needle, PyObject *start) {
+    return py_bytes_find_range(src, needle, py_int_value_i64(start), INT64_MAX);
 }
 
 /* bytes/bytearray .rfind(): highest index of the sub-bytes (or single byte

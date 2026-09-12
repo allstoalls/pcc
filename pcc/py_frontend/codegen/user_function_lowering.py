@@ -47,6 +47,7 @@ from .exact_int_lowering import (
     allocate_forced_exact_int_locals,
     bind_forced_exact_int_parameter,
     forced_exact_int_local_names,
+    mixed_scalar_object_local_names,
 )
 from .expr_helper_lowering import emit_python_floordiv_i64_unchecked
 from .runtime_abi import declare_runtime_global
@@ -1178,6 +1179,7 @@ class UserFunctionLoweringMixin:
         saved_box_int_locals = self._box_int_locals
         saved_exact_int_flags = self._exact_int_env_flags
         saved_planned_exact_int_local_names = self._planned_exact_int_local_names
+        saved_planned_object_local_names = self._planned_object_local_names
         saved_ir_builder_flags = self._ir_builder_env_flags
         saved_threading_list_elem_flags = self._threading_list_elem_flags
         saved_weak_dict_flags = self._weak_dict_env_flags
@@ -1340,6 +1342,13 @@ class UserFunctionLoweringMixin:
                 self._current_global_names,
             )
             forced_exact_int_name_set = set(forced_exact_int_names)
+            planned_object_name_set = set(
+                mixed_scalar_object_local_names(
+                    self,
+                    fd,
+                    self._current_global_names,
+                )
+            )
 
             # Pick an entry-block name that can't collide with a parameter
             # or local variable of the same name. LLVM keeps labels in the
@@ -1370,6 +1379,7 @@ class UserFunctionLoweringMixin:
                 name: True for name in forced_exact_int_names
             }
             self._planned_exact_int_local_names = forced_exact_int_name_set
+            self._planned_object_local_names = planned_object_name_set
             self._async_body_depth = saved_async_body_depth + (1 if fd.is_async else 0)
             self.loop_stack = []
             self._owned_local_names = set()
@@ -1707,6 +1717,7 @@ class UserFunctionLoweringMixin:
             self._planned_exact_int_local_names = (
                 saved_planned_exact_int_local_names
             )
+            self._planned_object_local_names = saved_planned_object_local_names
             self._async_body_depth = saved_async_body_depth
             self._owned_local_names = saved_owned_local_names
             self._owned_local_has_value = saved_owned_local_has_value

@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 
 from pcc.backend.self_backend_cache_identity import (
+    MACHO_LINK_SOURCE_PATHS,
     self_backend_emitter_source_identity,
 )
 
@@ -49,10 +50,33 @@ _FRONTEND_IRRELEVANT_PREFIXES = (
     "pcc/gpu_gc",        # GPU GC oracles
     "pcc/kernel_ir",     # GPU kernel IR thread
     "pcc/tools",
+    # The C toolchain.  `pcc/codegen` is the C code generator and
+    # `pcc/evaluater` the C driver/evaluator; `pcc/py_frontend` imports
+    # neither (verified: zero references), so neither can change the IR a
+    # *Python* module compiles to.  If one of them changes, its own module's
+    # per-module cache key changes and that module recompiles -- which is the
+    # correct scope.  Before this line, editing the C driver invalidated every
+    # cached frontend IR module and forced a fully cold stage.
+    #
+    # `pcc/parse` is deliberately NOT here: `parse/py_lift.py` and
+    # `parse/py_parse.py` are the Python front door, not the C parser.
+    "pcc/codegen",
+    "pcc/evaluater",
 )
+
+# The Mach-O object/link surface consumes IR; it cannot change the IR a module
+# compiles to.  `macho_linker_source_identity` already binds exactly these
+# files for the link action, which is the key that does depend on them, so
+# counting them here only forced a cold frontend after every assembler,
+# object-writer or linker edit -- 170 runtime objects and every cached
+# frontend IR module, measured at ~9.5 minutes per edit.  Reuse that tuple
+# rather than restating it, so the two lists cannot drift apart.
+_FRONTEND_IRRELEVANT_FILES = frozenset(MACHO_LINK_SOURCE_PATHS)
 
 
 def _is_frontend_relevant(relative: str) -> bool:
+    if relative in _FRONTEND_IRRELEVANT_FILES:
+        return False
     for prefix in _FRONTEND_IRRELEVANT_PREFIXES:
         if relative == prefix or relative.startswith(prefix + "/"):
             return False

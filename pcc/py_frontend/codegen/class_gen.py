@@ -121,6 +121,7 @@ from .exact_int_lowering import (
     allocate_forced_exact_int_locals,
     bind_forced_exact_int_parameter,
     forced_exact_int_local_names,
+    mixed_scalar_object_local_names,
 )
 from .builtin_exceptions import builtin_exc_tag_or_missing
 from .errors import L1CodegenError
@@ -184,7 +185,7 @@ def _classgen_extern_default_expr(arg: dict, span: SourceSpan):
         if owning_module and name:
             default_expr = Call(
                 span=span,
-                ty=DynType(name="dyn"),
+                ty=decode_type(gref.get("value_ty")) or DynType(name="dyn"),
                 func=Name(span, DynType(name="dyn"), _NATIVE_DEFAULT_GLOBAL_SENTINEL),
                 args=(
                     StrLit(span, StrType(name="str"), str(owning_module)),
@@ -3918,6 +3919,7 @@ class ClassLowering:
         saved_planned_exact_int_local_names = (
             parent._planned_exact_int_local_names
         )
+        saved_planned_object_local_names = parent._planned_object_local_names
         saved_ir_builder_flags = getattr(parent, "_ir_builder_env_flags", {})
         saved_class = getattr(parent, "current_class", None)
         saved_global_names = getattr(parent, "_current_global_names", set())
@@ -4051,6 +4053,13 @@ class ClassLowering:
                 name: True for name in forced_exact_int_names
             }
             parent._planned_exact_int_local_names = set(forced_exact_int_names)
+            parent._planned_object_local_names = set(
+                mixed_scalar_object_local_names(
+                    parent,
+                    fd,
+                    parent._current_global_names,
+                )
+            )
             parent._async_body_depth = saved_async_body_depth + (
                 1 if fd.is_async else 0
             )
@@ -4375,6 +4384,7 @@ class ClassLowering:
             parent._planned_exact_int_local_names = (
                 saved_planned_exact_int_local_names
             )
+            parent._planned_object_local_names = saved_planned_object_local_names
             parent._async_body_depth = saved_async_body_depth
             parent._ir_builder_env_flags = saved_ir_builder_flags
             parent.current_class = saved_class  # type: ignore[attr-defined]
@@ -6121,6 +6131,24 @@ class ClassLowering:
                 return True
         return False
 
+    def has_subclass(self, class_name: str) -> bool:
+        """True if any class in the closed world derives from ``class_name``.
+
+        ``self.__class__`` is the receiver's *runtime* class, and a method
+        body is shared with every subclass that inherits it, so folding
+        ``self.__class__(...)`` to the lexically-resolved class builds the
+        wrong type whenever a subclass can reach the body.
+        """
+        info = self.classes.get(class_name)
+        if info is None:
+            return False
+        for other in self.classes.values():
+            if other is info:
+                continue
+            if self._derives_from(other, class_name):
+                return True
+        return False
+
     def method_overridden_by_subclass(
         self, info: ClassInfo, method_name: str
     ) -> bool:
@@ -6494,6 +6522,26 @@ class ClassLowering:
                 "instantiation: class " + class_name + " not found in module"
             )
         cls_ptr = self._load_class_object(info, ".cls." + class_name)
+        # CPython constructs with ``cls.__new__(cls, *args)``.  Allocating
+        # straight from ``py_instance_new`` skipped every user ``__new__``,
+        # so an interning or singleton class handed back a fresh object each
+        # call.  A class reached through an imported module object -- e.g.
+        # ``ir.IntType(1)`` rather than ``from ... import IntType`` -- is
+        # constructed here, which is why pcc1 died at
+        # pcc/codegen/c_types.py:22 with ``'object' object has no attribute
+        # '_cache'``: the cache lookup ran on a class ``__new__`` never saw.
+        new_fn = info.methods.get("__new__")
+        if new_fn is not None:
+            new_args = [cls_ptr]
+            for arg_expr in arg_exprs:
+                new_args.append(parent._emit_expr_as_pcc_object(arg_expr))
+            constructed = builder.call(
+                new_fn,
+                new_args,
+                name=self._fresh("new." + class_name),
+            )
+            parent._emit_post_call_err_check(None)
+            return constructed
         inst = builder.call(
             runtime["py_instance_new"],
             [cls_ptr],

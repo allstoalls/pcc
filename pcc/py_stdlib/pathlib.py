@@ -6,6 +6,7 @@ source and build scripts touch.
 """
 from __future__ import annotations
 
+import os
 from os import path as _op
 
 
@@ -33,6 +34,43 @@ class PurePath:
     @property
     def parent(self) -> "PurePath":
         return PurePath(_op.dirname(self._raw))
+
+    def _parent_raw_paths(self) -> list:
+        """Ancestor path strings, closest first, as CPython orders them.
+
+        ``/a/b/c`` -> ``["/a/b", "/a", "/"]``; ``a/b/c`` -> ``["a/b", "a",
+        "."]``; ``c`` -> ``["."]``; ``.``, ``/`` and ``""`` -> ``[]``.
+        """
+        out: list = []
+        current = self._raw
+        if current == "" or current == ".":
+            return out
+        while True:
+            parent = _op.dirname(current)
+            if parent == current:
+                break
+            if parent == "":
+                out.append(".")
+                break
+            out.append(parent)
+            current = parent
+        return out
+
+    @property
+    def parents(self) -> list:
+        """The ancestors, closest first.
+
+        CPython returns a lazy sequence; a list is returned here because
+        indexing and ``len`` are the whole surface callers use --
+        ``pcc/package/inspect.py`` opens with
+        ``Path(__file__).resolve().parents[2]``, which was a module-level
+        CPython fallback while this was missing, and module-level code is
+        outside the strict no-libpython stub projection.
+        """
+        out: list = []
+        for raw in self._parent_raw_paths():
+            out.append(PurePath(raw))
+        return out
 
     @property
     def suffix(self) -> str:
@@ -67,6 +105,30 @@ class PurePath:
 
 
 class Path(PurePath):
+    @property
+    def parents(self) -> list:
+        """Same ancestors as ``PurePath.parents``, as ``Path`` objects."""
+        out: list = []
+        for raw in self._parent_raw_paths():
+            out.append(Path(raw))
+        return out
+
+    def absolute(self) -> "Path":
+        if _op.isabs(self._raw):
+            return Path(self._raw)
+        return Path(_op.join(os.getcwd(), self._raw))
+
+    def resolve(self, strict: bool = False) -> "Path":
+        """Absolute, normalized path.
+
+        Symlinks are NOT followed: there is no native ``realpath`` yet, so
+        this is ``absolute()`` plus ``normpath``.  Same kind of documented
+        narrowing as ``is_file``/``is_dir`` above, and it is what the callers
+        in this tree need -- ``Path(__file__).resolve().parents[2]`` wants an
+        absolute repo root, not link identity.
+        """
+        return Path(_op.normpath(self.absolute()._raw))
+
     def exists(self) -> bool:
         return _op.exists(self._raw)
 
@@ -78,10 +140,31 @@ class Path(PurePath):
         # Same caveat as is_file.
         return _op.exists(self._raw)
 
-    def read_text(self, encoding: str = "utf-8") -> str:
-        with open(self._raw, "r", encoding=encoding) as f:
+    def read_text(
+        self,
+        encoding: str = "utf-8",
+        errors: str = "strict",
+        newline: str = "",
+    ) -> str:
+        # ``errors`` and ``newline`` are part of CPython's signature and are
+        # forwarded to ``open``, which accepts them as compatibility kwargs
+        # (see ``codegen/native_files``).  Accepting them here is what lets
+        # ordinary code such as ``path.read_text(encoding="utf-8",
+        # errors="ignore")`` compile at all -- ``pcc/package/metadata.py``
+        # spells it that way twice.
+        with open(
+            self._raw, "r", encoding=encoding, errors=errors, newline=newline
+        ) as f:
             return f.read()
 
-    def write_text(self, s: str, encoding: str = "utf-8") -> int:
-        with open(self._raw, "w", encoding=encoding) as f:
+    def write_text(
+        self,
+        s: str,
+        encoding: str = "utf-8",
+        errors: str = "strict",
+        newline: str = "",
+    ) -> int:
+        with open(
+            self._raw, "w", encoding=encoding, errors=errors, newline=newline
+        ) as f:
             return f.write(s)

@@ -828,6 +828,15 @@ def test_x86_emitter_delegates_variable_length_pc_finalization_to_assembler():
     assert " - probe" in assembly
     assert f"  .byte {SAFEPOINT_CONTINUATION}" in assembly
     assert f"  .byte {SAFEPOINT_EXCEPTION}" in assembly
+    from pcc.backend.x86_64_asm_driver import assemble_file as assemble_elf
+
+    obj = assemble_elf(assembly)
+    payload = next(section.data for section in obj.sections if section.name == ".pcc_stackmaps")
+    decoded = decode_stack_map(payload, expected_arch=ARCH_X86_64)
+    assert any(record.locations for fn in decoded.functions for record in fn.records)
+    # The symbolic renderer must carry the same v2 global location-table
+    # representation as the shared codec, including relocated address slots.
+    assert encode_stack_map(decoded) == payload
 
 
 def _stale_managed_ssa_ir(triple: str, *, ambiguous: bool = False) -> str:

@@ -300,8 +300,25 @@ class SetLoweringMixin:
         assert isinstance(attr, Attr)
         if attr.name not in _DYN_SET_METHOD_NATIVE:
             return None
-        return self._maybe_emit_set_method(expr)
-    def _maybe_emit_set_method(self, expr: Call) -> Optional[ir.Value]:
+        # Name alone does not make the receiver a set: a user class with an
+        # ``add``/``update``/``pop`` method reaching py_set_* silently did
+        # nothing.  Test the runtime tag and send anything else to generic
+        # dispatch.
+        return self._emit_dyn_container_method_with_tag_guard(
+            expr,
+            (PY_TYPE_SET,),
+            lambda recv: self._maybe_emit_set_method(
+                expr, recv=recv, recv_borrowed=True
+            ),
+            "dyn.set",
+        )
+
+    def _maybe_emit_set_method(
+        self,
+        expr: Call,
+        recv: Optional[ir.Value] = None,
+        recv_borrowed: bool = False,
+    ) -> Optional[ir.Value]:
         """Dispatch selected pcc-native set methods.
 
         Set/frozenset values carry a first-class ``SetType`` projection.
@@ -325,7 +342,8 @@ class SetLoweringMixin:
             # The 1-arg form covers the common case; multi-arg union/
             # intersection/etc. fall back to the generic path.
             return None
-        recv = self._emit_expr(attr.obj)
+        if recv is None:
+            recv = self._emit_expr(attr.obj)
         if recv in getattr(self, "_cpy_values", ()):
             return self._emit_cpy_method_call_src(
                 recv,
@@ -424,7 +442,12 @@ class SetLoweringMixin:
                 ir.Constant(_I64, 0),
                 name=self._fresh("set.isdisjoint.i1"),
             )
-        recv_owned = self._owned_release_needed(recv, attr.obj)
+        # Borrowed receiver: the dyn tag guard evaluated it and releases it
+        # on every path.  See the same note in _emit_owned_dict_get -- taking
+        # ownership here as well freed the set one reference early.
+        recv_owned = (
+            False if recv_borrowed else self._owned_release_needed(recv, attr.obj)
+        )
         recv_root = self._enter_container_temp_root(recv, self._fresh("set.receiver"))
         item = self._emit_expr_with_cpy_operand_cleanup(
             expr.args[0], (), as_pcc_object=True,

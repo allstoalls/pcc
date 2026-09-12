@@ -5,6 +5,7 @@ from pcc.extern import c_abi_export, c_int64, c_ptr, c_void, extern
 from pcc.unsafe import (
     abi_constant,
     gc_backend_current,
+    global_addr,
     global_load_ptr,
     load_i32,
     load_i64,
@@ -120,14 +121,22 @@ def pcc_gc_visit_scheduler_root_slots(mode: i64, resolve: i64) -> i64:
 
 @c_abi_export("pcc_gc_visit_builtin_exception_cache_slots")
 def pcc_gc_visit_builtin_exception_cache_slots(mode: i64, resolve: i64) -> i64:
-    return pcc_gc_visit_mapped_root_slots(
-        22,
+    result: i64 = pcc_gc_visit_mapped_root_slots(
+        34,
         py_subs_exc_cache_slot(0),
         null(),
         0,
         mode,
         resolve,
     )
+    index: i64 = 0
+    slot = load_ptr(global_addr("pcc_builtin_type_root_slots"), index * 8)
+    while ptr_is_null(slot) == 0:
+        visited: i64 = pcc_gc_visit_mapped_root_slot(slot, 0, null(), 0, mode, resolve)
+        result = result + (visited if mode == 3 else 1)
+        index = index + 1
+        slot = load_ptr(global_addr("pcc_builtin_type_root_slots"), index * 8)
+    return result
 
 
 @c_abi_export("pcc_gc_visit_registered_root_slots")

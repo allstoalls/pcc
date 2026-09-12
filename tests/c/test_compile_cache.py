@@ -72,9 +72,9 @@ def test_compile_translation_units_recompiles_only_dirty_units(tmp_path, monkeyp
     original_compile = c_evaluator._compile_preprocessed_translation_unit_artifact
     compiled_names = []
 
-    def tracking_compile(unit_name, codestr):
+    def tracking_compile(unit_name, codestr, **kwargs):
         compiled_names.append(unit_name)
-        return original_compile(unit_name, codestr)
+        return original_compile(unit_name, codestr, **kwargs)
 
     monkeypatch.setattr(
         c_evaluator,
@@ -134,9 +134,9 @@ def test_cli_no_cache_bypasses_disk_compile_cache(tmp_path, monkeypatch):
     compiled_names = []
     original_compile = c_evaluator._compile_preprocessed_translation_unit_artifact
 
-    def tracking_compile(unit_name, codestr):
+    def tracking_compile(unit_name, codestr, **kwargs):
         compiled_names.append(unit_name)
-        return original_compile(unit_name, codestr)
+        return original_compile(unit_name, codestr, **kwargs)
 
     monkeypatch.setattr(
         c_evaluator,
@@ -169,6 +169,34 @@ def test_compiler_cache_fingerprint_tracks_c_codegen_and_ir_analysis_package_fil
     assert "ssa/__init__.py" in tracked_files
     assert "ssa/builder.py" in tracked_files
     assert "ssa/sccp.py" in tracked_files
+    assert "parse/c_parse_driver.py" in tracked_files
+
+
+def test_compiler_cache_fingerprint_tracks_bytes_when_metadata_is_unchanged(tmp_path, monkeypatch):
+    import os
+
+    source = tmp_path / "compiler.py"
+    source.write_bytes(b"old")
+    before = source.stat()
+    monkeypatch.setattr(c_evaluator, "_compiler_cache_tracked_files", lambda: [str(source)])
+    first = c_evaluator._host_compiler_cache_fingerprint()
+    source.write_bytes(b"new")
+    os.utime(source, ns=(before.st_atime_ns, before.st_mtime_ns))
+    assert c_evaluator._host_compiler_cache_fingerprint() != first
+
+
+def test_cache_publish_is_atomic_under_same_process_competing_writers(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    import json
+
+    key = "a" * 64
+    values = [{"unit_name": "x.c", "ir_text": str(i) * 1000} for i in range(6)]
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        list(pool.map(lambda value: c_evaluator._store_compiled_artifact(str(tmp_path), key, value), values))
+    output = Path(c_evaluator._compile_cache_path(str(tmp_path), key))
+    assert json.loads(output.read_text()) in values
+    assert list(output.parent.iterdir()) == [output]
+    assert output.stat().st_mode & 0o777 == 0o600
 
 
 def test_compile_cache_key_tracks_disabled_pass_selection(monkeypatch):

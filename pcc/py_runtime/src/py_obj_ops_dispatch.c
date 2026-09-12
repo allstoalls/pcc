@@ -550,6 +550,28 @@ static PyClassObject *pcc_type_cls_object = NULL;
 static PyClassObject *pcc_type_cls_super = NULL;
 static PyClassObject *pcc_slice_cls = NULL;
 
+void **pcc_builtin_type_root_slots[] = {
+    (void **)&pcc_type_cls_none,
+    (void **)&pcc_type_cls_bool,
+    (void **)&pcc_type_cls_int,
+    (void **)&pcc_type_cls_float,
+    (void **)&pcc_type_cls_str,
+    (void **)&pcc_type_cls_list,
+    (void **)&pcc_type_cls_dict,
+    (void **)&pcc_type_cls_tuple,
+    (void **)&pcc_type_cls_set,
+    (void **)&pcc_type_cls_type,
+    (void **)&pcc_type_cls_complex,
+    (void **)&pcc_type_cls_bytes,
+    (void **)&pcc_type_cls_bytearray,
+    (void **)&pcc_type_cls_memoryview,
+    (void **)&pcc_type_cls_coroutine,
+    (void **)&pcc_type_cls_object,
+    (void **)&pcc_type_cls_super,
+    (void **)&pcc_slice_cls,
+    NULL,
+};
+
 static PyObject *pcc_builtin_type_class(
     const char *name,
     PyClassObject **slot
@@ -1827,6 +1849,9 @@ int64_t py_obj_isinstance(PyObject *o, PyObject *cls) {
         return 0;
     }
     if (py_header(cls)->type_tag != PY_TYPE_CLASS) return 0;
+    if (cls == (PyObject *)pcc_type_cls_type) {
+        return py_type_of(o) == PY_TYPE_CLASS || pcc_capi_is_type_object_value(o);
+    }
     if (cls == (PyObject *)pcc_type_cls_bool) return py_type_of(o) == PY_TYPE_BOOL;
     if (cls == (PyObject *)pcc_type_cls_int) {
         int32_t tag = py_type_of(o);

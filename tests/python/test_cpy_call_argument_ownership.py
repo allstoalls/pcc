@@ -41,6 +41,40 @@ def _block_containing(body: str, needle: str) -> str:
     raise AssertionError(body)
 
 
+def _cleanup_chain(body: str, start_label: str) -> str:
+    """Every block reachable from ``start_label`` through unconditional edges.
+
+    Operand cleanup is a chain: each block releases what it owns and branches
+    to the next one, which releases the outer operand, and so on to the
+    function's error exit.  Asserting a release lands in the block a failing
+    site branches to *directly* pins one link of that chain, so an extra link
+    -- a container temp root, say -- moves the release one block along and the
+    assertion fails even though the error path still releases it exactly once.
+    Walking the chain checks the path instead of the link.
+    """
+    blocks = {}
+    for match in re.finditer(
+        r"(?ms)^([A-Za-z0-9_.]+):(.*?)(?=^[A-Za-z0-9_.]+:|\Z)",
+        body,
+    ):
+        blocks[match.group(1)] = match.group(0)
+    seen = []
+    work = [start_label]
+    while work:
+        label = work.pop()
+        if label in seen or label not in blocks:
+            continue
+        seen.append(label)
+        for nxt in re.findall(r"br label %([A-Za-z0-9_.]+)", blocks[label]):
+            work.append(nxt)
+        for nxt in re.findall(
+            r"br i1 [^,]+, label %([A-Za-z0-9_.]+), label %([A-Za-z0-9_.]+)",
+            blocks[label],
+        ):
+            work.extend(nxt)
+    return "".join(blocks[label] for label in seen)
+
+
 def _blocks_containing(body: str, needle: str) -> list[str]:
     return [
         match.group(0)
@@ -1628,16 +1662,22 @@ def dict_setitem_cleanup() -> object:
     ), body
 
 
-def test_multi_pair_cpython_key_dict_fails_closed_before_delayed_insertion(
+def test_multi_pair_cpython_key_dict_evaluates_operands_before_inserting(
     tmp_path,
 ):
-    with pytest.raises(
-        NotImplementedError,
-        match="multi-pair CPython-key dict literal",
-    ):
-        _compile_to_ir(
-            tmp_path,
-            """
+    """The pair-count restriction is gone; the ordering it protected is not.
+
+    A CPython-key dict literal used to be refused past one pair, on the
+    grounds that a per-pair insertion error had to be visible before later
+    operands ran.  The collection loop already evaluates every key and value
+    before a single ``_emit_cpython_dict_items`` inserts them, which is what
+    CPython's dict display does too (all operands pushed, then one
+    ``BUILD_MAP``).  Runtime parity is pinned in
+    tests/python/test_py_dict_literal_cpython_key_pairs.py.
+    """
+    ir_text = _compile_to_ir(
+        tmp_path,
+        """
 from decimal import Context, Decimal
 
 def later() -> int:
@@ -1646,7 +1686,19 @@ def later() -> int:
 def cpython_key_insertion_order() -> object:
     return Context({Decimal("sNaN"): later(), Decimal(3): later()})
 """,
-        )
+    )
+    body = _function_body(ir_text, "cpython_key_insertion_order")
+    assert body is not None, ir_text
+    last_operand = body.rindex("later(")
+    first_insert = body.index("@py_cpy_call")
+    setitem = [
+        m.start()
+        for m in re.finditer(r"@py_cpy_(?:setitem|call2|call3)\(", body)
+    ]
+    assert setitem, body
+    # Every operand runs before the first insertion.
+    assert last_operand < setitem[-1], body
+    assert first_insert >= 0
 
 
 def test_multi_pair_native_custom_key_dict_inserts_before_later_pair(tmp_path):
@@ -2061,9 +2113,11 @@ def exact_rhs_error() -> object:
         body,
     )
     assert div_error is not None, body
-    cleanup = _block_containing(body, f"{div_error.group('cleanup')}:")
+    cleanup = _cleanup_chain(body, div_error.group("cleanup"))
     assert f"call void @pcc_gc_unpin(ptr {lhs})" in cleanup, cleanup
     assert f"call void @pcc_gc_release(ptr {lhs})" in cleanup, cleanup
+    # Exactly once on the error path: a double release would be a use-after-free.
+    assert cleanup.count(f"call void @pcc_gc_release(ptr {lhs})") == 1, cleanup
 
 
 def test_exact_unary_releases_fresh_operand(tmp_path):
@@ -3356,14 +3410,20 @@ def lhs_compare_order(values: list[int]) -> object:
         "(*Decimal(2), later())",
     ),
 )
-def test_cpython_splat_with_following_element_fails_closed(literal, tmp_path):
-    with pytest.raises(
-        NotImplementedError,
-        match="iterable splat.*following literal operands",
-    ):
-        _compile_to_ir(
-            tmp_path,
-            f"""
+def test_cpython_splat_with_following_element_lowers_in_source_order(
+    literal, tmp_path
+):
+    """The position restriction is gone; source order is what it protected.
+
+    Both consumers replay the recorded ops in the order the operands were
+    written, so a splat is expanded where it appears.  The native sibling of
+    this test is ``test_native_splat_with_following_element_lowers_at_source
+    _position``; runtime parity is pinned in
+    tests/python/test_py_literal_splat_source_position.py.
+    """
+    ir_text = _compile_to_ir(
+        tmp_path,
+        f"""
 from decimal import Context, Decimal
 
 def later() -> int:
@@ -3372,7 +3432,12 @@ def later() -> int:
 def splat_order_boundary() -> object:
     return Context({literal})
 """,
-        )
+    )
+    body = _function_body(ir_text, "splat_order_boundary")
+    assert body is not None, ir_text
+    splat = body.index("Decimal")
+    following = body.index("later(")
+    assert splat < following, body
 
 
 @pytest.mark.parametrize(

@@ -43,8 +43,13 @@ def test_bootstrap_defaults_to_safe_auto_lanes_and_rejects_wide_override() -> No
     assert "_BOOTSTRAP_SAFE_MAX_JOBS=2" in source
     assert "_BOOTSTRAP_SAFE_MAX_LINK_JOBS=8" in source
     assert "_BOOTSTRAP_SAFE_MAX_TREE_RSS_BYTES=17179869184" in source
-    assert 'BOOTSTRAP_MAX_TREE_RSS_BYTES="${PCC_BOOTSTRAP_MAX_TREE_RSS_BYTES:-8589934592}"' in source
+    # The tree budget default now equals _BOOTSTRAP_SAFE_MAX_TREE_RSS_BYTES:
+    # measured stage1 peaks sat at 5.8 GiB of the old 8 GiB cap, so the cap
+    # was never the bound -- but four workers need the headroom the safe
+    # maximum already sanctioned.
+    assert 'BOOTSTRAP_MAX_TREE_RSS_BYTES="${PCC_BOOTSTRAP_MAX_TREE_RSS_BYTES:-17179869184}"' in source
     assert 'BOOTSTRAP_STAGE_TIMEOUT="${PCC_BOOTSTRAP_STAGE_TIMEOUT:-600}"' in source
+    assert "_BOOTSTRAP_SAFE_MAX_STAGE_TIMEOUT=2400" in source
     assert 'run_process_tree_sample.py' in source
     assert 'PCC_BOOTSTRAP_EXTERNAL_MEMORY_GUARD' in source
     assert '--darwin-preflight-reserve-bytes' in source

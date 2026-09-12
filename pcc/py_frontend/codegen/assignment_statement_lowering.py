@@ -867,7 +867,7 @@ class AssignmentStatementLoweringMixin:
             ir_ty = (
                 _CSTR
                 if (boxed_int_target or exact_int_value is not None)
-                else self._storage_ir_type(local_target_ty)
+                else self._local_slot_ir_type(target.ident, local_target_ty)
             )
             init_null = isinstance(ir_ty, ir.PointerType) and self._ir_type_matches(
                 ir_ty, _CSTR
@@ -877,14 +877,18 @@ class AssignmentStatementLoweringMixin:
                 name=f"{target.ident}.addr",
                 init_null=init_null,
             )
-            self.env[target.ident] = (alloca, ir_ty, local_target_ty)
+            self.env[target.ident] = (
+                alloca,
+                ir_ty,
+                self._local_slot_decl_type(target.ident, local_target_ty),
+            )
             slot = self.env[target.ident]
 
         alloca, ir_ty, declared_ty = slot
         target_storage_ty = (
             _CSTR
             if (boxed_int_target or exact_int_value is not None)
-            else self._storage_ir_type(local_target_ty)
+            else self._local_slot_ir_type(target.ident, local_target_ty)
         )
         if (
             forced_exact_int_target
@@ -933,6 +937,22 @@ class AssignmentStatementLoweringMixin:
                     stmt.value.ty,
                 )
             self._exact_int_env_flags[target.ident] = True
+        elif (
+            target.ident in getattr(self, "_planned_object_local_names", set())
+            and isinstance(ir_ty, ir.PointerType)
+            and self._ir_type_matches(ir_ty, _CSTR)
+        ):
+            # The slot is the object one on every edge, so a scalar RHS is
+            # boxed rather than coerced into a shape the slot does not have.
+            if not isinstance(value.type, ir.PointerType):
+                value = marshal.marshal_to_object(
+                    self.builder,
+                    self.module,
+                    self.runtime,
+                    value,
+                    stmt.value.ty,
+                )
+            self._exact_int_env_flags.pop(target.ident, None)
         else:
             if not forced_exact_int_target:
                 self._exact_int_env_flags.pop(target.ident, None)
@@ -1665,7 +1685,7 @@ class AssignmentStatementLoweringMixin:
                     stmt.target.ident,
                     False,
                 )
-            ) or isinstance(stmt.target.ty, (StrType, BytesType)):
+            ) or isinstance(stmt.target.ty, (StrType, BytesType, ByteArrayType)):
                 # Reuse the exact Assign path so lhs pinning, RHS error
                 # cleanup, owned-result replacement, root barriers, and the
                 # local owned flag stay identical to ``x = x <op> rhs``.
@@ -1673,6 +1693,8 @@ class AssignmentStatementLoweringMixin:
                 # generic augassign store below never released the previous
                 # owned value (a 20k-char ``cur += ch`` loop retained 299 MB,
                 # tests/python/test_ownership_str_iadd_and_len_call_result.py).
+                # The current bytearray helper also returns a replacement;
+                # that NEW reference needs the same owned-slot transfer.
                 combined = BinOp(
                     span=stmt.span,
                     ty=stmt.target.ty,

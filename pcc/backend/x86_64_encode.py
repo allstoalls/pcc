@@ -994,6 +994,7 @@ def encode_instruction(
         opcode = (0x50 if mnemonic == "push" else 0x58) + reg.low
         return EncodedInstruction(_rex(w=False, r=0, x=0, b=reg.high) + bytes((opcode,)))
     fixed = {
+        "nop": b"\x90",
         "cdq": b"\x99",
         "cqo": b"\x48\x99",
         "syscall": b"\x0f\x05",

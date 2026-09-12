@@ -21,6 +21,7 @@ from ..py_ast import (
     DynType,
     StrType,
     Expr,
+    FloatType,
     For,
     FuncDef,
     If,
@@ -242,6 +243,72 @@ def _collect_exact_int_assignment_target(
                 out,
             )
         index += 1
+
+
+def mixed_scalar_object_local_names(host, fd: FuncDef, global_names) -> tuple[str, ...]:
+    """Locals written through both an unboxed float and an object.
+
+    ``forced_exact_int_local_names`` already does this for ``int``, because a
+    raw i64 and a PyInt cannot share one slot.  The same is true of a raw
+    double and any object, and nothing covered it: the slot took the shape of
+    the first binding and every later store was *coerced* into it, so
+    assigning a class instance to a name previously bound to a float emitted
+    ``py_float_to_f64`` on the instance -- a silently wrong value, caught only
+    because the self backend's verifier later saw the double reach a call
+    expecting an object.
+
+    ``pcc/codegen/c_codegen.py::_eval_const_expr`` is the real instance: it
+    writes ``lhs = float(...)`` on the floating branch and
+    ``lhs = integer_promotion(...)`` (a ``ConstIntValue``) on the integer one,
+    then reads ``lhs.width``.
+
+    ``int`` is deliberately NOT included here; it keeps its own planner, whose
+    consumers project the exact-int object lane.
+
+    ``bool`` is not included either, and that is a known gap rather than a
+    judgement that it is safe: the same mix is possible (``x = a > b`` on one
+    branch, ``x = SomeClass()`` on the other) and today the object is coerced
+    through ``py_obj_truthy``.  Including it made two owned-local store paths
+    reachable that still write a raw ``i1`` into the object slot
+    (``<name>.owned.cont``), so closing it needs those covered first.  See
+    ``tests/python/test_mixed_float_object_local_slot.py``.
+    """
+    if getattr(host, "_freestanding_module", False):
+        # Same boundary as the exact-int planner: the freestanding subset
+        # cannot allocate objects or register GC roots.
+        return ()
+    binding_types = []
+    for arg in fd.args:
+        if arg.name != "":
+            binding_types.append(
+                (arg.name, arg.annotation or DynType(name="dyn"))
+            )
+    _collect_local_binding_types(fd.body, binding_types)
+
+    scalar_bindings = set()
+    object_bindings = set()
+    order = []
+    seen = set()
+    for name, binding_ty in binding_types:
+        if name in global_names:
+            continue
+        if name not in seen:
+            seen.add(name)
+            order.append(name)
+        if isinstance(binding_ty, FloatType):
+            scalar_bindings.add(name)
+        elif isinstance(binding_ty, IntType):
+            # An int binding is an object only when ints are boxed; either way
+            # the int planner owns that name.
+            continue
+        elif host._is_object(binding_ty):
+            object_bindings.add(name)
+
+    out = []
+    for name in order:
+        if name in scalar_bindings and name in object_bindings:
+            out.append(name)
+    return tuple(out)
 
 
 def forced_exact_int_local_names(host, fd: FuncDef, global_names) -> tuple[str, ...]:
@@ -796,6 +863,24 @@ class ExactIntLoweringMixin:
             if rhs_owned:
                 self._gc_release(rhs)
             return result
+        if (
+            isinstance(expr, UnaryOp)
+            and expr.op == "-"
+            and isinstance(expr.operand, (IntLit, BoolLit))
+        ):
+            # ``-<literal>`` is a compile-time constant.  Going through
+            # py_int_neg costs the call, an operand pin/unpin pair, a
+            # post-call error check and a NULL guard -- about ten basic
+            # blocks per negative literal.  ``pcc/parse/c_parsetab.py``
+            # alone holds 9,443 of them, and its module-level table
+            # construction was 88.9 MB of IR / 175,239 blocks, of which the
+            # post-call error checks were 60,670.
+            literal = expr.operand
+            if isinstance(literal, BoolLit):
+                return self._emit_int_literal_object(
+                    -1 if bool(literal.value) else 0
+                )
+            return self._emit_int_literal_object(-int(literal.value))
         if (
             isinstance(expr, UnaryOp)
             and expr.op == "-"

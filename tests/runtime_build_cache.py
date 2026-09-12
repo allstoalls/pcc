@@ -53,6 +53,7 @@ _PCC_PY_ARCHIVE_ENV_KEYS = (
     "CPPFLAGS",
     "LDFLAGS",
     "PCC_REFCOUNT_KIND",
+    "PCC_IR_TO_OBJ_EMITTER",
 )
 
 _REPO_ROOT = Path(__file__).absolute().parents[1]

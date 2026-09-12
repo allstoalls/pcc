@@ -72,6 +72,11 @@ DYLINKER = b"/usr/lib/dyld"
 
 # adrp x16, <page> ; ldr x16, [x16, #<off>] ; br x16
 _STUB_SIZE = 12
+_VENEER_SIZE = 12  # adrp x16, page ; add x16, x16, pageoff ; br x16
+# Distance between thunk islands.  Any point in __text is within this of
+# the nearest island, so it must stay under the +-128 MiB branch reach
+# with room for the island tables themselves.
+_VENEER_ISLAND_SPAN = 96 * 1024 * 1024
 _MIN_CHAINED_FIXUPS_VERSION = (12, 0)
 _PROVEN_INPUT_LOAD_COMMANDS = frozenset({
     spec.LC_SEGMENT_64,
@@ -152,7 +157,15 @@ def _branch26(word: int, delta: int) -> int:
         raise LinkError("misaligned branch target")
     words = delta >> 2
     if not -(1 << 25) <= words < (1 << 25):
-        raise LinkError("branch target out of range")
+        # AArch64 b/bl reach +-128 MiB.  Report by how much, so the next
+        # reader knows whether the image merely crossed the line or needs
+        # range-extension thunks in bulk.
+        raise LinkError(
+            "branch target out of range: delta "
+            + str(delta)
+            + " bytes exceeds +-"
+            + str(1 << 27)
+        )
     return (word & ~0x03FFFFFF) | (words & 0x03FFFFFF)
 
 
@@ -365,6 +378,27 @@ def link_prepared_executable(
         s["name"] for s in symbols
         if (s["n_type"] & spec.N_TYPE) == spec.N_UNDF
     )
+    # An undefined symbol is bound as a dylib import.  A pcc-generated name
+    # can only come from the image itself, so importing one produces a binary
+    # that links and then dies at startup with a dyld "Symbol not found"
+    # instead of a link error naming the gap.  That is exactly what a missing
+    # ``user_pcc_llvm_capi_ir_LiteralStructType___init__0`` did to the first
+    # pcc1 carrying the C frontend.
+    internal_undefined = sorted(
+        name for name in imports
+        if name.lstrip("_").startswith(("user_", "pcc_", "py_"))
+    )
+    if internal_undefined:
+        raise LinkError(
+            "undefined pcc-internal symbol(s) would be bound as dylib "
+            "imports: "
+            + ", ".join(repr(name) for name in internal_undefined[:8])
+            + (
+                " (and " + str(len(internal_undefined) - 8) + " more)"
+                if len(internal_undefined) > 8
+                else ""
+            )
+        )
     if entry not in defined:
         raise LinkError(f"entry symbol {entry!r} is not defined by the inputs")
     entry_symbol = defined[entry]
@@ -397,6 +431,7 @@ def link_prepared_executable(
     _S_THREAD_LOCAL_VARIABLES = 0x13
     code_imports_set: set[str] = set()
     relocated_imports: set[str] = set()
+    branch_targets_set: set[str] = set()
     names_all = [s["name"] for s in symbols]
     imports_set = set(imports)
     for sec in sections:
@@ -406,10 +441,18 @@ def link_prepared_executable(
             nm = names_all[r["r_symbolnum"]]
             if nm in imports_set:
                 relocated_imports.add(nm)
+            if r["r_type"] == spec.ARM64_RELOC_BRANCH26:
+                # Every call target is a candidate for a range-extension
+                # thunk; which ones need one is only known once addresses
+                # exist, and sizing the island from the candidates avoids a
+                # second layout pass (an unused slot is 12 zero bytes).
+                branch_targets_set.add(nm)
             if r["r_type"] in (spec.ARM64_RELOC_BRANCH26,
                                spec.ARM64_RELOC_GOT_LOAD_PAGE21,
                                spec.ARM64_RELOC_GOT_LOAD_PAGEOFF12):
                 code_imports_set.add(nm)
+    branch_targets = sorted(branch_targets_set)
+    veneer_index = {name: i for i, name in enumerate(branch_targets)}
     unreferenced_imports = sorted(set(imports) - relocated_imports)
     if unreferenced_imports:
         raise LinkError(
@@ -515,12 +558,47 @@ def link_prepared_executable(
                  2, bytearray(b"\0" * (_STUB_SIZE * len(code_imports))))
     got = _Out("__DATA_CONST", "__got", spec.S_REGULAR, 3,
                bytearray(b"\0" * (8 * len(code_imports))))
+    # Range-extension thunks.  AArch64 b/bl reach +-128 MiB.  A single
+    # island at offset 0 only serves sites within 128 MiB of the start, which
+    # __text outgrew: one island was the standing bug behind
+    # "range-extension thunk itself out of range".  Islands are spread every
+    # _VENEER_ISLAND_SPAN bytes instead, and every island carries the whole
+    # table, so a call site always has one in reach.  Each thunk is
+    # adrp + add + br x16, and adrp reaches +-4 GiB, so any island can name
+    # any target in the image.
+    _veneer_table_bytes = _VENEER_SIZE * len(branch_targets)
+
+    def _make_veneer_island():
+        return _Out("__TEXT", "__veneers", spec.S_REGULAR
+                    | spec.S_ATTR_PURE_INSTRUCTIONS
+                    | spec.S_ATTR_SOME_INSTRUCTIONS,
+                    2, bytearray(b"\0" * _veneer_table_bytes))
+
+    if branch_targets:
+        _text_payload = sum(len(out.data) for out in text_out)
+        if code_imports:
+            _text_payload += _STUB_SIZE * len(code_imports)
+        veneer_island_count = 1
+        while True:
+            _with_islands = _text_payload + veneer_island_count * _veneer_table_bytes
+            _needed = max(1, -(-_with_islands // _VENEER_ISLAND_SPAN))
+            if _needed <= veneer_island_count:
+                break
+            veneer_island_count = _needed
+    else:
+        veneer_island_count = 0
+    veneer_islands = [_make_veneer_island() for _ in range(veneer_island_count)]
+    veneers = veneer_islands[0] if veneer_islands else _make_veneer_island()
 
     # Load-command size is needed before addresses; compute it by counting.
     seg_cmd_size = lambda n: spec.SEGMENT_COMMAND_64.size + n * spec.SECTION_64.size
     sizeofcmds = (
         seg_cmd_size(0)                                   # __PAGEZERO
-        + seg_cmd_size(len(text_out) + (1 if code_imports else 0))
+        + seg_cmd_size(
+            len(text_out)
+            + (1 if code_imports else 0)
+            + veneer_island_count
+        )
         + seg_cmd_size(1 if code_imports else 0)          # __DATA_CONST
         + (seg_cmd_size(len(data_out)) if data_out else 0)
         + seg_cmd_size(0)                                 # __LINKEDIT
@@ -540,13 +618,57 @@ def link_prepared_executable(
     )
 
     cursor = spec.MACH_HEADER_64.size + sizeofcmds
-    text_sections = list(text_out) + ([stubs] if code_imports else [])
+    # Island 0 leads __TEXT; the rest are inserted once the bytes since the
+    # previous island reach the span, so no point is further than one span
+    # from an island.
+    text_sections = []
+    _remaining_islands = list(veneer_islands)
+    if _remaining_islands:
+        text_sections.append(_remaining_islands.pop(0))
+    _since_island = 0
+    for _out in list(text_out) + ([stubs] if code_imports else []):
+        if _remaining_islands and _since_island >= _VENEER_ISLAND_SPAN:
+            text_sections.append(_remaining_islands.pop(0))
+            _since_island = 0
+        text_sections.append(_out)
+        _since_island += len(_out.data)
+    text_sections.extend(_remaining_islands)
     for out in text_sections:
         cursor = _align(cursor, 1 << out.align_log2)
         out.fileoff = cursor
         out.addr = TEXT_BASE + cursor
         cursor += len(out.data)
     text_filesize = _align(cursor, PAGE)
+    # AArch64 b/bl reach is +-128 MiB.  A single thunk island can only serve
+    # call sites within that of itself, so once __text passes the reach the
+    # link fails late, deep in the relocation pass, with only "worst |delta|"
+    # to reverse-engineer the span from.  Report the span and its margin here
+    # -- before any of that work -- so a build that cannot fit says so up
+    # front instead of after the whole codegen phase.
+    _text_span = cursor - (spec.MACH_HEADER_64.size + sizeofcmds)
+    if os.environ.get("PCC_LINK_REPORT_TEXT_SPAN", "1") not in ("0", "off", ""):
+        _reach = 1 << 27
+        _margin = _reach - _text_span
+        sys.stderr.write(
+            "pcc link: __text span "
+            + str(_text_span)
+            + " bytes ("
+            + ("%.1f" % (_text_span / (1 << 20)))
+            + " MiB), branch reach "
+            + ("%.0f" % (_reach / (1 << 20)))
+            + " MiB, margin "
+            + ("%+.1f" % (_margin / (1 << 20)))
+            + " MiB"
+            + ", "
+            + str(veneer_island_count)
+            + (" island" if veneer_island_count == 1 else " islands")
+            + (
+                ""
+                if _margin >= 0
+                else " (span exceeds the reach, so the islands carry it)"
+            )
+            + "\n"
+        )
 
     data_const_off = text_filesize
     if code_imports:
@@ -606,6 +728,18 @@ def link_prepared_executable(
         name: stubs.addr + i * _STUB_SIZE for i, name in enumerate(code_imports)
     }
     got_addr = {name: got.addr + i * 8 for i, name in enumerate(code_imports)}
+    def veneer_addr_for(name: str, site: int) -> int:
+        """Address of ``name``'s thunk in the island nearest ``site``."""
+        offset = veneer_index[name] * _VENEER_SIZE
+        best = veneer_islands[0].addr + offset
+        best_delta = abs(best - site)
+        for island in veneer_islands[1:]:
+            candidate = island.addr + offset
+            delta = abs(candidate - site)
+            if delta < best_delta:
+                best = candidate
+                best_delta = delta
+        return best
 
     # --- stub bodies -------------------------------------------------------
     for i, name in enumerate(code_imports):
@@ -616,6 +750,9 @@ def link_prepared_executable(
         struct.pack_into("<3I", stubs.data, i * _STUB_SIZE, adrp, ldr, 0xD61F0200)
 
     # --- apply relocations -------------------------------------------------
+    # name -> final target address, for every thunk a branch actually needed.
+    veneer_used: dict = {}
+    unreachable_veneers: list = []
     import_ordinal = {name: i for i, name in enumerate(imports)}
     # Chained-fixup BIND sites outside the GOT: a TLV descriptor's thunk
     # field is an import pointer in __DATA that dyld binds. Collected here,
@@ -680,8 +817,19 @@ def link_prepared_executable(
             if rtype == spec.ARM64_RELOC_BRANCH26:
                 dest = stub_addr[name] if target is None else target
                 word, = struct.unpack_from("<I", out.data, at_off)
+                delta = dest - at
+                if not -(1 << 27) <= delta < (1 << 27):
+                    # Out of b/bl reach: branch to this symbol's thunk in the
+                    # __veneers island instead, and record the real target so
+                    # the thunk body can be emitted below.
+                    thunk = veneer_addr_for(name, at)
+                    veneer_used[name] = dest
+                    delta = thunk - at
+                    if not -(1 << 27) <= delta < (1 << 27):
+                        unreachable_veneers.append((name, at, thunk, delta))
+                        continue
                 struct.pack_into("<I", out.data, at_off,
-                                 _branch26(word, dest - at))
+                                 _branch26(word, delta))
             elif rtype in (spec.ARM64_RELOC_PAGE21,
                            spec.ARM64_RELOC_GOT_LOAD_PAGE21):
                 # GOT relaxation: a GOT load of a DEFINED symbol needs no GOT
@@ -801,6 +949,34 @@ def link_prepared_executable(
             )
         except PreciseStackMapError as exc:
             raise LinkError(f"final stack-map table is invalid: {exc}") from exc
+
+    if unreachable_veneers:
+        # The island itself is out of reach, which means __text exceeds what
+        # one island at offset 0 can serve (roughly 128 MiB past the lowest
+        # call site that needs a thunk).  Report it rather than emit a
+        # mis-encoded branch; the fix is more islands, not a wider field.
+        worst = max(abs(r[3]) for r in unreachable_veneers)
+        raise LinkError(
+            "range-extension thunk itself out of range for "
+            + str(len(unreachable_veneers))
+            + " call site(s), worst |delta| "
+            + str(worst)
+            + " vs +-"
+            + str(1 << 27)
+            + "; __text needs more than one thunk island"
+        )
+
+    # --- range-extension thunk bodies --------------------------------------
+    # Every island carries a body for every thunk actually taken: which
+    # island a given call site reaches is decided per site, so they cannot
+    # be filled selectively.
+    for name, dest in veneer_used.items():
+        off = veneer_index[name] * _VENEER_SIZE
+        for island in veneer_islands:
+            at = island.addr + off
+            adrp = _adrp_imm(0x90000010, (dest >> 12) - (at >> 12))
+            add = _addimm12(0x91000210, dest & 0xFFF)
+            struct.pack_into("<3I", island.data, off, adrp, add, 0xD61F0200)
 
     # --- chained fixups: binds across the segments that carry them ---------
     # A bind pointer is an import reference dyld resolves by walking a chain.
@@ -987,8 +1163,10 @@ def link_prepared_executable(
         strx = len(strtab)
         strtab += name.encode() + b"\0"
         out, sec_addr = section_addr[sym["n_sect"]]
-        n_sect = 1 + (text_out + ([stubs] if code_imports else [])
-                      + ([got] if code_imports else []) + data_out).index(out)
+        # Derived from text_sections so the two orders cannot drift.
+        n_sect = 1 + (
+            text_sections + ([got] if code_imports else []) + data_out
+        ).index(out)
         nlists += spec.NLIST_64.pack({
             "n_strx": strx,
             "n_type": (

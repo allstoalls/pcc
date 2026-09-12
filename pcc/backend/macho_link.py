@@ -72,16 +72,17 @@ class LinkError(Exception):
     """The link job is outside what this linker proves."""
 
 
-# A string, not a PEP 604 union. This alias sits at module scope, so the union
-# was evaluated at import time -- and pcc1's closed-world object model has no
-# `|` between class objects, which made the whole owned linker unimportable
-# under self-host. It surfaced as "unsupported operand type(s) for |" from
-# inside the link step (and, before the guarded reporting fix, as the single
-# word "returncode"). Every use is `list[LinkInput]` or `value: LinkInput`, so
-# nothing evaluates it as a type at runtime.
+# A real PEP 604 union.  This was once a *string*, to dodge a self-host gap:
+# pcc1 could not evaluate `|` between class objects, so the module-level alias
+# made the owned linker unimportable.  Both halves of that gap are now
+# implemented -- the runtime evaluates the union, and `type_infer` records a
+# module-level union alias instead of leaving a phantom `ClassType(alias)`.
+# The string form was actively harmful: `isinstance(value, bytes)` inside
+# `_coerce_link_object` compiled against that phantom class and answered False
+# for real bytes, so a self-hosted link rejected its own archive members.
 LinkInput = (
-    "bytes | NativeObject | NativeObjectView | PackedNativeObject"
-    " | spec.MachOObject"
+    bytes | NativeObject | NativeObjectView | PackedNativeObject
+    | spec.MachOObject
 )
 
 
@@ -129,6 +130,8 @@ class _MergedSection:
     flags: int
     align_log2: int = 0
     data: bytearray = field(default_factory=bytearray)
+    data_parts: list[bytes | bytearray] = field(default_factory=list)
+    data_size: int = 0
     symbols: list[TextSymbol] = field(default_factory=list)
     relocations: list[Relocation] = field(default_factory=list)
     data_in_code: list[DataInCodeRegion] = field(default_factory=list)
@@ -956,24 +959,26 @@ def link_relocatable_native(objects: list[LinkInput]) -> NativeObject:
                 base = _align_up(target.zerofill_size, sec_align)
                 target.zerofill_size = base + sec_size
             else:
-                base = _align_up(len(target.data), sec_align)
-                padding = base - len(target.data)
-                if padding and len(target.data) % 4 != 0 and (
+                base = _align_up(target.data_size, sec_align)
+                padding = base - target.data_size
+                if padding and target.data_size % 4 != 0 and (
                     target.flags & spec.S_ATTR_PURE_INSTRUCTIONS
                 ):
                     # A preceding input may end in an odd-sized inline-data
                     # tail.  The zeros needed to align the next text atom are
                     # data as well, not a partial AArch64 instruction.
                     target.data_in_code.append(DataInCodeRegion(
-                        offset=len(target.data),
+                        offset=target.data_size,
                         length=padding,
                         kind=spec.DICE_KIND_DATA,
                     ))
-                target.data.extend(b"\0" * (base - len(target.data)))
+                if padding:
+                    target.data_parts.append(b"\0" * padding)
                 payload = _section_payload(
                     obj, sec, sec_index, section_addrs,
                 )
-                target.data.extend(payload)
+                target.data_parts.append(payload)
+                target.data_size = base + len(payload)
             bases[sec_index] = base
             input_section_addr[key] = (sec_addr, base)
             target.data_in_code.extend(
@@ -1060,6 +1065,13 @@ def link_relocatable_native(objects: list[LinkInput]) -> NativeObject:
                 private_external=bool(sym_type & spec.N_PEXT),
             ))
             defined[name] = key
+
+    # Keep each input payload once while calculating offsets. Growing the
+    # merged bytearray for every object copies an ever-larger prefix in the
+    # native runtime; materialize each section once before relocation writes.
+    for section in merged.values():
+        section.data = bytearray(b"".join(section.data_parts))
+        section.data_parts.clear()
 
     if stack_map_payloads:
         try:

@@ -18,6 +18,7 @@ from pcc.py_runtime.py.py_abi_constants import (
     PY_TYPE_FUNC,
     PY_TYPE_INSTANCE,
     PY_TYPE_INT,
+    PY_TYPE_NONE,
     PY_TYPE_TUPLE,
     PY_TYPE_USER_CLASS_START,
 )
@@ -64,6 +65,8 @@ py_err_occurred = extern("py_err_occurred", (), c_int64)
 py_obj_truthy = extern("py_obj_truthy", (c_ptr,), c_int64)
 py_int_to_i64 = extern("py_int_to_i64", (c_ptr, c_ptr), c_int64)
 py_int_value_i64 = extern("py_int_value_i64", (c_ptr,), c_int64)
+py_int_cmp = extern("py_int_cmp", (c_ptr, c_ptr), c_int32)
+py_int_from_i64 = extern("py_int_from_i64", (c_int64,), c_ptr)
 py_int_floordiv = extern("py_int_floordiv", (c_ptr, c_ptr), c_ptr)
 py_float_to_f64 = extern("py_float_to_f64", (c_ptr,), c_double)
 py_float_from_f64 = extern("py_float_from_f64", (c_double,), c_ptr)
@@ -383,6 +386,47 @@ def py_obj_index_i64(obj) -> int:
             return value
     else:
         py_decref(result)
+    py_raise_owned(py_exc_new(3, cstr("__index__ returned non-int")))
+    return 0
+
+
+def _slice_integer_i64(value) -> int:
+    overflow = stack_alloc(4)
+    store_i32(overflow, 0, 0)
+    result: int = py_int_to_i64(value, overflow)
+    if load_i32(overflow, 0) == 0:
+        return result
+    zero = py_int_from_i64(0)
+    sign: int = py_int_cmp(value, zero)
+    py_decref(zero)
+    if sign < 0:
+        return -9223372036854775808
+    return 9223372036854775807
+
+
+@c_abi_export("py_slice_index_i64")
+def py_slice_index_i64(obj, default: int) -> int:
+    """Optional __index__ value, saturated to the platform index range."""
+    if ptr_is_null(obj) != 0 or _type_of(obj) == PY_TYPE_NONE:
+        return default
+    if is_tagged_int(obj) != 0 or _type_of(obj) == PY_TYPE_INT:
+        return _slice_integer_i64(obj)
+    if _type_of(obj) == PY_TYPE_BOOL:
+        if ptr_eq(obj, global_load_ptr("py_True")) != 0:
+            return 1
+        return 0
+    method = _lookup_dunder(obj, cstr("__index__"))
+    if ptr_is_null(method) != 0:
+        py_raise_owned(py_exc_new(3, cstr("slice indices must be integers or None or have an __index__ method")))
+        return 0
+    result = _call_unary(method, obj)
+    if ptr_is_null(result) != 0:
+        return 0
+    if is_tagged_int(result) != 0 or _type_of(result) == PY_TYPE_INT:
+        value: int = _slice_integer_i64(result)
+        py_decref(result)
+        return value
+    py_decref(result)
     py_raise_owned(py_exc_new(3, cstr("__index__ returned non-int")))
     return 0
 

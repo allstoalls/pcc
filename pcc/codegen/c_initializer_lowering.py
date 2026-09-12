@@ -8,6 +8,7 @@ import struct
 
 from pcc.llvm_capi.compat import ir_c as ir
 
+from .c_layout import BitFieldRef
 from .c_layout import is_struct_ir_type as _is_struct_ir_type
 from .c_types import int8_t, int32_t, int64_t
 from ..ast import c_ast as c_ast

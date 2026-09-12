@@ -583,6 +583,42 @@ class IrScaffoldLoweringMixin:
             return attr.name
         return None
 
+    def _maybe_emit_ir_scaffold_symbol_value(self, attr: Attr):
+        """Lower a bare ``ir.SYMBOL`` -- an ``ir.X`` that is *not* being called.
+
+        Every other scaffold entry point matches the call shape ``ir.X(...)``,
+        so an ``ir.X`` used as a value had no lowering at all: the compile-time
+        alias registered for ``ir`` has no runtime binding, and the reference
+        fell through to a plain name lookup.  ``pcc/codegen/c_codegen.py:84``
+        (``IRBuilder = ir.IRBuilder``) is the one such site in the tree, and it
+        is what pcc1 hit after the provider-init fix, as
+        ``NameError: name 'ir' is not defined``.
+
+        The provider module publishes each class object in
+        ``@.class.pcc_llvm_capi_ir.<Name>``, which is what the isinstance
+        lowering already reads; loading it here hands back the same class
+        object ``from pcc.llvm_capi.ir import X`` would have bound, so a later
+        call through the alias runs the real class.
+        """
+        if not self._ir_scaffold_enabled():
+            # OFF mode leaves ``ir`` a real imported module object; normal
+            # attribute lowering is correct there.
+            return None
+        symbol = self._ir_module_symbol_target(attr)
+        if symbol is None:
+            return None
+        g_name = ".class.pcc_llvm_capi_ir." + symbol
+        existing = self.module.globals.get(g_name)
+        if existing is None:
+            gv = ir.GlobalVariable(self.module, _CSTR, name=g_name)
+            gv.linkage = "external"
+        else:
+            gv = existing
+        return self.builder.load(
+            gv,
+            name=self._fresh("ir.symbol." + symbol),
+        )
+
     def _expr_is_ir_builder_ctor(self, expr: Expr) -> bool:
         return (
             _is_scaffold_call(expr)
@@ -1664,6 +1700,11 @@ class IrScaffoldLoweringMixin:
                 name=self._fresh(f"scaffold.{symbol}"),
             )
         extern_name = f"{self._IR_TOPLEVEL_SYMBOL_PREFIX}{symbol}___init__"
+        if symbol == "Module":
+            # Module.__init__ is the instance initializer, not a factory.
+            # Its mangled symbol otherwise happens to satisfy this call with
+            # the wrong receiver/return ABI. The scaffold factory allocates.
+            extern_name = f"{self._IR_TOPLEVEL_SYMBOL_PREFIX}scaffold_Module___init__"
         param_tys = [_CSTR] * arity
         fn = self._declare_external_function(extern_name, _CSTR, param_tys)
         return self.builder.call(

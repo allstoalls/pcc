@@ -2274,7 +2274,9 @@ def _parse_arg_infos(function_name: str, args_text: str) -> list[ArgInfo]:
             raise BackendUnavailable(
                 f"self backend could not decode argument in {function_name!r}: {chunk}"
             ) from exc
-        name_match = re.search(r'(%(?:"[^"]+"|[A-Za-z_.$][\w.$-]*))\s*$', remainder)
+        name_match = re.search(
+            r'(%(?:"[^"]+"|[A-Za-z_.$][\w.$-]*|[0-9]+))\s*$', remainder
+        )
         if name_match is None:
             raise BackendUnavailable(
                 f"self backend could not decode argument in {function_name!r}: {chunk}"
@@ -2927,9 +2929,16 @@ def _parse_blocks(
             current_start = len(raw_lines)
             continue
         if not block_names:
-            raise BackendUnavailable(
-                f"self backend expected a labeled basic block in {function_name!r}: {line}"
-            )
+            # An omitted entry label consumes the next unnamed local slot.
+            # Preserve that identity for PHI predecessor references instead
+            # of inventing a named block that may collide with a later label.
+            entry_slot = 0
+            for arg in args:
+                if arg.name.isdigit():
+                    after_arg = int(arg.name) + 1
+                    if after_arg > entry_slot:
+                        entry_slot = after_arg
+            block_names.append(str(entry_slot))
         raw_lines.append(line)
 
     if not block_names:

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import json
+from pathlib import Path
 import shutil
 import subprocess
 import sys
@@ -173,8 +175,7 @@ def c_bundle_valid(archive: str, *, host_python_command) -> bool:
         return True
     try:
         with open(archive, "rb") as stream:
-            if stream.read(8) != b"!<arch>\n":
-                return False
+            archive_data = stream.read()
         inventory_path = capi_inventory(archive)
         with open(inventory_path, "r", encoding="utf-8") as stream:
             inventory_text = stream.read()
@@ -189,44 +190,23 @@ def c_bundle_valid(archive: str, *, host_python_command) -> bool:
         bare = symbol[1:] if symbol.startswith("_") else symbol
         if not (bare.startswith("Py") or bare.startswith("_Py")):
             return False
-    verify_code = (
-        "import subprocess\n"
-        "import sys\n"
-        "archive = sys.argv[1]\n"
-        "inventory_path = sys.argv[2]\n"
-        "members = subprocess.check_output(['ar', 't', archive], text=True, timeout=30)\n"
-        "real_members = []\n"
-        "for raw in members.splitlines():\n"
-        "    name = raw.strip()\n"
-        "    if name and name not in ('/', '//') and not name.startswith('__.SYMDEF'):\n"
-        "        real_members.append(name)\n"
-        "if not real_members:\n"
-        "    raise SystemExit(2)\n"
-        "nm_text = subprocess.check_output(['nm', '-g', archive], stderr=subprocess.STDOUT, text=True, timeout=30)\n"
-        "actual = set()\n"
-        "for raw in nm_text.splitlines():\n"
-        "    parts = raw.split()\n"
-        "    if len(parts) != 3 or parts[1] == 'U' or not parts[1].isupper():\n"
-        "        continue\n"
-        "    symbol = parts[2]\n"
-        "    bare = symbol[1:] if symbol.startswith('_') else symbol\n"
-        "    if bare.startswith('Py') or bare.startswith('_Py'):\n"
-        "        actual.add(symbol)\n"
-        "with open(inventory_path, 'r', encoding='utf-8') as stream:\n"
-        "    expected = stream.read().splitlines()\n"
-        "if sorted(actual) != expected:\n"
-        "    raise SystemExit(3)\n"
-    )
     try:
-        subprocess.run(
-            [host_python_command(), "-c", verify_code, archive, capi_inventory(archive)],
-            check=True,
-            capture_output=True,
-            timeout=90,
-        )
+        from pcc.backend.ar import read_members
+        from pcc.backend.ar_writer import _defined_symbols
+
+        members = read_members(archive_data)
+        if not members:
+            return False
+        actual = set()
+        for _name, payload in members:
+            _format, symbols = _defined_symbols(payload)
+            for symbol in symbols:
+                bare = symbol[1:] if symbol.startswith("_") else symbol
+                if bare.startswith("Py") or bare.startswith("_Py"):
+                    actual.add(symbol)
+        return sorted(actual) == lines
     except Exception:
         return False
-    return True
 
 
 def provenance_root(archive: str, runtime_dir: str) -> str:
@@ -248,31 +228,11 @@ def provenance_valid(
     if not os.path.isfile(archive) or not os.path.isfile(manifest):
         return False
     root = runtime_root or provenance_root(archive, runtime_dir)
-    host_code = (
-        "import os\n"
-        "import sys\n"
-        "pcc_source_root = sys.argv[1]\n"
-        "if pcc_source_root and pcc_source_root not in sys.path:\n"
-        "    sys.path.insert(0, pcc_source_root)\n"
-        "if pcc_source_root:\n"
-        "    os.environ.setdefault('PCC_SOURCE_ROOT', pcc_source_root)\n"
-        "    os.environ.setdefault('PCC_REPO_ROOT', pcc_source_root)\n"
-        "from pcc.tools.runtime_archive_provenance import verify_runtime_archive_manifest\n"
-        "verify_runtime_archive_manifest(sys.argv[2], runtime_root=sys.argv[3])\n"
-    )
     try:
-        subprocess.run(
-            [
-                host_python_command(),
-                "-c",
-                host_code,
-                pcc_source_root(),
-                archive,
-                str(root),
-            ],
-            check=True,
-            capture_output=True,
-            timeout=90,
+        from pcc.tools.runtime_archive_provenance import verify_runtime_archive_manifest
+
+        verify_runtime_archive_manifest(
+            Path(archive), runtime_root=Path(root),
         )
     except Exception:
         return False
@@ -285,52 +245,18 @@ def provenance_codegen_stale(
     pcc_source_root,
     host_python_command,
 ) -> bool:
-    """Check an automatic local archive against the current compiler source.
-
-    This intentionally crosses the existing host-Python boundary instead of
-    importing host-only source identity code into the pcc1 closure.  Failure to
-    spawn, import, read, or prove a checksum is stale for an automatically
-    managed archive.
-    """
+    """Check freshness in the compiler process; an unproved identity is stale."""
 
     manifest = provenance_manifest(archive)
     if not os.path.isfile(manifest):
         return True
-    host_code = (
-        "import json\n"
-        "import os\n"
-        "import sys\n"
-        "pcc_source_root = sys.argv[1]\n"
-        "if pcc_source_root and pcc_source_root not in sys.path:\n"
-        "    sys.path.insert(0, pcc_source_root)\n"
-        "if pcc_source_root:\n"
-        "    os.environ.setdefault('PCC_SOURCE_ROOT', pcc_source_root)\n"
-        "    os.environ.setdefault('PCC_REPO_ROOT', pcc_source_root)\n"
-        "from pcc.tools.runtime_archive_provenance import manifest_is_stale_for_current_codegen\n"
-        "with open(sys.argv[2], 'r', encoding='utf-8') as stream:\n"
-        "    manifest = json.load(stream)\n"
-        "raise SystemExit(1 if manifest_is_stale_for_current_codegen(manifest) else 0)\n"
-    )
     try:
-        result = subprocess.run(
-            [
-                host_python_command(),
-                "-c",
-                host_code,
-                pcc_source_root(),
-                manifest,
-            ],
-            check=False,
-            capture_output=True,
-            timeout=90,
-        )
+        from pcc.tools.runtime_archive_provenance import manifest_is_stale_for_current_codegen
+
+        with open(manifest, "r", encoding="utf-8") as stream:
+            records = json.loads(stream.read())
+        return manifest_is_stale_for_current_codegen(records)
     except Exception:
-        return True
-    try:
-        return result.returncode != 0
-    except Exception:
-        # A compiled stage that cannot read ``returncode`` must not treat an
-        # unverified manifest as valid.
         return True
 
 

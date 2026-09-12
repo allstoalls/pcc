@@ -84,7 +84,19 @@ enum {
     PY_EXC_MEMORYERROR       = 19,
     PY_EXC_IMPORTERROR       = 20,
     PY_EXC_MODULENOTFOUNDERROR = 21,
-    PY_EXC_N_BUILTIN         = 22
+    PY_EXC_WARNING           = 22,
+    PY_EXC_USERWARNING       = 23,
+    PY_EXC_DEPRECATIONWARNING = 24,
+    PY_EXC_PENDINGDEPRECATIONWARNING = 25,
+    PY_EXC_SYNTAXWARNING     = 26,
+    PY_EXC_RUNTIMEWARNING    = 27,
+    PY_EXC_FUTUREWARNING     = 28,
+    PY_EXC_IMPORTWARNING     = 29,
+    PY_EXC_UNICODEWARNING    = 30,
+    PY_EXC_BYTESWARNING      = 31,
+    PY_EXC_ENCODINGWARNING   = 32,
+    PY_EXC_RESOURCEWARNING   = 33,
+    PY_EXC_N_BUILTIN         = 34
 };
 
 /* Every PyObject has this header prefix. */
@@ -821,6 +833,8 @@ PyObject *py_bytes_hex(PyObject *o);    /* bytes.hex() -> lowercase hex str */
 PyObject *py_bytes_upper(PyObject *o);
 PyObject *py_bytes_lower(PyObject *o);
 PyObject *py_bytes_strip(PyObject *o);
+PyObject *py_bytes_lstrip(PyObject *o);
+PyObject *py_bytes_rstrip(PyObject *o);
 PyObject *py_bytes_getitem(PyObject *o, PyObject *k);
 PyObject *py_bytes_slice(PyObject *o, PyObject *lo, PyObject *hi, PyObject *step);
 PyObject *py_bytes_concat(PyObject *a, PyObject *b);
@@ -846,6 +860,8 @@ PyObject *py_i64_buffer_dot_scalar(PyObject *left, PyObject *right,
 int64_t   py_guarded_loop_counter_add(int64_t counter, int64_t delta);
 int64_t   py_guarded_loop_counter_get(int64_t counter);
 int64_t   py_bytes_find(PyObject *src, PyObject *needle);
+int64_t   py_bytes_find_from(PyObject *src, PyObject *needle, PyObject *start);
+int64_t   py_bytes_find_range(PyObject *src, PyObject *needle, int64_t start, int64_t end);
 int64_t   py_bytes_rfind(PyObject *src, PyObject *needle);
 int64_t   py_bytes_count(PyObject *src, PyObject *needle);
 PyObject *py_bytes_split(PyObject *src, PyObject *sep);
@@ -1097,6 +1113,7 @@ int64_t   py_obj_gt(PyObject *a, PyObject *b);
 int64_t   py_obj_ge(PyObject *a, PyObject *b);
 int64_t   py_obj_hash(PyObject *o);
 int64_t   py_obj_index_i64(PyObject *o);
+int64_t   py_slice_index_i64(PyObject *o, int64_t default_value);
 PyObject *py_obj_repr(PyObject *o);
 PyObject *py_obj_ascii(PyObject *o);
 PyObject *py_obj_str(PyObject *o);
@@ -1485,6 +1502,7 @@ PyObject *py_os_getpid(void);
 PyObject *py_subprocess_check_output(PyObject *argv);
 int64_t py_process_normalize_wait_status(int64_t status);
 int64_t py_subprocess_run(PyObject *argv, int32_t capture_output);
+int64_t pcc_worker_process_pool(PyObject *specs, int64_t width);
 int64_t py_subprocess_run_timeout(
     PyObject *argv, int32_t capture_output, int64_t timeout_ms
 );
@@ -1575,6 +1593,7 @@ PyObject   *py_os_getcwd_str(void);
 PyObject   *py_os_makedirs(PyObject *path, int64_t mode, int32_t exist_ok);
 /* Durable filesystem mutation helpers used by native persistence code. */
 PyObject   *py_os_unlink(PyObject *path);
+PyObject   *py_os_rmdir(PyObject *path);
 PyObject   *py_os_replace(PyObject *source, PyObject *destination);
 PyObject   *py_os_chmod(PyObject *path, int64_t mode);
 PyObject   *py_os_fsync(int64_t fd);
@@ -1891,6 +1910,7 @@ int32_t     py_subs_exc_n_builtin(void);
 void       *py_subs_exc_cache_get(int32_t tag);
 void        py_subs_exc_cache_set(int32_t tag, void *cls);
 void      **py_subs_exc_cache_slot(int32_t tag);
+extern void **pcc_builtin_type_root_slots[];
 
 /* py_set_dummy tombstone sentinel accessor (value of the global
  * const pointer). Lives in substrate so py_set.c can be replaced. */

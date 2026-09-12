@@ -224,6 +224,25 @@ class Function:
         return "".join(parts)
 
 
+def _terminated(text: str) -> str:
+    """Keep a line-oriented chunk on its own line.
+
+    A module whose final line carries no trailing newline -- `declare i64
+    @strlen(ptr)` at end of file, which is exactly how a lazily emitted libc
+    declaration lands -- was stored without one and re-emitted *before* the
+    functions, gluing it to the next define:
+
+        declare i64 @strlen(ptr)define i32 @fib(...)
+
+    The function then no longer existed for anything downstream, so a C
+    program calling `strlen` linked against an undefined `_fib` and died in
+    dyld.  Terminate every chunk instead of trusting the input's last line.
+    """
+    if not text or text.endswith("\n"):
+        return text
+    return text + "\n"
+
+
 @dataclass
 class MutableModule:
     """Mutable representation of an LLVM-IR module."""
@@ -246,11 +265,11 @@ class MutableModule:
 
     def serialize(self) -> str:
         parts = []
-        parts.extend(self.header_lines)
-        parts.extend(self.globals_)
-        parts.extend(self.declarations)
+        parts.extend(_terminated(line) for line in self.header_lines)
+        parts.extend(_terminated(line) for line in self.globals_)
+        parts.extend(_terminated(line) for line in self.declarations)
         for fn in self.functions:
-            parts.append(fn.serialize())
+            parts.append(_terminated(fn.serialize()))
         parts.extend(self.tail_lines)
         return "".join(parts)
 

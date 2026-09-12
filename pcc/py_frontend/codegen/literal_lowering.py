@@ -7,27 +7,34 @@ import os
 from pcc.llvm_capi.compat import ir
 
 from ..py_ast import (
+    BoolLit,
     BoolType,
+    BytesLit,
     BytesType,
     Call,
     DictExpr,
     DictType,
     DynType,
     Expr,
+    FloatLit,
     FloatType,
     FuncType,
+    IntLit,
     IntType,
     ListExpr,
     ListType,
     Name,
+    NoneLit,
     NoneType,
     StrLit,
     StrType,
     TupleExpr,
     TupleType,
     Type,
+    UnaryOp,
 )
 from . import marshal
+from .cpy_call_lowering import _expr_cannot_raise
 from .freestanding_abi_constants import (
     PY_TYPE_DICT,
     PY_TYPE_LIST,
@@ -40,6 +47,18 @@ _I8 = ir.IntType(8)
 _I32 = ir.IntType(32)
 _I64 = ir.IntType(64)
 _CSTR = _I8.as_pointer()
+
+
+# Literal key kinds whose hash cannot raise.  ``py_dict_set`` and the 20
+# functions reachable from it in ``py_dict.py`` never raise; its only
+# exceptional edge is ``py_obj_hash`` on the key, and a constant of one of
+# these types is hashable by construction.
+_HASHABLE_LITERAL_KEYS = (IntLit, StrLit, BoolLit, NoneLit, FloatLit, BytesLit)
+
+
+def _dict_literal_key_hash_cannot_raise(key_expr) -> bool:
+    """True when storing under ``key_expr`` cannot set a Python exception."""
+    return isinstance(key_expr, _HASHABLE_LITERAL_KEYS)
 
 
 class LiteralLoweringMixin:
@@ -385,7 +404,10 @@ class LiteralLoweringMixin:
             [ir.Constant(_I64, 0)],
             name=self._fresh("literal.splat.list"),
         )
-        self._emit_post_call_err_check()
+        # py_list_new / py_dict_new / py_tuple_new only allocate; neither they
+        # nor anything they call sets a Python exception (py_list_append does,
+        # on MemoryError, which is why its check stays).  The check here had no
+        # reachable edge and cost two blocks per container literal.
         lst_root = self._enter_container_temp_root(lst, "literal.splat.list")
 
         for elem in elems:
@@ -462,6 +484,14 @@ class LiteralLoweringMixin:
         return tup
 
     def _emit_list_literal(self, expr: ListExpr) -> ir.Value:
+        static_list = self._maybe_emit_static_constant_sequence(
+            expr.elems, "py_list_from_static_items", "list"
+        )
+        if static_list is not None:
+            return static_list
+        nested_list = self._maybe_emit_static_aggregate(expr, "list")
+        if nested_list is not None:
+            return nested_list
         has_splat = any(
             isinstance(el, Call)
             and isinstance(el.func, Name)
@@ -517,7 +547,10 @@ class LiteralLoweringMixin:
                 [n_val],
                 name=self._fresh("list.new"),
             )
-            self._emit_post_call_err_check()
+            # py_list_new / py_dict_new / py_tuple_new only allocate; neither they
+            # nor anything they call sets a Python exception (py_list_append does,
+            # on MemoryError, which is why its check stays).  The check here had no
+            # reachable edge and cost two blocks per container literal.
             # The root protects the container while its elements are built;
             # an empty literal builds nothing.
             lst_root = (
@@ -803,7 +836,10 @@ class LiteralLoweringMixin:
         d = self.builder.call(
             self.runtime["py_dict_new"], [], name=self._fresh("dict.new")
         )
-        self._emit_post_call_err_check()
+        # py_list_new / py_dict_new / py_tuple_new only allocate; neither they
+        # nor anything they call sets a Python exception (py_list_append does,
+        # on MemoryError, which is why its check stays).  The check here had no
+        # reachable edge and cost two blocks per container literal.
         dict_root = self._enter_container_temp_root(d, "dict")
         for k_expr, v_expr in expr.pairs:
             if isinstance(k_expr, Name) and k_expr.ident == "**":
@@ -869,14 +905,22 @@ class LiteralLoweringMixin:
                 if key_pinned:
                     self._gc_pin(k_obj)
                 key_pin_cleanup = ((k_obj, key_owned),) if key_pinned else ()
-                self._emit_post_call_err_check(
-                    getattr(k_expr, "span", None),
-                    release_on_error=(
-                        (k_obj,) if key_owned and not key_pinned else ()
-                    ),
-                    rooted_release_on_error=((d, dict_root),),
-                    pinned_release_on_error=key_pin_cleanup,
-                )
+                if not _expr_cannot_raise(k_expr):
+                    # Evaluating a constant operand cannot set an exception, so
+                    # this check has no reachable edge.  This is NOT the
+                    # ``[DENIED]`` conclusion recorded beside
+                    # ``_expr_cannot_raise``: the container temp root stays
+                    # exactly where it is.  Removing the check removes the
+                    # branch, so the managed root state stays linear instead of
+                    # joining two disagreeing ones.
+                    self._emit_post_call_err_check(
+                        getattr(k_expr, "span", None),
+                        release_on_error=(
+                            (k_obj,) if key_owned and not key_pinned else ()
+                        ),
+                        rooted_release_on_error=((d, dict_root),),
+                        pinned_release_on_error=key_pin_cleanup,
+                    )
                 v_obj = self._emit_expr_with_cpy_operand_cleanup(
                     v_expr,
                     (),
@@ -939,6 +983,222 @@ class LiteralLoweringMixin:
         self._leave_container_temp_root(dict_root)
         return d
 
+    # py_int_from_i64 tags every value in this range as inttoptr((v << 1) | 1)
+    # -- a pointer-sized immediate, not an allocation.  Keep in sync with
+    # ``py_int_from_i64`` in pcc/py_runtime/py/py_int_core.py; that identity is
+    # what lets a constant table become static data.
+    _STATIC_TAGGED_INT_MIN = -4611686018427387904
+    _STATIC_TAGGED_INT_MAX = 4611686018427387903
+    # One pair already pays: the per-pair path emits ~18 calls for it, the
+    # static path 16 bytes of data and a share of one call.  Measured on
+    # c_parsetab, a threshold of 8 caught only 207 of ~736 inner tables --
+    # an LR action table is mostly two- and three-entry rows.
+    _STATIC_DICT_MIN_PAIRS = 1
+
+    def _static_literal_int_value(self, expr):
+        """The int a literal expression denotes, or None.
+
+        ``-307`` is ``UnaryOp("-", IntLit(307))``, not ``IntLit(-307)``.  An
+        LR action table is mostly negative (reduce) entries, so missing this
+        left 372 of c_parsetab's 736 inner tables on the per-pair path.
+        """
+        if type(expr) is IntLit:
+            return int(expr.value)
+        if type(expr) is UnaryOp and type(expr.operand) is IntLit:
+            inner = int(expr.operand.value)
+            if expr.op == "-":
+                return -inner
+            if expr.op == "+":
+                return inner
+            if expr.op == "~":
+                return ~inner
+        return None
+
+    def _static_literal_object_constant(self, expr):
+        """The compile-time object pointer for ``expr``, or None.
+
+        Only literals whose runtime object *is* a constant: a pooled immortal
+        ``str`` object in the data segment, or a tagged small int.
+        """
+        value = self._static_literal_int_value(expr)
+        if value is not None:
+            if self._STATIC_TAGGED_INT_MIN <= value <= self._STATIC_TAGGED_INT_MAX:
+                return ir.Constant(_I64, (value << 1) | 1).inttoptr(_CSTR)
+            return None
+        if type(expr) is StrLit:
+            return self._emit_str_literal(expr.value).bitcast(_CSTR)
+        return None
+
+    def _maybe_emit_static_constant_dict(self, expr: DictExpr):
+        """A constant table as static data plus one call, or None.
+
+        The per-pair path emits ``py_dict_set`` wrapped in the rooted-temporary
+        protocol.  Measured on ``pcc/parse/c_parsetab.py`` (16,213 pairs):
+        300,891 calls in the module initialiser, of which 16,213 were the
+        inserts and 263,032 -- 87% -- were pin/store_root/load_ptr/
+        frame_leave/unpin/release around operands that are compile-time
+        constants.  301 KB of source became 37.5 MB of IR and 4.4 MB of code.
+
+        Key order and last-duplicate-wins match the per-pair path because the
+        runtime helper inserts in the same order, and hashing a str or a
+        tagged int cannot raise, so no per-pair error edge is lost.
+        """
+        pairs = expr.pairs
+        if len(pairs) < self._STATIC_DICT_MIN_PAIRS:
+            return None
+        elements = []
+        for k_expr, v_expr in pairs:
+            k_const = self._static_literal_object_constant(k_expr)
+            if k_const is None:
+                return None
+            v_const = self._static_literal_object_constant(v_expr)
+            if v_const is None:
+                return None
+            elements.append(k_const)
+            elements.append(v_const)
+        counter = getattr(self, "_static_dict_counter", 0) + 1
+        self._static_dict_counter = counter
+        arr_ty = ir.ArrayType(_CSTR, len(elements))
+        gv = ir.GlobalVariable(
+            self.module, arr_ty, name=".pcc.static.dict." + str(counter)
+        )
+        gv.linkage = "internal"
+        gv.global_constant = True
+        gv.initializer = ir.Constant(arr_ty, elements)
+        zero = ir.Constant(_I32, 0)
+        base = self.builder.gep(
+            gv, [zero, zero], inbounds=True, name=self._fresh("static.dict.pairs")
+        )
+        return self.builder.call(
+            self.runtime["py_dict_from_static_pairs"],
+            [base, ir.Constant(_I64, len(pairs))],
+            name=self._fresh("dict.static"),
+        )
+
+    def _maybe_emit_static_constant_tuple(self, expr):
+        """A constant tuple as static data plus one call, or None.
+
+        Mirrors ``_maybe_emit_static_constant_dict``.  Element order and
+        identity are unchanged; constructing a str or tagged-int element
+        cannot raise, so no per-element error edge is lost.
+        """
+        return self._maybe_emit_static_constant_sequence(
+            expr.elems, "py_tuple_from_static_items", "tuple"
+        )
+
+    _STATIC_AGG_HEADER = {"DictExpr": 2, "TupleExpr": 4, "ListExpr": 6}
+
+    def _static_aggregate_words(self, expr):
+        """Descriptor words for a constant aggregate, or None.
+
+        Recursive: a leaf is its compile-time object constant; a nested
+        dict/tuple/list contributes a header, a tagged count, and its own
+        elements.  Any non-constant element anywhere makes the whole literal
+        take the general path.
+        """
+        leaf = self._static_literal_object_constant(expr)
+        if leaf is not None:
+            return [leaf]
+        header = self._STATIC_AGG_HEADER.get(type(expr).__name__)
+        if header is None:
+            return None
+        words = [ir.Constant(_I64, header).inttoptr(_CSTR)]
+        if header == 2:
+            pairs = expr.pairs
+            if not pairs:
+                return None
+            words.append(ir.Constant(_I64, (len(pairs) << 1) | 1).inttoptr(_CSTR))
+            for key_expr, value_expr in pairs:
+                if isinstance(key_expr, Name) and key_expr.ident == "**":
+                    return None
+                key = self._static_literal_object_constant(key_expr)
+                if key is None:
+                    return None
+                value = self._static_aggregate_words(value_expr)
+                if value is None:
+                    return None
+                words.append(key)
+                words.extend(value)
+            return words
+        elems = expr.elems
+        if not elems:
+            return None
+        words.append(ir.Constant(_I64, (len(elems) << 1) | 1).inttoptr(_CSTR))
+        for elem in elems:
+            sub = self._static_aggregate_words(elem)
+            if sub is None:
+                return None
+            words.extend(sub)
+        return words
+
+    def _maybe_emit_static_aggregate(self, expr, label):
+        """One global + one runtime call for a nested constant table, or None.
+
+        Runs after the flat all-constant paths declined, so reaching here
+        with a descriptor means at least one element is itself an aggregate.
+        The descriptor holds no heap pointers; the runtime builds every level
+        (see py_static_aggregate_build), which is what keeps the freshly
+        built inner objects visible to the collector.
+        """
+        if os.environ.get("PCC_STATIC_AGGREGATE", "1") in ("0", "off", "no"):
+            # Kill switch: the descriptor path is the newest and least
+            # exercised of the constant-literal lowerings, so a self-host
+            # failure needs a one-variable A/B that does not require
+            # reverting source.
+            return None
+        words = self._static_aggregate_words(expr)
+        if words is None or len(words) < 3:
+            return None
+        counter = getattr(self, "_static_agg_counter", 0) + 1
+        self._static_agg_counter = counter
+        arr_ty = ir.ArrayType(_CSTR, len(words))
+        gv = ir.GlobalVariable(
+            self.module, arr_ty, name=".pcc.static.agg." + label + "." + str(counter)
+        )
+        gv.linkage = "internal"
+        gv.global_constant = True
+        gv.initializer = ir.Constant(arr_ty, words)
+        zero = ir.Constant(_I32, 0)
+        base = self.builder.gep(
+            gv, [zero, zero], inbounds=True,
+            name=self._fresh("static.agg." + label),
+        )
+        return self.builder.call(
+            self.runtime["py_static_aggregate_build"],
+            [base],
+            name=self._fresh(label + ".agg"),
+        )
+
+    def _maybe_emit_static_constant_sequence(self, elems, runtime_name, label):
+        """Static data plus one call for an all-constant sequence, or None."""
+        if not elems:
+            return None
+        constants = []
+        for elem in elems:
+            const = self._static_literal_object_constant(elem)
+            if const is None:
+                return None
+            constants.append(const)
+        counter = getattr(self, "_static_seq_counter", 0) + 1
+        self._static_seq_counter = counter
+        arr_ty = ir.ArrayType(_CSTR, len(constants))
+        gv = ir.GlobalVariable(
+            self.module, arr_ty, name=".pcc.static." + label + "." + str(counter)
+        )
+        gv.linkage = "internal"
+        gv.global_constant = True
+        gv.initializer = ir.Constant(arr_ty, constants)
+        zero = ir.Constant(_I32, 0)
+        base = self.builder.gep(
+            gv, [zero, zero], inbounds=True,
+            name=self._fresh("static." + label + ".items"),
+        )
+        return self.builder.call(
+            self.runtime[runtime_name],
+            [base, ir.Constant(_I64, len(constants))],
+            name=self._fresh(label + ".static"),
+        )
+
     def _emit_dict_literal(self, expr: DictExpr) -> ir.Value:
         # ``{**m, ...}`` — the lift encodes a ``**mapping`` splat as a pair whose
         # key is the sentinel Name("**"). Route to the splat-aware builder so the
@@ -949,6 +1209,12 @@ class LiteralLoweringMixin:
             for k_expr, _v_expr in expr.pairs
         ):
             return self._emit_dict_literal_with_splat(expr)
+        static_dict = self._maybe_emit_static_constant_dict(expr)
+        if static_dict is not None:
+            return static_dict
+        nested_dict = self._maybe_emit_static_aggregate(expr, "dict")
+        if nested_dict is not None:
+            return nested_dict
         # Native dict insertion may dispatch user ``__hash__``/``__eq__``.
         # Build one pair at a time so those effects (and failures) happen
         # before the next key/value expression, including for Dyn values that
@@ -964,7 +1230,10 @@ class LiteralLoweringMixin:
                 [],
                 name=self._fresh("dict.new"),
             )
-            self._emit_post_call_err_check()
+            # py_list_new / py_dict_new / py_tuple_new only allocate; neither they
+            # nor anything they call sets a Python exception (py_list_append does,
+            # on MemoryError, which is why its check stays).  The check here had no
+            # reachable edge and cost two blocks per container literal.
             dict_root = (
                 self._enter_container_temp_root(d, "dict")
                 if expr.pairs
@@ -993,14 +1262,22 @@ class LiteralLoweringMixin:
                 key_pin_cleanup = (
                     ((k_obj, key_owned),) if key_pinned else ()
                 )
-                self._emit_post_call_err_check(
-                    getattr(k_expr, "span", None),
-                    release_on_error=(
-                        (k_obj,) if key_owned and not key_pinned else ()
-                    ),
-                    rooted_release_on_error=((d, dict_root),),
-                    pinned_release_on_error=key_pin_cleanup,
-                )
+                if not _expr_cannot_raise(k_expr):
+                    # Evaluating a constant operand cannot set an exception, so
+                    # this check has no reachable edge.  This is NOT the
+                    # ``[DENIED]`` conclusion recorded beside
+                    # ``_expr_cannot_raise``: the container temp root stays
+                    # exactly where it is.  Removing the check removes the
+                    # branch, so the managed root state stays linear instead of
+                    # joining two disagreeing ones.
+                    self._emit_post_call_err_check(
+                        getattr(k_expr, "span", None),
+                        release_on_error=(
+                            (k_obj,) if key_owned and not key_pinned else ()
+                        ),
+                        rooted_release_on_error=((d, dict_root),),
+                        pinned_release_on_error=key_pin_cleanup,
+                    )
                 v_obj = self._emit_expr_with_cpy_operand_cleanup(
                     v_expr,
                     (),
@@ -1030,22 +1307,29 @@ class LiteralLoweringMixin:
                     unpinned_owned_on_error.append(k_obj)
                 if value_owned and not value_pinned:
                     unpinned_owned_on_error.append(v_obj)
-                self._emit_post_call_err_check(
-                    getattr(v_expr, "span", None),
-                    release_on_error=tuple(unpinned_owned_on_error),
-                    rooted_release_on_error=((d, dict_root),),
-                    pinned_release_on_error=pinned_on_error,
-                )
+                if not _expr_cannot_raise(v_expr):
+                    self._emit_post_call_err_check(
+                        getattr(v_expr, "span", None),
+                        release_on_error=tuple(unpinned_owned_on_error),
+                        rooted_release_on_error=((d, dict_root),),
+                        pinned_release_on_error=pinned_on_error,
+                    )
                 self.builder.call(
                     self.runtime["py_dict_set"],
                     [d, k_obj, v_obj],
                 )
-                self._emit_post_call_err_check(
-                    getattr(v_expr, "span", None),
-                    release_on_error=tuple(unpinned_owned_on_error),
-                    rooted_release_on_error=((d, dict_root),),
-                    pinned_release_on_error=pinned_on_error,
-                )
+                if not _dict_literal_key_hash_cannot_raise(k_expr):
+                    # The store itself never raises; only hashing the key can,
+                    # and a constant literal key is hashable by construction.
+                    # Each check costs a py_err_occurred, a compare and two to
+                    # three basic blocks, which is what made a constant table
+                    # such as pcc/parse/c_parsetab.py 88.9 MB of IR.
+                    self._emit_post_call_err_check(
+                        getattr(v_expr, "span", None),
+                        release_on_error=tuple(unpinned_owned_on_error),
+                        rooted_release_on_error=((d, dict_root),),
+                        pinned_release_on_error=pinned_on_error,
+                    )
                 # py_dict_set borrows (balanced store); owned key/value
                 # temps must be released here, mirroring py_list_append.
                 if key_pinned:
@@ -1732,6 +2016,12 @@ class LiteralLoweringMixin:
         return out
 
     def _emit_tuple_literal(self, expr: TupleExpr) -> ir.Value:
+        static_tuple = self._maybe_emit_static_constant_tuple(expr)
+        if static_tuple is not None:
+            return static_tuple
+        nested_tuple = self._maybe_emit_static_aggregate(expr, "tuple")
+        if nested_tuple is not None:
+            return nested_tuple
         has_splat = any(
             isinstance(el, Call)
             and isinstance(el.func, Name)
@@ -1778,7 +2068,10 @@ class LiteralLoweringMixin:
                     [n_val],
                     name=self._fresh("tup.new"),
                 )
-                self._emit_post_call_err_check()
+                # py_list_new / py_dict_new / py_tuple_new only allocate; neither they
+                # nor anything they call sets a Python exception (py_list_append does,
+                # on MemoryError, which is why its check stays).  The check here had no
+                # reachable edge and cost two blocks per container literal.
                 tup_root = (
                     self._enter_container_temp_root(tup, "tuple")
                     if expr.elems
@@ -1809,16 +2102,23 @@ class LiteralLoweringMixin:
                         self.runtime["py_tuple_set_item"],
                         [tup, idx, v_obj],
                     )
-                    self._emit_post_call_err_check(
-                        getattr(el, "span", None),
-                        release_on_error=(
-                            (v_obj,) if release_temp and not temp_pinned else ()
-                        ),
-                        rooted_release_on_error=((tup, tup_root),),
-                        pinned_release_on_error=(
-                            ((v_obj, release_temp),) if temp_pinned else ()
-                        ),
-                    )
+                    if not _expr_cannot_raise(el):
+                        # py_tuple_set_item is a plain store and never raises
+                        # (unlike py_list_append, which raises MemoryError when
+                        # the backing array cannot grow), so with a constant
+                        # element there is no exceptional edge to publish.
+                        self._emit_post_call_err_check(
+                            getattr(el, "span", None),
+                            release_on_error=(
+                                (v_obj,)
+                                if release_temp and not temp_pinned
+                                else ()
+                            ),
+                            rooted_release_on_error=((tup, tup_root),),
+                            pinned_release_on_error=(
+                                ((v_obj, release_temp),) if temp_pinned else ()
+                            ),
+                        )
                     if temp_pinned:
                         self.builder.call(
                             self.runtime["pcc_gc_unpin"],

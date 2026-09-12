@@ -57,7 +57,17 @@ class DictLoweringMixin:
             key=DynType(name="dyn"),
             value=DynType(name="dyn"),
         )
-        return self._maybe_emit_dict_method(expr, dict_ty)
+        # ``get``/``keys``/``copy``/``setdefault`` are ordinary user method
+        # names too.  Without the tag test the py_dict_* helper ran against a
+        # user instance and quietly returned nothing; see dyn_method_guard.
+        return self._emit_dyn_container_method_with_tag_guard(
+            expr,
+            (PY_TYPE_DICT,),
+            lambda recv: self._maybe_emit_dict_method(
+                expr, dict_ty, recv=recv, recv_borrowed=True
+            ),
+            "dyn.dict",
+        )
 
     def _emit_dyn_pop_method_with_runtime_guard(
         self,
@@ -203,7 +213,12 @@ class DictLoweringMixin:
         result.add_incoming(generic_result, generic_exit)
         return result
 
-    def _emit_owned_dict_get(self, expr: Call, recv: ir.Value) -> ir.Value:
+    def _emit_owned_dict_get(
+        self,
+        expr: Call,
+        recv: ir.Value,
+        recv_borrowed: bool = False,
+    ) -> ir.Value:
         # Reserve the result root below operand roots. This preserves strict
         # LIFO cleanup and keeps an aliased default/result live while earlier
         # operands (including user keys with finalizers) are released.
@@ -212,7 +227,21 @@ class DictLoweringMixin:
         )
         roots = [(result_root, False)]
         recv_root = self._enter_container_temp_root(recv, self._fresh("dict.get.recv"))
-        roots.append((recv_root, self._owned_release_needed(recv, expr.func.obj)))
+        # A receiver handed in by the caller is borrowed: the caller evaluated
+        # it and releases it once on every path.  Claiming it here too dropped
+        # the reference twice per ``d.get(...)``, so a dict reached through a
+        # dyn receiver was freed while still in use and later reads saw
+        # whatever object reused the slot -- "'tuple' object has no attribute
+        # 'get'" from a variable that was a dict three calls earlier.  Root it
+        # for liveness either way; only take ownership when we evaluated it.
+        roots.append(
+            (
+                recv_root,
+                False
+                if recv_borrowed
+                else self._owned_release_needed(recv, expr.func.obj),
+            )
+        )
         operands = [recv]
         for arg in expr.args:
             value = self._emit_expr_with_cpy_operand_cleanup(
@@ -253,6 +282,8 @@ class DictLoweringMixin:
         self,
         expr: Call,
         dict_ty: DictType,
+        recv: Optional[ir.Value] = None,
+        recv_borrowed: bool = False,
     ) -> Optional[ir.Value]:
         """Dispatch selected ``dict`` methods directly to runtime helpers."""
         attr = expr.func
@@ -260,7 +291,8 @@ class DictLoweringMixin:
         if expr.kwargs and attr.name != "update":
             return None  # d.update(k=v, ...) is handled below; others fall back
         name = attr.name
-        recv = self._emit_expr(attr.obj)
+        if recv is None:
+            recv = self._emit_expr(attr.obj)
         if recv in getattr(self, "_cpy_values", ()):
             return self._emit_cpy_method_call_src(
                 recv,
@@ -280,7 +312,7 @@ class DictLoweringMixin:
 
         if name == "get":
             if len(expr.args) in (1, 2):
-                return self._emit_owned_dict_get(expr, recv)
+                return self._emit_owned_dict_get(expr, recv, recv_borrowed)
             return None
         if name == "keys":
             if expr.args:

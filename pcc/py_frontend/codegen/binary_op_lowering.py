@@ -195,11 +195,16 @@ class BinaryOpLoweringMixin:
                 and isinstance(lhs_ty, DynType)
             )
         ):
-            return self.builder.call(
+            result = self.builder.call(
                 self.runtime["py_bytes_concat"],
                 [lhs, rhs],
                 name=self._fresh("bytes.concat"),
             )
+            # The runtime returns a NEW bytes/bytearray. Register the actual
+            # owner so assignment and discarded expressions consume it even
+            # when their static result type is more precise than DynType.
+            self._note_owned_object_value(result)
+            return result
         if op == "%":
             numeric_static = isinstance(lhs_ty, (IntType, BoolType, FloatType)) and isinstance(
                 rhs_ty, (IntType, BoolType, FloatType)

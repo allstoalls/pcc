@@ -44,6 +44,9 @@ from pcc.unsafe import (
 
 py_str_utf8 = extern("py_str_utf8", (c_ptr,), c_ptr)
 py_str_new = extern("py_str_new", (c_ptr, c_int64), c_ptr)
+py_bytes_len = extern("py_bytes_len", (c_ptr,), c_int64)
+py_bytes_new = extern("py_bytes_new", (c_ptr, c_int64), c_ptr)
+py_bytes_data_ptr = extern("py_bytes_data_ptr", (c_ptr,), c_ptr)
 pcc_platform_read = extern(
     "pcc_platform_read", (c_int64, c_ptr, c_int64), c_int64
 )
@@ -291,6 +294,31 @@ def _sha256_file_hex_bounded(path_object, max_bytes: int):
         index = index + 1
     store_i8(output, 64, 0)
     return py_str_new(output, 64)
+
+
+@c_abi_export("py_sha256_bytes_digest")
+def py_sha256_bytes_digest(data_object):
+    """SHA-256 of a bytes-like object, as a 32-byte ``bytes``.
+
+    The file entry points already drive this native transform; code signing
+    needs the in-memory form.  Without it `macho_codesign` fell through to the
+    pure-Python `pcc.py_stdlib.hashlib`, whose per-round boxed-integer
+    arithmetic turned one 6.6 MiB image signature into ~28 minutes and 5 GiB
+    of RSS under self-host.
+    """
+    if ptr_is_null(data_object):
+        return null()
+    length: int = py_bytes_len(data_object)
+    payload = py_bytes_data_ptr(data_object)
+    if ptr_is_null(payload) and length > 0:
+        return null()
+    context = stack_alloc(160)
+    _sha256_init(context)
+    if length > 0:
+        _sha256_update(context, payload, length)
+    digest = stack_alloc(32)
+    _sha256_final(context, digest)
+    return py_bytes_new(digest, 32)
 
 
 @c_abi_export("py_sha256_file_hex")

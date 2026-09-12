@@ -74,6 +74,7 @@ _SPECIAL_SYMBOL_SUFFIXES = {
     "IRBuilder": "scaffold_IRBuilder",
     "IdentifiedStructType": "scaffold_IdentifiedStructType",
     "Context": "scaffold_Context",
+    "Module": "scaffold_Module___init__",
 }
 
 

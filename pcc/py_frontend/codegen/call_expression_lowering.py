@@ -648,8 +648,9 @@ class CallExpressionLoweringMixin:
             class_name = self._class_hint_for_expr(func.obj)
         except Exception:
             class_name = None
+        receiver_is_self = isinstance(func.obj, Name) and func.obj.ident == "self"
         if class_name is None:
-            if isinstance(func.obj, Name) and func.obj.ident == "self":
+            if receiver_is_self:
                 class_name = self._self_receiver_class_name()
         if class_name is None:
             return None
@@ -659,6 +660,21 @@ class CallExpressionLoweringMixin:
             return None
         if class_name not in classes:
             return None
+        if receiver_is_self and self.class_lowering.has_subclass(class_name):
+            # This body can run with a subclass receiver, whose
+            # ``self.__class__`` is that subclass.  Folding the construction
+            # to the lexical class made ``Sub().clone()`` return a ``Base``.
+            # Read the class off the instance at runtime and call that --
+            # ``getattr(self, "__class__")`` already resolves correctly, so
+            # this stays libpython-free rather than falling through to a
+            # CPython call (which the strict no-libpython mode stubs out).
+            return self._emit_callable_attribute_call(
+                func.obj,
+                "__class__",
+                expr.args,
+                expr.kwargs,
+                expr.span,
+            )
         return self._emit_call(
             Call(
                 span=self._expr_span_or_none(expr),
@@ -1133,6 +1149,13 @@ class CallExpressionLoweringMixin:
                 name=self._fresh("object.sentinel"),
             )
         if name == "dict":
+            # ``dict(os.environ)`` first: os.environ is a codegen special
+            # form with no object behind it, so the generic dict() path
+            # cannot read it and the call fell through to CPython -- which
+            # stubbed every enclosing function under no-libpython.
+            environ_dict = self._maybe_emit_native_os_environ_dict(expr)
+            if environ_dict is not None:
+                return environ_dict
             return self._emit_dict_builtin(expr)
         if name == "list" and not expr.args and not expr.kwargs:
             return self.builder.call(
@@ -2149,6 +2172,85 @@ class CallExpressionLoweringMixin:
                 )
                 if inst is not None:
                     return attach_hoisted_class_captures(inst)
+            construct_new_info = self._resolve_method_mro(class_name, "__new__")
+            if construct_new_info is None and class_info is not None:
+                if "__new__" in class_info.methods:
+                    construct_new_info = class_info
+            construct_new_fn = (
+                None
+                if construct_new_info is None
+                else construct_new_info.methods.get("__new__")
+            )
+            if construct_new_fn is not None and class_info is not None:
+                # CPython's construction protocol: ``__new__`` runs first and
+                # its return value is the object ``__init__`` is applied to.
+                # Consulting ``__new__`` only when a class has no ``__init__``
+                # silently dropped every interning/singleton ``__new__`` that
+                # also defines one -- ``IntType(8) is IntType(8)`` was False
+                # where CPython says True, because pcc/llvm_capi/ir.py interns
+                # per width in ``__new__`` and defines ``__init__`` as well.
+                cls_ptr = self.class_lowering._load_class_object(
+                    class_info,
+                    "cls." + class_name + ".__new__",
+                )
+                constructed = self._emit_direct_method_call(
+                    construct_new_fn,
+                    cls_ptr,
+                    construct_new_info,
+                    "__new__",
+                    expr.args,
+                    kwargs=expr.kwargs,
+                )
+                construct_init_info = self._resolve_method_mro(
+                    class_name, "__init__"
+                )
+                construct_init_fn = (
+                    None
+                    if construct_init_info is None
+                    else construct_init_info.methods.get("__init__")
+                )
+                if construct_init_fn is not None:
+                    # CPython applies ``__init__`` only when ``__new__``
+                    # returned an instance of the class being constructed; a
+                    # ``__new__`` that hands back a foreign object leaves it
+                    # untouched.  The check is a branch rather than an
+                    # assumption about this tree's ``__new__`` bodies.
+                    construct_is_inst = self.builder.call(
+                        self.runtime["py_obj_isinstance"],
+                        [constructed, cls_ptr],
+                        name=self._fresh("new.isinst"),
+                    )
+                    construct_cmp = self.builder.icmp_signed(
+                        "!=",
+                        construct_is_inst,
+                        ir.Constant(_I64, 0),
+                        name=self._fresh("new.isinst.cmp"),
+                    )
+                    construct_fn = self.current_function
+                    construct_init_bb = construct_fn.append_basic_block(
+                        name=self._fresh("new.init")
+                    )
+                    construct_cont_bb = construct_fn.append_basic_block(
+                        name=self._fresh("new.cont")
+                    )
+                    self.builder.cbranch(
+                        construct_cmp, construct_init_bb, construct_cont_bb
+                    )
+                    self.builder.position_at_end(construct_init_bb)
+                    self._emit_direct_method_call(
+                        construct_init_fn,
+                        constructed,
+                        construct_init_info,
+                        "__init__",
+                        expr.args,
+                        kwargs=expr.kwargs,
+                    )
+                    # ``__init__`` lowering can open its own blocks, so branch
+                    # from wherever the builder ended up.
+                    if not self._builder_block_is_terminated():
+                        self.builder.branch(construct_cont_bb)
+                    self.builder.position_at_end(construct_cont_bb)
+                return attach_hoisted_class_captures(constructed)
             return attach_hoisted_class_captures(
                 self._emit_class_init_call(class_name, resolved_args)
             )

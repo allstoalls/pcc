@@ -9,12 +9,12 @@
       "domain": "C integer promotions already applied; undefined C operations fail closed"
     },
     {
-      "path": "pcc/ir_passes/integer_fold_contract.py",
+      "path": "pcc/native_ir/integer_fold_contract.py",
       "symbol": "fold_llvm_integer_binary",
       "domain": "LLVM integer binops, poison-producing flags, and bit-width wrapping"
     },
     {
-      "path": "pcc/ir_passes/integer_fold_contract.py",
+      "path": "pcc/native_ir/integer_fold_contract.py",
       "symbol": "fold_llvm_integer_compare",
       "domain": "LLVM signed and unsigned icmp predicates"
     }
@@ -36,12 +36,12 @@
       "owner_calls": ["evaluate_binary(", "evaluate_compare("]
     },
     {
-      "path": "pcc/ir_passes/instsimplify.py",
+      "path": "pcc/native_ir/instsimplify.py",
       "symbol": "_fold_constant_binop/_simplify_icmp",
       "owner_calls": ["fold_llvm_integer_binary(", "fold_llvm_integer_compare("]
     },
     {
-      "path": "pcc/ir_passes/instcombine.py",
+      "path": "pcc/native_ir/instcombine.py",
       "symbol": "_fold_const_binop",
       "owner_calls": ["fold_llvm_integer_binary("]
     },

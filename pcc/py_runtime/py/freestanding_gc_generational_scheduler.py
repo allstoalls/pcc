@@ -316,10 +316,14 @@ def pcc_gc_generational_promote_scheduler_roots(
             )
             continue
 
-        if slot_index >= 22:
+        slot = null()
+        if slot_index < 34:
+            slot = py_subs_exc_cache_slot(slot_index)
+        else:
+            slot = load_ptr(global_addr("pcc_builtin_type_root_slots"), (slot_index - 34) * 8)
+        if ptr_is_null(slot) != 0:
             _reset_scheduler_root_scan()
             break
-        slot = py_subs_exc_cache_slot(slot_index)
         revision_before = load_i64(
             global_addr("pcc_gc_root_registry_revision"), 0
         )

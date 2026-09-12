@@ -46,6 +46,80 @@ def native_struct():
     return importlib.import_module("pcc.py_stdlib.struct")
 
 
+def test_module_functions_reuse_format_plan(native_struct, monkeypatch):
+    clear = getattr(native_struct, "_clearcache", None)
+    if clear is not None:
+        clear()
+    parsed = []
+    original = native_struct._parse_format
+
+    def record(fmt):
+        parsed.append(fmt)
+        return original(fmt)
+
+    monkeypatch.setattr(native_struct, "_parse_format", record)
+    for _ in range(20):
+        payload = native_struct.pack("<iI", -7, 42)
+        assert native_struct.calcsize("<iI") == 8
+        assert native_struct.unpack_from("<iI", payload) == (-7, 42)
+    assert parsed == ["<iI"]
+
+
+def test_format_plan_cache_is_bounded_and_clearable(native_struct):
+    native_struct._clearcache()
+    for width in range(1, 202):
+        assert native_struct.calcsize("<" + str(width) + "s") == width
+    assert len(native_struct._FORMAT_CACHE) <= 100
+    native_struct._clearcache()
+    assert native_struct._FORMAT_CACHE == {}
+
+
+def test_native_format_cache_keeps_results_and_bounded_live_memory(
+    tmp_path, pcc_py_runtime_archive,
+):
+    from pcc.py_frontend.pipeline import compile_python
+
+    source = tmp_path / "struct_cache_probe.py"
+    source.write_text('''
+import struct
+from pcc.extern import c_int64, extern
+live_bytes = extern("pcc_os_heap_in_use_bytes", (), c_int64)
+def scan(count: int) -> int:
+    data = b"\\xf9\\xff\\xff\\xff\\x2a\\x00\\x00\\x00"
+    total = 0
+    index = 0
+    while index < count:
+        values = struct.unpack_from("<iI", data)
+        total += values[0] + values[1] + struct.calcsize("<iI")
+        index += 1
+    return total
+def main():
+    scan(16)
+    before = live_bytes()
+    first = scan(500)
+    middle = live_bytes()
+    second = scan(500)
+    after = live_bytes()
+    print(first, second, middle - before, after - middle)
+main()
+''', encoding="utf-8")
+    output = tmp_path / "struct_cache_probe"
+    compile_python(
+        str(source), str(output), backend="self", libpython_mode="off",
+        runtime_archive=str(pcc_py_runtime_archive),
+    )
+    for backend in range(5):
+        result = subprocess.run(
+            [str(output)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
+            capture_output=True, text=True, timeout=20,
+        )
+        assert result.returncode == 0, f"GC{backend}: {result.stderr}"
+        first, second, growth1, growth2 = map(int, result.stdout.split())
+        assert first == second == 43 * 500
+        if backend == 0:
+            assert growth1 < 32768 and growth2 < 32768, (growth1, growth2)
+
+
 @pytest.mark.parametrize(
     "fmt,values",
     [
@@ -137,6 +211,48 @@ def test_native_struct_unpack_from_reads_every_offset_of_a_large_payload(
         assert layout.unpack_from(payload, offset) == row
         offset += layout.size
     assert offset == len(payload)
+
+
+def test_unpack_from_does_not_copy_an_entire_mutable_buffer(native_struct):
+    import tracemalloc
+
+    payload = bytearray(2 * 1024 * 1024)
+    shape = native_struct.Struct("<I")
+    tracemalloc.start()
+    try:
+        for offset in range(64):
+            assert shape.unpack_from(payload, offset) == (0,)
+        _current, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert peak < 65536, peak
+
+
+def test_compiled_mutable_unpack_preserves_bytes_fields(tmp_path, pcc_py_runtime_archive):
+    from pcc.py_frontend.pipeline import compile_python
+
+    source = tmp_path / "mutable_struct.py"
+    source.write_text('''
+import struct
+def main():
+    data = bytearray(b"\\x01\\x00\\x00\\x00xyZ" + b"\\x00" * 65536)
+    layout = struct.Struct("<I2sc")
+    for index in range(32):
+        values = layout.unpack_from(data, 0)
+    print(values[0], values[1], values[2])
+    print(isinstance(values[1], bytes), isinstance(values[2], bytes))
+    data[4] = 97
+    print(layout.unpack_from(data, 0)[1], values[1])
+main()
+''', encoding="utf-8")
+    output = tmp_path / "mutable_struct"
+    compile_python(str(source), str(output), backend="self", libpython_mode="off",
+                   runtime_archive=str(pcc_py_runtime_archive))
+    for gc in range(5):
+        result = subprocess.run([str(output)], capture_output=True, text=True, timeout=20,
+                                env=dict(os.environ, PCC_GC_BACKEND=str(gc)))
+        assert result.returncode == 0, f"GC{gc}: {result.stderr}"
+        assert result.stdout == "1 b'xy' b'Z'\nTrue True\nb'ay' b'xy'\n"
 
 
 def test_native_struct_pack_into_matches_cpython(native_struct):

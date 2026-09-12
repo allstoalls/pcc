@@ -49,6 +49,20 @@ BUILTIN_EXC_TAG = {
     "KeyboardInterrupt": 0,
     "GeneratorExit": 0,
     "StopAsyncIteration": 17,
+    # Each warning class has its own identity. The runtime parent table makes
+    # the subclasses match Warning without making sibling handlers match.
+    "Warning": 22,
+    "UserWarning": 23,
+    "DeprecationWarning": 24,
+    "PendingDeprecationWarning": 25,
+    "SyntaxWarning": 26,
+    "RuntimeWarning": 27,
+    "FutureWarning": 28,
+    "ImportWarning": 29,
+    "UnicodeWarning": 30,
+    "BytesWarning": 31,
+    "EncodingWarning": 32,
+    "ResourceWarning": 33,
 }
 
 

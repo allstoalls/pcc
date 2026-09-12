@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
 
+from .cli_contract import DEFAULT_PUBLIC_BACKEND
 from .evaluater.c_evaluator import CEvaluator
 from .project import TranslationUnit, collect_translation_units, translation_unit_include_dirs
 
@@ -52,6 +53,20 @@ class BuildArtifact:
 # build(...)
 # ---------------------------------------------------------------------------
 
+def _resolve_public_backend(backend):
+    """The public build API ships the CLI's backend, not llvm.
+
+    `CEvaluator(backend=None)` resolves to llvm, which the C suite relies on
+    as its differential oracle.  Inheriting that default here made
+    `api.build` and the `pcc` CLI emit different objects for the same source
+    -- the divergence `tests/c/test_api_cli_object_parity.py` exists to catch
+    -- and pulled llvmlite onto the public API's default path.
+    """
+    if backend is None:
+        return DEFAULT_PUBLIC_BACKEND
+    return backend
+
+
 def build(
     sources: str | Path | Sequence[str | Path],
     *,
@@ -78,7 +93,7 @@ def build(
         link_args: Raw linker flags (escape hatch).
         optimize: Optimization level (0-3 or bool).
         kind: "exe", "sharedlib", or "object".
-        backend: Backend implementation to use. Defaults to the current LLVM path.
+        backend: Backend implementation to use. Defaults to the owned self backend.
         out_dir: Output directory (default: temp dir).
         use_compile_cache: Enable compilation cache.
         jobs: Parallel compilation jobs.
@@ -117,9 +132,18 @@ def build(
 
     # Compile — use internal _compile_translation_units to get full artifacts
     # (pass_report, ir_text) instead of just the stripped compiled_unit tuples.
-    ev = CEvaluator(backend=backend)
-    opt_level = ev._normalize_opt_level(optimize)
-    use_system_cpp = ev._has_system_cpp()
+    resolved_backend = _resolve_public_backend(backend)
+    ev = CEvaluator(backend=resolved_backend)
+    # The self backend clamps -O above zero until its vector lowering lands.
+    # The CLI applies this; `api.build` did not, so the same source compiled
+    # at two different optimisation levels depending on the entry point.
+    # Reuse the CLI's own function rather than restating the rule.
+    from .cli_core import _effective_self_backend_opt_level
+
+    opt_level = _effective_self_backend_opt_level(
+        resolved_backend, ev._normalize_opt_level(optimize)
+    )
+    use_system_cpp = ev.backend != "self" and ev._has_system_cpp()
     from .evaluater.c_evaluator import _artifact_to_compiled_unit
 
     artifacts = ev._compile_translation_units(
@@ -193,6 +217,10 @@ def build(
 
 def _link_exe(ev, compiled_units, out_dir, link_args, opt_level):
     """Link compiled units into an executable."""
+    if ev.backend == "self":
+        output = os.path.join(out_dir, "a.out")
+        ev.emit_executable(compiled_units, output, optimize=opt_level, link_args=link_args)
+        return output
     cc = ev._system_cc()
     obj_paths = []
     obj_path = os.path.join(out_dir, "output.o")

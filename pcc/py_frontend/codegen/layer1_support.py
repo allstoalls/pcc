@@ -354,6 +354,24 @@ def _populate_static_native_exports_0(out):
             (_export_arg("argv", ("list", ("str",))),),
         ),
     }
+    # ``cli_bootstrap._run_c_cli`` dispatches a C/project input to the full CLI
+    # in this process.  The raw per-module probe compiles ``cli_bootstrap``
+    # alone, where ``pcc.cli_core`` is not part of the source set, so without a
+    # static signature that one import and call become
+    # ``py_cpy_import``/``py_cpy_getattr``/``py_cpy_call`` and break the
+    # module's zero-fallback contract
+    # (``test_cli_bootstrap_package_schema_static_imports_stay_native``).
+    out["pcc.cli_core"] = {
+        "cli_main": _function_export(
+            ("int", 64, True),
+            (("list", ("str",)),),
+            (
+                _export_arg(
+                    "argv", ("list", ("str",)), has_default=True
+                ),
+            ),
+        ),
+    }
     # ``cli_bootstrap.py`` consumes this self-host-safe package contract in
     # standalone as well as closed-world builds.  Keep the imported constants
     # and helpers native in the raw per-module probe; otherwise every call is

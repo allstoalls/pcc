@@ -56,7 +56,7 @@ def _exc_cache_set(tag: int, cls) -> None:
 
 @c_abi_export("py_exc_builtin_class")
 def py_exc_builtin_class(tag: int):
-    n_builtin: int = 22  # PY_EXC_N_BUILTIN
+    n_builtin: int = 34  # PY_EXC_N_BUILTIN
     if tag < 0 or tag >= n_builtin:
         tag = 1  # PY_EXC_EXCEPTION
 

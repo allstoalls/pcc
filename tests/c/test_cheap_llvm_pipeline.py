@@ -65,7 +65,7 @@ def test_cheap_llvm_pipeline_rejects_unknown_pass_name(monkeypatch):
     monkeypatch.setenv("PCC_CHEAP_LLVM_PIPELINE", "bogus-pass")
 
     with pytest.raises(ValueError, match="unsupported cheap LLVM pass"):
-        llvmmod = c_evaluator.llvm.parse_assembly("define i32 @main() { ret i32 0 }")
+        llvmmod = c_evaluator._llvm().parse_assembly("define i32 @main() { ret i32 0 }")
         target_machine = CEvaluator().target.create_target_machine()
         c_evaluator._apply_llvm_optimizations(llvmmod, target_machine, 0)
 
@@ -73,7 +73,7 @@ def test_cheap_llvm_pipeline_rejects_unknown_pass_name(monkeypatch):
 def test_cheap_llvm_pipeline_records_backend_pass_metric(monkeypatch):
     monkeypatch.setenv("PCC_CHEAP_LLVM_PIPELINE", "1")
 
-    llvmmod = c_evaluator.llvm.parse_assembly("define i32 @main() { ret i32 0 }")
+    llvmmod = c_evaluator._llvm().parse_assembly("define i32 @main() { ret i32 0 }")
     target_machine = CEvaluator().target.create_target_machine()
     ctx = PassContext()
 

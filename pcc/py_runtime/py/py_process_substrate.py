@@ -64,6 +64,11 @@ py_list_append = extern("py_list_append", (c_ptr, c_ptr), c_void)
 py_list_new = extern("py_list_new", (c_int64,), c_ptr)
 py_obj_getitem = extern("py_obj_getitem", (c_ptr, c_ptr), c_ptr)
 py_obj_len = extern("py_obj_len", (c_ptr,), c_int64)
+py_dict_entries_used = extern("py_dict_entries_used", (c_ptr,), c_int64)
+py_dict_entry_key_at = extern("py_dict_entry_key_at", (c_ptr, c_int64), c_ptr)
+py_dict_entry_value_at = extern(
+    "py_dict_entry_value_at", (c_ptr, c_int64), c_ptr
+)
 py_obj_str = extern("py_obj_str", (c_ptr,), c_ptr)
 py_program_argv = extern("py_program_argv", (c_int64,), c_ptr)
 py_program_executable = extern("py_program_executable", (), c_ptr)
@@ -269,6 +274,97 @@ def py_subprocess_check_output(argv):
     free(tmp)
     _buf_free(st)
     return result
+
+
+def _append_env_prefix(st, env_map) -> int:
+    """Prefix ``env -i 'K=V' ...`` so the child sees exactly ``env_map``.
+
+    CPython's ``env=`` replaces the environment rather than adding to it;
+    ``env -i`` is that same semantics for a shell command line.
+    """
+    if _buf_append(st, cstr("env -i"), 6) != 0:
+        return -1
+    used: int = py_dict_entries_used(env_map)
+    index: int = 0
+    while index < used:
+        key = py_dict_entry_key_at(env_map, index)
+        index = index + 1
+        if ptr_is_null(key):
+            continue
+        value = py_dict_entry_value_at(env_map, index - 1)
+        if ptr_is_null(value):
+            py_decref(key)
+            continue
+        key_str = py_obj_str(key)
+        value_str = py_obj_str(value)
+        py_decref(key)
+        py_decref(value)
+        pair = _buf_new()
+        if ptr_is_null(pair):
+            py_decref(key_str)
+            py_decref(value_str)
+            return -1
+        failed: int = 0
+        if _buf_append(pair, py_str_utf8(key_str), strlen(py_str_utf8(key_str))) != 0:
+            failed = 1
+        if failed == 0 and _buf_append(pair, cstr("="), 1) != 0:
+            failed = 1
+        if failed == 0 and _buf_append(
+            pair, py_str_utf8(value_str), strlen(py_str_utf8(value_str))
+        ) != 0:
+            failed = 1
+        py_decref(key_str)
+        py_decref(value_str)
+        if failed != 0:
+            _buf_free(pair)
+            return -1
+        raw_pair = _buf_detach(pair)
+        if ptr_is_null(raw_pair):
+            return -1
+        if _buf_append(st, cstr(" "), 1) != 0:
+            free(raw_pair)
+            return -1
+        if _append_shell_quoted(st, raw_pair) != 0:
+            free(raw_pair)
+            return -1
+        free(raw_pair)
+    if _buf_append(st, cstr(" "), 1) != 0:
+        return -1
+    return 0
+
+
+@c_abi_export("py_subprocess_run_env")
+def py_subprocess_run_env(argv, capture_output: int, env_map) -> int:
+    """``subprocess.run(argv, env=env_map)``.
+
+    ``run_runtime_make`` -- the only way pcc1 can rebuild its own runtime
+    archive -- passes ``env=``, so without this the archive rebuild could
+    never run under ``--python-libpython=off``.
+    """
+    if ptr_is_null(env_map):
+        return py_subprocess_run(argv, capture_output)
+    body = _build_shell_command(argv)
+    if ptr_is_null(body):
+        return 127
+    st = _buf_new()
+    if ptr_is_null(st):
+        free(body)
+        return 127
+    if _append_env_prefix(st, env_map) != 0:
+        _buf_free(st)
+        free(body)
+        return 127
+    if _buf_append(st, body, strlen(body)) != 0:
+        _buf_free(st)
+        free(body)
+        return 127
+    free(body)
+    cmd = _buf_detach(st)
+    if ptr_is_null(cmd):
+        return 127
+    rc: int = _run_shell_command(cmd, capture_output)
+    free(cmd)
+    return rc
 
 
 @c_abi_export("py_subprocess_run")

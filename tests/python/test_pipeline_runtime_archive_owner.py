@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
+import json
+
+import pytest
 
 from pcc.py_frontend import pipeline
 from pcc.py_frontend import pipeline_runtime_archive as runtime_archive
@@ -34,37 +36,59 @@ def test_non_production_archive_bundle_policy_is_basename_scoped():
     assert not runtime_archive.requires_c_bundle_validation("/tmp/foreign.a")
 
 
-def test_codegen_freshness_checker_uses_the_host_python_boundary(
+def test_codegen_freshness_checker_runs_the_owned_verifier(
     tmp_path: Path,
     monkeypatch,
 ):
     archive = tmp_path / "libpy_runtime_pcc_py.a"
-    Path(str(archive) + ".provenance.json").write_text("{}\n", encoding="utf-8")
+    manifest = Path(str(archive) + ".provenance.json")
+    manifest.write_text(json.dumps({"source": "test"}), encoding="utf-8")
     calls = []
+    from pcc.tools import runtime_archive_provenance as provenance
 
-    def fake_run(argv, **kwargs):
-        calls.append((argv, kwargs))
-        return SimpleNamespace(returncode=0)
+    def check(records):
+        calls.append(records)
+        return False
 
-    monkeypatch.setattr(runtime_archive.subprocess, "run", fake_run)
+    monkeypatch.setattr(provenance, "manifest_is_stale_for_current_codegen", check)
+    monkeypatch.setattr(runtime_archive.subprocess, "run", lambda *a, **k: pytest.fail("host delegation"))
 
     assert not runtime_archive.provenance_codegen_stale(
         str(archive),
         pcc_source_root=lambda: "/source/root",
         host_python_command=lambda: "/host/python",
     )
-    assert calls[0][0][0] == "/host/python"
-    assert calls[0][0][-2] == "/source/root"
-    assert calls[0][0][-1] == str(archive) + ".provenance.json"
-    assert calls[0][1]["timeout"] == 90
+    assert calls == [{"source": "test"}]
 
     monkeypatch.setattr(
-        runtime_archive.subprocess,
-        "run",
-        lambda *_args, **_kwargs: SimpleNamespace(returncode=1),
+        provenance,
+        "manifest_is_stale_for_current_codegen",
+        lambda *_args, **_kwargs: True,
     )
     assert runtime_archive.provenance_codegen_stale(
         str(archive),
         pcc_source_root=lambda: "/source/root",
         host_python_command=lambda: "/host/python",
     )
+
+
+def test_c_bundle_inventory_is_checked_without_ar_nm_or_python(tmp_path, monkeypatch):
+    from pcc.backend.ar_writer import write_archive
+    from pcc.backend.arm64_asm_driver import assemble_file
+    from pcc.backend.macho_obj import emit_object
+
+    sections, undefined = assemble_file(
+        ".section __TEXT,__text,regular,pure_instructions\n.globl _PyOwned\n_PyOwned:\n ret\n"
+    )
+    archive = tmp_path / "libpy_runtime.a"
+    archive.write_bytes(write_archive([("owned.o", emit_object(sections, undefined=undefined))]))
+    inventory = Path(str(archive) + ".capi_syms")
+    inventory.write_text("_PyOwned\n")
+    def forbidden(*args, **kwargs):
+        pytest.fail("archive validation delegated to an external tool")
+    monkeypatch.setattr(runtime_archive.subprocess, "run", forbidden)
+    assert runtime_archive.c_bundle_valid(str(archive), host_python_command=forbidden)
+    inventory.write_text("_PyMissing\n")
+    assert not runtime_archive.c_bundle_valid(str(archive), host_python_command=forbidden)
+    archive.write_bytes(archive.read_bytes()[:-1])
+    assert not runtime_archive.c_bundle_valid(str(archive), host_python_command=forbidden)

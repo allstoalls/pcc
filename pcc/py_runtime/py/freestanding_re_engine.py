@@ -511,6 +511,54 @@ def _parse_atom(ps, out, nullable) -> i64:
         if _current(ps) == 63:
             if _peek(ps, 1) == 58:
                 _advance(ps, 2)
+            elif _peek(ps, 1) == 61 or _peek(ps, 1) == 33:
+                # ``(?=...)`` / ``(?!...)`` lookahead.  Compiled as its own
+                # sub-program ending in the assertion terminator (kind 20) so
+                # the matcher can run it from the current position, keep the
+                # verdict, and continue without consuming input -- kind 11
+                # would publish the sub-match's end as the whole match's end.
+                negate: i64 = 0
+                if _peek(ps, 1) == 33:
+                    negate = 1
+                _advance(ps, 2)
+                look_program = load_ptr(ps, 16)
+                groups_before: i64 = load_i32(look_program, 4)
+                inner = stack_alloc(16392)
+                inner_nullable = stack_alloc(4)
+                store_i32(inner_nullable, 0, 0)
+                if _parse_alt(ps, inner, inner_nullable) == 0:
+                    return 0
+                if _current(ps) != 41:
+                    _set_error(ps)
+                    return 0
+                _advance(ps, 1)
+                if load_i32(load_ptr(ps, 16), 4) != groups_before:
+                    # A capture written inside a lookahead would have to
+                    # survive a failed negative assertion, and a failed
+                    # positive one would have to be rolled back.  Refuse the
+                    # pattern rather than answer with stale group spans.
+                    _set_error(ps)
+                    return 0
+                assert_end: i64 = _emit(ps, 20)
+                if load_i32(ps, 32) != 0:
+                    return 0
+                inner_start: i64 = load_i32(inner, 0)
+                if inner_start < 0:
+                    inner_start = assert_end
+                _frag_patch(ps, inner, assert_end)
+                look: i64 = _emit(ps, 19)
+                if load_i32(ps, 32) != 0:
+                    return 0
+                look_instruction = _op(load_ptr(ps, 16), look)
+                store_i32(look_instruction, 16, inner_start)
+                store_i32(look_instruction, 20, negate)
+                _frag_init(out)
+                store_i32(out, 0, look)
+                _frag_add(ps, out, look, 0)
+                # An assertion consumes nothing, so it is nullable for the
+                # empty-loop guards a quantifier would install around it.
+                store_i32(nullable, 0, 1)
+                return 1
             elif _peek(ps, 1) == 80 and _peek(ps, 2) == 60:
                 _advance(ps, 3)
                 if not (
@@ -685,8 +733,23 @@ def _parse_atom(ps, out, nullable) -> i64:
             store_i32(nullable, 0, 1)
             return 1
         if escape >= 49 and escape <= 57:
-            _set_error(ps)
-            return 0
+            # ``\1``..``\9`` -- match the same text the numbered group
+            # captured.  The group has to exist already, exactly as CPython
+            # requires ("invalid group reference" otherwise).
+            group_ref: i64 = escape - 48
+            if group_ref > load_i32(load_ptr(ps, 16), 4):
+                _set_error(ps)
+                return 0
+            index = _emit(ps, 21)
+            if load_i32(ps, 32) != 0:
+                return 0
+            store_i32(_op(load_ptr(ps, 16), index), 16, group_ref)
+            store_i32(out, 0, index)
+            _frag_add(ps, out, index, 0)
+            # A backreference to a zero-width capture consumes nothing, so it
+            # is nullable for the empty-loop guards a quantifier installs.
+            store_i32(nullable, 0, 1)
+            return 1
         literal: i64 = -1
         if escape == 120:
             literal = _hex_byte(ps, 0)
@@ -1506,6 +1569,59 @@ def _match(context, pc: i64, position: i64) -> i64:
                 if result != 0:
                     store_i32(context, 168, load_i32(context, 168) - 1)
                     return result
+            pc = load_i32(instruction, 24)
+            continue
+        if kind == 19:
+            sub: i64 = _match(context, load_i32(instruction, 16), position)
+            holds: i64 = 0
+            if load_i32(instruction, 20) != 0:
+                if sub == 0:
+                    holds = 1
+            elif sub != 0:
+                holds = 1
+            if holds != 0:
+                # Zero width: continue from the same position.
+                pc = load_i32(instruction, 24)
+                continue
+            store_i32(context, 168, load_i32(context, 168) - 1)
+            return 0
+        if kind == 20:
+            # Assertion sub-program success.  Unlike kind 11 this must not
+            # write caps[1]: the enclosing match's end is not here.
+            store_i32(context, 168, load_i32(context, 168) - 1)
+            return 1
+        if kind == 21:
+            # Backreference: the numbered group's captured text must appear
+            # again at the current position.  An unmatched group never
+            # matches, as in CPython.
+            group_ref: i64 = load_i32(instruction, 16)
+            ref_slot: i64 = group_ref * 2
+            if ref_slot + 1 >= load_i32(context, 32):
+                store_i32(context, 168, load_i32(context, 168) - 1)
+                return 0
+            ref_caps = load_ptr(context, 24)
+            ref_start: i64 = load_i64(ref_caps, ref_slot * 8)
+            ref_end: i64 = load_i64(ref_caps, (ref_slot + 1) * 8)
+            if ref_start < 0 or ref_end < ref_start:
+                store_i32(context, 168, load_i32(context, 168) - 1)
+                return 0
+            ref_len: i64 = ref_end - ref_start
+            if position + ref_len > length:
+                store_i32(context, 168, load_i32(context, 168) - 1)
+                return 0
+            ref_i: i64 = 0
+            while ref_i < ref_len:
+                ref_a: i64 = _byte(text, ref_start + ref_i)
+                ref_b: i64 = _byte(text, position + ref_i)
+                if (flags & 2) != 0:
+                    if _fold_byte(ref_a) != _fold_byte(ref_b):
+                        store_i32(context, 168, load_i32(context, 168) - 1)
+                        return 0
+                elif ref_a != ref_b:
+                    store_i32(context, 168, load_i32(context, 168) - 1)
+                    return 0
+                ref_i = ref_i + 1
+            position = position + ref_len
             pc = load_i32(instruction, 24)
             continue
         if kind == 11:

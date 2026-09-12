@@ -202,3 +202,82 @@ int64_t py_subprocess_run_timeout(
     terminate_process_group(pid, &status);
     return PCC_SUBPROCESS_TIMEOUT_RC;
 }
+
+int64_t pcc_worker_process_pool(PyObject *specs, int64_t width) {
+    int64_t count = py_obj_len(specs);
+    if (count <= 0) return 0;
+    if (width < 1) width = 1;
+    if (width > count) width = count;
+    struct WorkerSlot { pid_t pid; int64_t index; };
+    struct WorkerSlot *slots = calloc((size_t)width, sizeof(*slots));
+    if (!slots) return INT64_C(4294967423);
+    int64_t next_index = 0, live = 0, failure = 0;
+    int status = 0;
+    while (next_index < count || live > 0) {
+        for (int64_t slot = 0; slot < width; slot++) {
+            pid_t pid = slots[slot].pid;
+            if (pid <= 0) continue;
+            int64_t waited = runtime_waitpid(pid, &status, WNOHANG);
+            if (waited == 0) continue;
+            int64_t rc = waited == pid ? py_process_normalize_wait_status(status) : 127;
+            runtime_kill(-pid, SIGKILL);
+            slots[slot].pid = 0;
+            live--;
+            if (rc != 0) {
+                failure = ((slots[slot].index + 1) << 32) | (rc & INT64_C(4294967295));
+                break;
+            }
+        }
+        if (failure) break;
+        int64_t slot = 0;
+        while (next_index < count && live < width) {
+            while (slots[slot].pid != 0) slot++;
+            PyObject *index = py_int_from_i64(next_index);
+            PyObject *spec = py_obj_getitem(specs, index);
+            py_decref(index);
+            PyObject *zero = py_int_from_i64(0), *one = py_int_from_i64(1);
+            PyObject *argv = py_obj_getitem(spec, zero), *env = py_obj_getitem(spec, one);
+            py_decref(zero); py_decref(one);
+            int64_t argc = 0, envc = 0;
+            char **items = build_exec_argv(argv, &argc);
+            char **envp = build_exec_argv(env, &envc);
+            pid_t pid = -1;
+            if (items && envp) {
+                posix_spawnattr_t attr;
+                if (posix_spawnattr_init(&attr) == 0) {
+                    int rc = posix_spawnattr_setpgroup(&attr, 0);
+                    if (rc == 0) rc = posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP);
+                    if (rc == 0) rc = posix_spawnp(&pid, items[0], NULL, &attr, items, envp);
+                    if (rc != 0) pid = -1;
+                    posix_spawnattr_destroy(&attr);
+                }
+            }
+            free_exec_argv(items, argc); free_exec_argv(envp, envc);
+            py_decref(argv); py_decref(env); py_decref(spec);
+            if (pid <= 0) {
+                failure = ((next_index + 1) << 32) | 127;
+                break;
+            }
+            slots[slot].pid = pid;
+            slots[slot].index = next_index++;
+            live++;
+            slot++;
+        }
+        if (failure) break;
+        if (live) pcc_runtime_sleep_ns(PCC_TIMEOUT_POLL_NS);
+    }
+    if (failure) {
+        for (int64_t slot = 0; slot < width; slot++) {
+            if (slots[slot].pid > 0) runtime_kill(-slots[slot].pid, SIGTERM);
+        }
+        pcc_runtime_sleep_ns(INT64_C(200000000));
+        for (int64_t slot = 0; slot < width; slot++) {
+            if (slots[slot].pid > 0) {
+                runtime_kill(-slots[slot].pid, SIGKILL);
+                runtime_waitpid(slots[slot].pid, &status, 0);
+            }
+        }
+    }
+    free(slots);
+    return failure;
+}

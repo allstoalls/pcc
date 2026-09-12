@@ -47,7 +47,19 @@ def _test_capi_manifest_fields() -> dict[str, object]:
     }
 
 
-def test_ir_to_obj_initializes_native_inline_asm_parser(tmp_path: Path) -> None:
+def test_runtime_cache_identity_distinguishes_owned_and_oracle_emitters(monkeypatch):
+    from tests import runtime_build_cache
+
+    compiler = REPO / ".venv/bin/pcc"
+    monkeypatch.setenv("PCC_IR_TO_OBJ_EMITTER", "pcc")
+    owned = runtime_build_cache._pcc_runtime_cache_key(compiler, variant="pcc-py")
+    monkeypatch.setenv("PCC_IR_TO_OBJ_EMITTER", "llvmlite")
+    oracle = runtime_build_cache._pcc_runtime_cache_key(compiler, variant="pcc-py")
+    assert owned != oracle
+
+
+def test_ir_to_obj_initializes_native_inline_asm_parser(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("PCC_IR_TO_OBJ_EMITTER", "llvmlite")
     target_triple = llvm.get_default_triple()
     ir_path = tmp_path / "native-inline-asm.ll"
     object_path = tmp_path / "native-inline-asm.o"
@@ -164,7 +176,11 @@ def test_ir_to_obj_rejects_target_data_layout_mismatch(tmp_path: Path) -> None:
 
 def test_ir_to_obj_rejects_foreign_target_inline_asm_before_llvm_emission(
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
+    # This parser-registration limit belongs to the explicit LLVM oracle.
+    # Owned cross-target assembly does not consult LLVM's native parser.
+    monkeypatch.setenv("PCC_IR_TO_OBJ_EMITTER", "llvmlite")
     target_triple = _foreign_target_triple()
     ir_path = tmp_path / "foreign-inline-asm.ll"
     object_path = tmp_path / "foreign-inline-asm.o"
@@ -293,6 +309,40 @@ def _build_provenanced_archive(
     return runtime_root, archive, objects, manifest
 
 
+def test_manifest_validation_does_not_start_external_tools(tmp_path, monkeypatch):
+    runtime_root, archive, objects, expected = _build_provenanced_archive(tmp_path)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("runtime archive validation started an external tool")
+
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    assert assemble_runtime_archive_manifest(
+        archive, objects, runtime_root=runtime_root,
+    ) == expected
+    assert verify_runtime_archive_manifest(
+        archive, runtime_root=runtime_root,
+    ) == expected
+
+
+def test_runtime_selection_checks_do_not_resolve_host_python(tmp_path):
+    from pcc.py_frontend.pipeline_runtime_archive import (
+        provenance_codegen_stale, provenance_valid,
+    )
+
+    runtime_root, archive, objects, expected = _build_provenanced_archive(tmp_path)
+
+    def forbidden():
+        pytest.fail("runtime validation tried to resolve a host Python")
+
+    assert provenance_valid(
+        str(archive), runtime_dir=str(runtime_root),
+        pcc_source_root=forbidden, host_python_command=forbidden,
+    )
+    assert not provenance_codegen_stale(
+        str(archive), pcc_source_root=forbidden, host_python_command=forbidden,
+    )
+
+
 def test_codegen_freshness_is_fail_closed_and_aggregates_all_members(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -376,7 +426,16 @@ def test_unsafe_archive_member_is_rejected_before_extraction(
     runtime_root = tmp_path / "pcc" / "py_runtime"
     runtime_root.mkdir(parents=True)
     archive = runtime_root / "libpy_runtime_pcc_py.a"
-    archive.write_bytes(b"!<arch>\n")
+    name = unsafe_member.encode()
+    payload = name + b"object"
+    header = (
+        ("#1/" + str(len(name))).encode().ljust(16)
+        + b"0".ljust(12) + b"0".ljust(6) + b"0".ljust(6)
+        + b"100644".ljust(8) + str(len(payload)).encode().ljust(10) + b"`\n"
+    )
+    archive.write_bytes(
+        b"!<arch>\n" + header + payload + (b"\n" if len(payload) % 2 else b"")
+    )
     invocation_log = tmp_path / "ar-invocations.txt"
     fake_ar = tmp_path / "fake-ar"
     _fake_ar_listing(fake_ar, member=unsafe_member, invocation_log=invocation_log)
@@ -419,7 +478,7 @@ def test_unsafe_archive_member_is_rejected_before_extraction(
             ar=str(fake_ar),
         )
 
-    assert invocation_log.read_text(encoding="utf-8").splitlines() == ["t"]
+    assert not invocation_log.exists()
 
 
 def test_pcc_python_archive_manifest_round_trips_without_build_paths(

@@ -17,8 +17,10 @@ from ..py_ast import (
     DynType,
     Expr,
     For,
+    FuncDef,
     If,
     IntType,
+    Lambda,
     ListType,
     Name,
     SetType,
@@ -114,7 +116,9 @@ def _for_target_scan_reads(node, ident: str, in_binding_body: bool, state) -> No
 
     ``state["nested"]`` records a binding loop lexically inside another
     binding loop's body: reads in the outer body are then attributable to
-    either loop, so no read is exempt and the answer is unusable.
+    either loop, so no read is exempt and the answer is unusable.  A nested
+    ``FuncDef``/``Lambda`` is exempt from the position rule entirely -- it can
+    be called after the loop no matter where it is written.
     ``state["depth"]`` tracks enclosing loops -- a back edge can re-reach a
     read that precedes the target loop, so a target inside any loop also
     falls back to counting everything.
@@ -142,6 +146,20 @@ def _for_target_scan_reads(node, ident: str, in_binding_body: bool, state) -> No
             and state["counting"] != 0
         ):
             state["outside"] = state["outside"] + 1
+        return
+    if isinstance(node, FuncDef) or isinstance(node, Lambda):
+        # A nested function's reads are not ordered by where it is written:
+        # it may be called after the loop and still capture the name.  Count
+        # them wherever they appear.
+        saved_counting = state["counting"]
+        state["counting"] = 1
+        i = 0
+        while i < len(_CPY_SCAN_FIELDS):
+            child = getattr(node, _CPY_SCAN_FIELDS[i], None)
+            if child is not None:
+                _for_target_scan_reads(child, ident, in_binding_body, state)
+            i += 1
+        state["counting"] = saved_counting
         return
     if isinstance(node, While):
         state["depth"] = state["depth"] + 1

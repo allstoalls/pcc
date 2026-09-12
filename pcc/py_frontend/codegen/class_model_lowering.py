@@ -13,6 +13,7 @@ from ..py_ast import (
     DynType,
     Expr,
     FuncDef,
+    ImportFrom,
     ListExpr,
     Name,
     Return,
@@ -563,6 +564,45 @@ class ClassModelLoweringMixin:
             return None
         return owner_info, desc_info
 
+    def _import_from_module_for_local_name(self, local_name: str):
+        """The module a ``from X import <local_name>`` bound, if any.
+
+        Cross-module class lookup is keyed by bare class name, so without this
+        the first module in the export table that happens to define the name
+        wins.  ``pcc/ast/c_ast.py`` alone defines ``Enum``, ``If``, ``For``,
+        ``Union``, ``Struct``, ``Return``, ``While``, ``ID``, ``Constant``,
+        ``Cast``, ``Decl``, ``Label``, ``Case``, ``Default``, ``Break``,
+        ``Continue``, ``Switch``, ``Typename`` and ``Assignment``; once the C
+        frontend joined the self-host closure, ``class DiagnosticSeverity(str,
+        Enum)`` in ``pcc/diagnostics.py`` resolved its base to the C AST's
+        ``Enum`` and every ``DiagnosticSeverity(value)`` call was checked
+        against ``__init__(self, name, values, coord=None)``.
+
+        A name the module imported from a specific module can only be that
+        module's, so the answer here is authoritative rather than a hint.
+        """
+        cache = getattr(self, "_import_from_module_cache", None)
+        if cache is None:
+            cache = {}
+            body = getattr(self.ast_module, "body", ())
+            i = 0
+            while i < len(body):
+                stmt = body[i]
+                i += 1
+                if not isinstance(stmt, ImportFrom):
+                    continue
+                module = stmt.module or ""
+                if not module:
+                    continue
+                j = 0
+                while j < len(stmt.names):
+                    pair = stmt.names[j]
+                    j += 1
+                    bound = pair[1] or pair[0]
+                    cache[bound] = module
+            self._import_from_module_cache = cache
+        return cache.get(local_name, None)
+
     def _resolve_method_mro(self, class_name: str, method_name: str):
         """Walk the declared bases of ``class_name`` looking for the
         first class that defines ``method_name``. Supports cross-module
@@ -603,7 +643,31 @@ class ClassModelLoweringMixin:
                     return remember(info)
                 for base_expr in info.bases_ast:
                     if isinstance(base_expr, Name) and base_expr.ident != "object":
-                        queue.append(base_expr.ident)
+                        # A base written as a bare name refers to THIS module's
+                        # binding for it, so qualify it with the module it was
+                        # imported from.  Bare-name lookup scans the whole
+                        # export table and takes the first hit, and
+                        # ``pcc/ast/c_ast.py`` alone defines ``Enum``, ``If``,
+                        # ``For``, ``Union``, ``Struct``, ``Return``,
+                        # ``While``, ``ID``, ``Constant``, ``Cast``, ``Decl``,
+                        # ``Label``, ``Case``, ``Default``, ``Break``,
+                        # ``Continue``, ``Switch``, ``Typename`` and
+                        # ``Assignment``: once the C frontend joined the
+                        # self-host closure, ``class DiagnosticSeverity(str,
+                        # Enum)`` resolved its base to the C AST's ``Enum`` and
+                        # every ``DiagnosticSeverity(value)`` was checked
+                        # against ``__init__(self, name, values, coord=None)``.
+                        #
+                        # Only syntactic bases are qualified.  An inferred
+                        # class hint carries a bare name with no import to
+                        # attribute it to, so those keep the wide scan.
+                        bound = self._import_from_module_for_local_name(
+                            base_expr.ident
+                        )
+                        if bound is not None:
+                            queue.append(bound + "." + base_expr.ident)
+                        else:
+                            queue.append(base_expr.ident)
                 continue
 
             # 2. Try cross-module lookup if local fails.

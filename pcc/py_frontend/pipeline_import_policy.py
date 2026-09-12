@@ -69,7 +69,12 @@ NATIVE_BUILTIN_IMPORTS = frozenset(
 # through CPython and took every function that called it -- including
 # `asyncio.Task.__init__` -- down to a fail-closed no-libpython stub.
 NATIVE_BUILTIN_IMPORTS_WITH_COMPILED_PROVIDER = frozenset(
-    {"platform", "subprocess", "contextvars"}
+    # ``contextlib``: builtin dispatch covers ``with`` statement lowering, not
+    # ``contextmanager``/``nullcontext`` as values.  ``pcc/codegen/c_codegen``
+    # imports both at module scope, so a pcc1 carrying the C frontend emitted
+    # a native module import for a module its closure did not contain and
+    # died at runtime with "No module named 'contextlib'".
+    {"platform", "subprocess", "contextvars", "contextlib"}
 )
 
 # A shallow explicit multi-file compile normally admits every directly
@@ -77,7 +82,7 @@ NATIVE_BUILTIN_IMPORTS_WITH_COMPILED_PROVIDER = frozenset(
 # also classified as compiler-owned builtin dispatch but still exposes
 # semantic objects that require its compiled provider.
 REQUIRED_COMPILED_STDLIB_PROVIDERS = frozenset(
-    {"platform", "subprocess", "contextvars"}
+    {"platform", "subprocess", "contextvars", "contextlib"}
 )
 
 NATIVE_IMPORT_FROMS = {

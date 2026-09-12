@@ -122,6 +122,23 @@ PyObject *py_os_unlink(PyObject *path) {
     return py_None;
 }
 
+PyObject *py_os_rmdir(PyObject *path) {
+    PyObject *owned = NULL;
+    PyObject *item = coerce_path_str(path, &owned);
+    if (item == NULL) {
+        py_decref(owned);
+        py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "path must be string-like"));
+        return NULL;
+    }
+    int rc = rmdir(py_str_utf8(item));
+    py_decref(owned);
+    if (rc != 0) {
+        py_raise_owned(py_exc_new(PY_EXC_OSERROR, "could not remove directory"));
+        return NULL;
+    }
+    return py_None;
+}
+
 PyObject *py_os_replace(PyObject *source, PyObject *destination) {
     PyObject *source_owned = NULL;
     PyObject *destination_owned = NULL;

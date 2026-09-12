@@ -1989,9 +1989,9 @@ class NativeModuleAliasMixin:
                     provider_boxes_int = bool(
                         info.get("box_int_abi", self._should_box_python_ints())
                     )
-                    if self._is_object(value_ty) or (
-                        isinstance(value_ty, IntType) and provider_boxes_int
-                    ):
+                    if isinstance(value_ty, IntType):
+                        source_ir_ty = self._abi_ir_type(value_ty, box_int_abi=provider_boxes_int)
+                    elif self._is_object(value_ty):
                         source_ir_ty = _CSTR
                     else:
                         source_ir_ty = self._storage_ir_type(value_ty)
@@ -2087,9 +2087,9 @@ class NativeModuleAliasMixin:
         provider_boxes_int = bool(
             info.get("box_int_abi", self._should_box_python_ints())
         )
-        if self._is_object(value_ty) or (
-            isinstance(value_ty, IntType) and provider_boxes_int
-        ):
+        if isinstance(value_ty, IntType):
+            ir_ty = self._abi_ir_type(value_ty, box_int_abi=provider_boxes_int)
+        elif self._is_object(value_ty):
             ir_ty = _CSTR
         else:
             ir_ty = self._storage_ir_type(value_ty)
@@ -2108,7 +2108,7 @@ class NativeModuleAliasMixin:
             # The consumer may keep ints in the other representation than the
             # exporting module (raw i64 versus boxed object); bridge on load.
             consumer_ir_ty = (
-                _CSTR if self._should_box_python_ints() else self._storage_ir_type(value_ty)
+                self._abi_ir_type(value_ty, box_int_abi=self._should_box_python_ints())
             )
             if not self._ir_type_matches(consumer_ir_ty, gv.value_type):
                 loaded = self._bridge_cross_module_int_global(
@@ -2127,9 +2127,9 @@ class NativeModuleAliasMixin:
         provider_boxes_int = bool(
             info.get("box_int_abi", self._should_box_python_ints())
         )
-        if self._is_object(value_ty) or (
-            isinstance(value_ty, IntType) and provider_boxes_int
-        ):
+        if isinstance(value_ty, IntType):
+            ir_ty = self._abi_ir_type(value_ty, box_int_abi=provider_boxes_int)
+        elif self._is_object(value_ty):
             ir_ty = _CSTR
         else:
             ir_ty = self._storage_ir_type(value_ty)
@@ -2511,9 +2511,9 @@ class NativeModuleAliasMixin:
             provider_boxes_int = bool(
                 info.get("box_int_abi", self._should_box_python_ints())
             )
-            if self._is_object(value_ty) or (
-                isinstance(value_ty, IntType) and provider_boxes_int
-            ):
+            if isinstance(value_ty, IntType):
+                ir_ty = self._abi_ir_type(value_ty, box_int_abi=provider_boxes_int)
+            elif self._is_object(value_ty):
                 ir_ty = _CSTR
             else:
                 ir_ty = self._storage_ir_type(value_ty)
@@ -3201,6 +3201,34 @@ class NativeModuleAliasMixin:
             import sys
 
             sys.stderr.write("debug: native_class_instantiate after_load\n")
+        # CPython constructs with ``cls.__new__(cls, *args)``.  This is the
+        # cross-module construction path -- ``ir.IntType(1)`` reached through
+        # an imported module object -- and it allocated straight from
+        # py_instance_new, so a user ``__new__`` never ran.  Interning and
+        # singleton classes therefore returned a fresh object every call, and
+        # pcc1 died at pcc/codegen/c_types.py:22 with ``'object' object has
+        # no attribute '_cache'`` because ``__new__`` was the thing that
+        # would have made ``cls`` meaningful there.
+        extern_new_fn = class_info.methods.get("__new__")
+        if extern_new_fn is None:
+            # ``__new__`` is commonly declared on a base -- the singleton
+            # idiom puts it on the shared base and subclasses only set class
+            # attributes -- and an extern class's method table carries only
+            # its own methods.
+            new_owner = self._resolve_method_mro(class_name, "__new__")
+            if new_owner is not None:
+                extern_new_fn = new_owner.methods.get("__new__")
+        if extern_new_fn is not None:
+            new_call_args = [cls_ptr]
+            for arg_expr in args:
+                new_call_args.append(self._emit_expr_as_pcc_object(arg_expr))
+            constructed = self.builder.call(
+                extern_new_fn,
+                new_call_args,
+                name=self._fresh(f"new.{class_name}"),
+            )
+            self._emit_post_call_err_check(None)
+            return constructed
         inst = self.builder.call(
             self.runtime["py_instance_new"],
             [cls_ptr],

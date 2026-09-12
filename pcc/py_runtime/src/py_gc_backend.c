@@ -11307,6 +11307,12 @@ static int64_t pcc_gc_visit_builtin_exception_cache_slots_unlocked(
         visit(slot, NULL, 0, ctx);
         n_slots++;
     }
+    for (int64_t index = 0;; index++) {
+        PyObject **slot = (PyObject **)pcc_builtin_type_root_slots[index];
+        if (slot == NULL) break;
+        visit(slot, NULL, 0, ctx);
+        n_slots++;
+    }
     return n_slots;
 }
 
@@ -11445,13 +11451,13 @@ void pcc_gc_generational_promote_scheduler_roots(int64_t budget) {
         }
 
         int64_t slot_index = pcc_gc_backend3_scheduler_root_scan_slot;
-        if (slot_index >= PY_EXC_N_BUILTIN) {
+        PyObject **slot = slot_index < PY_EXC_N_BUILTIN
+            ? (PyObject **)py_subs_exc_cache_slot((int32_t)slot_index)
+            : (PyObject **)pcc_builtin_type_root_slots[slot_index - PY_EXC_N_BUILTIN];
+        if (slot == NULL) {
             pcc_gc_backend3_scheduler_root_scan_reset_unlocked();
             break;
         }
-        PyObject **slot = (PyObject **)py_subs_exc_cache_slot(
-            (int32_t)slot_index
-        );
         if (slot != NULL) {
             pcc_gc_promote_mapped_root_slot(slot, NULL, 0, NULL);
         }
@@ -13034,14 +13040,14 @@ static int64_t pcc_gc_runtime_root_snapshot_fill_batch_unlocked(
         }
 
         int64_t slot_index = pcc_gc_runtime_root_snapshot_slot;
-        if (slot_index >= PY_EXC_N_BUILTIN) {
+        PyObject **slot = slot_index < PY_EXC_N_BUILTIN
+            ? (PyObject **)py_subs_exc_cache_slot((int32_t)slot_index)
+            : (PyObject **)pcc_builtin_type_root_slots[slot_index - PY_EXC_N_BUILTIN];
+        if (slot == NULL) {
             pcc_gc_runtime_root_snapshot_reset_unlocked();
             *complete = 1;
             break;
         }
-        PyObject **slot = (PyObject **)py_subs_exc_cache_slot(
-            (int32_t)slot_index
-        );
         if (slot != NULL) {
             pcc_gc_snapshot_runtime_mapped_root_slot(
                 slot, NULL, 0, &snapshot_ctx

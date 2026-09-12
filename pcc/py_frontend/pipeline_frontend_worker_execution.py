@@ -218,7 +218,7 @@ def run_codegen_worker(
             return run_summary_worker_callback(manifest)
         from .type_infer import infer_module
         from .codegen.layer1 import L1CodeGen
-        structured_instruction_output = bool(native_worker_executable())
+        is_native_worker = bool(native_worker_executable())
 
         src_paths = manifest["src_paths"]
         module_names = manifest["module_names"]
@@ -242,7 +242,7 @@ def run_codegen_worker(
         unique_external_class_preload = None
         indexed_exports = False
         if exports_path:
-            if structured_instruction_output and len(assigned_indices) == 1:
+            if is_native_worker and len(assigned_indices) == 1:
                 root_module = module_names[assigned_indices[0]]
                 (
                     native_exports,
@@ -531,9 +531,9 @@ def run_codegen_worker(
                                 emit_aarch64_darwin_indexed_transport(
                                     direct_module,
                                     optimize=False,
-                                    structured_instructions=(
-                                        structured_instruction_output
-                                    ),
+                                    # Both host and native workers emit final
+                                    # machine records through the owned encoder.
+                                    structured_instructions=True,
                                 )
                             )
                             if worker_timing:
@@ -779,4 +779,15 @@ def run_codegen_worker(
                     stream.write(message + "\n")
         except Exception:
             pass
+        if str(
+            os.environ.get("PCC_DEBUG_WORKER_RERAISE", "") or ""
+        ).strip() not in ("", "0"):
+            # The handler above deliberately avoids ``traceback`` so the strict
+            # worker keeps its libpython closure, which also means a worker
+            # failure arrives as a bare "Type: message" with no location. Set
+            # this to let the exception reach the process handler instead: it
+            # prints file and line, and the durable failure file and stderr
+            # line have already been written above, so the parent still sees
+            # the same report.
+            raise
         return 1

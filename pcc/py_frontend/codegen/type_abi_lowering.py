@@ -145,6 +145,32 @@ class TypeAbiLoweringMixin:
             return _CSTR
         return self._map_type(ty)
 
+    def _local_slot_ir_type(self, ident: str, ty: Type) -> ir.Type:
+        """The slot shape for a named local.
+
+        A name written through both an unboxed float/bool and an object needs
+        the object slot on every edge; ``_storage_ir_type`` only sees the type
+        of one binding, so the function-level plan decides.  Without it the
+        slot took the first binding's shape and later stores were coerced into
+        it -- turning ``x = SomeClass(...)`` after ``x = 1.0`` into
+        ``py_float_to_f64`` on the instance.
+        """
+        if ident in getattr(self, "_planned_object_local_names", set()):
+            return _CSTR
+        return self._storage_ir_type(ty)
+
+    def _local_slot_decl_type(self, ident: str, ty: Type) -> Type:
+        """The semantic type recorded for a named local's slot.
+
+        A planned-object local holds an object on every edge, and which kind
+        varies per binding, so the slot's semantic type is ``dyn``.  Keeping
+        the first binding's ``float`` would make later reads interpret the
+        stored pointer as an unboxed double.
+        """
+        if ident in getattr(self, "_planned_object_local_names", set()):
+            return DynType(name="dyn")
+        return ty
+
     def _abi_ir_type(self, ty: Type, *, box_int_abi: bool) -> ir.Type:
         if box_int_abi and isinstance(ty, IntType):
             return _CSTR

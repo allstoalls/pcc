@@ -838,6 +838,7 @@ def test_pcc_owned_signature_is_published_without_external_codesign(
     monkeypatch.setattr(pipeline.sys, "platform", "darwin")
     monkeypatch.setenv("PCC_SELF_BACKEND_PUBLISH_SYNC", "0")
     monkeypatch.setattr(pipeline.subprocess, "run", fake_run)
+    (tmp_path / "output.tmp").write_bytes(b"owned signature bytes")
 
     pipeline._finish_self_backend_executable(
         str(tmp_path / "output.tmp"),
@@ -846,9 +847,8 @@ def test_pcc_owned_signature_is_published_without_external_codesign(
         signature_owned_by_pcc=True,
     )
 
-    assert commands[0][0:2] == ["/bin/mv", "-f"]
-    assert commands[1][0:2] == ["/bin/sh", "-c"]
-    assert all(command[0] != "/usr/bin/codesign" for command in commands)
+    assert commands == []
+    assert (tmp_path / "output").read_bytes() == b"owned signature bytes"
 
 
 @pytest.mark.parametrize(

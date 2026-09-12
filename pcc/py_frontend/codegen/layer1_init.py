@@ -37,6 +37,10 @@ class Layer1InitMixin:
         # same reason as the handler stack above: pcc1's L1CodeGen has
         # a fixed layout and cannot grow the attribute lazily.
         self._for_join_stmt_stack: list = []
+        # local name -> module it was bound from by ``from X import Y``.
+        # Real constructor state: cross-module class resolution consults
+        # it, and pcc1's L1CodeGen has a fixed layout.
+        self._import_from_module_cache = None
         self._emitting_finally = False
         self._prefer_native_callable_values = False
         self._cpy_values = set()
@@ -194,6 +198,10 @@ class Layer1InitMixin:
         # by an intervening object assignment; this set keeps a later int
         # rebind on the entry-planned object slot.
         self._planned_exact_int_local_names: set[str] = set()
+        # Locals written through both an unboxed float/bool and an
+        # object.  Their slot must be the object one from the entry
+        # block; a scalar slot would coerce the object store instead.
+        self._planned_object_local_names: set[str] = set()
         self.loop_stack: list[tuple[ir.Block, ir.Block]] = []
         self._fmt_int: Optional[ir.GlobalVariable] = None
         self._fmt_float: Optional[ir.GlobalVariable] = None

@@ -1065,8 +1065,131 @@ PyObject *py_dict_items(PyObject *dict) {
     return out;
 }
 
+static int py_dict_update_hold(PyObject **slots, void **handles,
+                               int index, PyObject *value) {
+    slots[index] = value;
+    if (py_dict_prepare_moving_root(&slots[index], &handles[index]) != 0) {
+        py_raise_owned(py_exc_new(PY_EXC_MEMORYERROR,
+                                 "dict.update: cannot root temporary"));
+        return 0;
+    }
+    return 1;
+}
+
+static PyObject *py_dict_update_load(PyObject **slots, void **handles, int index) {
+    return py_dict_reload_moving_root(&slots[index], handles[index]);
+}
+
+static void py_dict_update_drop(PyObject **slots, void **handles, int index) {
+    PyObject *value = py_dict_update_load(slots, handles, index);
+    py_dict_finish_moving_root(handles[index]);
+    handles[index] = NULL;
+    slots[index] = NULL;
+    if (index >= 2) py_decref(value);
+}
+
+static void py_dict_update_protocol(PyObject *dst, PyObject *src) {
+    /* Destination/source are borrowed; the remaining slots own temporaries.
+     * Mirrors _dict_update_protocol in the pcc-Python runtime. */
+    PyObject *slots[7] = {NULL};
+    void *handles[7] = {NULL};
+    int ok = py_dict_update_hold(slots, handles, 0, dst);
+    if (ok) ok = py_dict_update_hold(slots, handles, 1, src);
+    int mapping = 0;
+    if (ok) {
+        PyObject *method = py_obj_getattr(py_dict_update_load(slots, handles, 1), "keys");
+        if (method == NULL) {
+            if (py_err_occurred()) {
+                if (py_exc_matches(py_current_exception(), py_exc_builtin_class(PY_EXC_ATTRIBUTEERROR)))
+                    py_clear_exception();
+                else ok = 0;
+            }
+        } else {
+            mapping = 1;
+            ok = py_dict_update_hold(slots, handles, 3, method);
+        }
+    }
+    if (ok && mapping) {
+        PyObject *args = py_tuple_new(0);
+        ok = py_dict_update_hold(slots, handles, 4, args);
+        if (args == NULL) ok = 0;
+        if (ok) {
+            PyObject *keys = py_obj_call(py_dict_update_load(slots, handles, 3),
+                                        py_dict_update_load(slots, handles, 4), NULL);
+            ok = py_dict_update_hold(slots, handles, 5, keys);
+            if (keys == NULL) ok = 0;
+        }
+    }
+    if (ok) {
+        PyObject *source = py_dict_update_load(slots, handles, mapping ? 5 : 1);
+        PyObject *iterator = py_obj_iter(source);
+        ok = py_dict_update_hold(slots, handles, 2, iterator);
+        if (iterator == NULL) ok = 0;
+    }
+    py_dict_update_drop(slots, handles, 5);
+    py_dict_update_drop(slots, handles, 4);
+    py_dict_update_drop(slots, handles, 3);
+    while (ok) {
+        PyObject *item = py_obj_next(py_dict_update_load(slots, handles, 2));
+        if (item == NULL) {
+            if (py_err_occurred()) {
+                if (py_exc_matches(py_current_exception(), py_exc_builtin_class(PY_EXC_STOPITERATION)))
+                    py_clear_exception();
+            } else {
+                py_runtime_error_if_unset("py_obj_next", "dict.update iterator returned NULL");
+            }
+            ok = 0;
+        } else {
+            ok = py_dict_update_hold(slots, handles, 3, item);
+            if (ok && !mapping) {
+                PyObject *pair = py_list_new(2);
+                ok = py_dict_update_hold(slots, handles, 4, pair);
+                if (pair == NULL) ok = 0;
+                if (ok) {
+                    py_list_extend(py_dict_update_load(slots, handles, 4),
+                                   py_dict_update_load(slots, handles, 3));
+                    if (py_err_occurred()) ok = 0;
+                    else if (py_list_len(py_dict_update_load(slots, handles, 4)) != 2) {
+                        py_raise_owned(py_exc_new(PY_EXC_VALUEERROR,
+                            "dictionary update sequence element must have length 2"));
+                        ok = 0;
+                    }
+                }
+            }
+            if (ok) {
+                PyObject *key = py_dict_update_load(slots, handles, 3);
+                if (mapping) py_incref(key);
+                else key = py_list_get(py_dict_update_load(slots, handles, 4), 0);
+                ok = py_dict_update_hold(slots, handles, 5, key);
+            }
+            if (ok) {
+                PyObject *value = mapping
+                    ? py_obj_getitem(py_dict_update_load(slots, handles, 1),
+                                     py_dict_update_load(slots, handles, 5))
+                    : py_list_get(py_dict_update_load(slots, handles, 4), 1);
+                ok = py_dict_update_hold(slots, handles, 6, value);
+                if (value == NULL) ok = 0;
+            }
+            if (ok) {
+                py_dict_set(py_dict_update_load(slots, handles, 0),
+                            py_dict_update_load(slots, handles, 5),
+                            py_dict_update_load(slots, handles, 6));
+                if (py_err_occurred()) ok = 0;
+            }
+            for (int index = 6; index >= 3; index--)
+                py_dict_update_drop(slots, handles, index);
+        }
+    }
+    for (int index = 6; index >= 0; index--)
+        py_dict_update_drop(slots, handles, index);
+}
+
 void py_dict_update(PyObject *dst, PyObject *src) {
-    if (!py_object_is_dict(dst) || !py_object_is_dict(src)) return;
+    if (!py_object_is_dict(dst)) return;
+    if (!py_object_is_dict(src)) {
+        py_dict_update_protocol(dst, src);
+        return;
+    }
     PyObject *dst_storage = dst;
     PyObject *src_storage = src;
     void *dst_handle = NULL;

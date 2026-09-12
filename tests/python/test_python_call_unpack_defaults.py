@@ -4,6 +4,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from pcc1_gate import repo_root
 
 from pcc1_gate import find_current_pcc1, skip_or_fail_no_current_pcc1
@@ -195,7 +197,7 @@ def test_parser_style_starstar_kwargs_merge_for_missing_formals():
     assert [pair[1] for pair in resolved[1].obj.pairs] == [left, right]
 
 
-def test_multiple_legacy_starstar_kwargs_split_to_splat_dict():
+def test_multiple_legacy_starstar_kwargs_require_duplicate_safe_bridge():
     resolver = _Resolver()
     span = None
     first = Name(span=span, ty=DynType(name="dyn"), ident="first")
@@ -216,15 +218,10 @@ def test_multiple_legacy_starstar_kwargs_split_to_splat_dict():
         kwargs=(),
     )
 
-    split = resolver._split_starstar_kwargs_unpack(
-        (first, left_unpack, right_unpack)
-    )
-
-    assert split is not None
-    positional, kwargs_expr = split
-    assert positional == (first,)
-    assert isinstance(kwargs_expr, DictExpr)
-    assert len(kwargs_expr.pairs) == 2
+    # A plain dict merge would overwrite duplicate keys. The legacy CPython
+    # bridge rejects this shape until it can preserve call-time TypeError.
+    with pytest.raises(NotImplementedError, match="duplicate-key semantics"):
+        resolver._split_starstar_kwargs_unpack((first, left_unpack, right_unpack))
 
 
 def test_pcc1_starred_unknown_positional_uses_required_args(tmp_path):

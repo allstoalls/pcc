@@ -244,14 +244,14 @@ def _unpack_generic(byteorder: str, plan, raw, offset: int) -> tuple:
             cursor += count
             continue
         if kind == _KIND_BYTES:
-            values.append(raw[cursor : cursor + count])
+            values.append(bytes(raw[cursor : cursor + count]))
             cursor += count
             continue
         item_index = 0
         while item_index < count:
             item_index += 1
             if kind == _KIND_CHAR:
-                values.append(raw[cursor : cursor + 1])
+                values.append(bytes(raw[cursor : cursor + 1]))
                 cursor += 1
                 continue
             numeric = int.from_bytes(raw[cursor : cursor + width], byteorder)
@@ -296,7 +296,7 @@ def _unpack_native_little(plan, raw, offset: int) -> tuple:
             continue
         if kind == _KIND_BYTES:
             start = cursor - data_offset
-            values.append(raw[start : start + count])
+            values.append(bytes(raw[start : start + count]))
             cursor += count
             continue
         item_index = 0
@@ -304,7 +304,7 @@ def _unpack_native_little(plan, raw, offset: int) -> tuple:
             item_index += 1
             if kind == _KIND_CHAR:
                 start = cursor - data_offset
-                values.append(raw[start : start + 1])
+                values.append(bytes(raw[start : start + 1]))
                 cursor += 1
                 continue
             if width == 8:
@@ -330,12 +330,13 @@ def _unpack_native_little(plan, raw, offset: int) -> tuple:
 
 
 def _unpack_plan(byteorder: str, plan, size: int, buffer, offset: int) -> tuple:
-    # An immutable bytes buffer is read in place.  Copying it here made every
+    # Bytes and bytearray buffers are read in place. Copying either made every
     # unpack_from O(len(buffer)) -- the self-backend stack-map validator calls
     # unpack_from tens of thousands of times on one multi-hundred-KB payload,
     # and under pcc1 that copy loop was 32% of a codegen worker's samples.
-    # Other buffer types keep the copy so 's'/'c' fields still yield bytes.
-    raw = buffer if isinstance(buffer, bytes) else bytes(buffer)
+    # Both share the native payload layout. 's'/'c' copy only their field and
+    # always return bytes, including when the input is mutable.
+    raw = buffer if isinstance(buffer, (bytes, bytearray)) else bytes(buffer)
     offset = _normalize_offset(len(raw), offset)
     if offset + size > len(raw):
         raise error(
@@ -377,6 +378,35 @@ class Struct:
             self._byteorder, self._plan, self.size, buffer, offset
         )
 
+    def iter_unpack(self, buffer):
+        """Yield one tuple per fixed-size chunk of ``buffer``.
+
+        CPython validates the buffer length when ``iter_unpack`` is *called*
+        and only then returns a lazy iterator, so the size check lives here
+        and the walk lives in the generator below.  Without this method a
+        `Struct.iter_unpack` call fell back to CPython, which fail-closed
+        stubbed `precise_stackmap.validate_stack_map_payload` -- the final
+        stack-map check on every self-hosted link.
+        """
+        if self.size <= 0:
+            raise error("cannot iter_unpack from struct of size 0")
+        total = len(buffer)
+        if total % self.size != 0:
+            raise error(
+                "iter_unpack requires a buffer of a multiple of "
+                + str(self.size)
+                + " bytes"
+            )
+        return self._iter_unpack_chunks(buffer, total)
+
+    def _iter_unpack_chunks(self, buffer, total: int):
+        offset = 0
+        while offset < total:
+            yield _unpack_plan(
+                self._byteorder, self._plan, self.size, buffer, offset
+            )
+            offset = offset + self.size
+
     def pack_into(self, buffer, offset: int, *values) -> None:
         payload = self.pack(*values)
         offset = _normalize_offset(len(buffer), offset)
@@ -392,21 +422,48 @@ class Struct:
             index += 1
 
 
+_FORMAT_CACHE = {}
+
+
+def _cached_struct(fmt: str) -> Struct:
+    # Module-level operations share a bounded immutable format plan, just as
+    # an explicit Struct does. Rebuilding it for every record dominated native
+    # object decoding even though the format strings were identical.
+    if not isinstance(fmt, str):
+        return Struct(fmt)
+    layout = _FORMAT_CACHE.get(fmt)
+    if layout is not None:
+        return layout
+    layout = Struct(fmt)
+    if len(_FORMAT_CACHE) >= 100:
+        _FORMAT_CACHE.clear()
+    _FORMAT_CACHE[fmt] = layout
+    return layout
+
+
+def _clearcache() -> None:
+    _FORMAT_CACHE.clear()
+
+
 def calcsize(fmt: str) -> int:
-    return Struct(fmt).size
+    return _cached_struct(fmt).size
 
 
 def pack(fmt: str, *values) -> bytes:
-    return Struct(fmt).pack(*values)
+    return _cached_struct(fmt).pack(*values)
 
 
 def unpack(fmt: str, data: bytes) -> tuple:
-    return Struct(fmt).unpack(data)
+    return _cached_struct(fmt).unpack(data)
 
 
 def pack_into(fmt: str, buffer, offset: int, *values) -> None:
-    Struct(fmt).pack_into(buffer, offset, *values)
+    _cached_struct(fmt).pack_into(buffer, offset, *values)
 
 
 def unpack_from(fmt: str, buffer, offset: int = 0) -> tuple:
-    return Struct(fmt).unpack_from(buffer, offset)
+    return _cached_struct(fmt).unpack_from(buffer, offset)
+
+
+def iter_unpack(fmt: str, buffer):
+    return _cached_struct(fmt).iter_unpack(buffer)

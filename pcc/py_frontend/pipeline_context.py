@@ -92,8 +92,12 @@ def build_closed_world_context(
     from .py_ast import Call as _Call
     from .py_ast import ClassDef as _ClassDef
     from .py_ast import ClassType as _ClassType
+    from .py_ast import Compare as _Compare
+    from .py_ast import DynType as _DynType
     from .py_ast import ExprStmt as _ExprStmt
     from .py_ast import FuncDef as _FuncDef
+    from .py_ast import FloatLit as _FloatLit
+    from .py_ast import FloatType as _FloatType
     from .py_ast import Import as _Import
     from .py_ast import ImportFrom as _ImportFrom
     from .py_ast import IntLit as _IntLit
@@ -104,35 +108,52 @@ def build_closed_world_context(
     from .py_ast import StrLit as _StrLit
     from .py_ast import Subscript as _Subscript
     from .py_ast import TupleExpr as _TupleExpr
+    from .py_ast import UnaryOp as _UnaryOp
     from .pipeline_exports import (
         _export_signed_int_literal_or_none,
     )
 
-    def known_module_int_expr(expr, known_names) -> bool:
-        if _closed_world_is_node(expr, (_IntLit, _BoolLit)):
-            return True
+    def known_module_scalar_expr(expr, known_names) -> str:
+        """Scalar storage inferred through prior module-top bindings."""
+        if _closed_world_is_node(expr, _BoolLit):
+            return "bool"
+        if _closed_world_is_node(expr, _IntLit):
+            return "int"
+        if _closed_world_is_node(expr, _FloatLit):
+            return "float"
         if _closed_world_is_node(expr, _Name):
-            return _py_ast_field_value(expr, "ident", "") in known_names
+            return known_names.get(_py_ast_field_value(expr, "ident", ""), "")
+        op = _py_ast_field_value(expr, "op", "")
+        if _closed_world_is_node(expr, _UnaryOp):
+            if op == "not":
+                return "bool"
+            operand = known_module_scalar_expr(_py_ast_field_value(expr, "operand", None), known_names)
+            if op in ("+", "-") and operand:
+                return "float" if operand == "float" else "int"
+            if op == "~" and operand in ("int", "bool"):
+                return "int"
+            return ""
+        if _closed_world_is_node(expr, _Compare):
+            if op in ("is", "is not", "in", "not in"):
+                return "bool"
+            left = known_module_scalar_expr(_py_ast_field_value(expr, "lhs", None), known_names)
+            right = known_module_scalar_expr(_py_ast_field_value(expr, "rhs", None), known_names)
+            return "bool" if left and right else ""
         if not _closed_world_is_node(expr, _BinOp):
-            return False
-        if _py_ast_field_value(expr, "op", "") not in (
-            "+",
-            "-",
-            "*",
-            "//",
-            "%",
-            "&",
-            "|",
-            "^",
-            "<<",
-            ">>",
-        ):
-            return False
-        return known_module_int_expr(
-            _py_ast_field_value(expr, "lhs", None), known_names
-        ) and known_module_int_expr(
-            _py_ast_field_value(expr, "rhs", None), known_names
-        )
+            return ""
+        left = known_module_scalar_expr(_py_ast_field_value(expr, "lhs", None), known_names)
+        right = known_module_scalar_expr(_py_ast_field_value(expr, "rhs", None), known_names)
+        if not left or not right:
+            return ""
+        if op == "/":
+            return "float"
+        if op in ("+", "-", "*", "//", "%"):
+            return "float" if "float" in (left, right) else "int"
+        if "float" not in (left, right) and op in ("&", "|", "^", "<<", ">>"):
+            if left == right == "bool" and op in ("&", "|", "^"):
+                return "bool"
+            return "int"
+        return ""
 
     _profile_end(profile, "build_closed_world_context_import_py_ast", import_t)
     import_t = _profile_begin(profile)
@@ -179,7 +200,7 @@ def build_closed_world_context(
         _profile_end(profile, "build_closed_world_context_lift", lift_t, mod_name)
         parsed_modules.append(ast_mod)
         exports = {}
-        known_int_names = set()
+        known_scalar_names = {}
         class_field_defs = {}
         class_init_field_defs = {}
         class_field_names = {}
@@ -408,15 +429,17 @@ def build_closed_world_context(
                 target_name = _py_ast_field_value(stmt_targets[0], "ident", "")
                 value = _py_ast_field_value(stmt, "value", None)
                 static_value_ty = _export_static_literal_type(value)
-                if static_value_ty is None and known_module_int_expr(
-                    value, known_int_names
-                ):
-                    static_value_ty = _IntType("int")
-                known_int_names.discard(target_name)
-                if _closed_world_is_node(
-                    static_value_ty, (_IntType, _BoolType)
-                ):
-                    known_int_names.add(target_name)
+                scalar_kind = known_module_scalar_expr(value, known_scalar_names)
+                if static_value_ty is None or _closed_world_is_node(static_value_ty, _DynType):
+                    if scalar_kind == "int":
+                        static_value_ty = _IntType("int")
+                    elif scalar_kind == "bool":
+                        static_value_ty = _BoolType("bool")
+                    elif scalar_kind == "float":
+                        static_value_ty = _FloatType("float")
+                known_scalar_names.pop(target_name, None)
+                if scalar_kind:
+                    known_scalar_names[target_name] = scalar_kind
                 annotation = _py_ast_field_value(stmt, "annotation", None)
                 annotation_name = _py_ast_field_value(annotation, "name", "")
                 if typing_metadata_bindings.get(
@@ -515,6 +538,7 @@ def build_closed_world_context(
                 continue
 
             for target_name in _closed_world_module_block_assign_targets(stmt):
+                known_scalar_names.pop(target_name, None)
                 if target_name in exports:
                     continue
                 exports[target_name] = _closed_world_dyn_module_global_export(

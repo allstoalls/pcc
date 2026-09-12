@@ -35,6 +35,7 @@ from .freestanding_abi_constants import (
     PY_TYPE_BOOL,
     PY_TYPE_BYTEARRAY,
     PY_TYPE_BYTES,
+    PY_TYPE_CLASS,
     PY_TYPE_DICT,
     PY_TYPE_FLOAT,
     PY_TYPE_FUNC,
@@ -76,6 +77,7 @@ _BUILTIN_TYPE_TAGS = {
     "FunctionType": PY_TYPE_FUNC,
     "bytes": PY_TYPE_BYTES,
     "bytearray": PY_TYPE_BYTEARRAY,
+    "type": PY_TYPE_CLASS,
 }
 
 
@@ -132,6 +134,14 @@ def emit_builtin_runtime_isinstance_impl(
     tag = _BUILTIN_TYPE_TAGS[class_ident]
     if obj_val is None:
         obj_val = host._emit_as_object(obj_expr)
+    if class_ident == "type":
+        cls_val = host.builder.call(
+            host.runtime["py_builtin_type_for_tag"], [ir.Constant(_I64, PY_TYPE_CLASS)],
+            name=host._fresh("isinstance.type.class"),
+        )
+        raw = host.builder.call(host.runtime["py_obj_isinstance"], [obj_val, cls_val])
+        host.builder.call(host.runtime["py_decref"], [cls_val])
+        return host.builder.icmp_signed("!=", raw, ir.Constant(_I64, 0))
     actual = host.builder.call(
         host.runtime["py_obj_type_tag"],
         [obj_val],

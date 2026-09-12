@@ -1174,7 +1174,12 @@ def test_direct_publication_uses_exact_static_abi_in_stage1_context(tmp_path):
         recursive_stdlib=True,
         ir_scaffold_mode="on",
     )
-    assert len(srcs) == 228
+    assert len(srcs) == len(mods) == len(set(mods))
+    # C compilation and linking now belong to the compiler closure. The old
+    # 228-file snapshot predates those owners; keep the ABI assertions below
+    # tied to the actual closure instead of an unrelated historical count.
+    assert "pcc.evaluater.c_evaluator" in mods
+    assert "pcc.backend.macho_exec" in mods
     assert "pcc.backend.self_backend_aarch64_fragments" in mods
 
     targets = {
@@ -1226,6 +1231,7 @@ def test_direct_publication_uses_exact_static_abi_in_stage1_context(tmp_path):
         "pcc.llvm_capi.ir",
         "pcc.llvm_capi.direct_indexed_kernel",
     }
+    assert targets.issubset(set(mods))
     counts = pipeline.compile_contextual_per_module_fallback_counts(
         srcs,
         mods,
@@ -1248,6 +1254,14 @@ def test_direct_publication_uses_exact_static_abi_in_stage1_context(tmp_path):
     )
     assert parallel_match is not None
     assert "strict.nolib.stub" not in parallel_match.group(1)
+
+    link_ir = (tmp_path / "pcc_py_frontend_pipeline_self_backend_link.ll").read_text()
+    owned_link = re.search(
+        r"define [^\n]+@user_pcc_py_frontend_pipeline_self_backend_link_"
+        r"_owned_macho_link_in_process\([^\n]*\) \{\n(.*?)\n\}", link_ir, re.S,
+    )
+    assert owned_link is not None
+    assert "strict.nolib.stub" not in owned_link.group(1)
 
     caller_ir = (tmp_path / "pcc_llvm_capi_ir.ll").read_text(encoding="utf-8")
     callee_ir = (

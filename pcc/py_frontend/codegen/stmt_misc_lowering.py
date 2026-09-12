@@ -91,6 +91,7 @@ class StmtMiscLoweringMixin:
             ByteArrayType(name="bytearray"),
             value_is_owned=True,
         )
+        self._gc_release_if_owned(recv_obj, target)
 
     def _emit_dyn_attr_bytearray_extend_stmt(self, expr: Call, target: Attr) -> bool:
         if self.current_function is None:
@@ -157,6 +158,10 @@ class StmtMiscLoweringMixin:
         self.builder.branch(done_bb)
 
         self.builder.position_at_end(done_bb)
+        # getattr returns a NEW reference; replacing the attribute releases
+        # only the container's old reference, not this receiver temporary.
+        # Typed field/local reads can be borrowed, so use recorded ownership.
+        self._gc_release_if_owned(recv_obj, target)
         return True
 
     def _maybe_emit_bytearray_append_stmt(self, expr: Call) -> bool:
@@ -193,6 +198,7 @@ class StmtMiscLoweringMixin:
             ByteArrayType(name="bytearray"),
             value_is_owned=True,
         )
+        self._gc_release_if_owned(recv_obj, target)
 
     def _maybe_emit_bytearray_insert_stmt(self, expr: Call) -> bool:
         if (
@@ -235,6 +241,7 @@ class StmtMiscLoweringMixin:
             ByteArrayType(name="bytearray"),
             value_is_owned=True,
         )
+        self._gc_release_if_owned(recv_obj, target)
 
     def _emit_dyn_attr_bytearray_append_stmt(self, expr: Call, target: Attr) -> bool:
         if self.current_function is None:
@@ -301,6 +308,7 @@ class StmtMiscLoweringMixin:
         self.builder.branch(done_bb)
 
         self.builder.position_at_end(done_bb)
+        self._gc_release_if_owned(recv_obj, target)
         return True
 
     def _emit_walrus(self, expr: Call) -> ir.Value:

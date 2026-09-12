@@ -230,6 +230,39 @@ int64_t py_obj_index_i64(PyObject *o) {
     return 0;
 }
 
+static int64_t slice_integer_i64(PyObject *value) {
+    int overflow = 0;
+    int64_t result = py_int_to_i64(value, &overflow);
+    if (!overflow) return result;
+    PyObject *zero = py_int_from_i64(0);
+    int sign = py_int_cmp(value, zero);
+    py_decref(zero);
+    return sign < 0 ? INT64_MIN : INT64_MAX;
+}
+
+int64_t py_slice_index_i64(PyObject *o, int64_t default_value) {
+    if (o == NULL || o == py_None) return default_value;
+    if (PY_IS_TAGGED_INT(o) || py_type_of(o) == PY_TYPE_INT)
+        return slice_integer_i64(o);
+    if (py_type_of(o) == PY_TYPE_BOOL) return o == py_True ? 1 : 0;
+    PyObject *method = lookup_dunder(o, "__index__");
+    if (method == NULL) {
+        py_raise_owned(py_exc_new(PY_EXC_TYPEERROR,
+            "slice indices must be integers or None or have an __index__ method"));
+        return 0;
+    }
+    PyObject *result = call_unary(method, o);
+    if (result == NULL) return 0;
+    if (PY_IS_TAGGED_INT(result) || py_type_of(result) == PY_TYPE_INT) {
+        int64_t value = slice_integer_i64(result);
+        py_decref(result);
+        return value;
+    }
+    py_decref(result);
+    py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "__index__ returned non-int"));
+    return 0;
+}
+
 int64_t py_user_contains_dispatch(PyObject *o, PyObject *item,
                                   int64_t *handled) {
     if (handled) *handled = 0;

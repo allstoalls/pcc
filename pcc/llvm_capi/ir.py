@@ -2228,12 +2228,14 @@ class IRBuilder:
                     direct_builder,
                     "br",
                     target0=str(t.name),
+                    target1=str(f.name),
                 )
             elif cond_ref in ("0", "false", "undef", "poison"):
                 rec._direct_record_id = DirectIndexedFunctionBuilder.publish_terminator(
                     direct_builder,
                     "br",
                     target0=str(f.name),
+                    target1=str(t.name),
                 )
             else:
                 rec._direct_record_id = DirectIndexedFunctionBuilder.publish_terminator(
@@ -3904,6 +3906,16 @@ def Module___init___named(name):
 
 def scaffold_Module___init__():
     return Module(name="")
+
+
+def LiteralStructType___init__0():
+    # ``ir.LiteralStructType([])`` -- an empty literal struct.  The C
+    # frontend's union lowering opens with one
+    # (``pcc/codegen/c_types.py``), so a pcc1 carrying the C frontend needs
+    # this arity; without it the scaffold's
+    # ``user_pcc_llvm_capi_ir_LiteralStructType___init__0`` stayed undefined
+    # and the linked stage died at startup with a dyld symbol error.
+    return LiteralStructType(())
 
 
 def LiteralStructType___init__1(arg0):

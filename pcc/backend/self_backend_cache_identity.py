@@ -13,7 +13,7 @@ _MACHO_LINK_IDENTITY_SCHEMA = b"pcc.macho-linker-source.v2\0"
 # must not evict an otherwise reusable link state.  The driver is included
 # because its input normalization and semantic options are part of the link
 # action just as much as the backend modules are.
-_MACHO_LINK_SOURCE_PATHS = (
+MACHO_LINK_SOURCE_PATHS = (
     "pcc/backend/arm64_asm_driver.py",
     "pcc/backend/arm64_encode.py",
     "pcc/backend/macho_archive.py",
@@ -83,7 +83,7 @@ def macho_linker_source_identity(
 
     digest = hashlib.sha256()
     digest.update(_MACHO_LINK_IDENTITY_SCHEMA)
-    for relative in _MACHO_LINK_SOURCE_PATHS:
+    for relative in MACHO_LINK_SOURCE_PATHS:
         path = root / relative
         if not path.is_file():
             raise FileNotFoundError(f"Mach-O linker source is missing: {path}")

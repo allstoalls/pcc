@@ -97,7 +97,13 @@ RECORD_FLAGS = RECORD_HAS_EXCEPTION_EDGE | RECORD_SUSPENDED
 NO_OFFSET = 0xFFFFFFFF
 NO_BASE = -1
 MAX_FUNCTIONS = 1_000_000
-MAX_RECORDS = 4_000_000
+MAX_RECORDS = 8_000_000  # same rationale as MAX_LOCATIONS below: the pcc
+                         # compiler closure is a legitimate payload and
+                         # grew past 4M safepoint records when the C
+                         # frontend joined it.  Not a format bound --
+                         # the per-function count is a u32 field and the
+                         # total is only summed here -- so this guards
+                         # against absurd payloads, not legit closures.
 MAX_LOCATIONS = 128_000_000  # merged pcc compiler closure exceeds 16M
                              # managed locations; the bound guards
                              # against absurd payloads, not legit closures
@@ -505,7 +511,12 @@ def validate_stack_map(value: PreciseStackMap, *, final_image: bool = False) -> 
         _check_uint(function.flags, 32, "function flags")
         total_records += len(function.records)
         if total_records > MAX_RECORDS:
-            raise PreciseStackMapError("too many stack-map records")
+            raise PreciseStackMapError(
+                "too many stack-map records: "
+                + str(total_records)
+                + " exceeds "
+                + str(MAX_RECORDS)
+            )
         previous_pc = -1
         for record in function.records:
             _check_uint(record.safepoint_id, 64, "safepoint id", nonzero=True)
@@ -760,7 +771,12 @@ def decode_stack_map(
         function_id_value, address, code_size, frame_size, record_count, flags = fields
         total_records += record_count
         if total_records > MAX_RECORDS:
-            raise PreciseStackMapError("too many stack-map records")
+            raise PreciseStackMapError(
+                "too many stack-map records: "
+                + str(total_records)
+                + " exceeds "
+                + str(MAX_RECORDS)
+            )
         raw_records: list[tuple] = []
         for _ in range(record_count):
             fields, offset = _take(payload, offset, _RECORD, "safepoint record")
@@ -894,7 +910,12 @@ def validate_stack_map_payload(
         record_count = function_fields[4]
         total_records += record_count
         if total_records > MAX_RECORDS:
-            raise PreciseStackMapError("too many stack-map records")
+            raise PreciseStackMapError(
+                "too many stack-map records: "
+                + str(total_records)
+                + " exceeds "
+                + str(MAX_RECORDS)
+            )
         for _ in range(record_count):
             record_fields, cursor = _take(
                 payload, cursor, _RECORD, "safepoint record"
@@ -1138,7 +1159,12 @@ def function_address_offsets(payload: bytes) -> tuple[int, ...]:
         offsets.append(function_start + 8)
         total_records += record_count
         if total_records > MAX_RECORDS:
-            raise PreciseStackMapError("too many stack-map records")
+            raise PreciseStackMapError(
+                "too many stack-map records: "
+                + str(total_records)
+                + " exceeds "
+                + str(MAX_RECORDS)
+            )
         for _ in range(record_count):
             record_fields, cursor = _take(
                 payload, cursor, _RECORD, "safepoint record"
@@ -1185,7 +1211,12 @@ def _scan_stack_map_payload(payload: bytes):
         function_id, _addr, _code, _frame, record_count, _flags = function_fields
         total_records += record_count
         if total_records > MAX_RECORDS:
-            raise PreciseStackMapError("too many stack-map records")
+            raise PreciseStackMapError(
+                "too many stack-map records: "
+                + str(total_records)
+                + " exceeds "
+                + str(MAX_RECORDS)
+            )
         for _ in range(record_count):
             record_fields, cursor = _take(
                 payload, cursor, _RECORD, "safepoint record"
@@ -1281,10 +1312,14 @@ def merge_stack_map_payloads(
                 blob[cursor + 30] = (merged_index >> 16) & 0xFF
                 blob[cursor + 31] = (merged_index >> 24) & 0xFF
                 cursor += record_size
+            # The caller relocates this field. Zero it before the record is
+            # frozen so the final table can be joined without growing and
+            # repeatedly copying a mutable prefix.
+            blob[8:16] = b"\0" * 8
             functions.append((function_id, bytes(blob)))
     functions.sort(key=lambda item: item[0])
     total_locations = table_locations
-    merged = bytearray(_HEADER.pack(
+    header = _HEADER.pack(
         MAGIC,
         VERSION,
         ARCH_AARCH64,
@@ -1292,18 +1327,16 @@ def merge_stack_map_payloads(
         len(functions),
         total_locations,
         0,
-    ))
+    )
+    chunks: list[bytes] = [header]
+    merged_size = len(header)
     address_offsets: list[tuple[int, int]] = []
     for function_id, record in functions:
-        address_offsets.append((function_id, len(merged) + 8))
-        merged += record
-        # Zero the function-address field; the caller's relocations fill it.
-        merged[len(merged) - len(record) + 8:len(merged) - len(record) + 16] = (
-            b"\0" * 8
-        )
-    for entry in table:
-        merged += entry
-    return bytes(merged), tuple(address_offsets)
+        address_offsets.append((function_id, merged_size + 8))
+        chunks.append(record)
+        merged_size += len(record)
+    chunks.extend(table)
+    return b"".join(chunks), tuple(address_offsets)
 
 
 def merge_stack_maps(values: tuple[PreciseStackMap, ...]) -> PreciseStackMap:

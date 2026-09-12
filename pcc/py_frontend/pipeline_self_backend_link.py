@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import os
+import json
 import subprocess
 import sys
 import tempfile
+import time
+import traceback
 
 from .pipeline_modes import failed_process_detail
 from typing import Optional
@@ -88,7 +91,7 @@ def finish_executable(
         profile_end(profile, "link_self_codesign", started)
 
     started = profile_begin(profile)
-    subprocess.run(["/bin/mv", "-f", tmp_out_path, out_path], check=True)
+    os.replace(tmp_out_path, out_path)
     profile_end(profile, "link_self_publish_move", started)
     if sys.platform != "darwin":
         return
@@ -98,19 +101,12 @@ def finish_executable(
         subprocess.run(["/usr/bin/codesign", "--verify", out_path], check=True)
         profile_end(profile, "link_self_codesign", started)
     started = profile_begin(profile)
-    if publish_sync_enabled():
-        subprocess.run(["/bin/sync"], check=True)
-    else:
-        subprocess.run(
-            [
-                "/bin/sh",
-                "-c",
-                'cat "$1" >/dev/null',
-                "pcc-self-publish-barrier",
-                out_path,
-            ],
-            check=True,
-        )
+    with open(out_path, "rb") as stream:
+        if publish_sync_enabled():
+            os.fsync(stream.fileno())
+        else:
+            while stream.read(1024 * 1024):
+                pass
     profile_end(profile, "link_self_publish_barrier", started)
 
 
@@ -127,16 +123,13 @@ def _owned_macho_link_covers_surface(
 
     The owned in-process entry assembles one or more internal inputs, adds
     caller object inputs and one runtime archive, and links an executable.
-    Surfaces owned only by ``scripts/pcc_link_macho.py`` (ordered mixed-input
-    manifests, the opt-in semantic layout policy, incremental publishing and
-    link profiles) keep the subprocess seam.
+    Ordered input manifests and profiles use this same owner. Semantic layout
+    remains a separate migration boundary.
     """
-    if pcc_internal_input_manifest:
-        return False
     if semantic_layout_policy:
         return False
-    if link_profile_path:
-        return False
+    if pcc_internal_input_manifest:
+        return True
     if pcc_asm_inputs and pcc_native_object_inputs:
         return False
     if not asm_path and not pcc_asm_inputs and not pcc_native_object_inputs:
@@ -152,6 +145,8 @@ def _owned_macho_link_in_process(
     runtime_archive,
     extra_link_inputs,
     tmp_out_path,
+    link_profile_path=None,
+    pcc_internal_input_manifest=None,
 ) -> None:
     """Link with pcc's owned Mach-O toolchain in this process.
 
@@ -161,26 +156,40 @@ def _owned_macho_link_in_process(
     interpreter to run ``scripts/pcc_link_macho.py``.
     """
     from pcc.backend.arm64_asm_driver import assemble_file
-    from pcc.backend.macho_exec import link_executable
-    from pcc.backend.native_object import NativeObject, decode_native_object
+    from pcc.backend.macho_exec import prepare_executable_object, link_prepared_executable
+    from pcc.backend.macho_codesign import parse_signature, build_signature
+    from pcc.backend.native_object import NativeObject, decode_packed_native_object
+    from pcc.backend.macho_internal_inputs import read_internal_input_manifest
 
     try:
+        started = time.monotonic()
+        phases = {"assemble_pool": 0.0, "decode_pco": 0.0, "prepare_link": 0.0,
+                  "sign": 0.0, "validate": 0.0, "write": 0.0}
         objects = []
-        if asm_path:
-            with open(asm_path, "r", encoding="utf-8") as stream:
-                sections, undefined = assemble_file(stream.read())
-            objects.append(
-                NativeObject.from_sections(sections, undefined=undefined)
-            )
-        for path in pcc_native_object_inputs:
-            with open(path, "rb") as stream:
-                objects.append(decode_native_object(stream.read()))
-        for path in pcc_asm_inputs:
-            with open(path, "r", encoding="utf-8") as stream:
-                sections, undefined = assemble_file(stream.read())
-            objects.append(
-                NativeObject.from_sections(sections, undefined=undefined)
-            )
+        if pcc_internal_input_manifest:
+            if asm_path or pcc_asm_inputs or pcc_native_object_inputs:
+                raise SelfBackendLinkError("ordered internal-input manifest cannot be combined with direct internal inputs")
+            ordered = read_internal_input_manifest(pcc_internal_input_manifest)
+        else:
+            ordered = [("ASM", asm_path)] if asm_path else []
+            ordered.extend(("ASM", path) for path in pcc_asm_inputs)
+            ordered.extend(("PCO", path) for path in pcc_native_object_inputs)
+        asm_count = 0
+        native_count = 0
+        for kind, path in ordered:
+            item_started = time.monotonic()
+            if kind == "ASM":
+                with open(path, "r", encoding="utf-8") as stream:
+                    sections, undefined = assemble_file(stream.read())
+                objects.append(NativeObject.from_sections(sections, undefined=undefined))
+                asm_count += 1
+                phases["assemble_pool"] += (time.monotonic() - item_started) * 1000.0
+            else:
+                with open(path, "rb") as stream:
+                    objects.append(decode_packed_native_object(stream.read()))
+                native_count += 1
+                phases["decode_pco"] += (time.monotonic() - item_started) * 1000.0
+        before_extras = time.monotonic()
         for path in extra_link_inputs or ():
             with open(path, "rb") as stream:
                 objects.append(stream.read())
@@ -188,17 +197,69 @@ def _owned_macho_link_in_process(
         if runtime_archive is not None:
             with open(runtime_archive, "rb") as stream:
                 archives.append(stream.read())
-        image = link_executable(objects, archives=archives, entry="_main")
+        before_link = time.monotonic()
+        phases["decode_pco"] += (before_link - before_extras) * 1000.0
+        pending = [prepare_executable_object(objects, archives=archives)]
+        objects.clear()
+        archives.clear()
+        sign_times = [0.0, 0.0]
+
+        def link_phase(event):
+            if event == "sign_begin":
+                sign_times[0] = time.monotonic()
+            elif event == "sign_end":
+                sign_times[1] += (time.monotonic() - sign_times[0]) * 1000.0
+
+        image = link_prepared_executable(pending.pop(), entry="_main", phase_callback=link_phase)
+        before_validate = time.monotonic()
+        phases["sign"] = sign_times[1]
+        phases["prepare_link"] = (before_validate - before_link) * 1000.0 - sign_times[1]
+        signature = parse_signature(image)
+        if signature.identifier != b"pcc-linked" or signature.dataoff + signature.datasize != len(image):
+            raise SelfBackendLinkError("owned linker produced an invalid signature boundary")
+        expected_signature = build_signature(
+            image[:signature.dataoff], identifier=signature.identifier,
+            exec_seg_base=signature.exec_seg_base, exec_seg_limit=signature.exec_seg_limit,
+            exec_seg_flags=signature.exec_seg_flags,
+        )
+        if image[signature.dataoff:] != expected_signature:
+            raise SelfBackendLinkError("owned linker produced stale signature page hashes")
+        before_write = time.monotonic()
+        phases["validate"] = (before_write - before_validate) * 1000.0
         temporary = str(tmp_out_path) + ".owned.tmp"
         with open(temporary, "wb") as stream:
             stream.write(image)
         os.chmod(temporary, 0o755)
         os.replace(temporary, str(tmp_out_path))
+        finished = time.monotonic()
+        phases["write"] = (finished - before_write) * 1000.0
+        if link_profile_path:
+            payload = {
+                "schema": "pcc.macho-link-profile.v1",
+                "phases_ms": phases,
+                "total_ms": (finished - started) * 1000.0,
+                "inputs": {
+                    "asm": asm_count,
+                    "native_object": native_count,
+                    "object": len(extra_link_inputs or ()),
+                    "archive": 1 if runtime_archive is not None else 0,
+                },
+            }
+            with open(link_profile_path, "w", encoding="utf-8") as stream:
+                stream.write(json.dumps(payload, sort_keys=True) + "\n")
     except SelfBackendLinkError:
         raise
     except Exception as exc:
+        # This link runs in-process, so the traceback -- not a child exit
+        # code -- is the diagnosis.  `failed_process_detail` describes a
+        # failed *child process*; on this path it reduces a real linker bug
+        # to a bare type and message, which is how a stage that rebuilt and
+        # failed nine times in a row reported no reason at all.
         raise SelfBackendLinkError(
-            "owned in-process link failed: " + _failed_process_detail(exc)
+            "owned in-process link failed: "
+            + type(exc).__name__ + ": " + str(exc)
+            + "\n"
+            + traceback.format_exc()
         ) from exc
 
 
@@ -266,6 +327,8 @@ def run_link_command(
                 str(path) for path in (extra_link_inputs or ())
             ),
             tmp_out_path=str(tmp_out_path),
+            link_profile_path=link_profile_path,
+            pcc_internal_input_manifest=pcc_internal_input_manifest,
         )
         if not os.path.isfile(tmp_out_path) or not os.access(tmp_out_path, os.X_OK):
             raise SelfBackendLinkError(

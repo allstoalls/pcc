@@ -436,6 +436,27 @@ def py_list_new(initial_capacity: int):
     return l
 
 
+@c_abi_export("py_list_from_static_items")
+def py_list_from_static_items(items, count: int):
+    """Build a list from a static ``[i0, i1, ...]`` pointer array.
+
+    Same contract as py_dict_from_static_pairs / py_tuple_from_static_items:
+    every element is a compile-time constant object -- a pooled immortal str
+    in the data segment, or a tagged small int -- so the array is immortal
+    data and the loop needs no rooting.  The per-element path emitted one
+    py_list_append plus the pin/store_root/unpin/release protocol around a
+    temporary that was already a constant.
+    """
+    l = py_list_new(count)
+    if ptr_is_null(l):
+        return null()
+    index: int = 0
+    while index < count:
+        py_list_append(l, load_ptr(items, index * 8))
+        index = index + 1
+    return l
+
+
 @c_abi_export("py_list_append")
 def py_list_append(lst, item) -> None:
     if not _list_is_sane(lst, -101):

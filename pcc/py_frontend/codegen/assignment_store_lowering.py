@@ -146,7 +146,7 @@ class AssignmentStoreLoweringMixin:
             )
             if slot is None and target_ty is not None:
                 if self._is_object(target_ty):
-                    ir_ty = self._storage_ir_type(target_ty)
+                    ir_ty = self._local_slot_ir_type(lhs.ident, target_ty)
                     if isinstance(ir_ty, ir.PointerType) and self._ir_type_matches(
                         ir_ty, _CSTR
                     ):
@@ -307,7 +307,7 @@ class AssignmentStoreLoweringMixin:
                     f"Layer 1 tuple-unpack target {target.ident!r} has "
                     f"unsupported type {type(target_ty).__name__}"
                 )
-            ir_ty = self._storage_ir_type(target_ty)
+            ir_ty = self._local_slot_ir_type(target.ident, target_ty)
             init_null = isinstance(ir_ty, ir.PointerType) and self._ir_type_matches(
                 ir_ty, _CSTR
             )
@@ -316,7 +316,11 @@ class AssignmentStoreLoweringMixin:
                 name=f"{target.ident}.addr",
                 init_null=init_null,
             )
-            self.env[target.ident] = (alloca, ir_ty, target_ty)
+            self.env[target.ident] = (
+                alloca,
+                ir_ty,
+                self._local_slot_decl_type(target.ident, target_ty),
+            )
             slot = self.env[target.ident]
 
         alloca, _ir_ty, declared_ty = slot
@@ -389,7 +393,21 @@ class AssignmentStoreLoweringMixin:
             flag = self._ensure_owned_local_flag(target.ident, alloca)
             self.builder.store(ir.Constant(_I1, 1), flag)
             return
-        value = self._coerce(value, value_ty, declared_ty)
+        if (
+            target.ident in getattr(self, "_planned_object_local_names", set())
+            and isinstance(_ir_ty, ir.PointerType)
+            and self._ir_type_matches(_ir_ty, _CSTR)
+            and not isinstance(value.type, ir.PointerType)
+        ):
+            value = marshal.marshal_to_object(
+                self.builder,
+                self.module,
+                self.runtime,
+                value,
+                value_ty,
+            )
+        else:
+            value = self._coerce(value, value_ty, declared_ty)
         self.builder.store(value, alloca)
         if self._is_valueclass_payload_type(declared_ty):
             self._ensure_valueclass_payload_gc_roots(target.ident, alloca, declared_ty)

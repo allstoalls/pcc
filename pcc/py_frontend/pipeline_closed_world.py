@@ -443,6 +443,17 @@ def _repair_closed_world_default_global_owners(native_exports) -> None:
                         if attrs:
                             repaired["attrs"] = tuple(attrs)
                         value["default_native_global"] = repaired
+                    # The sentinel is reconstructed in the consuming module.
+                    # Preserve a scalar global's semantic type so a raw i64,
+                    # i1 or double load is not mistaken for a PyObject*.
+                    value_ty = source.get("value_ty")
+                    if (
+                        source.get("kind") == "module_global"
+                        and isinstance(value_ty, (tuple, list))
+                        and value_ty
+                        and value_ty[0] in ("int", "bool", "float")
+                    ):
+                        value["default_native_global"]["value_ty"] = value_ty
             for child in value.values():
                 visit(child)
             return

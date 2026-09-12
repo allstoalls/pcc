@@ -266,8 +266,10 @@ def _align_up(value: int, align_log2: int) -> int:
 def _validate_section(sec: Section, *, relocations=None, relocation_count=None) -> None:
     # Internal indexed-object validation supplies a fresh row iterator and its
     # exact count. Ordinary object emission continues to use the stored tuple.
+    rows_origin = "parameter"
     if relocations is None:
         relocations = sec.relocations
+        rows_origin = "section.relocations"
     if relocation_count is None:
         relocation_count = len(sec.relocations)
     if (
@@ -385,7 +387,26 @@ def _validate_section(sec: Section, *, relocations=None, relocation_count=None) 
             _scanned, address_offsets = _scan_stack_map_section(sec.data)
         except PreciseStackMapError as exc:
             raise MachOEmitError(f"invalid __pcc_stackmaps payload: {exc}") from exc
-        relocation_by_offset = {relocation.offset: relocation for relocation in relocations}
+        # A row that is not a Relocation used to surface as a bare
+        # `AttributeError: 'list' object has no attribute 'offset'` with no
+        # section, no row and no count -- unreadable in a self-hosted link,
+        # where this validator is the first thing a miscompiled relocation
+        # source hits.  Name what arrived instead.
+
+        relocation_by_offset = {}
+        for relocation in relocations:
+            row_offset = getattr(relocation, "offset", None)
+            if row_offset is None:
+                raise MachOEmitError(
+                    "__pcc_stackmaps relocation row is not a Relocation:"
+                    + " rows_origin=" + rows_origin
+                    + " section=" + str(sec.segname) + "," + str(sec.sectname)
+                    + " row_type=" + type(relocation).__name__
+                    + " rows_type=" + type(relocations).__name__
+                    + " relocation_count=" + str(relocation_count)
+                    + " row=" + repr(relocation)[:200]
+                )
+            relocation_by_offset[row_offset] = relocation
         if len(relocation_by_offset) != relocation_count:
             raise MachOEmitError("duplicate __pcc_stackmaps relocation offset")
         if set(relocation_by_offset) != set(address_offsets):

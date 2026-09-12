@@ -13,14 +13,6 @@ import re
 import sys
 
 
-class UserWarning(Warning):
-    pass
-
-
-class DeprecationWarning(Warning):
-    pass
-
-
 class WarningMessage:
     def __init__(
         self,

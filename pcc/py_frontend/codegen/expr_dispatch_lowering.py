@@ -647,13 +647,30 @@ class ExprDispatchLoweringMixin:
         # ``sorted(xs, key=lambda x: x[i])`` idioms that dominate
         # pcc's own source (method / subscript getters used as sort
         # keys).
+        #
+        # The native function object is tried FIRST when native callables are
+        # preferred (``libpython_mode="off"``).  Otherwise the operator
+        # shortcut claims the shape and imports CPython's ``operator`` module:
+        # ``pcc/passes/base.py`` builds a module-scope dict of ten
+        # ``lambda pm: pm.add_<x>_pass()`` values, which became ten
+        # ``py_cpy_import``/``getattr``/``call1`` sequences in that module's
+        # top-level code -- and module-level code is outside the strict
+        # no-libpython stub projection, so it failed the whole compile.
         if _expr_is_lambda(expr, expr_kind):
+            prefer_native = bool(
+                getattr(self, "_prefer_native_callable_values", False)
+            )
+            if prefer_native:
+                native = self._maybe_emit_native_lambda_func(expr)
+                if native is not None:
+                    return native
             simple = self._maybe_emit_simple_lambda(expr)
             if simple is not None:
                 return simple
-            native = self._maybe_emit_native_lambda_func(expr)
-            if native is not None:
-                return native
+            if not prefer_native:
+                native = self._maybe_emit_native_lambda_func(expr)
+                if native is not None:
+                    return native
             # Fall back to the general lambda-wrap path: hoist the
             # lambda body into a dedicated pcc FuncDef and wrap the
             # function pointer as a CPython PyCFunction via

@@ -417,6 +417,7 @@ def _runtime_signatures_part_7():
     "py_memoryview_new": (_PYOBJ, [_PYOBJ], False),
     "py_bytes_decode": (_PYOBJ, [_PYOBJ], False),
     "py_bytes_decode_utf8_ignore": (_PYOBJ, [_PYOBJ], False),
+    "py_bytes_decode_utf8_surrogateescape": (_PYOBJ, [_PYOBJ], False),
     "py_bytes_decode_with_encoding": (
         _PYOBJ,
         [_PYOBJ, _PYOBJ, _PYOBJ],
@@ -426,6 +427,13 @@ def _runtime_signatures_part_7():
     "py_bytes_upper": (_PYOBJ, [_PYOBJ], False),
     "py_bytes_lower": (_PYOBJ, [_PYOBJ], False),
     "py_bytes_strip": (_PYOBJ, [_PYOBJ], False),
+    "py_bytes_lstrip": (_PYOBJ, [_PYOBJ], False),
+    "py_bytes_rstrip": (_PYOBJ, [_PYOBJ], False),
+    "py_bytes_ljust": (_PYOBJ, [_PYOBJ, _I64, _PYOBJ], False),
+    "py_bytes_rjust": (_PYOBJ, [_PYOBJ, _I64, _PYOBJ], False),
+    "py_bytes_strip_chars": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
+    "py_bytes_lstrip_chars": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
+    "py_bytes_rstrip_chars": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
     "py_bytes_getitem": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
     "py_bytes_slice": (_PYOBJ, [_PYOBJ, _PYOBJ, _PYOBJ, _PYOBJ], False),
     "py_bytes_concat": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
@@ -435,6 +443,8 @@ def _runtime_signatures_part_7():
     "py_bytes_fromhex": (_PYOBJ, [_PYOBJ], False),
     "py_bytes_replace": (_PYOBJ, [_PYOBJ, _PYOBJ, _PYOBJ], False),
     "py_bytes_len": (_I64, [_PYOBJ], False),
+    "py_bytes_data_ptr": (_CSTR, [_PYOBJ], False),
+    "py_sha256_bytes_digest": (_PYOBJ, [_PYOBJ], False),
     "py_i64_buffer_new": (_PYOBJ, [_I64], False),
     "py_i64_buffer_set_item": (_I64, [_PYOBJ, _I64, _PYOBJ], False),
     "py_i64_buffer_get_item": (_PYOBJ, [_PYOBJ, _I64], False),
@@ -445,9 +455,13 @@ def _runtime_signatures_part_7():
     "py_guarded_loop_counter_add": (_I64, [_I64, _I64], False),
     "py_guarded_loop_counter_get": (_I64, [_I64], False),
     "py_bytes_find": (_I64, [_PYOBJ, _PYOBJ], False),
+    "py_bytes_find_from": (_I64, [_PYOBJ, _PYOBJ, _PYOBJ], False),
+    "py_bytes_find_range": (_I64, [_PYOBJ, _PYOBJ, _I64, _I64], False),
+    "py_slice_index_i64": (_I64, [_PYOBJ, _I64], False),
     "py_bytes_rfind": (_I64, [_PYOBJ, _PYOBJ], False),
     "py_bytes_count": (_I64, [_PYOBJ, _PYOBJ], False),
     "py_bytes_split": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
+    "py_bytes_split_max": (_PYOBJ, [_PYOBJ, _PYOBJ, _PYOBJ], False),
     "py_bytes_partition": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
     "py_bytearray_extend": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
     "py_bytearray_append": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
@@ -595,6 +609,15 @@ def _runtime_signatures_part_10():
     # ---- Dict ------------------------------------------------------
     "py_dict_new": (_PYOBJ, [], False),
     "py_dict_set": (_VOID, [_PYOBJ, _PYOBJ, _PYOBJ], False),
+    # Constant module-level table: a static [k0, v0, k1, v1, ...] array
+    # and one call, in place of one py_dict_set per pair wrapped in the
+    # rooted-temporary protocol (measured 18 emitted calls per entry).
+    "py_dict_from_static_pairs": (_PYOBJ, [_CSTR, _I64], False),
+    "py_tuple_from_static_items": (_PYOBJ, [_CSTR, _I64], False),
+    "py_list_from_static_items": (_PYOBJ, [_CSTR, _I64], False),
+    # Nested constant table from a static descriptor; see
+    # py_static_aggregate_build in pcc/py_runtime/py/py_dict.py.
+    "py_static_aggregate_build": (_PYOBJ, [_CSTR], False),
     "py_dict_get": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
     "py_dict_getitem": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
     "py_dict_fromkeys": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
@@ -999,6 +1022,14 @@ def _runtime_signatures_part_16():
     "py_os_putenv": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
     "py_os_unsetenv": (_PYOBJ, [_PYOBJ], False),
     "py_os_environ_getitem": (_PYOBJ, [_PYOBJ], False),
+    # dict(os.environ) / os.environ.items() / keys() / values() /
+    # iteration: os.environ is a codegen special form with no object
+    # behind it, so everything beyond getitem/setitem/get/contains had
+    # no lowering and fell through to CPython.
+    "py_os_environ_snapshot": (_PYOBJ, [], False),
+    # subprocess.run(env=...): CPython replaces the environment, which is
+    # `env -i K=V ... cmd` for the shell command the runtime builds.
+    "py_subprocess_run_env": (_I64, [_PYOBJ, _I32, _PYOBJ], False),
     "py_os_environ_setitem": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
     "py_os_environ_contains": (_I32, [_PYOBJ], False),
     "py_os_path_join": (_PYOBJ, [_PYOBJ], False),
@@ -1024,6 +1055,7 @@ def _runtime_signatures_part_16():
     "py_os_getcwd_str": (_PYOBJ, [], False),
     "py_os_makedirs": (_PYOBJ, [_PYOBJ, _I64, _I32], False),
     "py_os_unlink": (_PYOBJ, [_PYOBJ], False),
+    "py_os_rmdir": (_PYOBJ, [_PYOBJ], False),
     "py_os_replace": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
     "py_os_chmod": (_PYOBJ, [_PYOBJ, _I64], False),
     "py_os_fsync": (_PYOBJ, [_I64], False),

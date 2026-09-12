@@ -109,18 +109,49 @@ def test_fragment_slot_load_store_matches_text_oracle(offset, kind, width, reg):
     )
 
 
+# Encodings verified against the host toolchain, not derived from pcc:
+#   $ llvm-mc --disassemble -triple=arm64
+#   785f03ae -> ldurh w14, [x29, #-16]
+#   781f03ae -> sturh w14, [x29, #-16]
+#   d282000e -> mov   x14, #4096
+#   cb0e03af -> sub   x15, x29, x14
+#   784001ee -> ldurh w14, [x15]
+#   780001ee -> sturh w14, [x15]
+_HALFWORD_SLOT_ENCODINGS = {
+    (16, "load"): (0x785F03AE,),
+    (16, "store"): (0x781F03AE,),
+    (4096, "load"): (0xD282000E, 0xCB0E03AF, 0x784001EE),
+    (4096, "store"): (0xD282000E, 0xCB0E03AF, 0x780001EE),
+}
+
+
 @pytest.mark.parametrize("offset", (16, 4096))
 @pytest.mark.parametrize("operation", ("load", "store"))
-def test_halfword_native_slot_rejects_before_mutating_fragment(offset, operation):
+def test_halfword_native_slot_emits_the_ldurh_sturh_encoding(offset, operation):
+    """16-bit managed slots encode as ldurh/sturh.
+
+    This used to assert `EncodeError("unsupported emitted load/store
+    mnemonic")` -- the fail-closed guard from before halfword slots were
+    lowered.  The lowering landed; the guard did not, so the test kept
+    demanding a refusal the encoder no longer owes.  Pin the encoding instead,
+    which is the stronger contract: a wrong halfword encoding silently
+    corrupts a managed reload.
+    """
     owner = RecordingFragments()
     owner.append_nop(owner.fragment)
-    initial = list(owner.words)
-    with pytest.raises(arm64_encode.EncodeError, match="unsupported emitted load/store mnemonic"):
-        if operation == "load":
-            slots.append_load_slot_to_reg_parts(owner, owner.fragment, offset, True, 16, "w14")
-        else:
-            slots.append_store_reg_to_slot_parts(owner, owner.fragment, "w14", offset, True, 16)
-    assert owner.words == initial and owner.labels == {}
+    before = len(owner.words)
+
+    if operation == "load":
+        slots.append_load_slot_to_reg_parts(
+            owner, owner.fragment, offset, True, 16, "w14",
+        )
+    else:
+        slots.append_store_reg_to_slot_parts(
+            owner, owner.fragment, "w14", offset, True, 16,
+        )
+
+    emitted = tuple(owner.words[before:])
+    assert emitted == _HALFWORD_SLOT_ENCODINGS[(offset, operation)]
 
 
 @pytest.fixture

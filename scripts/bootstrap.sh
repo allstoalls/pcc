@@ -41,7 +41,7 @@
 #   PCC_BOOTSTRAP_STAGE1_PY_FRONTEND_JOBS=${PCC_PY_FRONTEND_JOBS:-2}
 #   PCC_BOOTSTRAP_SELF_BACKEND_JOBS=${PCC_SELF_BACKEND_JOBS:-2}
 #   PCC_BOOTSTRAP_MACHO_LINK_JOBS=${PCC_MACHO_LINK_JOBS:-8}
-#   PCC_BOOTSTRAP_MAX_TREE_RSS_BYTES=8589934592
+#   PCC_BOOTSTRAP_MAX_TREE_RSS_BYTES=17179869184
 #   PCC_BOOTSTRAP_STAGE_TIMEOUT=600
 #
 # The Stage2+ auto default is a host-safety contract: it runs oversized modules
@@ -61,11 +61,17 @@ BOOTSTRAP_PYTHON_IR_PASSES="${PCC_BOOTSTRAP_PYTHON_IR_PASSES:-${PCC_PYTHON_IR_PA
 _BOOTSTRAP_SAFE_MAX_JOBS=2
 _BOOTSTRAP_SAFE_MAX_LINK_JOBS=8
 _BOOTSTRAP_SAFE_MAX_TREE_RSS_BYTES=17179869184
+# A cold stage1 measured 383s, 391s, 400s, 505s and 546s across runs on
+# 2026-09-11; a 600s cap leaves under 20% margin over the observed spread
+# and fired as a false MEMORY/TIMEOUT failure twice in one evening, once
+# purely from CPU contention with a concurrent test suite.  The watchdog
+# is there to stop a runaway, not to race a healthy build.
+_BOOTSTRAP_SAFE_MAX_STAGE_TIMEOUT=2400
 BOOTSTRAP_PY_FRONTEND_JOBS="${PCC_BOOTSTRAP_PY_FRONTEND_JOBS:-${PCC_PY_FRONTEND_JOBS:-auto}}"
 BOOTSTRAP_STAGE1_PY_FRONTEND_JOBS="${PCC_BOOTSTRAP_STAGE1_PY_FRONTEND_JOBS:-${PCC_PY_FRONTEND_JOBS:-2}}"
 BOOTSTRAP_SELF_BACKEND_JOBS="${PCC_BOOTSTRAP_SELF_BACKEND_JOBS:-${PCC_SELF_BACKEND_JOBS:-2}}"
 BOOTSTRAP_MACHO_LINK_JOBS="${PCC_BOOTSTRAP_MACHO_LINK_JOBS:-${PCC_MACHO_LINK_JOBS:-8}}"
-BOOTSTRAP_MAX_TREE_RSS_BYTES="${PCC_BOOTSTRAP_MAX_TREE_RSS_BYTES:-8589934592}"
+BOOTSTRAP_MAX_TREE_RSS_BYTES="${PCC_BOOTSTRAP_MAX_TREE_RSS_BYTES:-17179869184}"
 BOOTSTRAP_STAGE_TIMEOUT="${PCC_BOOTSTRAP_STAGE_TIMEOUT:-600}"
 BOOTSTRAP_HOST_MEMORY_RESERVE_BYTES="${PCC_BOOTSTRAP_HOST_MEMORY_RESERVE_BYTES:-8589934592}"
 BOOTSTRAP_EXTERNAL_MEMORY_GUARD="${PCC_BOOTSTRAP_EXTERNAL_MEMORY_GUARD:-0}"
@@ -120,7 +126,7 @@ validate_bootstrap_resource_limit() {
 validate_bootstrap_resource_limit \
     "PCC_BOOTSTRAP_MAX_TREE_RSS_BYTES" "${BOOTSTRAP_MAX_TREE_RSS_BYTES}" "${_BOOTSTRAP_SAFE_MAX_TREE_RSS_BYTES}"
 validate_bootstrap_resource_limit \
-    "PCC_BOOTSTRAP_STAGE_TIMEOUT" "${BOOTSTRAP_STAGE_TIMEOUT}" 600
+    "PCC_BOOTSTRAP_STAGE_TIMEOUT" "${BOOTSTRAP_STAGE_TIMEOUT}" "${_BOOTSTRAP_SAFE_MAX_STAGE_TIMEOUT}"
 validate_bootstrap_resource_limit \
     "PCC_BOOTSTRAP_HOST_MEMORY_RESERVE_BYTES" "${BOOTSTRAP_HOST_MEMORY_RESERVE_BYTES}" 8589934592
 
@@ -535,8 +541,18 @@ run_stage() {
     # that line -- which is exactly how these runs get measured -- reads a
     # timing and an output path for work that never happened.
     if [[ ${stage_returncode} -ne 0 ]]; then
+        # Keep the process-tree sample on failure: result.json/samples.tsv are
+        # the only record of what the killed stage was doing.
         echo "PCC_BOOTSTRAP_STAGE_FAILED stage=${stage} elapsed_ms=${stage_elapsed_ms} rc=${stage_returncode} output=<none>"
         exit "${stage_returncode}"
+    fi
+    # Successful stage: drop the sampler scratch directory, the way
+    # stage_exec_barrier already drops its smoke directory.  Without this every
+    # stage run left a `stage<N>.process.XXXXXX` behind for good -- 84 of them
+    # had accumulated in one out-dir.  Set
+    # PCC_BOOTSTRAP_KEEP_PROCESS_SAMPLES=1 to retain them for profiling.
+    if [[ -n "${process_guard_dir}" && -z "${PCC_BOOTSTRAP_KEEP_PROCESS_SAMPLES:-}" ]]; then
+        rm -rf "${process_guard_dir}"
     fi
     if [[ ! -s "${out_exe}" ]]; then
         echo "PCC_BOOTSTRAP_STAGE_FAILED stage=${stage} elapsed_ms=${stage_elapsed_ms} rc=0 output=<missing:${out_exe}>"

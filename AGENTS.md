@@ -8,7 +8,8 @@ Code establishes current behavior; it does not redefine the intended contract.
 
 Current source, effective configuration and execution of its artifacts are
 first-hand evidence. Documents are requirements or historical navigation;
-they do not prove the current implementation. User instructions take priority.
+they do not prove the current implementation. User instructions take priority
+over any procedure in this file, including its gates and checks.
 
 1. Read this short guide, inspect `git status --short`, and locate the relevant
    entrypoint, implementation and tests with `rg`. Trace the path actually used.
@@ -66,6 +67,8 @@ These are required outcomes, not assertions that migration is complete. See
 - Preserve other work. Re-read targets before narrow edits; no destructive
   restore/reset/revert/stash/clean or discarding branch switches without explicit
   user direction. Do not commit/push unless authorized in the current session.
+- When the user names a single action, do exactly that action. Additional steps
+  the user did not ask for are proposed, never taken silently.
 - Do not investigate other sessions through author/timestamp/process heuristics.
   Check relevant input identities for measurement stability, not attribution.
 - Fix the generic implementation. Enumerate repeated shapes and check enclosing
@@ -141,8 +144,10 @@ These are required outcomes, not assertions that migration is complete. See
   at the first failure. Do not repeatedly widen timeouts to hide a regression.
 - Critical parser/frontend/codegen/runtime/bootstrap changes need the relevant
   native/bootstrap gate; do not claim fixed point without stage1->stage2->stage3.
-  Before commit qualification, run bootstrap/fallback baseline checks. Baseline
-  JSON files are recorded receipts: validate their identity, not just their label.
+  Before declaring a change qualified -- or when the user asks for the release
+  gate -- run bootstrap/fallback baseline checks. An ordinary user-requested
+  commit is not gated by this line. Baseline JSON files are recorded receipts:
+  validate their identity, not just their label.
 - See [validation-workflow.md](docs/validation-workflow.md) for scoped gates,
   watchdogs and correctness invariants before those operations. A full GC gate
   must explicitly select integration tests, for example:

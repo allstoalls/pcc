@@ -2652,6 +2652,24 @@ def _typeconf_storage_class(ty: Type) -> str:
     return "object"
 
 
+def _typeconf_container_joined_with_unknown(a: Type, b: Type) -> bool:
+    """True when one arm specialises to list/tuple and the other is unknown.
+
+    That pair shares the PyObject* slot, so no storage widening is required,
+    but the container type authorises an unchecked indexed-iteration lowering
+    that the unknown side cannot honour.
+    """
+    def _is_plain_dyn(ty: Type) -> bool:
+        return isinstance(ty, DynType) and ty.name == "dyn"
+
+    def _is_container(ty: Type) -> bool:
+        return isinstance(ty, (ListType, TupleType))
+
+    if _is_container(a) and _is_plain_dyn(b):
+        return True
+    return _is_container(b) and _is_plain_dyn(a)
+
+
 def _typeconf_join_type(a: Optional[Type], b: Optional[Type]) -> Optional[Type]:
     """Return a widened type when arms ``a`` and ``b`` need a unified slot.
 
@@ -2799,6 +2817,23 @@ def _typeconf_widen_if_join(
         if widened is not None:
             scope.update(name, widened)
             widen[name] = True
+        elif _typeconf_container_joined_with_unknown(cand_then, cand_else):
+            # Same storage slot, but a *container-specialised* type joined
+            # with an unknown one.  `_typeconf_join_type` answers a storage
+            # question ("do the arms need one boxed slot"); a list/tuple and a
+            # `dyn` already share the PyObject* slot, so it reports no
+            # widening -- and the arm's ListType/TupleType stayed in scope.
+            #
+            # `for x in xs` then lowers to `py_list_len`/`py_tuple_get` with
+            # no runtime check (`for_loop_lowering._emit_for_list_index`), so
+            # `if xs is None: xs = <tuple field>` -- the ordinary default-
+            # argument idiom -- made a caller-supplied generator get read
+            # through the tuple layout: garbage rows, then SIGSEGV.
+            #
+            # Only the recorded type widens; the arms keep their storage, and
+            # the rule is confined to container-vs-unknown so struct-backed
+            # bindings are untouched.
+            scope.update(name, TYPE_DYN)
 
     if not widen:
         return (body, else_body)
@@ -5182,6 +5217,16 @@ def _infer_assign(ctx: _InferCtx, scope: _Scope, stmt: Assign) -> Assign:
                     scope.update(sub_ident, elem_ty)
                 sub_targets.append(_with_ty(sub, elem_ty))
             new_targets.append(replace(tgt, elems=tuple(sub_targets), ty=bind_ty))
+        elif isinstance(tgt, TupleExpr) and (
+            isinstance(bind_ty, (DynType, ListType))
+            or (isinstance(bind_ty, TupleType) and not bind_ty.elems)
+        ):
+            # A list or unknown iterable still assigns every target. Reading
+            # targets as expressions here retained stale None/callable types
+            # from earlier bindings instead of recording the new values.
+            # Reuse the conservative nested-target binder; precise known
+            # tuple element types keep the existing path above.
+            new_targets.append(_bind_for_tuple_target(ctx, scope, tgt, bind_ty))
         else:
             new_targets.append(_infer_expr(ctx, scope, tgt))
     # Preserve the resolved annotation as a ``Type`` in the node so the
@@ -6252,7 +6297,18 @@ def _prepopulate_module_scope(ctx: _InferCtx, module: Module) -> None:
         if not isinstance(stmt, Assign) or len(stmt.targets) != 1:
             continue
         target = stmt.targets[0]
-        if not isinstance(target, Name) or not isinstance(stmt.value, Subscript):
+        if not isinstance(target, Name):
+            continue
+        # A PEP 604 union is a `BinOp`, not a `Subscript`, so
+        # `LinkInput = bytes | NativeObject | ...` was never recorded and every
+        # `value: LinkInput` became a phantom `ClassType("LinkInput")`.  The
+        # symptom is silent: `isinstance(value, bytes)` compiles against that
+        # phantom class and answers False for real bytes, which is how the
+        # owned linker rejected its own archive members under self-host.
+        # Inline `value: bytes | X` already resolves, so only the alias form
+        # was missing.
+        is_union = isinstance(stmt.value, BinOp) and stmt.value.op == "|"
+        if not isinstance(stmt.value, Subscript) and not is_union:
             continue
         # Module-level type alias: ``Instruction = dict[Engine, list]``,
         # ``Engine = Literal[...]``. Record so annotations naming the
@@ -6262,6 +6318,14 @@ def _prepopulate_module_scope(ctx: _InferCtx, module: Module) -> None:
         # ``dyn`` for runtime subscripts (``row = matrix[i]``), so those
         # are never recorded; ``Literal[...]`` is recorded as ``dyn``
         # explicitly since its parse is also ``dyn``.
+        if is_union:
+            # Record even when the union parses to `dyn`: the name denotes a
+            # *type*, and "unknown type" is the sound answer.  Skipping it
+            # left the phantom `ClassType(alias)` in place, which is the
+            # failure mode this whole table exists to prevent -- the same
+            # reason `Literal[...]` is recorded as `dyn` just below.
+            ctx.type_aliases[target.ident] = parse_annotation(stmt.value)
+            continue
         head_obj = stmt.value.obj
         head = None
         if isinstance(head_obj, Name):

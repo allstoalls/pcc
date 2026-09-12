@@ -122,6 +122,18 @@ define_global_cstr("PY_EXC_NAME_18", "ReferenceError")
 define_global_cstr("PY_EXC_NAME_19", "MemoryError")
 define_global_cstr("PY_EXC_NAME_20", "ImportError")
 define_global_cstr("PY_EXC_NAME_21", "ModuleNotFoundError")
+define_global_cstr("PY_EXC_NAME_22", "Warning")
+define_global_cstr("PY_EXC_NAME_23", "UserWarning")
+define_global_cstr("PY_EXC_NAME_24", "DeprecationWarning")
+define_global_cstr("PY_EXC_NAME_25", "PendingDeprecationWarning")
+define_global_cstr("PY_EXC_NAME_26", "SyntaxWarning")
+define_global_cstr("PY_EXC_NAME_27", "RuntimeWarning")
+define_global_cstr("PY_EXC_NAME_28", "FutureWarning")
+define_global_cstr("PY_EXC_NAME_29", "ImportWarning")
+define_global_cstr("PY_EXC_NAME_30", "UnicodeWarning")
+define_global_cstr("PY_EXC_NAME_31", "BytesWarning")
+define_global_cstr("PY_EXC_NAME_32", "EncodingWarning")
+define_global_cstr("PY_EXC_NAME_33", "ResourceWarning")
 define_global_ptr_array(
     "PY_EXC_BUILTIN_NAMES",
     "PY_EXC_NAME_0",
@@ -146,6 +158,18 @@ define_global_ptr_array(
     "PY_EXC_NAME_19",
     "PY_EXC_NAME_20",
     "PY_EXC_NAME_21",
+    "PY_EXC_NAME_22",
+    "PY_EXC_NAME_23",
+    "PY_EXC_NAME_24",
+    "PY_EXC_NAME_25",
+    "PY_EXC_NAME_26",
+    "PY_EXC_NAME_27",
+    "PY_EXC_NAME_28",
+    "PY_EXC_NAME_29",
+    "PY_EXC_NAME_30",
+    "PY_EXC_NAME_31",
+    "PY_EXC_NAME_32",
+    "PY_EXC_NAME_33",
 )
 define_global_i32_array(
     "PY_EXC_PARENT",
@@ -171,8 +195,20 @@ define_global_i32_array(
     1,
     1,
     20,
+    1,
+    22,
+    22,
+    22,
+    22,
+    22,
+    22,
+    22,
+    22,
+    22,
+    22,
+    22,
 )
-define_global_null_ptr_array("py_exc_classes", 22)
+define_global_null_ptr_array("py_exc_classes", 34)
 
 define_global_i8("py_set_dummy_storage", 0)
 define_global_ptr_to_global("py_set_dummy", "py_set_dummy_storage")
@@ -348,7 +384,7 @@ def py_subs_exc_parent(tag: int) -> int:
 
 @c_abi_export("py_subs_exc_n_builtin")
 def py_subs_exc_n_builtin() -> int:
-    return 22
+    return 34
 
 
 @c_abi_export("py_subs_exc_cache_get")

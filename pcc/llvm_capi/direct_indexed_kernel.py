@@ -1381,10 +1381,21 @@ def _finalize_structured_seed(
         )
     block_names = [str(block.name) for block in function.blocks]
     terminator_indexes: list[int] = []
+    pruned_target_names: list[str] = []
     for block in function.blocks:
-        terminator_indexes.append(
-            _direct_terminator_index(builder, block._instrs)
-        )
+        terminator_index = _direct_terminator_index(builder, block._instrs)
+        terminator_indexes.append(terminator_index)
+        metadata = _record_metadata(builder, block._instrs[terminator_index])
+        pruned_target = ""
+        if metadata.first == PARSED_INSTRUCTION_KIND_BR:
+            term = builder.terminator_scalars.get4_unchecked(metadata.second * 2)
+            span = builder.terminator_scalars.get4_unchecked(metadata.second * 2 + 1)
+            # A folded cbranch keeps its discarded target in the otherwise
+            # unused second-target slot. Remove only that edge's PHI input;
+            # unrelated malformed PHIs must still reach the verifier.
+            if span.first >= 0 and span.first != term.fourth:
+                pruned_target = builder.target_names[span.first]
+        pruned_target_names.append(pruned_target)
     name_to_old = {}
     for block_id, block_name in enumerate(block_names):
         name_to_old[block_name] = block_id
@@ -1524,7 +1535,7 @@ def _finalize_structured_seed(
                         builder.target_names[incoming.second]
                     ]
                     predecessor_new = old_to_new[predecessor_old]
-                    if predecessor_new >= 0:
+                    if predecessor_new >= 0 and pruned_target_names[predecessor_old] != block_names[old_block_id]:
                         seed.phi_incoming_scalars.append2(
                             incoming.first,
                             predecessor_new,

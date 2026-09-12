@@ -10410,62 +10410,37 @@ def _should_delegate_to_host_cli(argv) -> bool:
 
 def _run_c_cli(argv) -> int:
     """Hand a C/project input, or a Python input needing the full option set,
-    to the complete pcc CLI.
+    to the complete pcc CLI, in this process.
 
-    This runs the host driver in a child process rather than importing
-    ``pcc.cli_core`` here, and that is not a stylistic choice.  All three
-    entrypoints -- the ``pcc`` console script, ``python -m pcc`` and ``pcc1``
-    -- reach this module, and ``pcc/__main__.py`` is also the module the
-    bootstrap compiles into pcc1.  An import of ``pcc.cli_core`` therefore
-    lands in the pcc1 source closure two different ways:
+    The static import is the point, not an accident: it puts ``cli_core``'s
+    closure -- the C frontend, packaging and llvm_capi -- into the pcc1 source
+    closure, so a compiled pcc1 owns C compilation instead of shelling out to
+    a host pcc.  That was previously impossible because members of that
+    closure did not lower under the self backend; the per-module gaps are
+    closed (see ``tests/python/test_py_for_target_representation_join.py``,
+    ``test_py_literal_splat_source_position.py``,
+    ``test_py_dict_literal_cpython_key_pairs.py``,
+    ``test_py_isinstance_pep604_union.py`` and
+    ``test_native_bytearray_slice_assignment.py``).
 
-    * written statically, it drags the C frontend, packaging and llvm_capi in,
-      and eight of those modules do not compile under the self backend today,
-      so stage1 fails outright;
-    * resolved through ``importlib`` to hide it from the closure walker, it
-      costs 84 CPython fallback calls in this module, measured by
-      ``test_cli_bootstrap_package_schema_static_imports_stay_native``, and
-      this module's contract is zero.
-
-    Both were tried in this order.  The child process keeps the closure clean
-    and this module at zero fallbacks; the delegated process runs the same
-    ``cli_core`` in-process, so the user-visible semantics are the full CLI's
-    either way.  In-process dispatch from the compiled stage stays the target
-    and needs the C frontend closure to compile first.
+    The import is unconditional and unaliased, both deliberately.  A
+    ``try``/``except ImportError`` wrapper would turn a missing ``cli_core``
+    into a runtime surprise instead of a link error, and pcc1 owning C
+    compilation means the dependency is not optional.  ``as`` renaming is
+    avoided because a function-scope ``from <static-native module> import X
+    as Y`` currently binds nothing at all: the first pcc1 carrying the C
+    frontend reached ``py_obj_call received NULL callable`` here, with the
+    slot still holding the ``except`` branch's ``None``.
     """
-    host = os.environ.get("PCC_HOST_PCC")
-    if host:
-        if host == sys.executable:
-            _write_text(
-                "Error: PCC_HOST_PCC points at this bootstrap binary; "
-                "refusing recursive C delegation",
-                err=True,
-            )
-            return 2
-        cmd = [host]
-    else:
-        host_python = os.environ.get("PCC_HOST_PYTHON") or "python3"
-        cmd = [host_python, "-m", "pcc.pcc"]
+    from pcc.cli_core import cli_main
 
     backend = os.environ.get("PCC_BACKEND", "") or DEFAULT_PUBLIC_BACKEND
-    cmd.append("--backend")
-    cmd.append(backend)
+    core_argv = ["--backend", backend]
     i = 0
     while i < len(argv):
-        cmd.append(argv[i])
+        core_argv.append(argv[i])
         i += 1
-
-    try:
-        _bootstrap_subprocess_run(cmd, check=True)
-    except Exception:
-        _write_text(
-            "Error: PCC-CPY-UNSUPPORTED-L3-TOOLING-C-DRIVER: the C compilation "
-            "driver is not owned by this stage and delegating to the host pcc "
-            "failed; set PCC_HOST_PCC to a host pcc entrypoint",
-            err=True,
-        )
-        return 1
-    return 0
+    return cli_main(core_argv)
 
 
 def _requires_full_compile_cli(argv) -> bool:

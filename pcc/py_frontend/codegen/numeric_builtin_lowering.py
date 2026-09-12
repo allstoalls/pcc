@@ -9,6 +9,8 @@ from pcc.llvm_capi.compat import ir
 
 from ..py_ast import (
     BoolType,
+    ByteArrayType,
+    BytesType,
     Call,
     ClassType,
     ComplexType,
@@ -675,7 +677,7 @@ class NumericBuiltinLoweringMixin:
             arg_ty = arg.ty
             if not isinstance(
                 arg_ty,
-                (ListType, TupleType, DictType, SetType, DynType),
+                (ListType, TupleType, DictType, SetType, BytesType, ByteArrayType, DynType),
             ):
                 return None
             src_val = self._emit_expr(arg)
@@ -878,6 +880,8 @@ class NumericBuiltinLoweringMixin:
                     owned_dict_keys,
                     self._release_context_label(f"{name}.src.dict.keys"),
                 )
+            if isinstance(arg_ty, (BytesType, ByteArrayType)):
+                self._gc_release_if_owned(src_obj, arg)
             return self.builder.load(
                 result_slot,
                 name=self._fresh(f"{name}.result"),

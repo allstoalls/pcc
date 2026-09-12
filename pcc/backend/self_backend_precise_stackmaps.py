@@ -6055,6 +6055,9 @@ def render_x86_64_stack_map_section(
         if line.endswith(":"):
             label_order[line[:-1]] = index
     ordered_plans = sorted(plans, key=lambda item: item.function_id)
+    location_lines: list[str] = []
+    location_indices: dict[str, int] = {}
+    location_count = 0
     lines = ['.section .pcc_stackmaps,"a",@progbits', ".p2align 3"]
     _append_bytes(lines, MAGIC)
     lines.extend((
@@ -6062,7 +6065,10 @@ def render_x86_64_stack_map_section(
         f"  .byte {ARCH_X86_64}",
         f"  .byte {POINTER_SIZE}",
         f"  .long {len(ordered_plans)}",
+        "  .long 0",  # v2 location table length, patched after interning
+        "  .long 0",
     ))
+    location_count_line = len(lines) - 2
     for plan in ordered_plans:
         symbol = function_symbol(plan.function_name)
         records = sorted(
@@ -6086,6 +6092,20 @@ def render_x86_64_stack_map_section(
             "  .long 0",
         ))
         for record in records:
+            packed_locations = _stack_locations(record.locations, arch=ARCH_X86_64)
+            key = ";".join(
+                ",".join(str(field) for field in (
+                    loc.kind, loc.flags, loc.size, loc.register,
+                    loc.base_index, loc.offset, loc.extent,
+                )) for loc in packed_locations
+            )
+            if key in location_indices:
+                location_index = location_indices[key]
+            else:
+                location_index = location_count
+                location_indices[key] = location_index
+                location_count += len(packed_locations)
+                _append_packed_location_lines(location_lines, packed_locations, arch=ARCH_X86_64)
             exceptional = str(NO_OFFSET)
             if record.exceptional_block:
                 target = block_label(plan.function_name, record.exceptional_block)
@@ -6104,15 +6124,10 @@ def render_x86_64_stack_map_section(
                 f"  .byte {record.kind}",
                 f"  .byte {record.flags}",
                 "  .short 0",
-                "  .long 0",
+                f"  .long {location_index}",
             ))
-            packed_locations = _stack_locations(
-                record.locations, arch=ARCH_X86_64
-            )
-            if packed_locations:
-                _append_packed_location_lines(
-                    lines, packed_locations, arch=ARCH_X86_64
-                )
+    lines[location_count_line] = f"  .long {location_count}"
+    lines.extend(location_lines)
     return lines
 
 

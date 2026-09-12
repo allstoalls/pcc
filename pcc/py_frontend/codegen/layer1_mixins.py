@@ -47,6 +47,7 @@ from .import_lowering import ImportLoweringMixin
 from .ir_decl_helpers import IrDeclHelperMixin
 from .ir_scaffold_lowering import IrScaffoldLoweringMixin
 from .isinstance_lowering import IsinstanceLoweringMixin
+from .dyn_method_guard import DynMethodGuardMixin
 from .iterator_builtin_lowering import IteratorBuiltinLoweringMixin
 from .lambda_callback_lowering import LambdaCallbackLoweringMixin
 from .lambda_helpers_lowering import LambdaHelperLoweringMixin
@@ -130,6 +131,7 @@ class L1CodeGenMixinStack(
     ListBuiltinLoweringMixin,
     ListMethodLoweringMixin,
     DictLoweringMixin,
+    DynMethodGuardMixin,
     StringMethodLoweringMixin,
     TupleZipLoweringMixin,
     ComprehensionLoweringMixin,

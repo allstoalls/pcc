@@ -3215,6 +3215,74 @@ def _compile_python_multi_codegen_parallel_uncached(
     )
 
 
+_COMPILED_MODULE_IMPORT_PREFIXES = (
+    "@.pcc.compiled.mod.",
+    "@.pcc.compiled.ensure.",
+)
+
+
+def _compiled_module_import_targets(ir_text: str) -> list:
+    """Module names named by native compiled-module imports in ``ir_text``.
+
+    A plain scan rather than a regex: ``pipeline`` is in the self-host
+    closure and has no ``re`` import, and adding one to read two fixed
+    prefixes would put a regex dependency on the compiler's own hot path.
+    """
+    out: list = []
+    for prefix in _COMPILED_MODULE_IMPORT_PREFIXES:
+        start = ir_text.find(prefix)
+        while start >= 0:
+            cursor = start + len(prefix)
+            end = cursor
+            while end < len(ir_text):
+                ch = ir_text[end]
+                if ch == "." or ch == "_" or ch.isalnum():
+                    end += 1
+                    continue
+                break
+            name = ir_text[cursor:end]
+            if name and name not in out:
+                out.append(name)
+            start = ir_text.find(prefix, end)
+    return out
+
+
+def _check_compiled_module_imports_are_in_closure(
+    mod_name: str, ir_text: str, module_names
+) -> None:
+    """Fail closed when a native module import names a module not compiled in.
+
+    ``py_compiled_module_import_by_name`` resolves through the image's own
+    registry, so naming a module the closure does not contain produces a
+    binary that links cleanly and then raises "No module named X" the first
+    time that import runs.  There is no earlier signal: the call site is
+    perfectly well-formed IR.
+
+    That is how a pcc1 carrying the C frontend died on ``contextlib`` --
+    builtin dispatch claimed the module, so the recursive-stdlib walk skipped
+    its provider, and ``pcc/codegen/c_codegen`` imports
+    ``contextmanager``/``nullcontext`` as values at module scope.
+    """
+    if not module_names:
+        return
+    available = set(module_names)
+    missing = []
+    for target in _compiled_module_import_targets(ir_text):
+        if target in available or target in missing:
+            continue
+        missing.append(target)
+    if missing:
+        raise PyPipelineError(
+            "module "
+            + mod_name
+            + " imports compiled module(s) missing from the closure: "
+            + ", ".join(sorted(missing))
+            + "; admit the provider (see "
+            + "pipeline_import_policy.NATIVE_BUILTIN_IMPORTS_WITH_COMPILED_PROVIDER)"
+            + " or give the imported names a native lowering"
+        )
+
+
 def compile_python_multi(
     src_paths,
     out_path: str,
@@ -3570,6 +3638,9 @@ def compile_python_multi(
                 )
                 if mod_name not in libpython_modules:
                     libpython_modules.append(mod_name)
+            _check_compiled_module_imports_are_in_closure(
+                mod_name, ir_text, module_names
+            )
             total_ir_bytes_before_passes += len(ir_text)
             module_ir_texts.append((mod_name, ir_text))
     if module_direct_artifacts is None and module_native_object_paths is None:

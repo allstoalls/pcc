@@ -791,6 +791,9 @@ class AttrLoadLoweringMixin:
 
     def _emit_attr(self, expr: Attr) -> ir.Value:
         runtime_attr_name = expr.name
+        scaffold_symbol = self._maybe_emit_ir_scaffold_symbol_value(expr)
+        if scaffold_symbol is not None:
+            return scaffold_symbol
         uname_attr = self._emit_native_os_uname_attr(expr)
         if uname_attr is not None:
             return uname_attr

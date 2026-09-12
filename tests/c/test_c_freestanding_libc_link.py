@@ -196,7 +196,17 @@ def test_c_cli_freestanding_libc_link_map_selects_only_pcc_python_libc(
             match = re.search(r"\[\s*(\d+)\]\s+(\S+)$", line)
             if match and match.group(1) in system_owners:
                 system_symbols.add(match.group(2))
-        assert system_symbols == {"_mmap.got", "_munmap.got"}
+        # The contract is *which* libc the program still depends on, not how
+        # the linker spells each reference.  `_mmap.got` and `_mmap.stub` are
+        # the indirect-address and the call-thunk entry for one symbol, so
+        # pinning the suffix made a linker that emits both fail a test about
+        # library ownership.  Compare the symbols; keep the set exact so a
+        # third system symbol still fails.
+        system_symbol_names = {
+            name.rsplit(".", 1)[0] if name.endswith((".got", ".stub")) else name
+            for name in system_symbols
+        }
+        assert system_symbol_names == {"_mmap", "_munmap"}, system_symbols
     else:
         assert "libpcc_freestanding_c.a(freestanding_allocator.o)" in ownership
         assert "libpcc_freestanding_c.a(freestanding_mem_str.o)" in ownership

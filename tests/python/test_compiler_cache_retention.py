@@ -63,6 +63,44 @@ def _policy(
     )
 
 
+def test_user_sweep_honors_automatic_disable(tmp_path, monkeypatch):
+    entry = tmp_path / ".cache/pcc/compile-cache/aa/entry"
+    entry.mkdir(parents=True)
+    (entry / "payload").write_bytes(b"old")
+    monkeypatch.setenv("PCC_COMPILER_CACHE_RETENTION", "0")
+    monkeypatch.setenv("PCC_COMPILER_CACHE_MAX_UNUSED_DAYS", "0")
+    report = retention.sweep_user_caches(home=tmp_path, automatic=True)
+    assert report["skipped_reason"] == "disabled"
+    assert entry.is_dir()
+
+
+def test_user_sweep_preserves_leases_locks_protected_paths_and_installations(tmp_path, monkeypatch):
+    root = tmp_path / ".cache/pcc/compile-cache/aa"
+    entries = []
+    for name in ("leased", "locked", "protected", "unused"):
+        entry = root / name
+        entry.mkdir(parents=True)
+        (entry / "payload").write_bytes(b"cached")
+        entries.append(entry)
+    lease = retention.acquire_entry_lease(entries[0])
+    lock = Path(str(entries[1]) + ".lock")
+    lock.write_text("builder lock")
+    installed = tmp_path / ".cache/pcc/installations/current"
+    installed.mkdir(parents=True)
+    (installed / "pcc1").write_bytes(b"compiler")
+    monkeypatch.setenv("PCC_COMPILER_CACHE_MAX_UNUSED_DAYS", "0")
+    try:
+        report = retention.sweep_user_caches(home=tmp_path, protected_paths=[entries[2]])
+        assert all(entry.is_dir() for entry in entries[:3])
+        assert Path(lease).is_file()
+        assert lock.is_file()
+        assert installed.is_dir()
+        assert not entries[3].exists()
+        assert report["removed"] == 1
+    finally:
+        retention.release_entry_lease(lease)
+
+
 def test_lru_size_policy_is_deterministic_without_large_fixture(tmp_path: Path):
     oldest = _object_entry(tmp_path, 1, 20, _NOW_NS - 3 * _DAY_NS)
     middle = _object_entry(tmp_path, 2, 20, _NOW_NS - 2 * _DAY_NS)

@@ -27,6 +27,8 @@ from pcc.py_runtime.py.py_abi_constants import (
     PY_TYPE_BYTEARRAY,
     PY_TYPE_BYTES,
     PY_TYPE_CLASS,
+    PY_TYPE_THREAD_LOCK,
+    PY_TYPE_THREAD_RLOCK,
     PY_TYPE_COMPLEX,
     PY_TYPE_COROUTINE,
     PY_TYPE_DICT,
@@ -49,6 +51,7 @@ from pcc.unsafe import (
     call_ptr2,
     cstr,
     define_global_ptr_null,
+    define_global_struct_words,
     free,
     global_load_ptr,
     global_store_ptr,
@@ -108,6 +111,19 @@ py_set_pop = extern("py_set_pop", (c_ptr,), c_ptr)
 py_set_new = extern("py_set_new", (), c_ptr)
 py_set_update = extern("py_set_update", (c_ptr, c_ptr), c_void)
 py_set_intersection = extern("py_set_intersection", (c_ptr, c_ptr), c_ptr)
+py_set_difference = extern("py_set_difference", (c_ptr, c_ptr), c_ptr)
+py_threading_lock_acquire = extern(
+    "py_threading_lock_acquire", (c_ptr,), c_int64
+)
+py_threading_lock_release = extern(
+    "py_threading_lock_release", (c_ptr,), c_int64
+)
+py_threading_rlock_acquire = extern(
+    "py_threading_rlock_acquire", (c_ptr,), c_int64
+)
+py_threading_rlock_release = extern(
+    "py_threading_rlock_release", (c_ptr,), c_int64
+)
 py_set_symmetric_difference = extern(
     "py_set_symmetric_difference", (c_ptr, c_ptr), c_ptr
 )
@@ -269,6 +285,30 @@ define_global_ptr_null("pcc_type_cls_coroutine")
 define_global_ptr_null("pcc_type_cls_object")
 define_global_ptr_null("pcc_type_cls_super")
 define_global_ptr_null("pcc_slice_cls")
+
+
+define_global_struct_words(
+    "pcc_builtin_type_root_slots",
+    "pcc_type_cls_none",
+    "pcc_type_cls_bool",
+    "pcc_type_cls_int",
+    "pcc_type_cls_float",
+    "pcc_type_cls_str",
+    "pcc_type_cls_list",
+    "pcc_type_cls_dict",
+    "pcc_type_cls_tuple",
+    "pcc_type_cls_set",
+    "pcc_type_cls_type",
+    "pcc_type_cls_complex",
+    "pcc_type_cls_bytes",
+    "pcc_type_cls_bytearray",
+    "pcc_type_cls_memoryview",
+    "pcc_type_cls_coroutine",
+    "pcc_type_cls_object",
+    "pcc_type_cls_super",
+    "pcc_slice_cls",
+    0,
+)
 
 
 def _cstr_is_dunder_class(s) -> int:
@@ -729,9 +769,16 @@ def py_obj_add(a, b):
 def py_obj_sub(a, b):
     # Generic ``a - b`` for dynamically-typed operands. Mirrors py_obj_add:
     # int/bool -> py_int_sub (bignum); any float -> py_float_sub (coerces the
-    # other numeric operand). Subtraction is numeric-only in Python. Fixes
+    # other numeric operand); set - set -> py_set_difference.  Fixes
     # boxed-float ``-`` (e.g. ``obj.attr - n`` where attr is a float) which fell
     # to the i64 path and misread the boxed pointer.
+    #
+    # Subtraction is NOT numeric-only: `a - b` on sets is difference, and the
+    # sibling bitwise dispatcher already handles set `&`, `|` and `^`.  Leaving
+    # `-` out meant a set whose static type had widened to dyn -- e.g. after
+    # `provided |= member` with a dynamically-typed `member` -- raised
+    # "unsupported operand type(s) for -" while both operands were sets.  pcc1
+    # hit exactly that selecting archive members.
     if ptr_is_null(a) != 0 or ptr_is_null(b) != 0:
         py_raise_owned(py_exc_new(3, cstr("unsupported operand type(s) for -")))
         return null()
@@ -741,6 +788,8 @@ def py_obj_sub(a, b):
         return py_int_sub(a, b)
     if (at == PY_TYPE_FLOAT or at == PY_TYPE_INT or at == PY_TYPE_BOOL) and (bt == PY_TYPE_FLOAT or bt == PY_TYPE_INT or bt == PY_TYPE_BOOL):
         return py_float_sub(a, b)
+    if at == PY_TYPE_SET and bt == PY_TYPE_SET:
+        return py_set_difference(a, b)
     if (
         pcc_capi_is_cext_type_tag(at) != 0
         or pcc_capi_is_cext_type_tag(bt) != 0
@@ -813,6 +862,42 @@ def py_obj_mul(a, b):
     return null()
 
 
+def _union_operand_len(obj, tag: int) -> int:
+    # A PEP 604 union member: a class object counts as one, and a tuple is an
+    # already-built union being extended (`A | B | C` folds left).
+    if tag == PY_TYPE_CLASS:
+        return 1
+    if tag == PY_TYPE_TUPLE:
+        return py_tuple_len(obj)
+    return -1
+
+
+def _union_join(a, b, a_len: int, b_len: int, at: int, bt: int):
+    out = py_tuple_new(a_len + b_len)
+    if ptr_is_null(out):
+        return null()
+    pos: int = 0
+    if at == PY_TYPE_CLASS:
+        py_tuple_set_item(out, pos, a)
+        pos = pos + 1
+    else:
+        i: int = 0
+        while i < a_len:
+            py_tuple_set_item(out, pos, py_tuple_get(a, i))
+            pos = pos + 1
+            i = i + 1
+    if bt == PY_TYPE_CLASS:
+        py_tuple_set_item(out, pos, b)
+        pos = pos + 1
+    else:
+        j: int = 0
+        while j < b_len:
+            py_tuple_set_item(out, pos, py_tuple_get(b, j))
+            pos = pos + 1
+            j = j + 1
+    return out
+
+
 def _py_obj_bitwise_dispatch(a, b, op: int):
     if ptr_is_null(a) != 0 or ptr_is_null(b) != 0:
         if op == 0:
@@ -840,6 +925,19 @@ def _py_obj_bitwise_dispatch(a, b, op: int):
         if op == 1:
             return py_int_or(a, b)
         return py_int_xor(a, b)
+    if op == 1:
+        # PEP 604 `A | B` between class objects.  The frontend folds this at
+        # compile time when both operands are plain names, but an operand
+        # reached through a module attribute (`bytes | spec.MachOObject`)
+        # stays a runtime `|` -- and this dispatcher had no class case, so a
+        # module-level union alias raised "unsupported operand type(s) for |"
+        # at import.  That is the gap a `LinkInput` string alias was once
+        # written to dodge.  Build the same tuple representation the folded
+        # form produces.
+        a_union: int = _union_operand_len(a, at)
+        b_union: int = _union_operand_len(b, bt)
+        if a_union >= 0 and b_union >= 0 and (at == PY_TYPE_CLASS or bt == PY_TYPE_CLASS):
+            return _union_join(a, b, a_union, b_union, at, bt)
     if at == PY_TYPE_SET and bt == PY_TYPE_SET:
         if op == 0:
             return py_set_intersection(a, b)
@@ -1751,6 +1849,149 @@ def _py_coroutine_bound_send(coro):
     return fn
 
 
+def _cstr_is_dunder_enter(s) -> int:
+    # "__enter__" — 9 bytes, compared explicitly like the other dunder probes
+    # in this module (no strcmp on the port tier).
+    if strlen(s) != 9:
+        return 0
+    if load_i8(s, 0) != 95 or load_i8(s, 1) != 95:
+        return 0
+    if load_i8(s, 2) != 101 or load_i8(s, 3) != 110:
+        return 0
+    if load_i8(s, 4) != 116 or load_i8(s, 5) != 101:
+        return 0
+    if load_i8(s, 6) != 114:
+        return 0
+    if load_i8(s, 7) != 95 or load_i8(s, 8) != 95:
+        return 0
+    return 1
+
+
+def _cstr_is_dunder_exit(s) -> int:
+    # "__exit__" — 8 bytes.
+    if strlen(s) != 8:
+        return 0
+    if load_i8(s, 0) != 95 or load_i8(s, 1) != 95:
+        return 0
+    if load_i8(s, 2) != 101 or load_i8(s, 3) != 120:
+        return 0
+    if load_i8(s, 4) != 105 or load_i8(s, 5) != 116:
+        return 0
+    if load_i8(s, 6) != 95 or load_i8(s, 7) != 95:
+        return 0
+    return 1
+
+
+def _cstr_is_acquire(s) -> int:
+    # "acquire" — 7 bytes.
+    if strlen(s) != 7:
+        return 0
+    if load_i8(s, 0) != 97 or load_i8(s, 1) != 99:
+        return 0
+    if load_i8(s, 2) != 113 or load_i8(s, 3) != 117:
+        return 0
+    if load_i8(s, 4) != 105 or load_i8(s, 5) != 114:
+        return 0
+    if load_i8(s, 6) != 101:
+        return 0
+    return 1
+
+
+def _cstr_is_release(s) -> int:
+    # "release" — 7 bytes.
+    if strlen(s) != 7:
+        return 0
+    if load_i8(s, 0) != 114 or load_i8(s, 1) != 101:
+        return 0
+    if load_i8(s, 2) != 108 or load_i8(s, 3) != 101:
+        return 0
+    if load_i8(s, 4) != 97 or load_i8(s, 5) != 115:
+        return 0
+    if load_i8(s, 6) != 101:
+        return 0
+    return 1
+
+
+def _py_lock_acquire_entry(captures, args):
+    lock = py_tuple_get(captures, 0)
+    if ptr_is_null(lock) != 0:
+        return null()
+    if load_i32(lock, 8) == PY_TYPE_THREAD_RLOCK:
+        py_threading_rlock_acquire(lock)
+    else:
+        py_threading_lock_acquire(lock)
+    return global_load_ptr("py_True")
+
+
+def _py_lock_release_entry(captures, args):
+    lock = py_tuple_get(captures, 0)
+    if ptr_is_null(lock) != 0:
+        return null()
+    if load_i32(lock, 8) == PY_TYPE_THREAD_RLOCK:
+        py_threading_rlock_release(lock)
+    else:
+        py_threading_lock_release(lock)
+    return global_load_ptr("py_None")
+
+
+def _py_lock_method_bound(o, which: int):
+    # `lock.acquire()` / `lock.release()` on a dynamically typed lock, the
+    # sibling of the `__enter__`/`__exit__` case below: `freeze()` walks
+    # `self._locks` and calls `acquire()` on each element, which the static
+    # lowering cannot type.
+    captures = py_tuple_new(1)
+    if ptr_is_null(captures) != 0:
+        return null()
+    py_tuple_set_item(captures, 0, o)
+    if which != 0:
+        fn = py_func_new_bound(_py_lock_release_entry, captures, cstr("release"), o)
+    else:
+        fn = py_func_new_bound(_py_lock_acquire_entry, captures, cstr("acquire"), o)
+    py_decref(captures)
+    return fn
+
+
+def _py_lock_enter_entry(captures, args):
+    lock = py_tuple_get(captures, 0)
+    if ptr_is_null(lock) != 0:
+        return null()
+    if load_i32(lock, 8) == PY_TYPE_THREAD_RLOCK:
+        py_threading_rlock_acquire(lock)
+    else:
+        py_threading_lock_acquire(lock)
+    return lock
+
+
+def _py_lock_exit_entry(captures, args):
+    lock = py_tuple_get(captures, 0)
+    if ptr_is_null(lock) != 0:
+        return null()
+    if load_i32(lock, 8) == PY_TYPE_THREAD_RLOCK:
+        py_threading_rlock_release(lock)
+    else:
+        py_threading_lock_release(lock)
+    return global_load_ptr("py_None")
+
+
+def _py_lock_context_bound(o, want_exit: int):
+    # `with lock:` on a *dynamically typed* lock.  The static lowering in
+    # `native_threading` already emits acquire/release when the receiver's
+    # type is known, but a lock read out of an untyped container
+    # (`self._locks[shard]`) reaches the generic attribute path -- which had
+    # no `__enter__`, so a self-hosted parallel link died with
+    # "'object' object has no attribute '__enter__'".
+    captures = py_tuple_new(1)
+    if ptr_is_null(captures) != 0:
+        return null()
+    py_tuple_set_item(captures, 0, o)
+    if want_exit != 0:
+        fn = py_func_new_bound(_py_lock_exit_entry, captures, cstr("__exit__"), o)
+    else:
+        fn = py_func_new_bound(_py_lock_enter_entry, captures, cstr("__enter__"), o)
+    py_decref(captures)
+    return fn
+
+
 def _py_list_pop_bound_entry(captures, args):
     lst = py_tuple_get(captures, 0)
     if ptr_is_null(lst) != 0:
@@ -1962,6 +2203,15 @@ def py_obj_getattr(o, name):
             return result
         return _raise_attribute_error(o, name)
 
+    if tag == PY_TYPE_THREAD_LOCK or tag == PY_TYPE_THREAD_RLOCK:
+        if _cstr_is_dunder_enter(name) != 0:
+            return _py_lock_context_bound(o, 0)
+        if _cstr_is_dunder_exit(name) != 0:
+            return _py_lock_context_bound(o, 1)
+        if _cstr_is_acquire(name) != 0:
+            return _py_lock_method_bound(o, 0)
+        if _cstr_is_release(name) != 0:
+            return _py_lock_method_bound(o, 1)
     if _cstr_is_pop(name) != 0:
         if tag == PY_TYPE_LIST:  # PY_TYPE_LIST
             return _py_list_pop_bound(o)
@@ -2313,6 +2563,65 @@ def _raise_not_callable(callable, tag: int):
     return null()
 
 
+def _instance_is_of_class(obj, cls) -> int:
+    """1 when ``obj`` is an instance whose class is exactly ``cls``."""
+    if ptr_is_null(obj) != 0 or ptr_is_null(cls) != 0:
+        return 0
+    if is_tagged_int(obj) != 0:
+        return 0
+    if _is_instance_tag(load_i32(obj, 8)) == 0:
+        return 0
+    owner = pcc_gc_load_ptr(obj, ptr_add(obj, PYINSTANCEOBJECT_CLS_OFFSET))
+    if ptr_eq(owner, cls) != 0:
+        return 1
+    return 0
+
+
+def _class_call_new(callable_obj, args, kwargs):
+    """``cls.__new__(cls, *args)``, or a plain allocation when undefined.
+
+    ``py_class_lookup`` finds only user-declared methods, so a class without
+    its own ``__new__`` takes the allocation path unchanged.
+    """
+    new_method = py_class_lookup(callable_obj, cstr("__new__"))
+    if ptr_is_null(new_method) != 0 or is_tagged_int(new_method) != 0:
+        return _require_call_result(
+            py_instance_new(callable_obj),
+            cstr("py_instance_new"),
+            cstr("py_instance_new returned NULL without setting an exception"),
+        )
+    if load_i32(new_method, 8) != PY_TYPE_FUNC:
+        return _require_call_result(
+            py_instance_new(callable_obj),
+            cstr("py_instance_new"),
+            cstr("py_instance_new returned NULL without setting an exception"),
+        )
+    argc: int = 0
+    if ptr_is_null(args) == 0:
+        argc = py_tuple_len(args)
+    full_args = py_tuple_new(argc + 1)
+    if ptr_is_null(full_args) != 0:
+        return _require_call_result(
+            null(),
+            cstr("py_tuple_new"),
+            cstr("class __new__ could not allocate its argument tuple"),
+        )
+    py_tuple_set_item(full_args, 0, callable_obj)
+    index: int = 0
+    while index < argc:
+        item = py_tuple_get(args, index)
+        py_tuple_set_item(full_args, index + 1, item)
+        py_decref(item)
+        index = index + 1
+    created = py_func_call_kwargs(new_method, full_args, kwargs)
+    py_decref(full_args)
+    return _require_call_result(
+        created,
+        cstr("class __new__"),
+        cstr("class __new__ returned NULL without setting an exception"),
+    )
+
+
 @c_abi_export("py_obj_call")
 def py_obj_call(callable, args, kwargs):
     if ptr_is_null(callable) != 0:
@@ -2447,13 +2756,18 @@ def py_obj_call(callable, args, kwargs):
             if ptr_is_null(arg) == 0:
                 py_decref(arg)
             return out
-        inst = py_instance_new(callable)
+        # CPython: ``obj = cls.__new__(cls, *args)`` first.  Going straight
+        # to py_instance_new skipped every user ``__new__``, so interning and
+        # singleton classes handed back a fresh object each call -- and a
+        # ``__new__`` that reads ``cls._cache`` ran against a class that had
+        # never been passed in.
+        inst = _class_call_new(callable, args, kwargs)
         if ptr_is_null(inst) != 0:
-            return _require_call_result(
-                null(),
-                cstr("py_instance_new"),
-                cstr("py_instance_new returned NULL without setting an exception"),
-            )
+            return null()
+        if _instance_is_of_class(inst, callable) == 0:
+            # ``__new__`` returned something else; CPython skips ``__init__``
+            # and hands that object back untouched.
+            return inst
         init_method = py_class_lookup(callable, cstr("__init__"))
         if ptr_is_null(init_method) == 0:
             if is_tagged_int(init_method) == 0:
@@ -2598,6 +2912,10 @@ def py_obj_isinstance(o, cls) -> int:
     if load_i32(cls, 8) != PY_TYPE_CLASS:  # PY_TYPE_CLASS
         return 0
     tag: int = _type_of(o)
+    if ptr_eq(cls, global_load_ptr("pcc_type_cls_type")) != 0:
+        if tag == PY_TYPE_CLASS:
+            return 1
+        return pcc_capi_is_type_object_value(o)
     if ptr_eq(cls, global_load_ptr("pcc_type_cls_bool")) != 0:
         return 1 if tag == PY_TYPE_BOOL else 0
     if ptr_eq(cls, global_load_ptr("pcc_type_cls_int")) != 0:

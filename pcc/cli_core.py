@@ -1300,8 +1300,10 @@ def execute_cli(
         return 1
 
     try:
-        run_prepare_commands(prepare_cmds)
-        ensure_make_goals(ensure_make_goal_specs, jobs=jobs)
+        if prepare_cmds:
+            run_prepare_commands(prepare_cmds)
+        if ensure_make_goal_specs:
+            ensure_make_goals(ensure_make_goal_specs, jobs=jobs)
         requested_opt_level = int(opt_level)
         opt_level = _effective_self_backend_opt_level(backend, requested_opt_level)
         _warn_if_self_backend_opt_level_clamped(
@@ -1388,7 +1390,7 @@ def execute_cli(
                         "--freestanding-libc requires PCC_RUNTIME_HIGH=py"
                     )
 
-            if emit_mode:
+            if emit_mode or output_path:
                 if use_multi_input:
                     compiled_units = pcc.compile_translation_units(
                         units,
@@ -1416,6 +1418,12 @@ def execute_cli(
                         cache_dir=cache_dir,
                         frontend_opt_level=opt_level,
                     )
+                if output_path and not emit_mode:
+                    pcc.emit_executable(
+                        compiled_units, output_path, optimize=opt_level,
+                        link_args=effective_link_args,
+                    )
+                    return 0
                 pcc.emit_compiled_units(
                     compiled_units,
                     emit_obj=emit_obj,

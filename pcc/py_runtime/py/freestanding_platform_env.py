@@ -172,6 +172,44 @@ def _env_append_owned(owned) -> i64:
     return 0
 
 
+@c_abi_export("pcc_platform_env_snapshot_count")
+def _env_snapshot_count() -> i64:
+    """Number of environment entries, populating the table on first use."""
+    _env_lock_acquire()
+    if _env_ensure() != 0:
+        _env_lock_release()
+        return -1
+    count = atomic_load_i64(
+        global_addr("pcc_platform_env_count"), 0, "relaxed"
+    )
+    _env_lock_release()
+    return count
+
+
+@c_abi_export("pcc_platform_env_snapshot_entry")
+def _env_snapshot_entry(index: i64):
+    """A fresh copy of entry ``index`` (``NAME=VALUE``), or NULL.
+
+    The caller owns the copy and frees it.  Returning the table's own
+    pointer would hand out a reference that ``_env_clear_owned`` can free
+    from another thread; copying under the lock keeps the window closed.
+    """
+    _env_lock_acquire()
+    if _env_ensure() != 0:
+        _env_lock_release()
+        return null()
+    count = atomic_load_i64(
+        global_addr("pcc_platform_env_count"), 0, "relaxed"
+    )
+    if index < 0 or index >= count:
+        _env_lock_release()
+        return null()
+    entries = global_load_ptr("pcc_platform_env_entries")
+    owned = _env_copy_entry(load_ptr(entries, index * 8))
+    _env_lock_release()
+    return owned
+
+
 @c_abi_export("pcc_platform_env_clear_owned")
 def _env_clear_owned() -> None:
     count = atomic_load_i64(

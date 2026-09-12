@@ -82,6 +82,7 @@ py_int_from_i64 = extern("py_int_from_i64", (c_int64,), c_ptr)
 py_int_add = extern("py_int_add", (c_ptr, c_ptr), c_ptr)
 py_int_mul = extern("py_int_mul", (c_ptr, c_ptr), c_ptr)
 py_int_to_i64 = extern("py_int_to_i64", (c_ptr, c_ptr), c_int64)
+py_slice_index_i64 = extern("py_slice_index_i64", (c_ptr, c_int64), c_int64)
 py_int_value_i64 = extern("py_int_value_i64", (c_ptr,), c_int64)
 py_int_to_str_obj = extern("py_int_to_str_obj", (c_ptr,), c_ptr)
 py_str_new = extern("py_str_new", (c_ptr, c_int64), c_ptr)
@@ -778,6 +779,16 @@ def _bytes_data(obj):
     return null()
 
 
+@c_abi_export("py_bytes_data_ptr")
+def py_bytes_data_ptr(o):
+    """Payload pointer of a bytes/bytearray/memoryview, or NULL.
+
+    Exported so other runtime modules do not have to restate the object
+    layout offset; `py_http_runtime`'s SHA-256 entry point needs it.
+    """
+    return _bytes_data(o)
+
+
 @c_abi_export("py_bytes_hex")
 def py_bytes_hex(o):
     # bytes.hex(): lowercase two-hex-digits-per-byte string. Mirrors
@@ -879,6 +890,164 @@ def py_bytes_strip(o):
     while hi > lo and _is_ascii_space(load_i8(data, hi - 1) & 255) != 0:
         hi = hi - 1
     return _bytes_new_same_family(o, ptr_add(data, lo), hi - lo)
+
+
+def _byte_in_set(set_data, set_len: int, c: int) -> int:
+    i: int = 0
+    while i < set_len:
+        if (load_i8(set_data, i) & 255) == c:
+            return 1
+        i = i + 1
+    return 0
+
+
+@c_abi_export("py_bytes_strip_chars")
+def py_bytes_strip_chars(o, chars):
+    data = _bytes_data(o)
+    if ptr_is_null(data):
+        return null()
+    cdata = _bytes_data(chars)
+    if ptr_is_null(cdata):
+        return null()
+    n: int = py_bytes_len(o)
+    cn: int = py_bytes_len(chars)
+    lo: int = 0
+    hi: int = n
+    while lo < hi and _byte_in_set(cdata, cn, load_i8(data, lo) & 255) != 0:
+        lo = lo + 1
+    while hi > lo and _byte_in_set(cdata, cn, load_i8(data, hi - 1) & 255) != 0:
+        hi = hi - 1
+    return _bytes_new_same_family(o, ptr_add(data, lo), hi - lo)
+
+
+@c_abi_export("py_bytes_lstrip_chars")
+def py_bytes_lstrip_chars(o, chars):
+    data = _bytes_data(o)
+    if ptr_is_null(data):
+        return null()
+    cdata = _bytes_data(chars)
+    if ptr_is_null(cdata):
+        return null()
+    n: int = py_bytes_len(o)
+    cn: int = py_bytes_len(chars)
+    lo: int = 0
+    while lo < n and _byte_in_set(cdata, cn, load_i8(data, lo) & 255) != 0:
+        lo = lo + 1
+    return _bytes_new_same_family(o, ptr_add(data, lo), n - lo)
+
+
+@c_abi_export("py_bytes_rstrip_chars")
+def py_bytes_rstrip_chars(o, chars):
+    data = _bytes_data(o)
+    if ptr_is_null(data):
+        return null()
+    cdata = _bytes_data(chars)
+    if ptr_is_null(cdata):
+        return null()
+    n: int = py_bytes_len(o)
+    cn: int = py_bytes_len(chars)
+    hi: int = n
+    while hi > 0 and _byte_in_set(cdata, cn, load_i8(data, hi - 1) & 255) != 0:
+        hi = hi - 1
+    return _bytes_new_same_family(o, data, hi)
+
+
+def _bytes_fill_byte(fill) -> int:
+    # `ljust`/`rjust` pad with a single byte; the default is ASCII space.
+    if ptr_is_null(fill):
+        return 32
+    data = _bytes_data(fill)
+    if ptr_is_null(data):
+        return 32
+    if py_bytes_len(fill) != 1:
+        return -1
+    return load_i8(data, 0) & 255
+
+
+@c_abi_export("py_bytes_ljust")
+def py_bytes_ljust(o, width: int, fill):
+    data = _bytes_data(o)
+    if ptr_is_null(data):
+        return null()
+    n: int = py_bytes_len(o)
+    target: int = width
+    pad: int = _bytes_fill_byte(fill)
+    if pad < 0:
+        py_raise_owned(py_exc_new(3, cstr("ljust fill must be a single byte")))
+        return null()
+    if target <= n:
+        return _bytes_new_same_family(o, data, n)
+    out = _bytes_new_same_family(o, null(), target)
+    if ptr_is_null(out):
+        return null()
+    dst = _bytes_data(out)
+    if ptr_is_null(dst):
+        return null()
+    i: int = 0
+    while i < n:
+        store_i8(dst, i, load_i8(data, i))
+        i = i + 1
+    while i < target:
+        store_i8(dst, i, pad)
+        i = i + 1
+    store_i8(dst, target, 0)
+    return out
+
+
+@c_abi_export("py_bytes_rjust")
+def py_bytes_rjust(o, width: int, fill):
+    data = _bytes_data(o)
+    if ptr_is_null(data):
+        return null()
+    n: int = py_bytes_len(o)
+    target: int = width
+    pad: int = _bytes_fill_byte(fill)
+    if pad < 0:
+        py_raise_owned(py_exc_new(3, cstr("rjust fill must be a single byte")))
+        return null()
+    if target <= n:
+        return _bytes_new_same_family(o, data, n)
+    out = _bytes_new_same_family(o, null(), target)
+    if ptr_is_null(out):
+        return null()
+    dst = _bytes_data(out)
+    if ptr_is_null(dst):
+        return null()
+    lead: int = target - n
+    i: int = 0
+    while i < lead:
+        store_i8(dst, i, pad)
+        i = i + 1
+    j: int = 0
+    while j < n:
+        store_i8(dst, lead + j, load_i8(data, j))
+        j = j + 1
+    store_i8(dst, target, 0)
+    return out
+
+
+@c_abi_export("py_bytes_lstrip")
+def py_bytes_lstrip(o):
+    data = _bytes_data(o)
+    if ptr_is_null(data):
+        return null()
+    n: int = py_bytes_len(o)
+    lo: int = 0
+    while lo < n and _is_ascii_space(load_i8(data, lo) & 255) != 0:
+        lo = lo + 1
+    return _bytes_new_same_family(o, ptr_add(data, lo), n - lo)
+
+
+@c_abi_export("py_bytes_rstrip")
+def py_bytes_rstrip(o):
+    data = _bytes_data(o)
+    if ptr_is_null(data):
+        return null()
+    n: int = py_bytes_len(o)
+    hi: int = n
+    while hi > 0 and _is_ascii_space(load_i8(data, hi - 1) & 255) != 0:
+        hi = hi - 1
+    return _bytes_new_same_family(o, data, hi)
 
 
 def _byte_from_obj(obj) -> int:
@@ -1206,34 +1375,68 @@ def py_i64_buffer_dot_scalar(left, right, expected_count: int):
     return accumulator
 
 
+@c_abi_export("py_bytes_find_from")
+def py_bytes_find_from(src, needle, start) -> int:
+    begin: int = py_int_value_i64(start)
+    return _bytes_find_from_offset(src, needle, begin)
+
+
 @c_abi_export("py_bytes_find")
 def py_bytes_find(src, needle) -> int:
+    return _bytes_find_from_offset(src, needle, 0)
+
+
+def _bytes_find_from_offset(src, needle, begin: int) -> int:
+    return py_bytes_find_range(src, needle, begin, py_bytes_len(src))
+
+
+@c_abi_export("py_bytes_find_range")
+def py_bytes_find_range(src, needle, begin: int, end: int) -> int:
+    # Search the borrowed payload directly. Copying a suffix per search makes
+    # repeated searches quadratic in copied bytes and requires a separate owner.
+    needle_data = _bytes_data(needle)
+    byte: int = -1
+    tag: int = _type_of(needle)
+    if tag == PY_TYPE_INT or tag == PY_TYPE_BOOL:
+        byte = py_slice_index_i64(needle, 0)
+        if byte < 0 or byte > 255:
+            py_raise_owned(py_exc_new(2, cstr("byte must be in range(0, 256)")))
+            return -1
+    elif ptr_is_null(needle_data):
+        py_raise_owned(py_exc_new(3, cstr("argument must be an integer or bytes-like object")))
+        return -1
     data = _bytes_data(src)
     if ptr_is_null(data):
         return -1
     n: int = py_bytes_len(src)
+    if begin < 0:
+        begin = n + begin
+        if begin < 0:
+            begin = 0
+    if end < 0:
+        end = n + end
+        if end < 0:
+            end = 0
+    if end > n:
+        end = n
+    if begin > n or begin > end:
+        return -1
 
-    byte: int = _byte_from_obj(needle)
     if byte >= 0:
-        if byte > 255:
-            return -1
-        i: int = 0
-        while i < n:
+        i: int = begin
+        while i < end:
             if (load_i8(data, i) & 255) == byte:
                 return i
             i = i + 1
         return -1
 
-    needle_data = _bytes_data(needle)
-    if ptr_is_null(needle_data):
-        return -1
     needle_n: int = py_bytes_len(needle)
     if needle_n == 0:
-        return 0
-    if needle_n > n:
+        return begin
+    if needle_n > end - begin:
         return -1
-    last: int = n - needle_n
-    i = 0
+    last: int = end - needle_n
+    i = begin
     while i <= last:
         if load_i8(data, i) == load_i8(needle_data, 0):
             same: int = 1
@@ -1381,6 +1584,56 @@ def py_bytes_split(src, sep):
             part = _bytes_new_same_family(src, ptr_add(data, start), i - start)
             py_list_append(out, part)
             py_decref(part)
+            i = i + sep_n
+            start = i
+        else:
+            i = i + 1
+    tail = _bytes_new_same_family(src, ptr_add(data, start), n - start)
+    py_list_append(out, tail)
+    py_decref(tail)
+    return out
+
+
+@c_abi_export("py_bytes_split_max")
+def py_bytes_split_max(src, sep, maxsplit):
+    # `bytes.split(sep, maxsplit)`: stop after `maxsplit` cuts and keep the
+    # rest as the final piece.  A negative `maxsplit` means unbounded, as in
+    # CPython.  pcc1 needs it for `raw.split(b"\0", 1)[0]` in macho_spec.
+    data = _bytes_data(src)
+    if ptr_is_null(data):
+        return null()
+    n: int = py_bytes_len(src)
+    sep_data = _bytes_data(sep)
+    if ptr_is_null(sep_data):
+        return null()
+    sep_n: int = py_bytes_len(sep)
+    if sep_n == 0:
+        py_raise_owned(py_exc_new(2, cstr("empty separator")))
+        return null()
+    limit: int = py_int_value_i64(maxsplit)
+    out = py_list_new(4)
+    if ptr_is_null(out):
+        return null()
+    start: int = 0
+    i: int = 0
+    cuts: int = 0
+    while i + sep_n <= n:
+        if limit >= 0 and cuts >= limit:
+            break
+        match: int = 0
+        if load_i8(data, i) == load_i8(sep_data, 0):
+            match = 1
+            j: int = 0
+            while j < sep_n:
+                if load_i8(data, i + j) != load_i8(sep_data, j):
+                    match = 0
+                    break
+                j = j + 1
+        if match != 0:
+            part = _bytes_new_same_family(src, ptr_add(data, start), i - start)
+            py_list_append(out, part)
+            py_decref(part)
+            cuts = cuts + 1
             i = i + sep_n
             start = i
         else:
@@ -1876,6 +2129,42 @@ def py_bytes_decode_utf8_ignore(o):
     return out
 
 
+@c_abi_export("py_bytes_decode_utf8_surrogateescape")
+def py_bytes_decode_utf8_surrogateescape(o):
+    # PEP 383: a byte that cannot start a valid UTF-8 sequence becomes the
+    # lone surrogate U+DC00+byte, which round-trips back through
+    # ``encode("utf-8", "surrogateescape")``.  The ignore mode drops those
+    # bytes instead; both share `_utf8_valid_width`.
+    data = _bytes_data(o)
+    n: int = py_bytes_len(o)
+    if ptr_is_null(data) or n <= 0:
+        return py_str_new(null(), 0)
+    tmp = py_mem_alloc(n * 3)
+    if ptr_is_null(tmp):
+        return null()
+    out_n: int = 0
+    i: int = 0
+    while i < n:
+        width: int = _utf8_valid_width(data, n, i)
+        if width <= 0:
+            code: int = 56320 + (load_i8(data, i) & 255)
+            store_i8(tmp, out_n, 224 | (code >> 12))
+            store_i8(tmp, out_n + 1, 128 | ((code >> 6) & 63))
+            store_i8(tmp, out_n + 2, 128 | (code & 63))
+            out_n = out_n + 3
+            i = i + 1
+        else:
+            j: int = 0
+            while j < width:
+                store_i8(tmp, out_n, load_i8(data, i + j))
+                out_n = out_n + 1
+                j = j + 1
+            i = i + width
+    out = py_str_new(tmp, out_n)
+    py_mem_free(tmp)
+    return out
+
+
 def _ascii_lower(c: int) -> int:
     if c >= 65 and c <= 90:
         return c + 32
@@ -1906,6 +2195,21 @@ def _str_is_utf8_name(obj) -> int:
         ):
             return 1
     return 0
+
+
+def _str_is_surrogateescape(obj) -> int:
+    if ptr_is_null(obj) or is_tagged_int(obj) or _type_of(obj) != PY_TYPE_STR:
+        return 0
+    if py_str_byte_len(obj) != 15:
+        return 0
+    data = py_str_utf8(obj)
+    want = cstr("surrogateescape")
+    i: int = 0
+    while i < 15:
+        if _ascii_lower(load_i8(data, i) & 255) != (load_i8(want, i) & 255):
+            return 0
+        i = i + 1
+    return 1
 
 
 def _str_is_errors_name(obj, ignore: int) -> int:
@@ -1960,6 +2264,8 @@ def py_bytes_decode_with_encoding(o, encoding, errors):
         return py_bytes_decode(o)
     if _str_is_errors_name(errors, 1) != 0:
         return py_bytes_decode_utf8_ignore(o)
+    if _str_is_surrogateescape(errors) != 0:
+        return py_bytes_decode_utf8_surrogateescape(o)
     py_raise_owned(py_exc_new(13, cstr("unsupported pcc-native bytes decode errors mode")))
     return null()
 

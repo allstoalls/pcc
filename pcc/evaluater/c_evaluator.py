@@ -3,7 +3,6 @@ import json
 import hashlib
 import inspect
 import time
-from ctypes.util import find_library
 import os
 import multiprocessing
 import subprocess
@@ -11,33 +10,23 @@ import shutil
 import sys
 import tempfile
 import platform
-from concurrent.futures import ProcessPoolExecutor
 from itertools import repeat
 
 
-try:
-    import llvmlite.binding as llvm
-except ImportError:  # pragma: no cover - exercised by the self-hosted stage
-    # Allowed to be absent, not deferred out of the module surface.
-    #
-    # This module holds both halves of the C toolchain: the compile driver
-    # (`_compile_translation_units` and friends, which `--emit-obj` uses) and
-    # the MCJIT evaluator. A hard module-scope import coupled them, so
-    # *compiling* C required LLVM's execution engine -- and a stage without
-    # llvmlite reported the whole C driver as unowned instead of naming the
-    # gap. Keeping the name bound (to None when unavailable) preserves
-    # `c_evaluator.llvm` for the callers and tests that legitimately want the
-    # real binding, while the compile path no longer needs it at all.
-    llvm = None
+llvm = None
 
 
 def _llvm():
-    """The llvmlite binding, or a clear error naming what is missing."""
+    """Load the explicit LLVM reference path only when it is requested."""
+    global llvm
     if llvm is None:
-        raise ImportError(
-            "llvmlite is required for this C toolchain path "
-            "(MCJIT evaluation, the LLVM backend, or an external opt pipeline)"
-        )
+        try:
+            import llvmlite.binding as binding
+        except ImportError as exc:
+            raise ImportError(
+                "llvmlite is required for the selected LLVM reference path"
+            ) from exc
+        llvm = binding
     return llvm
 from ..py_frontend.pipeline_targets import host_target_triple
 from ..backend import (
@@ -172,6 +161,19 @@ _DEFAULT_CHEAP_LLVM_PASSES = (
     "add_simplify_cfg_pass",
     "add_aggressive_dce_pass",
 )
+
+
+def _optional_find_library(name):
+    """``ctypes.util.find_library`` when the host has it, else ``None``.
+
+    A compiled pcc1 has no ``ctypes.util``; the owned directory search above
+    covers the same ground, so its absence must not be an import error.
+    """
+    try:
+        from ctypes.util import find_library
+    except ImportError:
+        return None
+    return find_library(name)
 
 
 def _select_self_object_emitter(requested, target_identity):
@@ -641,7 +643,7 @@ def _compiler_cache_tracked_files():
         os.path.join(base_dir, "lex", "c_lexer.py"),
         os.path.join(base_dir, "preprocessor.py"),
     ]
-    for dirname in ("codegen", "passes", "ir_passes", "ssa", "llvm_capi", "backend"):
+    for dirname in ("parse", "lex", "codegen", "passes", "ir_passes", "ssa", "llvm_capi", "backend"):
         package_dir = os.path.join(base_dir, dirname)
         try:
             for root, dirs, files in os.walk(package_dir):
@@ -654,20 +656,29 @@ def _compiler_cache_tracked_files():
     return tuple(dict.fromkeys(tracked_files))
 
 
-def _compiler_cache_fingerprint():
+def _host_compiler_cache_fingerprint():
     hasher = hashlib.sha256()
+    hasher.update(b"pcc.c-compiler-content.v2\0")
     for tracked_path in _compiler_cache_tracked_files():
         hasher.update(tracked_path.encode("utf-8"))
         try:
-            st = os.stat(tracked_path)
-            hasher.update(str(st.st_mtime_ns).encode("ascii"))
-            hasher.update(str(st.st_size).encode("ascii"))
+            with open(tracked_path, "rb") as stream:
+                hasher.update(stream.read())
         except OSError:
             hasher.update(b"missing")
+        hasher.update(b"\0")
     hasher.update(sys.version.encode("utf-8"))
     hasher.update(sys.platform.encode("utf-8"))
     hasher.update(platform.machine().encode("utf-8"))
     return hasher.hexdigest()
+
+
+def _compiler_cache_fingerprint():
+    if sys.implementation.name == "pcc":
+        from pcc.tools.compiler_identity import native_executable_identity
+
+        return native_executable_identity(sys.executable)
+    return _host_compiler_cache_fingerprint()
 
 
 _COMPILER_CACHE_FINGERPRINT = _compiler_cache_fingerprint()
@@ -717,13 +728,13 @@ def _native_cache_key(entry, opt_signature, pass_signature, backend_sig, source_
     ).hexdigest()
 
 
-def _compile_cache_path(cache_dir, cache_key):
-    return os.path.join(cache_dir, cache_key[:2], f"{cache_key[2:]}.json")
+def _compile_cache_path(cache_dir: str, cache_key: str) -> str:
+    return os.path.join(cache_dir, cache_key[:2], cache_key[2:] + ".json")
 
 
-def _native_cache_path(cache_dir, cache_key):
+def _native_cache_path(cache_dir: str, cache_key: str) -> str:
     ext = ".dylib" if sys.platform == "darwin" else ".so"
-    return os.path.join(cache_dir, cache_key[:2], f"{cache_key[2:]}{ext}")
+    return os.path.join(cache_dir, cache_key[:2], cache_key[2:] + ext)
 
 
 def _build_native_cache(
@@ -826,24 +837,46 @@ def _load_compiled_artifact(cache_dir, cache_key):
     return artifact
 
 
-def _store_compiled_artifact(cache_dir, cache_key, artifact):
+def _store_compiled_artifact(cache_dir: str, cache_key: str, artifact):
     path = _compile_cache_path(cache_dir, cache_key)
     parent = os.path.dirname(path)
-    tmp_path = None
+    temporary_dir = ""
+    temporary_file = ""
     try:
         os.makedirs(parent, exist_ok=True)
-        fd, tmp_path = tempfile.mkstemp(prefix=".tmp-", suffix=".json", dir=parent)
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(artifact, f, sort_keys=True)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp_path, path)
+        prefix = path + ".tmp." + str(os.getpid()) + "."
+        attempt = 0
+        while attempt < 128:
+            candidate = prefix + str(attempt)
+            try:
+                os.makedirs(candidate, mode=0o700, exist_ok=False)
+                temporary_dir = candidate
+                break
+            except OSError:
+                if not os.path.isdir(candidate):
+                    raise
+                attempt += 1
+        if not temporary_dir:
+            return
+        temporary_file = os.path.join(temporary_dir, "artifact.json")
+        with open(temporary_file, "w", encoding="utf-8") as stream:
+            stream.write(json.dumps(artifact, sort_keys=True))
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary_file, 0o600)
+        os.replace(temporary_file, path)
+        temporary_file = ""
     except OSError:
         pass
     finally:
-        if tmp_path and os.path.exists(tmp_path):
+        if temporary_file:
             try:
-                os.unlink(tmp_path)
+                os.unlink(temporary_file)
+            except OSError:
+                pass
+        if temporary_dir:
+            try:
+                os.rmdir(temporary_dir)
             except OSError:
                 pass
 
@@ -922,7 +955,25 @@ def _serialize_ir_type(ir_type):
 
 def _resolve_dynamic_link_libraries(link_args):
     link_args = list(link_args or [])
+    # The standard loader directories, searched by pcc itself.  A compiled
+    # pcc1 has no ``ctypes.util``, and relying on it for ``-l<name>``
+    # resolution made the whole C driver unreachable there
+    # ("ImportError: No module named 'ctypes.util'" out of this module's
+    # import line).  ``find_library`` stays below as an optional accelerator
+    # on hosts that have it; these directories are what makes the owned path
+    # complete rather than a fallback that only sees ``-L`` arguments.
     search_dirs = []
+    for default_dir in (
+        os.environ.get("DYLD_LIBRARY_PATH", ""),
+        os.environ.get("LD_LIBRARY_PATH", ""),
+    ):
+        for part in default_dir.split(os.pathsep):
+            if part:
+                search_dirs.append(os.path.abspath(part))
+    search_dirs.append("/usr/local/lib")
+    search_dirs.append("/usr/lib")
+    search_dirs.append("/lib")
+    search_dirs.append("/opt/homebrew/lib")
     i = 0
     while i < len(link_args):
         arg = link_args[i]
@@ -948,7 +999,7 @@ def _resolve_dynamic_link_libraries(link_args):
         if name == "termcap":
             aliases.extend(["ncurses", "curses", "tinfo"])
         for alias in aliases:
-            found = find_library(alias)
+            found = _optional_find_library(alias)
             if found:
                 return found
             for directory in search_dirs:
@@ -1305,9 +1356,7 @@ def _preprocess_translation_unit_source(
         codestr = _SIZEOF_TYPEOF_SIZE_T.sub("typedef unsigned long size_t;", codestr)
         codestr = _inject_system_cpp_keyword_compat(codestr)
     else:
-        if cpp_args:
-            raise ValueError("cpp_args require use_system_cpp=True")
-        codestr = preprocess(codestr, base_dir=base_dir)
+        codestr = preprocess(codestr, base_dir=base_dir, include_dirs=include_dirs, cpp_args=cpp_args)
     return _normalize_preprocessed_source(codestr)
 
 
@@ -1344,20 +1393,7 @@ def _compile_preprocessed_translation_unit_artifact(
         pass_ctx=pass_ctx,
     )
     if target_triple:
-        # An LLVM target machine only carries the data layout and the
-        # TargetData handle into the codegen; the self backend reads neither,
-        # so a stage without llvmlite sets the header from strings instead of
-        # reporting the whole C driver as unowned.
-        try:
-            _llvm().initialize_all_targets()
-            _llvm().initialize_all_asmprinters()
-            target_machine = _llvm().Target.from_triple(
-                target_triple
-            ).create_target_machine()
-        except ImportError:
-            codegen.set_target_text(target_triple, "")
-        else:
-            codegen.set_target_machine(target_triple, target_machine)
+        codegen.set_target_text(target_triple, "")
     # SEC-P1-UBSAN: opt-in `-fsanitize=undefined`-style trapping. OFF unless a
     # non-empty check set is threaded down from evaluate()/build().
     if fsanitize:
@@ -1472,40 +1508,11 @@ def _invoke_compile_preprocessed_translation_unit_artifact(
     target_triple=None,
     fsanitize=None,
 ):
-    """Call the compile helper with backward-compatible monkeypatch support.
-
-    Some tests monkeypatch ``_compile_preprocessed_translation_unit_artifact``
-    with a narrow two-argument tracker. When the frontend-opt-level plumbing was
-    added, those tests started failing before they could observe the intended
-    cache behavior. Prefer passing the new keyword when the active callable
-    supports it, but gracefully fall back to the legacy two-argument surface for
-    narrow wrappers.
-    """
-    fn = _compile_preprocessed_translation_unit_artifact
-    if frontend_opt_level is None and target_triple is None and not fsanitize:
-        return fn(unit_name, codestr)
-
-    try:
-        params = inspect.signature(fn).parameters
-    except (TypeError, ValueError):
-        params = {}
-
-    def _supports(param_name):
-        return param_name in params or any(
-            param.kind == inspect.Parameter.VAR_KEYWORD
-            for param in params.values()
-        )
-
-    kwargs = {}
-    if frontend_opt_level is not None and _supports("frontend_opt_level"):
-        kwargs["frontend_opt_level"] = frontend_opt_level
-    if target_triple is not None and _supports("target_triple"):
-        kwargs["target_triple"] = target_triple
-    if fsanitize and _supports("fsanitize"):
-        kwargs["fsanitize"] = fsanitize
-    if kwargs:
-        return fn(unit_name, codestr, **kwargs)
-    return fn(unit_name, codestr)
+    """Call the owned frontend's fixed internal ABI."""
+    return _compile_preprocessed_translation_unit_artifact(
+        unit_name, codestr, frontend_opt_level=frontend_opt_level,
+        target_triple=target_triple, fsanitize=fsanitize,
+    )
 
 
 def _raise_if_duplicate_external_definitions(compiled_units):
@@ -1637,7 +1644,8 @@ class CEvaluator(object):
         host_triple = host_target_triple()
         self.target_triple = target_triple or host_triple
         self._llvm_target = None
-        self.codegen.set_target_text(self.target_triple, _host_data_layout_text())
+        data_layout = "" if self.backend == "self" else _host_data_layout_text()
+        self.codegen.set_target_text(self.target_triple, data_layout)
         self.is_cross = target_triple is not None and target_triple != host_triple
         self.ee = None
         self._bound_modules = []
@@ -1766,7 +1774,7 @@ class CEvaluator(object):
                     return native_func(*args)
 
         if use_system_cpp is None:
-            use_system_cpp = self._has_system_cpp()
+            use_system_cpp = self.backend != "self" and self._has_system_cpp()
         snippet_base_dir = os.path.abspath(base_dir) if base_dir else os.getcwd()
         snippet_unit = TranslationUnit(
             name="__pcc_eval__.c",
@@ -1941,6 +1949,14 @@ class CEvaluator(object):
                 for unit in units
             ]
 
+        # Imported here, not at module scope: a compiled pcc1 has no
+        # ``concurrent.futures``, and a module-level import made this whole
+        # module -- and with it the entire C driver -- unreachable there
+        # ("ImportError: No module named 'concurrent.futures'").  The serial
+        # branch above already covers the single-unit case pcc1 takes for one
+        # translation unit, so the dependency belongs on the parallel edge.
+        from concurrent.futures import ProcessPoolExecutor
+
         max_workers = min(jobs, len(units))
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             return list(
@@ -2048,7 +2064,7 @@ class CEvaluator(object):
         frontend_opt_level=None,
     ):
         if use_system_cpp is None:
-            use_system_cpp = self._has_system_cpp()
+            use_system_cpp = self.backend != "self" and self._has_system_cpp()
 
         artifacts = self._compile_translation_units(
             units,
@@ -2282,6 +2298,11 @@ class CEvaluator(object):
             enabled=freestanding_libc,
         )
         if self.backend == "self":
+            # This entry point *is* the host-toolchain oracle -- callers reach
+            # for it by name to compare pcc's result against `cc`'s.  Routing
+            # it through pcc's own linker would leave nothing to compare
+            # against, and silently turned three vendor runtime tests into a
+            # self-comparison.
             return self._run_compiled_translation_units_self_backend(
                 compiled_units,
                 optimize=optimize,
@@ -2292,6 +2313,7 @@ class CEvaluator(object):
                 capture_output=capture_output,
                 text=text,
                 freestanding_libc=freestanding_libc,
+                link_with_system_cc=True,
             )
 
         _raise_if_duplicate_external_definitions(compiled_units)
@@ -2410,6 +2432,38 @@ class CEvaluator(object):
             obj_bytes = target_machine.emit_object(combined)
             with open(emit_obj, "wb") as f:
                 f.write(obj_bytes)
+
+    def emit_executable(self, compiled_units, output: str, *, optimize=True, link_args=None):
+        """Publish a C executable with the explicitly selected backend owner."""
+        if self.backend != "self":
+            with tempfile.TemporaryDirectory(prefix="pcc_c_reference_") as temporary:
+                obj = os.path.join(temporary, "program.o")
+                self.emit_compiled_units(compiled_units, emit_obj=obj, optimize=optimize)
+                subprocess.run([self._system_cc(), obj, "-o", output] + list(link_args or ()), check=True)
+            return
+        if link_args:
+            raise BackendUnavailable("owned C executable linking does not yet support extra link arguments")
+        prepared = self._prepare_self_backend_units(compiled_units, optimize=optimize) if self._normalize_opt_level(optimize) > 0 else compiled_units
+        if self._self_link_target_identity(prepared) != "self-aarch64-darwin-v0":
+            raise BackendUnavailable("owned C executable publication is currently implemented for AArch64 Darwin")
+        from pcc.backend.arm64_asm_driver import assemble_file
+        from pcc.backend.native_object import NativeObject
+        from pcc.backend.macho_exec import link_executable
+
+        objects = []
+        for unit in prepared:
+            # Each translation unit owns one stack-map table. Keep object
+            # boundaries until the relocatable linker merges those tables.
+            sections, undefined = assemble_file(self._self_backend_asm_text([unit]))
+            objects.append(NativeObject.from_sections(sections, undefined=undefined))
+        image = link_executable(objects, entry="_main")
+        temporary = output + ".pcc-link.tmp"
+        with open(temporary, "wb") as stream:
+            stream.write(image)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, 0o755)
+        os.replace(temporary, output)
 
     def _emit_compiled_units_self_backend(
         self,
@@ -2531,16 +2585,36 @@ class CEvaluator(object):
                 )
 
     def _prepare_self_backend_units(self, compiled_units, *, optimize=True):
-        target_machine = self.target.create_target_machine()
+        """Optimize IR for the self backend with pcc's own passes.
+
+        This used to build an LLVM target machine and run llvmlite's pass
+        manager over every unit, which made *compiling C with the self
+        backend* require llvmlite -- the one thing `CEvaluator.__init__`
+        already says this path must not do.  `run_owned_passes` is the same
+        llvmlite-free tier the Python frontend and pcc1 already run, so C and
+        Python now optimize through one owned pipeline.
+
+        Every `-O` above zero selects the same bounded owned tier; the caller
+        gates on level > 0.  `pipeline_pass_config` owns that tuple's
+        membership, so selecting it here cannot drift from the Python path.
+        llvmlite keeps optimizing the `--backend llvm` route, which is where
+        it belongs.
+        """
+        from pcc.py_frontend.compiled_owned_passes import run_owned_passes
+        from pcc.py_frontend.pipeline_pass_config import (
+            PYTHON_IR_PASS_DEFAULT_TIER,
+        )
+
+        pass_names = list(PYTHON_IR_PASS_DEFAULT_TIER)
         prepared_units = []
         for unit_name, ir_text, unit_return_type, external_defs in compiled_units:
-            llvmmod = self._prepare_llvm_module(
-                unit_name,
-                ir_text,
-                target_machine,
-                optimize=optimize,
+            # C IR carries no `py_cpy_*` calls, so the strict-no-libpython
+            # bailout cannot apply here; pass it off rather than leave the
+            # decision to a value that means something else on this path.
+            optimized = run_owned_passes(str(ir_text), pass_names, False)
+            prepared_units.append(
+                (unit_name, optimized, unit_return_type, external_defs)
             )
-            prepared_units.append((unit_name, str(llvmmod), unit_return_type, external_defs))
         return prepared_units
 
     def _self_backend_asm_text(self, compiled_units):
@@ -2715,6 +2789,59 @@ class CEvaluator(object):
             [archive_path],
         )
 
+    @staticmethod
+    def _self_link_mode():
+        """Which linker completes a self-backend C run.
+
+        Defaults to pcc's own Mach-O linker.  `system-cc` keeps the host
+        toolchain reachable as a differential oracle, the way `PCC_SELF_OBJ`
+        already does for object emission.  An unknown value is refused rather
+        than silently becoming a host-tool fallback.
+        """
+        raw = str(os.environ.get("PCC_SELF_LINK", "") or "").strip().lower()
+        if not raw:
+            return "pcc"
+        if raw not in ("pcc", "system-cc"):
+            raise BackendUnavailable(
+                "unknown PCC_SELF_LINK value " + repr(raw)
+                + "; expected 'pcc' or 'system-cc'"
+            )
+        return raw
+
+    @staticmethod
+    def _self_link_target_identity(prepared_units):
+        for _unit_name, ir_text, _return_type, _external_defs in prepared_units:
+            try:
+                return self_backend_target_identity(
+                    parse_self_backend_target_triple(ir_text)
+                )
+            except Exception:
+                return None
+        return None
+
+    @staticmethod
+    def _link_executable_owned(asm_text, bin_path):
+        """Assemble and link a self-backend C program with pcc's own tools.
+
+        Running a C program used to shell out to `cc` for assemble+link, so
+        *running* C required a host C compiler even though `--emit-obj`
+        already wrote the object with pcc's own assembler and object writer.
+        Undefined libc symbols become ordinary dylib imports, which is what
+        the Mach-O linker already does for every pcc-linked image.
+        """
+        from ..backend.arm64_asm_driver import assemble_file
+        from ..backend.macho_exec import link_executable
+        from ..backend.native_object import NativeObject
+
+        sections, undefined = assemble_file(asm_text)
+        native_object = NativeObject.from_sections(
+            sections, undefined=undefined,
+        )
+        image = link_executable([native_object], entry="_main")
+        with open(bin_path, "wb") as stream:
+            stream.write(image)
+        os.chmod(bin_path, 0o755)
+
     def _run_compiled_translation_units_self_backend(
         self,
         compiled_units,
@@ -2727,8 +2854,8 @@ class CEvaluator(object):
         capture_output=False,
         text=False,
         freestanding_libc=False,
+        link_with_system_cc=False,
     ):
-        cc = self._system_cc()
         prepared_units = (
             self._prepare_self_backend_units(compiled_units, optimize=optimize)
             if self._normalize_opt_level(optimize) > 0
@@ -2737,6 +2864,27 @@ class CEvaluator(object):
         asm_text = self._self_backend_asm_text(prepared_units)
         tmpdir = tempfile.mkdtemp(prefix="pcc_self_run_")
         try:
+            # Freestanding startup objects and caller-supplied link arguments
+            # are host-toolchain inputs; pcc owns the plain case, which is the
+            # one that made *running* C require a C compiler.
+            if (
+                not link_with_system_cc
+                and self._self_link_mode() == "pcc"
+                and self._self_link_target_identity(prepared_units)
+                == "self-aarch64-darwin-v0"
+                and not freestanding_libc
+                and not link_args
+            ):
+                owned_bin = os.path.join(tmpdir, "a.out")
+                self._link_executable_owned(asm_text, owned_bin)
+                return subprocess.run(
+                    [owned_bin] + [str(arg) for arg in (prog_args or [])],
+                    capture_output=capture_output,
+                    text=text,
+                    timeout=timeout,
+                    cwd=base_dir or os.getcwd(),
+                )
+            cc = self._system_cc()
             asm_path = os.path.join(tmpdir, "self_backend.s")
             with open(asm_path, "w") as f:
                 f.write(asm_text)

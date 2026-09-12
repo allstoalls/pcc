@@ -8,7 +8,7 @@ Extraction can include hypotheses, test status and superseded conclusions.
 Check the original experiment, revision and later updates against current
 code and matching execution before adopting a cause. Read only relevant hits.
 
-1587 confirmations across 474 investigations.
+1588 confirmations across 474 investigations.
 
 ## [Investigation: direct AArch64 instruction capture order and lifetime](../investigations/aarch64-direct-instruction-capture-order.md)
 
@@ -2612,7 +2612,8 @@ code and matching execution before adopting a cause. Read only relevant hits.
 
 ## [Investigation: one CLI needs eleven frontend gaps closed, not a CLI rewrite](../investigations/single-cli-blocked-by-c-frontend-closure.md)
 
-- Test [CONFIRMED] — The blocker for the first route, enumerated 2026-09-08. Compute the tightened
+- Test [CONFIRMED] — The blocker for the first route, enumerated 2026-09-08 and re-measured
+- Closed [CONFIRMED 2026-09-11] — All nine classes are closed and the same enumeration now reports **0 failing
 
 ## [Investigation: sorted()/min()/max() ignore a custom __lt__ (no-libpython)](../investigations/sorted-min-max-custom-lt-not-used-no-libpython.md)
 

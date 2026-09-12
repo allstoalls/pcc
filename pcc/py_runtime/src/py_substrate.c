@@ -196,6 +196,18 @@ const char *const PY_EXC_BUILTIN_NAMES[PY_EXC_N_BUILTIN] = {
     "MemoryError",
     "ImportError",
     "ModuleNotFoundError",
+    "Warning",
+    "UserWarning",
+    "DeprecationWarning",
+    "PendingDeprecationWarning",
+    "SyntaxWarning",
+    "RuntimeWarning",
+    "FutureWarning",
+    "ImportWarning",
+    "UnicodeWarning",
+    "BytesWarning",
+    "EncodingWarning",
+    "ResourceWarning",
 };
 
 const int32_t PY_EXC_PARENT[PY_EXC_N_BUILTIN] = {
@@ -221,6 +233,18 @@ const int32_t PY_EXC_PARENT[PY_EXC_N_BUILTIN] = {
     [PY_EXC_MEMORYERROR]       = PY_EXC_EXCEPTION,
     [PY_EXC_IMPORTERROR]       = PY_EXC_EXCEPTION,
     [PY_EXC_MODULENOTFOUNDERROR] = PY_EXC_IMPORTERROR,
+    [PY_EXC_WARNING]           = PY_EXC_EXCEPTION,
+    [PY_EXC_USERWARNING]       = PY_EXC_WARNING,
+    [PY_EXC_DEPRECATIONWARNING] = PY_EXC_WARNING,
+    [PY_EXC_PENDINGDEPRECATIONWARNING] = PY_EXC_WARNING,
+    [PY_EXC_SYNTAXWARNING]     = PY_EXC_WARNING,
+    [PY_EXC_RUNTIMEWARNING]    = PY_EXC_WARNING,
+    [PY_EXC_FUTUREWARNING]     = PY_EXC_WARNING,
+    [PY_EXC_IMPORTWARNING]     = PY_EXC_WARNING,
+    [PY_EXC_UNICODEWARNING]    = PY_EXC_WARNING,
+    [PY_EXC_BYTESWARNING]      = PY_EXC_WARNING,
+    [PY_EXC_ENCODINGWARNING]   = PY_EXC_WARNING,
+    [PY_EXC_RESOURCEWARNING]   = PY_EXC_WARNING,
 };
 
 /* Per-tag class cache. Populated lazily on first access by whichever

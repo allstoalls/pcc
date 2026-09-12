@@ -199,6 +199,26 @@ def py_tuple_new(n: int):
     return t
 
 
+@c_abi_export("py_tuple_from_static_items")
+def py_tuple_from_static_items(items, count: int):
+    """Build a tuple from a static ``[i0, i1, ...]`` pointer array.
+
+    Every element is a compile-time constant -- a pooled immortal str object
+    in the data segment, or a tagged small int -- so the array is immortal
+    data and the loop needs no rooting.  The per-element path emitted one
+    py_tuple_set_item plus the pin/store_root/unpin/release protocol around
+    a temporary that was already a constant.
+    """
+    t = py_tuple_new(count)
+    if ptr_is_null(t):
+        return null()
+    index: int = 0
+    while index < count:
+        py_tuple_set_item(t, index, load_ptr(items, index * 8))
+        index = index + 1
+    return t
+
+
 @c_abi_export("py_tuple_from_list")
 def py_tuple_from_list(lst):
     # New tuple from a pcc list's elements. Mirrors py_tuple_from_list in

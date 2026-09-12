@@ -6,12 +6,14 @@ from pcc.extern import c_abi_export, c_int64, c_ptr, c_void, extern
 from pcc.unsafe import (
     free,
     load_i32,
+    load_i64,
     load_ptr,
     malloc,
     memcpy,
     null,
     ptr_is_null,
     store_i32,
+    store_i64,
     store_i8,
     store_ptr,
     strlen,
@@ -170,3 +172,108 @@ def py_subprocess_run_timeout(
     _terminate_process_group(pid, status)
     free(status)
     return -124
+
+
+@c_abi_export("pcc_worker_process_pool")
+def pcc_worker_process_pool(specs, width: int) -> int:
+    """Run argv/env-vector pairs with bounded concurrency and group cleanup.
+
+    Zero means success. A failure packs (command index + 1) in the high
+    32 bits and the signed return code in the low 32 bits.
+    """
+    count = py_obj_len(specs)
+    if count <= 0:
+        return 0
+    if width < 1:
+        width = 1
+    if width > count:
+        width = count
+    slots = malloc(width * 16)
+    status = malloc(4)
+    if ptr_is_null(slots) or ptr_is_null(status):
+        free(slots)
+        free(status)
+        return 4294967423
+    slot = 0
+    while slot < width:
+        store_i64(slots, slot * 16, 0)
+        slot += 1
+    next_index = 0
+    live = 0
+    failure = 0
+    while next_index < count or live > 0:
+        slot = 0
+        while slot < width:
+            pid = load_i64(slots, slot * 16)
+            if pid > 0:
+                waited = platform_waitpid(pid, status, 1)
+                if waited != 0:
+                    rc = 127
+                    if waited == pid:
+                        rc = normalize_wait_status(load_i32(status, 0))
+                    # A completed worker cannot leave a helper behind.
+                    platform_kill(-pid, 9)
+                    store_i64(slots, slot * 16, 0)
+                    live -= 1
+                    if rc != 0:
+                        index = load_i64(slots, slot * 16 + 8)
+                        failure = ((index + 1) << 32) | (rc & 4294967295)
+                        break
+            slot += 1
+        if failure != 0:
+            break
+        slot = 0
+        while next_index < count and live < width:
+            while load_i64(slots, slot * 16) != 0:
+                slot += 1
+            py_index = py_int_from_i64(next_index)
+            spec = py_obj_getitem(specs, py_index)
+            py_decref(py_index)
+            zero = py_int_from_i64(0)
+            one = py_int_from_i64(1)
+            argv = py_obj_getitem(spec, zero)
+            env = py_obj_getitem(spec, one)
+            py_decref(zero)
+            py_decref(one)
+            argc = py_obj_len(argv)
+            envc = py_obj_len(env)
+            items = _build_exec_argv(argv)
+            envp = _build_exec_argv(env)
+            pid = -1
+            if ptr_is_null(items) == 0 and ptr_is_null(envp) == 0:
+                pid = platform_spawnp(items, envp, 0)
+            _free_exec_argv(items, argc)
+            _free_exec_argv(envp, envc)
+            py_decref(argv)
+            py_decref(env)
+            py_decref(spec)
+            if pid <= 0:
+                failure = ((next_index + 1) << 32) | 127
+                break
+            store_i64(slots, slot * 16, pid)
+            store_i64(slots, slot * 16 + 8, next_index)
+            next_index += 1
+            live += 1
+            slot += 1
+        if failure != 0:
+            break
+        if live > 0:
+            platform_sleep_ns(10000000)
+    if failure != 0:
+        slot = 0
+        while slot < width:
+            pid = load_i64(slots, slot * 16)
+            if pid > 0:
+                platform_kill(-pid, 15)
+            slot += 1
+        platform_sleep_ns(200000000)
+        slot = 0
+        while slot < width:
+            pid = load_i64(slots, slot * 16)
+            if pid > 0:
+                platform_kill(-pid, 9)
+                platform_waitpid(pid, status, 0)
+            slot += 1
+    free(status)
+    free(slots)
+    return failure

@@ -238,7 +238,47 @@ class ImportLoweringMixin:
             "pcc.llvm_capi.compat",
         }
     )
+    # Modules pcc lowers natively for a plain ``import X``.  Kept as a named
+    # constant so the dotted-form check below reads the same set.
+    _NATIVE_BUILTIN_IMPORT_MODULES = frozenset(
+        {
+            "builtins",
+            "sys",
+            "os",
+            "time",
+            "string",
+            "platform",
+            "subprocess",
+            "tempfile",
+            "fileinput",
+            "shutil",
+            "shlex",
+            "math",
+            "json",
+            "re",
+            "codecs",
+            "gc",
+            "weakref",
+            "copy",
+            "functools",
+            "pickle",
+            "threading",
+            "pcc.virtual_thread",
+            "pcc",
+            "inspect",
+            "contextlib",
+            "contextvars",
+            "enum",
+            "warnings",
+            "textwrap",
+            "traceback",
+        }
+    )
     _IR_RUNTIME_COMPAT_MODULE = "pcc.llvm_capi.compat"
+    # The module the ON-mode closure rewrite substitutes for compat: it holds
+    # the real definitions behind every emitted ``user_pcc_llvm_capi_ir_*``
+    # call, so its top-level init has to run before the first scaffold call.
+    _IR_RUNTIME_PROVIDER_MODULE = "pcc.llvm_capi.ir"
     _UNSAFE_SCAFFOLD_MODULES = frozenset(
         {
             "pcc.unsafe",
@@ -562,6 +602,35 @@ class ImportLoweringMixin:
         self._emit_post_call_err_check()
         self._gc_release(module)
 
+    def _emit_ir_scaffold_provider_init(self, import_module) -> None:
+        """Run the IR provider's top-level init for an elided scaffold import.
+
+        In ON mode ``_filter_ir_scaffold_closure`` drops
+        ``pcc.llvm_capi.compat`` from the source closure and substitutes
+        ``pcc.llvm_capi.ir`` as the link provider for the emitted
+        ``user_pcc_llvm_capi_ir_*`` calls.  Registering compile-time markers
+        is all this statement owes the imported *names*, but the provider
+        also has module-level state: its class objects live in
+        ``@.class.pcc_llvm_capi_ir.*`` globals that only
+        ``_pcc_py_module_top_pcc_llvm_capi_ir`` fills in.  Eliding the import
+        removed the one edge that ran it -- the provider was still registered
+        with ``py_compiled_module_register_init``, but registration only
+        records the initializer, it never executes it.  The first
+        ``ir.IntType(1)`` then read ``cls._cache`` off a NULL class, which
+        surfaced as ``'object' object has no attribute '_cache'`` and is why
+        pcc1 could not compile C at pcc/codegen/c_types.py:22.
+        """
+        if import_module not in (
+            self._IR_RUNTIME_COMPAT_MODULE, "pcc.llvm_capi"
+        ):
+            return
+        provider = self._IR_RUNTIME_PROVIDER_MODULE
+        if getattr(self.ast_module, "name", None) == provider:
+            return
+        if provider not in getattr(self, "_sibling_module_inits", ()):
+            return
+        self._emit_compiled_module_ensure_initialized(provider)
+
     def _emit_native_extension_import_from(
         self,
         module_name: str,
@@ -743,38 +812,21 @@ class ImportLoweringMixin:
         # subsequent ``module.X`` access resolves to ``user_<mod>_<X>``.
         native_table = self._native_module_exports
         for mod_name, as_name in stmt_names:
-            if mod_name in (
-                "builtins",
-                "sys",
-                "os",
-                "time",
-                "string",
-                "platform",
-                "subprocess",
-                "tempfile",
-                "fileinput",
-                "shutil",
-                "shlex",
-                "math",
-                "json",
-                "re",
-                "codecs",
-                "gc",
-                "weakref",
-                "copy",
-                "functools",
-                "pickle",
-                "threading",
-                "pcc.virtual_thread",
-                "pcc",
-                "inspect",
-                "contextlib",
-                "contextvars",
-                "enum",
-                "warnings",
-                "textwrap",
-                "traceback",
+            builtin_module = mod_name
+            if (
+                as_name is None
+                and "." in mod_name
+                and mod_name.split(".")[0] in self._NATIVE_BUILTIN_IMPORT_MODULES
             ):
+                # ``import os.path`` binds ``os``, not the leaf -- the submodule
+                # is reached as an attribute of the package.  Matching only the
+                # full dotted name missed the builtin table, so the statement
+                # fell through to the strict-mode error ``No module named
+                # 'os.path'``.  ``pcc/ply/yacc.py`` is the site that blocked
+                # pcc1 from compiling C.
+                builtin_module = mod_name.split(".")[0]
+            if builtin_module in self._NATIVE_BUILTIN_IMPORT_MODULES:
+                mod_name = builtin_module
                 if mod_name in getattr(self, "_sibling_module_inits", ()):
                     self._emit_compiled_module_ensure_initialized(mod_name)
                 self._register_native_builtin_module_alias(
@@ -1033,6 +1085,7 @@ class ImportLoweringMixin:
         raw_import_module = import_module
         if self._is_extern_scaffold_import_module(import_module):
             self._register_extern_scaffold_imports(stmt)
+            self._emit_ir_scaffold_provider_init(import_module)
             return
         if self._is_test_facade_import_module(import_module):
             return
