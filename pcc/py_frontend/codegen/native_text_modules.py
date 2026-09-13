@@ -962,6 +962,8 @@ class NativeTextModulesLoweringMixin:
             return None
         if attr.name == "findall":
             return self._emit_native_re_findall_call(expr.args, expr.kwargs)
+        if attr.name == "finditer":
+            return self._emit_native_re_finditer_call(expr.args, expr.kwargs)
         if attr.name == "split":
             legacy_split = self._emit_native_re_split_call(expr.args, expr.kwargs)
             if legacy_split is not None:
@@ -1017,6 +1019,45 @@ class NativeTextModulesLoweringMixin:
             name=self._fresh(kind),
         )
         self._emit_post_call_err_check(getattr(args[0], "span", None))
+        return result
+
+    def _emit_native_re_finditer_call(self, args, kwargs) -> Optional[ir.Value]:
+        if kwargs or not 2 <= len(args) <= 3:
+            return None
+        values = []
+        pinned = []
+        for arg in args:
+            value = self._emit_expr_with_cpy_operand_cleanup(
+                arg, (), pinned_pcc=tuple(pinned), as_object=True,
+            )
+            if not self._owned_release_needed(value, arg):
+                value = self._gc_retain(value, name=self._fresh("re.finditer.retain"))
+            self._gc_pin(value)
+            values.append(value)
+            pinned.append((value, True))
+        old_target = self._current_try_err_block()
+        target = old_target if old_target is not None else self._ensure_fn_err_exit()
+        self._try_err_block = self._make_cpy_operand_cleanup_block(
+            (), (), target, "re.finditer.cleanup", tuple(pinned),
+        )
+        try:
+            flags = ir.Constant(_I64, 0)
+            if len(values) == 3:
+                flags = self.builder.call(self.runtime["py_index_i64_checked"], [values[2]],
+                                          name=self._fresh("re.finditer.flags"))
+                self._emit_post_call_err_check(args[2].span)
+            result = self.builder.call(self.runtime["py_re_finditer_flags"],
+                                       [values[0], values[1], flags],
+                                       name=self._fresh("re.finditer"))
+            self._emit_post_call_err_check(args[0].span)
+        finally:
+            self._try_err_block = old_target
+        self._note_owned_object_value(result)
+        self._gc_pin(result)
+        for value in values:
+            self._gc_unpin(value)
+            self._gc_release(value)
+        self._gc_unpin(result)
         return result
 
     def _emit_native_re_findall_call(

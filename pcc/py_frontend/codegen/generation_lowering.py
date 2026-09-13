@@ -161,11 +161,13 @@ class GenerationLoweringMixin:
         saved_runtime_port_module = self._runtime_port_module
         saved_sibling_module_inits = self._sibling_module_inits
         saved_native_module_exports = self._native_module_exports
+        saved_direct_retain_text = getattr(self.module, "_direct_indexed_retain_text", False)
         if module is not None:
             setattr(self, "ast_module", module)
             setattr(self, "_ast_body", module.body)
             setattr(self, "_try_err_block", None)
             setattr(self, "module", ir.Module(name=module.name or "pcc_py_module"))
+            self.module._direct_indexed_retain_text = saved_direct_retain_text
             # The constructor already built a compile unit, but for the module
             # it was handed; this is a different ``ir.Module``, and debug nodes
             # are owned per module.  Rebuild against the one that gets rendered.
@@ -864,9 +866,11 @@ class GenerationLoweringMixin:
         # The static str literal pool is complete only now as well.
         self._finalize_static_literal_init()
 
-        if str(
-            os.environ.get("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "") or ""
-        ).strip().lower() in ("1", "true", "yes", "on"):
+        if (
+            not saved_direct_retain_text
+            and str(os.environ.get("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "") or "")
+            .strip().lower() in ("1", "true", "yes", "on")
+        ):
             direct_started = time.monotonic() if worker_timing else 0.0
             self._direct_indexed_module = self.module.direct_indexed_module()
             if worker_timing:
@@ -916,7 +920,7 @@ class GenerationLoweringMixin:
                 in ("1", "true", "yes", "on")
             )
         )
-        if direct_only:
+        if direct_only and not saved_direct_retain_text:
             out = ""
         else:
             _mark_freestanding_no_builtins(self)

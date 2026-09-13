@@ -17,7 +17,7 @@ from ..py_ast import (
     StrType,
 )
 from . import marshal
-from .freestanding_abi_constants import PY_TYPE_DICT, PY_TYPE_LIST
+from .freestanding_abi_constants import PY_TYPE_DICT, PY_TYPE_LIST, PY_TYPE_SET
 
 
 _I1 = ir.IntType(1)
@@ -48,6 +48,12 @@ class DictLoweringMixin:
     ) -> Optional[ir.Value]:
         attr = expr.func
         assert isinstance(attr, Attr)
+        if attr.name == "update" and len(expr.args) == 1 and not expr.kwargs:
+            return self._emit_dyn_container_method_with_tag_guard(
+                expr, (PY_TYPE_DICT, PY_TYPE_SET),
+                lambda recv: self._emit_shared_container_update(expr, recv),
+                "dyn.update",
+            )
         if attr.name not in _DYN_DICT_METHOD_NATIVE:
             return None
         if attr.name == "pop":
@@ -68,6 +74,27 @@ class DictLoweringMixin:
             ),
             "dyn.dict",
         )
+
+    def _emit_shared_container_update(self, expr: Call, recv: ir.Value) -> ir.Value:
+        """The one-source update shape shared by dict and set receivers."""
+        tag = self.builder.call(self.runtime["py_obj_type_tag"], [recv])
+        is_dict = self.builder.icmp_signed("==", tag, ir.Constant(_I64, PY_TYPE_DICT))
+        fn = self.current_function
+        dict_bb = fn.append_basic_block(self._fresh("update.dict"))
+        set_bb = fn.append_basic_block(self._fresh("update.set"))
+        done_bb = fn.append_basic_block(self._fresh("update.done"))
+        self.builder.cbranch(is_dict, dict_bb, set_bb)
+        self.builder.position_at_end(dict_bb)
+        dict_ty = DictType(name="dict", key=DynType(name="dyn"), value=DynType(name="dyn"))
+        result = self._maybe_emit_dict_method(expr, dict_ty, recv=recv, recv_borrowed=True)
+        assert result is not None
+        self.builder.branch(done_bb)
+        self.builder.position_at_end(set_bb)
+        result = self._maybe_emit_set_method(expr, recv=recv, recv_borrowed=True)
+        assert result is not None
+        self.builder.branch(done_bb)
+        self.builder.position_at_end(done_bb)
+        return self._emit_none_literal()
 
     def _emit_dyn_pop_method_with_runtime_guard(
         self,

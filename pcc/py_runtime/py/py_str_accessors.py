@@ -785,6 +785,59 @@ def py_str_rfind_range(s, sub, start: int, end: int) -> int:
     return result
 
 
+def _str_tailmatch_one(s, needle, start: int, end: int, suffix: int) -> int:
+    if ptr_is_null(needle) != 0 or is_tagged_int(needle) != 0:
+        py_raise_owned(py_exc_new(3, cstr("prefix or suffix must be str")))
+        return -1
+    if load_i32(needle, PYOBJECTHEADER_TYPE_TAG_OFFSET) != PY_TYPE_STR:
+        py_raise_owned(py_exc_new(3, cstr("prefix or suffix must be str")))
+        return -1
+    length: int = _str_cp_len(s)
+    if start < 0:
+        start = start + length
+        if start < 0:
+            start = 0
+    if end < 0:
+        end = end + length
+        if end < 0:
+            end = 0
+    elif end > length:
+        end = length
+    if start > length or end < start:
+        return 0
+    lo: int = _utf8_byte_offset_for_codepoint(s, start)
+    hi: int = _utf8_byte_offset_for_codepoint(s, end)
+    size: int = load_i64(needle, PYSTROBJECT_BYTE_LEN_OFFSET)
+    if size > hi - lo:
+        return 0
+    if suffix != 0:
+        lo = hi - size
+    return _bytes_eq(ptr_add(s, PYSTROBJECT_DATA_OFFSET + lo),
+                     ptr_add(needle, PYSTROBJECT_DATA_OFFSET), size)
+
+
+@c_abi_export("py_str_tailmatch_range")
+def py_str_tailmatch_range(s, needle, start: int, end: int, suffix: int) -> int:
+    if ptr_is_null(s) != 0 or is_tagged_int(s) != 0:
+        py_raise_owned(py_exc_new(3, cstr("prefix/suffix receiver must be str")))
+        return -1
+    if load_i32(s, PYOBJECTHEADER_TYPE_TAG_OFFSET) != PY_TYPE_STR:
+        py_raise_owned(py_exc_new(3, cstr("prefix/suffix receiver must be str")))
+        return -1
+    if ptr_is_null(needle) == 0 and is_tagged_int(needle) == 0:
+        if load_i32(needle, PYOBJECTHEADER_TYPE_TAG_OFFSET) == PY_TYPE_TUPLE:
+            length: int = load_i64(needle, PYTUPLEOBJECT_LEN_OFFSET)
+            index: int = 0
+            while index < length:
+                item = load_ptr(needle, PYTUPLEOBJECT_ITEMS_OFFSET + index * 8)
+                result: int = _str_tailmatch_one(s, item, start, end, suffix)
+                if result != 0:
+                    return result
+                index = index + 1
+            return 0
+    return _str_tailmatch_one(s, needle, start, end, suffix)
+
+
 @c_abi_export("py_str_startswith")
 def py_str_startswith(s, prefix) -> int:
     if ptr_is_null(s) != 0:

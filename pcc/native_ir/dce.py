@@ -41,19 +41,19 @@ _FUNC_ATTR_RE = re.compile(
     r"""
     ^\s*
     (?:declare|define)\s+
-    .*?@(?P<name>[\w\.\$]+)\([^)]*\)
+    .*?@(?P<name>[\w.$-]+)\([^)]*\)
     (?P<tail>.*?)
     (?:\s*\{)?\s*$
     """,
     re.VERBOSE,
 )
-_ASSIGN_RE = re.compile(r"^\s*%([\w\.]+)\s*=\s*(\w+)")
+_ASSIGN_RE = re.compile(r"^\s*%([\w.$-]+)\s*=\s*(\w+)")
 _CALL_ASSIGN_RE = re.compile(
     r"""
     ^\s*
-    %(?P<result>[\w\.]+)\s*=\s*
+    %(?P<result>[\w.$-]+)\s*=\s*
     (?:(?:tail|musttail|notail)\s+)?
-    call\b.*?@(?P<callee>[\w\.\$]+)\(
+    call\b.*?@(?P<callee>[\w.$-]+)\(
     """,
     re.VERBOSE,
 )
@@ -171,7 +171,7 @@ def _one_dce_pass(
                 if am:
                     defs[am.group(1)] = (opcode, text)
                 # Every other %name in this instruction is a use.
-                for used in re.findall(r"%([\w\.]+)", text):
+                for used in re.findall(r"%([\w.$-]+)", text):
                     if am and used == am.group(1):
                         continue
                     users.setdefault(used, set()).add(
@@ -200,7 +200,7 @@ def _one_dce_pass(
     # function's dead set.
     new_lines: list[str] = []
     current_fn: str | None = None
-    _DEFINE_NAME_RE = re.compile(r"^\s*define\s+[^@]*@(?P<name>[\w\.]+)")
+    _DEFINE_NAME_RE = re.compile(r"^\s*define\s+[^@]*@(?P<name>[\w.$-]+)")
     for line in ir_text.splitlines(keepends=True):
         dm = _DEFINE_NAME_RE.match(line)
         if dm:
@@ -224,7 +224,7 @@ def _defined_function_lines(ir_text: str) -> list[tuple[str, list[str]]]:
     body: list[str] = []
     for line in ir_text.splitlines(keepends=True):
         if not name:
-            match = re.match(r"^\s*define\s+[^@]*@(?P<name>[\w\.]+)", line)
+            match = re.match(r"^\s*define\s+[^@]*@(?P<name>[\w.$-]+)", line)
             if match:
                 name = match.group("name")
                 body = []

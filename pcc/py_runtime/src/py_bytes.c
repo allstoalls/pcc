@@ -60,6 +60,11 @@ static const char *bytes_data(PyObject *o, int64_t *n) {
     return NULL;
 }
 
+const char *py_bytes_data_ptr(PyObject *o) {
+    int64_t size;
+    return bytes_data(o, &size);
+}
+
 static int byte_from_obj(PyObject *o, int64_t *out) {
     if (o == NULL) {
         return -1;
@@ -498,8 +503,28 @@ PyObject *py_bytes_decode_with_encoding(
     }
     int64_t n = 0;
     const char *data = bytes_data(o, &n);
+    if (pcc_str_is_ascii_word(encoding, "ascii")
+        || pcc_str_is_ascii_word(encoding, "us-ascii")
+        || pcc_str_is_ascii_word(encoding, "us_ascii")) {
+        if (errors != NULL && py_type_of(errors) != PY_TYPE_STR) {
+            py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "decode errors must be a string"));
+            return NULL;
+        }
+        if (data == NULL && n != 0) {
+            py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "decoding requires an accessible bytes buffer"));
+            return NULL;
+        }
+        for (int64_t index = 0; index < n; index++) {
+            if ((unsigned char)data[index] >= 128) {
+                py_raise_owned(py_exc_new(PY_EXC_NOTIMPLEMENTEDERROR,
+                    "pcc-native ASCII decoding of non-ASCII bytes is not supported"));
+                return NULL;
+            }
+        }
+        return py_str_new(data, n);
+    }
     if (!pcc_str_is_utf8_name(encoding)) {
-        py_raise_owned(py_exc_new(PY_EXC_LOOKUPERROR, "pcc-native bytes decode supports utf-8 only"));
+        py_raise_owned(py_exc_new(PY_EXC_LOOKUPERROR, "pcc-native bytes decode supports utf-8 and ascii only"));
         return NULL;
     }
     if (errors == NULL || errors == py_None || pcc_str_is_ascii_word(errors, "strict")) {

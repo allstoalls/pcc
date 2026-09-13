@@ -569,7 +569,7 @@ class IrScaffoldLoweringMixin:
         return None
 
     def _ir_module_symbol_target(self, attr: Attr) -> Optional[str]:
-        """Detect whether ``attr`` is an ``ir.SYMBOL`` constructor.
+        """Resolve an IR symbol or its owned ``ir.values`` alias.
 
         Returns the recognised symbol name (e.g. ``IntType``,
         ``PointerType``) if ``attr`` looks like ``ir.SYMBOL`` and
@@ -580,6 +580,15 @@ class IrScaffoldLoweringMixin:
         if attr.name not in _IR_MODULE_SYMBOLS:
             return None
         if _is_scaffold_name(attr.obj) and attr.obj.ident == "ir":
+            return attr.name
+        namespace = attr.obj
+        if (
+            _is_scaffold_attr(namespace)
+            and namespace.name == "values"
+            and _is_scaffold_name(namespace.obj)
+            and namespace.obj.ident == "ir"
+            and attr.name in ("Value", "Constant", "Argument", "Function", "GlobalVariable")
+        ):
             return attr.name
         return None
 

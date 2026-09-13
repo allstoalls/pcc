@@ -1585,7 +1585,9 @@ def _load_build_receipt(
         "PCC_RUNTIME_HIGH": {"py"},
         "PCC_SELF_LINK": {"pcc"},
         "PCC_SELF_BACKEND_PUBLISH_SYNC": {"1"},
-        "PCC_PYTHON_IR_PASSES": {"off"},
+        # Historical unoptimized receipts remain readable; their effective
+        # policy stays recorded and is not relabeled as an optimized build.
+        "PCC_PYTHON_IR_PASSES": {"off", "default"},
         "PCC_PYTHON_IR_PASS_JOBS": {"1"},
         "PCC_PY_FRONTEND_IR_CACHE": {"0"},
         "PCC_SELF_BACKEND_OBJECT_CACHE": {"0"},

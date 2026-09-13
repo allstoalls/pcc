@@ -206,44 +206,22 @@ class DeleteLoweringMixin:
                     continue
                 obj = self._emit_expr(target.obj)
                 obj_ty = target.obj.ty
-                idx_val = self._emit_expr(target.idx)
-                idx_obj = marshal.marshal_to_object(
-                    self.builder,
-                    self.module,
-                    self.runtime,
-                    idx_val,
-                    target.idx.ty,
-                )
-                if isinstance(obj_ty, DictType):
+                if isinstance(obj_ty, (DictType, ListType, ClassType, DynType)):
+                    idx_obj = self._emit_subscript_key_object(target.idx)
+                    release_on_error = []
+                    if self._owned_release_needed(idx_obj, target.idx):
+                        release_on_error.append(idx_obj)
+                    if self._owned_release_needed(obj, target.obj):
+                        release_on_error.append(obj)
                     self.builder.call(
-                        self.runtime["py_dict_del"],
+                        self.runtime["py_obj_delete_subscript"],
                         [obj, idx_obj],
                     )
                     self._emit_post_call_err_check(
-                        getattr(target, "span", None)
+                        target.span, release_on_error=tuple(release_on_error)
                     )
-                    continue
-                if isinstance(obj_ty, ListType):
-                    idx_i64 = marshal.marshal_from_object(
-                        self.builder,
-                        self.module,
-                        self.runtime,
-                        idx_obj,
-                        IntType(name="int"),
-                    )
-                    popped = self.builder.call(
-                        self.runtime["py_list_pop"],
-                        [obj, idx_i64],
-                        name=self._fresh("list.del.pop"),
-                    )
-                    self._emit_post_call_err_check(getattr(target, "span", None))
-                    self._gc_release(popped)
-                    continue
-                if isinstance(obj_ty, (ClassType, DynType)):
-                    self.builder.call(
-                        self.runtime["py_obj_delitem"],
-                        [obj, idx_obj],
-                    )
+                    self._gc_release_if_owned(idx_obj, target.idx)
+                    self._gc_release_if_owned(obj, target.obj)
                     continue
                 raise NotImplementedError(
                     f"Layer 1 'del' on subscript with container type "

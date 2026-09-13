@@ -1023,7 +1023,8 @@ int64_t py_obj_delitem(PyObject *o, PyObject *k) {
         case PY_TYPE_LIST: {
             int64_t idx = py_obj_index_i64(k);
             if (py_err_occurred()) return -1;
-            py_list_pop(o, idx);
+            PyObject *popped = py_list_pop(o, idx);
+            if (popped != NULL) py_decref(popped);
             return 0;
         }
         case PY_TYPE_DICT:
@@ -1040,6 +1041,28 @@ int64_t py_obj_delitem(PyObject *o, PyObject *k) {
 
 static int is_instance_tag_d(int32_t tag) {
     return tag == PY_TYPE_INSTANCE || tag >= PY_TYPE_USER_CLASS_START;
+}
+
+int64_t py_obj_assign_subscript(PyObject *o, PyObject *key, PyObject *value) {
+    int64_t status = py_obj_setitem(o, key, value);
+    if (status < 0 && !py_err_occurred()) {
+        py_raise_owned(py_exc_new(PY_EXC_TYPEERROR,
+            "object does not support item assignment"));
+    }
+    return status;
+}
+
+int64_t py_obj_delete_subscript(PyObject *o, PyObject *key) {
+    int64_t status = py_obj_delitem(o, key);
+    if (status < 0 && !py_err_occurred()) {
+        if (py_type_of(o) == PY_TYPE_DICT) {
+            py_raise_owned(py_exc_new_with_value(PY_EXC_KEYERROR, key));
+        } else {
+            py_raise_owned(py_exc_new(PY_EXC_TYPEERROR,
+                "object does not support item deletion"));
+        }
+    }
+    return status;
 }
 
 static PyObject *py_obj_missing_attr(const char *name) {
@@ -1264,6 +1287,13 @@ PyObject *py_obj_getattr(PyObject *o, const char *name) {
     int32_t tag = py_header(o)->type_tag;
     pcc_runtime_log_event_code(7, 5, tag, 0, o);
 
+    if (tag == PY_TYPE_STATICMETHOD
+        && (strcmp(name, "__func__") == 0 || strcmp(name, "__wrapped__") == 0)) {
+        PyObject *func = pcc_gc_load_ptr(o, &((PyStaticMethodObject *)o)->func);
+        py_incref(func);
+        return func;
+    }
+
     PyObject *type_attr = pcc_capi_type_object_getattr(o, name);
     if (type_attr != NULL || py_err_occurred()) return type_attr;
 
@@ -1305,6 +1335,16 @@ PyObject *py_obj_getattr(PyObject *o, const char *name) {
     if (tag == PY_TYPE_FUNC) {
         PyFuncObject *f = (PyFuncObject *)o;
         PyObject *attrs = pcc_gc_load_ptr(o, &f->attrs);
+        if (strcmp(name, "__dict__") == 0) {
+            if (attrs == NULL) {
+                attrs = py_dict_new();
+                if (attrs == NULL) return NULL;
+                pcc_gc_store_ptr(o, &f->attrs, attrs);
+                return attrs;
+            }
+            py_incref(attrs);
+            return attrs;
+        }
         if (attrs != NULL) {
             PyObject *key = py_str_new(name, (int64_t)strlen(name));
             if (key == NULL) return NULL;
@@ -1525,6 +1565,15 @@ int64_t py_obj_setattr(PyObject *o, const char *name, PyObject *v) {
     }
     if (tag == PY_TYPE_FUNC) {
         PyFuncObject *f = (PyFuncObject *)o;
+        if (strcmp(name, "__dict__") == 0) {
+            if (py_type_of(v) != PY_TYPE_DICT) {
+                py_raise_owned(py_exc_new(PY_EXC_TYPEERROR,
+                    "function __dict__ must be set to a dictionary"));
+                return -1;
+            }
+            pcc_gc_store_ptr(o, &f->attrs, v);
+            return 0;
+        }
         PyObject *attrs = pcc_gc_load_ptr(o, &f->attrs);
         int attrs_created = 0;
         if (attrs == NULL) {
@@ -1614,6 +1663,13 @@ PyObject *py_obj_call(PyObject *callable, PyObject *args, PyObject *kwargs) {
     }
     int32_t tag = py_header(callable)->type_tag;
     pcc_runtime_log_event_code(7, 8, tag, 0, callable);
+
+    if (tag == PY_TYPE_STATICMETHOD) {
+        PyObject *func = pcc_gc_load_ptr(
+            callable, &((PyStaticMethodObject *)callable)->func
+        );
+        return py_obj_call(func, args, kwargs);
+    }
 
     if (pcc_capi_type_object_is_callable(callable)) {
         return dispatch_require_call_result(

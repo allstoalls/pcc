@@ -1202,12 +1202,11 @@ typedef struct {
     int64_t index;          /* next index to return */
 } PyIterObject;
 
-/* Constructors implemented by py_class_attrs.c. All return new references.
- * Static methods currently lower directly to their wrapped callable, so tag
- * PY_TYPE_STATICMETHOD remains part of the runtime layout/GC contract but has
- * no public constructor. */
+/* Descriptor constructors implemented by py_class_attrs.c. All return new
+ * references and publish their initialized GC-visible slots. */
 PyObject *py_property_new(PyObject *fget, PyObject *fset, PyObject *fdel);
 PyObject *py_classmethod_new(PyObject *func);
+PyObject *py_staticmethod_new(PyObject *func);
 PyObject *py_instance_bind_method(PyObject *method, PyObject *self, const char *name);
 
 /* In-place setter/deleter replacement — used by the @name.setter /

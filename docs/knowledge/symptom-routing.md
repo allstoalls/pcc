@@ -636,7 +636,7 @@ Titles, snippets and status are historical locators, not current diagnosis.
 - [Investigation: Linux zero-libc pcc-Python process entry](../investigations/linux-zero-libc-python-start.md) — **resolved**
   - `_start` · `-> None` · `rather than` · `--target x86_64-unknown-linux-gnu` · `explicit_bzero` · `_start(ptr)`
 - [Investigation: list()/sum()/tuple()/set() consume DynType via len+getitem, silently yielding empty/wrong results for iterator-only objects (generators)](../investigations/sequence-builtins-len-getitem-not-iterator-protocol.md) — **active**
-  - `--backend self --python-libpython=off` · `for v in gen(): ...` · `py_obj_iter` · `py_obj_next` · `list_builtin_lowering._maybe_emit_list_builtin` · `py_obj_len(src)`
+  - `gateway-comparison-r.json` · `TaskScope._retire_child` · `vthread-frame-probe/{plain,quoted}.py` · `_receiver_class_name` · `{'scope': 'Scope'}` · `vthread-receiver-lldb.stdout`
 - [Investigation: list-indexed Thread.start fails under pthread runtime](../investigations/threading-list-index-start-failure.md) — **active**
   - `threading.Lock` · `threads[i].start()` · `RuntimeError: native Thread.start failed` · `PCC_WITH_THREADS=1` · `t.start()` · `, and`
 - [Investigation: list-indexed threading receivers miss native dispatch](../investigations/threading-list-index-native-dispatch.md) — **active**

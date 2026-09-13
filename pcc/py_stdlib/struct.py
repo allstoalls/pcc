@@ -81,13 +81,15 @@ def _parse_format(fmt: str):
         )
 
     fields = []
-    repeat = 0
+    repeat = -1
     while index < len(fmt):
         ch = fmt[index]
         index += 1
         if ch == " ":
             continue
         if ch >= "0" and ch <= "9":
+            if repeat < 0:
+                repeat = 0
             repeat = repeat * 10 + (ord(ch) - ord("0"))
             continue
         if ch not in _SIZES:
@@ -96,10 +98,10 @@ def _parse_format(fmt: str):
                     "struct format code " + repr(ch) + " is not owned yet"
                 )
             raise error("bad char in struct format: " + repr(ch))
-        count = repeat if repeat != 0 else 1
+        count = repeat if repeat >= 0 else 1
         fields.append((ch, count))
-        repeat = 0
-    if repeat != 0:
+        repeat = -1
+    if repeat >= 0:
         raise error("repeat count given without format specifier")
     return byteorder, fields
 
@@ -217,7 +219,7 @@ def _normalize_offset(buffer_len: int, offset: int) -> int:
     return offset
 
 
-def _build_plan(fields) -> list:
+def _build_plan(fields) -> list[tuple[int, int, int, int]]:
     """Resolve parsed fields into ``(kind, width, signed, count)`` rows."""
     plan = []
     for ch, count in fields:
@@ -235,7 +237,9 @@ def _build_plan(fields) -> list:
     return plan
 
 
-def _unpack_generic(byteorder: str, plan, raw, offset: int) -> tuple:
+def _unpack_generic(
+    byteorder: str, plan: list[tuple[int, int, int, int]], raw, offset: int
+) -> tuple:
     """Byte-slice decode shared by CPython and by big-endian layouts."""
     values = []
     cursor = offset
@@ -271,7 +275,9 @@ def _unpack_generic(byteorder: str, plan, raw, offset: int) -> tuple:
     return tuple(values)
 
 
-def _unpack_native_little(plan, raw, offset: int) -> tuple:
+def _unpack_native_little(
+    plan: list[tuple[int, int, int, int]], raw, offset: int
+) -> tuple:
     """Decode little-endian integer fields straight from a ``bytes`` payload.
 
     Only reached when pcc lowered ``pcc.unsafe`` for this module and the caller

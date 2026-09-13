@@ -395,7 +395,6 @@ class CallExpressionLoweringMixin:
                 name=self._fresh("method.dict.fallback.fn"),
             )
             self._emit_post_call_err_check(self._expr_span_or_none(expr))
-            args_owned = not self._is_starred_unpack(expr.args)
             args_tuple = self._emit_dynamic_call_args_tuple(expr.args)
             kwargs_obj = self._emit_dynamic_call_kwargs_object(
                 (),
@@ -407,8 +406,7 @@ class CallExpressionLoweringMixin:
                 [fn_val, args_tuple, kwargs_obj],
                 name=self._fresh("method.dict.fallback.call"),
             )
-            if args_owned:
-                self._gc_release(args_tuple)
+            self._gc_release(args_tuple)
             self._gc_release(fn_val)
             if not self.builder.block.is_terminated:
                 incoming.append((fallback_result, self.builder.block))
@@ -891,7 +889,6 @@ class CallExpressionLoweringMixin:
             kwargs_expr = None
             if kwdict_unpack is not None:
                 arg_exprs, kwargs_expr = kwdict_unpack
-            args_owned = not self._is_starred_unpack(arg_exprs)
             args_tuple = self._emit_dynamic_call_args_tuple(arg_exprs)
             kwargs_obj = self._emit_dynamic_call_kwargs_object(
                 expr.kwargs,
@@ -903,8 +900,7 @@ class CallExpressionLoweringMixin:
                 [fn_val, args_tuple, kwargs_obj],
                 name=self._fresh("obj.call"),
             )
-            if args_owned:
-                self._gc_release(args_tuple)
+            self._gc_release(args_tuple)
             if expr.kwargs:
                 self._gc_release(kwargs_obj)
             self._emit_post_call_err_check(self._expr_span_or_none(expr))
@@ -1678,7 +1674,21 @@ class CallExpressionLoweringMixin:
             if result is not None:
                 return result
         if name == "staticmethod" and len(expr.args) == 1 and not expr.kwargs:
-            return self._emit_expr_with_native_callable_values(expr.args[0])
+            value = self._emit_expr_with_native_callable_values(expr.args[0])
+            func_obj = marshal.marshal_to_object(
+                self.builder, self.module, self.runtime, value, expr.args[0].ty
+            )
+            result = self.builder.call(
+                self.runtime["py_staticmethod_new"], [func_obj],
+                name=self._fresh("staticmethod"),
+            )
+            self._emit_post_call_err_check(
+                None,
+                release_on_error=(func_obj,) if self._owned_release_needed(func_obj, expr.args[0]) else (),
+            )
+            self._gc_release_if_owned(func_obj, expr.args[0])
+            self._note_owned_object_value(result)
+            return result
         if name == "property" and 1 <= len(expr.args) <= 3 and not expr.kwargs:
             prop_args: list[ir.Value] = []
             for arg in expr.args:
@@ -2331,7 +2341,6 @@ class CallExpressionLoweringMixin:
             kwargs_expr = None
             if kwdict_unpack is not None:
                 arg_exprs, kwargs_expr = kwdict_unpack
-            args_owned = not self._is_starred_unpack(arg_exprs)
             args_tuple = self._emit_dynamic_call_args_tuple(arg_exprs)
             kwargs_obj = self._emit_dynamic_call_kwargs_object(
                 expr.kwargs,
@@ -2343,8 +2352,7 @@ class CallExpressionLoweringMixin:
                 [fn_val, args_tuple, kwargs_obj],
                 name=self._fresh(f"{name}.obj.call"),
             )
-            if args_owned:
-                self._gc_release(args_tuple)
+            self._gc_release(args_tuple)
             if expr.kwargs:
                 self._gc_release(kwargs_obj)
             self._emit_post_call_err_check(self._expr_span_or_none(expr))
@@ -2368,7 +2376,6 @@ class CallExpressionLoweringMixin:
                 kwargs_expr = None
                 if kwdict_unpack is not None:
                     arg_exprs, kwargs_expr = kwdict_unpack
-                args_owned = not self._is_starred_unpack(arg_exprs)
                 args_tuple = self._emit_dynamic_call_args_tuple(arg_exprs)
                 kwargs_obj = self._emit_dynamic_call_kwargs_object(
                     expr.kwargs,
@@ -2380,8 +2387,7 @@ class CallExpressionLoweringMixin:
                     [native_star_val, args_tuple, kwargs_obj],
                     name=self._fresh(f"{name}.native.star.call"),
                 )
-                if args_owned:
-                    self._gc_release(args_tuple)
+                self._gc_release(args_tuple)
                 if expr.kwargs:
                     self._gc_release(kwargs_obj)
                 self._gc_release(native_star_val)
@@ -2467,7 +2473,6 @@ class CallExpressionLoweringMixin:
                 kwargs_expr = None
                 if kwdict_unpack is not None:
                     arg_exprs, kwargs_expr = kwdict_unpack
-                args_owned = not self._is_starred_unpack(arg_exprs)
                 args_tuple = self._emit_dynamic_call_args_tuple(arg_exprs)
                 kwargs_obj = self._emit_dynamic_call_kwargs_object(
                     expr.kwargs,
@@ -2479,8 +2484,7 @@ class CallExpressionLoweringMixin:
                     [fn_val, args_tuple, kwargs_obj],
                     name=self._fresh(f"{name}.obj.call"),
                 )
-                if args_owned:
-                    self._gc_release(args_tuple)
+                self._gc_release(args_tuple)
                 if expr.kwargs:
                     self._gc_release(kwargs_obj)
                 self._emit_post_call_err_check(self._expr_span_or_none(expr))
@@ -2503,7 +2507,6 @@ class CallExpressionLoweringMixin:
             kwargs_expr = None
             if kwdict_unpack is not None:
                 arg_exprs, kwargs_expr = kwdict_unpack
-            args_owned = not self._is_starred_unpack(arg_exprs)
             args_tuple = self._emit_dynamic_call_args_tuple(arg_exprs)
             kwargs_obj = self._emit_dynamic_call_kwargs_object(
                 expr.kwargs,
@@ -2515,8 +2518,7 @@ class CallExpressionLoweringMixin:
                 [fn_val, args_tuple, kwargs_obj],
                 name=self._fresh(f"{name}.dyn.call"),
             )
-            if args_owned:
-                self._gc_release(args_tuple)
+            self._gc_release(args_tuple)
             if expr.kwargs:
                 self._gc_release(kwargs_obj)
             self._emit_post_call_err_check(self._expr_span_or_none(expr))

@@ -51,7 +51,7 @@ from .simplifycfg import _function_chunk_module, _module_context_for_function
 _BINOP_RE = re.compile(
     r"""
     ^(?P<indent>\s*)
-    %(?P<result>[\w\.]+)\s*=\s*
+    %(?P<result>[\w.$-]+)\s*=\s*
     (?P<op>add|sub|mul|shl|xor|and|or)
     (?P<flags>(?:\s+(?:nsw|nuw|exact|disjoint))*)
     \s+(?P<ty>i\d+)\s+
@@ -60,12 +60,12 @@ _BINOP_RE = re.compile(
     re.VERBOSE,
 )
 _ZEXT_CONST_RE = re.compile(
-    r"^(?P<indent>\s*)%(?P<result>[\w\.]+)\s*=\s*zext\s+i1\s+(?P<cond>true|false)\s+to\s+(?P<ty>i\d+)\s*$"
+    r"^(?P<indent>\s*)%(?P<result>[\w.$-]+)\s*=\s*zext\s+i1\s+(?P<cond>true|false)\s+to\s+(?P<ty>i\d+)\s*$"
 )
 _SEXT_CONST_RE = re.compile(
-    r"^(?P<indent>\s*)%(?P<result>[\w\.]+)\s*=\s*sext\s+i1\s+(?P<cond>true|false)\s+to\s+(?P<ty>i\d+)\s*$"
+    r"^(?P<indent>\s*)%(?P<result>[\w.$-]+)\s*=\s*sext\s+i1\s+(?P<cond>true|false)\s+to\s+(?P<ty>i\d+)\s*$"
 )
-_SSA_NAME_RE = re.compile(r"%([\w\.]+)\b")
+_SSA_NAME_RE = re.compile(r"%([\w.$-]+)")
 
 
 def _split_functions(ir_text: str) -> list[tuple[bool, str]]:

@@ -301,7 +301,7 @@ def _child_env(
     env = os.environ.copy()
     env.pop("LC_ALL", None)
     if python_ir_passes is None:
-        env.setdefault("PCC_PYTHON_IR_PASSES", "off")
+        env.setdefault("PCC_PYTHON_IR_PASSES", "default")
     else:
         env["PCC_PYTHON_IR_PASSES"] = str(python_ir_passes)
     if python_ir_pass_transport is not None:

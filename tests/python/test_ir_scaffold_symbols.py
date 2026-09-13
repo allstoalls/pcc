@@ -138,6 +138,24 @@ def test_constant_dynamic_int_uses_i64_scaffold_not_object_handle():
     assert "inttoptr i64 %value" not in body, body
 
 
+def test_values_constant_alias_reuses_constructor_and_class_lowering():
+    program = textwrap.dedent(
+        """
+        from pcc.llvm_capi import ir
+
+        def use_alias(ty, value: int):
+            constant = ir.values.Constant(ty, value)
+            return isinstance(constant, ir.values.Constant)
+        """
+    )
+    ir_text = _compile_to_ll(program, "sym_values_constant", mode="on")
+    body = _function_body(ir_text, "use_alias")
+    assert body is not None
+    assert "@user_pcc_llvm_capi_ir_scaffold_Constant_i64" in body
+    assert "@.class.pcc_llvm_capi_ir.Constant" in body
+    assert "@py_cpy_" not in body
+
+
 def test_constant_runtime_int_value_uses_i64_scaffold_not_object_handle():
     program = textwrap.dedent(
         """

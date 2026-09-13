@@ -21,10 +21,6 @@ def test_reserved_descriptor_tags_never_enter_instance_layout_dispatch():
         ),
         (
             "py_obj.c",
-            "|| tag >= PY_TYPE_USER) {",
-        ),
-        (
-            "py_obj.c",
             "|| tag >= PY_TYPE_USER",
         ),
         (
@@ -45,6 +41,10 @@ def test_reserved_descriptor_tags_never_enter_instance_layout_dispatch():
                     c_violations.append(f"{path.name}:{lineno}: {line.strip()}")
 
     py_allowed = {
+        # These preparation helpers share the refcount header-validity check;
+        # accepting a descriptor header does not access an instance layout.
+        ("py_obj.py", "_py_incref_prepare"),
+        ("py_obj.py", "_py_decref_prepare"),
         ("py_obj.py", "py_incref"),
         ("py_obj.py", "py_decref"),
         ("py_tuple.py", "_tuple_item_can_participate_in_cycle"),

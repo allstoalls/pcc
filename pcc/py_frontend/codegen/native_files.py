@@ -304,19 +304,12 @@ class NativeFilesLoweringMixin:
             [prefix_obj],
             name=self._fresh("tempfile.TemporaryDirectory"),
         )
-
-        slot = self.env.get(as_expr.ident)
-        if slot is None:
-            alloca = self._alloca_in_entry(_CSTR, name=f"{as_expr.ident}.addr")
-            self.env[as_expr.ident] = (alloca, _CSTR, StrType(name="str"))
-            slot = self.env[as_expr.ident]
-        self.builder.store(tmp_val, slot[0])
+        self._emit_post_call_err_check(stmt.span)
+        self._note_owned_object_value(tmp_val)
+        entered = self._gc_retain(tmp_val)
         if hasattr(self, "_cpy_env_flags"):
             self._cpy_env_flags.pop(as_expr.ident, None)
-
-        self._emit_stmts(stmt.body)
-        if not self._builder_block_is_terminated():
-            self.builder.call(self.runtime["py_tempdir_cleanup"], [tmp_val])
+        self._emit_native_context_body(stmt, tmp_val, entered, "py_tempdir_cleanup")
         return True
 
 

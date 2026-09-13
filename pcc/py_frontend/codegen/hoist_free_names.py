@@ -104,8 +104,11 @@ def compute_free_names(
     extend_names_once(module_names, excluded)
     if own_name is not None:
         append_name_once(module_names, own_name)
-    # ``fd.name`` is in scope for recursive self-calls.
-    append_name_once(module_names, fd.name)
+    # A recursive function name can instead be an enclosing lexical cell.
+    # The hoister excludes direct symbol recursion explicitly; such a cell
+    # must remain capturable, including when later rebound by the owner.
+    if not name_in(outer_scope_names, fd.name):
+        append_name_once(module_names, fd.name)
 
     from ..py_ast import TupleExpr as _TupleExpr
 

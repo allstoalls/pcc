@@ -7,8 +7,10 @@ from pcc.py_runtime.py.py_abi_constants import (
     PYOBJECTHEADER_FLAGS_OFFSET,
     PY_TYPE_CLASS,
     PY_TYPE_FUNC,
+    PY_TYPE_GEN,
     PY_TYPE_INSTANCE,
     PY_TYPE_INT,
+    PY_TYPE_STATICMETHOD,
     PY_TYPE_STR,
     PY_TYPE_USER_CLASS_START,
     PY_TYPE_WEAKREF,
@@ -60,6 +62,7 @@ py_decref = extern("py_decref", (c_ptr,), c_void)
 py_tuple_new = extern("py_tuple_new", (c_int64,), c_ptr)
 py_tuple_set_item = extern("py_tuple_set_item", (c_ptr, c_int64, c_ptr), c_void)
 py_func_call = extern("py_func_call", (c_ptr, c_ptr), c_ptr)
+py_gen_finalize = extern("py_gen_finalize", (c_ptr,), c_void)
 pcc_gc_alloc = extern("pcc_gc_alloc", (c_int64, c_int32, c_int32), c_ptr)
 strlen = extern("strlen", (c_ptr,), c_int64)
 pcc_runtime_log_event_code = extern("pcc_runtime_log_event_code", (c_int32, c_int32, c_int64, c_int64, c_ptr), c_void)
@@ -481,7 +484,7 @@ def py_builtin_callable(o):
     if is_tagged_int(o):
         return py_bool_from_bit(0)
     tag: int = load_i32(o, 8)
-    if tag == PY_TYPE_FUNC or tag == PY_TYPE_CLASS or tag == PY_TYPE_WEAKREF:
+    if tag == PY_TYPE_FUNC or tag == PY_TYPE_CLASS or tag == PY_TYPE_WEAKREF or tag == PY_TYPE_STATICMETHOD:
         return py_bool_from_bit(1)
     if tag == PY_TYPE_INSTANCE or tag >= PY_TYPE_USER_CLASS_START:
         cls = _load_instance_cls(o)
@@ -614,6 +617,9 @@ def py_user_del_dispatch(o) -> None:
     if is_tagged_int(o):
         return
     tag: int = load_i32(o, 8)
+    if tag == PY_TYPE_GEN:
+        py_gen_finalize(o)
+        return
     if tag != PY_TYPE_INSTANCE and tag < PY_TYPE_USER_CLASS_START:
         return
     if pcc_capi_is_cext_type_tag(tag) != 0:

@@ -379,11 +379,21 @@ class SetLoweringMixin:
             fn_name = (
                 "py_set_issubset" if name == "issubset" else "py_set_issuperset"
             )
+            if not self._owned_release_needed(recv, attr.obj):
+                recv = self._gc_retain(recv, name=self._fresh("set.predicate.receiver"))
+            self._gc_pin(recv)
+            other = self._emit_expr_with_cpy_operand_cleanup(
+                expr.args[0], (), pinned_pcc=((recv, True),), as_object=True,
+            )
             result = self.builder.call(
                 self.runtime[fn_name],
-                [recv, self._emit_as_object(expr.args[0])],
+                [recv, other],
                 name=self._fresh(f"set.{name}"),
             )
+            self._gc_release_if_owned(other, expr.args[0])
+            self._gc_unpin(recv)
+            self._gc_release(recv)
+            self._emit_post_call_err_check(expr.span)
             return self.builder.icmp_signed(
                 "!=",
                 result,
@@ -497,23 +507,29 @@ class SetLoweringMixin:
 
         - no args → empty ``py_set_new``.
         - literal list/tuple → allocate + add each element.
-        - dict-typed arg → the mapping's KEYS, like ``list(d)``.
-        - any other iterable (ListType / TupleType / DynType) →
-          materialise as PyObject*, iterate via the generic
-          ``py_obj_len`` + ``py_obj_getitem``, and add each element
-          to the set.
+        - non-literal arg → the runtime iterator protocol, including mapping
+          keys and generators, with the same behavior for every type hint.
         """
         if expr.args and not isinstance(expr.args[0], (ListExpr, TupleExpr)):
-            mapping = expr.args[0]
-            if isinstance(mapping.ty, DictType):
-                # ``set(d)`` / ``frozenset(d)`` iterate the mapping's keys.
-                # The generic loop below indexes positionally, and for a dict
-                # ``py_obj_getitem(d, i)`` is a KEY lookup for 0, 1, 2 …, so a
-                # string-keyed mapping silently produced an EMPTY set.  That
-                # is a wrong answer, not a fallback: inside pcc1's own backend
-                # it made `frozenset(managed_origins)` empty and disabled
-                # every managed-value reload the host compiler emits.
-                return self._materialize_dict_keys_view_set(mapping)
+            arg = expr.args[0]
+            src = self._emit_as_object(arg)
+            owned = self._owned_release_needed(src, arg)
+            self._gc_pin(src)
+            result = self.builder.call(
+                self.runtime["py_set_from_iterable"], [src],
+                name=self._fresh("set.from.iterable"),
+            )
+            self._emit_post_call_err_check(
+                expr.span, pinned_release_on_error=((src, owned),),
+            )
+            # Releasing a temporary iterator may run its finalizer. Keep the
+            # new set alive while balancing that argument's owner.
+            root = self._enter_container_temp_root(result, self._fresh("set.result"))
+            self._gc_unpin(src)
+            self._gc_release_if_owned(src, arg)
+            self._leave_container_temp_root(root)
+            self._note_owned_object_value(result)
+            return result
         new_set = self.builder.call(
             self.runtime["py_set_new"],
             [],
@@ -549,131 +565,8 @@ class SetLoweringMixin:
                 self._cpy_operand_cleanup_block = old_cpy_err
             self._leave_container_temp_root(root)
             return new_set
-        arg_ty = arg.ty
-        if isinstance(arg_ty, SetType):
-            src_val = self._emit_expr(arg)
-            self.builder.call(
-                self.runtime["py_set_update"],
-                [new_set, src_val],
-            )
-            self._emit_post_call_err_check(expr.span)
-            return new_set
-        if isinstance(arg_ty, ClassType):
-            # A user-class instance (custom __iter__/__next__, no __len__):
-            # build a list via the iterator protocol, then add each element to
-            # the set. Matches CPython set(x)/frozenset(x) via iter(x). Without
-            # this, set(<custom iterator>) forced the libpython fallback.
-            src_val = self._emit_expr(arg)
-            src_obj = marshal.marshal_to_object(
-                self.builder, self.module, self.runtime, src_val, arg_ty,
-            )
-            tmp_list = self.builder.call(
-                self.runtime["py_list_new"],
-                [ir.Constant(_I64, 0)],
-                name=self._fresh("set.iter.list"),
-            )
-            self._emit_list_append_via_iter(
-                tmp_list, src_obj, getattr(arg, "span", None),
-            )
-            fn = self.current_function
-            n_val = self.builder.call(
-                self.runtime["py_list_len"],
-                [tmp_list],
-                name=self._fresh("set.iter.len"),
-            )
-            idx_slot = self._alloca_in_entry(_I64, name="set.iter.idx.addr")
-            self.builder.store(ir.Constant(_I64, 0), idx_slot)
-            cond_bb = fn.append_basic_block(name=self._fresh("set.iter.cond"))
-            body_bb = fn.append_basic_block(name=self._fresh("set.iter.body"))
-            step_bb = fn.append_basic_block(name=self._fresh("set.iter.step"))
-            end_bb = fn.append_basic_block(name=self._fresh("set.iter.end"))
-            self.builder.branch(cond_bb)
-            self.builder.position_at_end(cond_bb)
-            cur = self.builder.load(idx_slot, name=self._fresh("set.iter.i"))
-            cond = self.builder.icmp_signed(
-                "<", cur, n_val, name=self._fresh("set.iter.i1"),
-            )
-            self.builder.cbranch(cond, body_bb, end_bb)
-            self.builder.position_at_end(body_bb)
-            elem = self.builder.call(
-                self.runtime["py_list_get"],
-                [tmp_list, cur],
-                name=self._fresh("set.iter.elem"),
-            )
-            self.builder.call(self.runtime["py_set_add"], [new_set, elem])
-            self._emit_post_call_err_check(expr.span)
-            self.builder.branch(step_bb)
-            self.builder.position_at_end(step_bb)
-            nxt = self.builder.add(
-                cur, ir.Constant(_I64, 1), name=self._fresh("set.iter.next"),
-            )
-            self.builder.store(nxt, idx_slot)
-            self.builder.branch(cond_bb)
-            self.builder.position_at_end(end_bb)
-            return new_set
-        if isinstance(
-            arg_ty,
-            (ListType, TupleType, SetType, DynType, StrType),
-        ):
-            src_val = self._emit_expr(arg)
-            src_obj = marshal.marshal_to_object(
-                self.builder,
-                self.module,
-                self.runtime,
-                src_val,
-                arg_ty,
-            )
-            fn = self.current_function
-            n_val = self.builder.call(
-                self.runtime["py_obj_len"],
-                [src_obj],
-                name=self._fresh("set.src.len"),
-            )
-            idx_slot = self._alloca_in_entry(_I64, name="set.idx.addr")
-            self.builder.store(ir.Constant(_I64, 0), idx_slot)
-            cond_bb = fn.append_basic_block(name=self._fresh("set.cond"))
-            body_bb = fn.append_basic_block(name=self._fresh("set.body"))
-            step_bb = fn.append_basic_block(name=self._fresh("set.step"))
-            end_bb = fn.append_basic_block(name=self._fresh("set.end"))
-            self.builder.branch(cond_bb)
-            self.builder.position_at_end(cond_bb)
-            cur = self.builder.load(idx_slot, name=self._fresh("set.idx"))
-            cond = self.builder.icmp_signed(
-                "<",
-                cur,
-                n_val,
-                name=self._fresh("set.cond.i1"),
-            )
-            self.builder.cbranch(cond, body_bb, end_bb)
-            self.builder.position_at_end(body_bb)
-            idx_box = self.builder.call(
-                self.runtime["py_int_from_i64"],
-                [cur],
-                name=self._fresh("set.idx.box"),
-            )
-            elem = self.builder.call(
-                self.runtime["py_obj_getitem"],
-                [src_obj, idx_box],
-                name=self._fresh("set.elem"),
-            )
-            self._emit_post_call_err_check(expr.span)
-            self.builder.call(
-                self.runtime["py_set_add"],
-                [new_set, elem],
-            )
-            self._emit_post_call_err_check(expr.span)
-            self.builder.branch(step_bb)
-            self.builder.position_at_end(step_bb)
-            nxt = self.builder.add(
-                cur,
-                ir.Constant(_I64, 1),
-                name=self._fresh("set.idx.next"),
-            )
-            self.builder.store(nxt, idx_slot)
-            self.builder.branch(cond_bb)
-            self.builder.position_at_end(end_bb)
-            return new_set
         return None
+
     def _emit_set_union_values(
         self,
         lhs: ir.Value,
@@ -690,67 +583,18 @@ class SetLoweringMixin:
         self._emit_post_call_err_check()
         return new_set
     def _spread_into_set(self, dst_set: ir.Value, src_expr: "Expr") -> None:
-        """Iterate ``src_expr`` and ``py_set_add`` each element to
-        ``dst_set``. Used to lower the set-literal splat element
-        ``{x, *iterable}`` (see ``_maybe_emit_set_builtin``)."""
-        src_val = self._emit_expr(src_expr)
-        if isinstance(src_expr.ty, SetType):
-            self.builder.call(self.runtime["py_set_update"], [dst_set, src_val])
-            self._emit_post_call_err_check(getattr(src_expr, "span", None))
-            return
-        src_obj = marshal.marshal_to_object(
-            self.builder,
-            self.module,
-            self.runtime,
-            src_val,
-            src_expr.ty,
+        """Update from the actual iterator protocol, independent of type hints."""
+        dst_root = self._enter_container_temp_root(dst_set, self._fresh("set.spread.dst"))
+        src = self._emit_expr_with_cpy_operand_cleanup(
+            src_expr, (), as_pcc_object=True,
+            rooted_pcc_lifetimes=((dst_root, False),),
         )
-        fn = self.current_function
-        n_val = self.builder.call(
-            self.runtime["py_obj_len"],
-            [src_obj],
-            name=self._fresh("set.spread.len"),
-        )
-        idx_slot = self._alloca_in_entry(_I64, name="set.spread.idx.addr")
-        self.builder.store(ir.Constant(_I64, 0), idx_slot)
-        cond_bb = fn.append_basic_block(name=self._fresh("set.spread.cond"))
-        body_bb = fn.append_basic_block(name=self._fresh("set.spread.body"))
-        step_bb = fn.append_basic_block(name=self._fresh("set.spread.step"))
-        end_bb = fn.append_basic_block(name=self._fresh("set.spread.end"))
-        self.builder.branch(cond_bb)
-        self.builder.position_at_end(cond_bb)
-        cur = self.builder.load(idx_slot, name=self._fresh("set.spread.idx"))
-        cond = self.builder.icmp_signed(
-            "<",
-            cur,
-            n_val,
-            name=self._fresh("set.spread.cond.i1"),
-        )
-        self.builder.cbranch(cond, body_bb, end_bb)
-        self.builder.position_at_end(body_bb)
-        idx_box = self.builder.call(
-            self.runtime["py_int_from_i64"],
-            [cur],
-            name=self._fresh("set.spread.idx.box"),
-        )
-        elem = self.builder.call(
-            self.runtime["py_obj_getitem"],
-            [src_obj, idx_box],
-            name=self._fresh("set.spread.elem"),
-        )
+        owned = self._owned_release_needed(src, src_expr)
+        src_root = self._enter_container_temp_root(src, self._fresh("set.spread.src"))
+        dst = self.builder.call(self.runtime["pcc_gc_load_ptr"],
+            [ir.Constant(_CSTR, None), self._as_gc_ptr(dst_root)])
+        src = self.builder.call(self.runtime["pcc_gc_load_ptr"],
+            [ir.Constant(_CSTR, None), self._as_gc_ptr(src_root)])
+        self.builder.call(self.runtime["py_set_update"], [dst, src])
+        self._release_rooted_pcc_lifetimes(((dst_root, False), (src_root, owned)))
         self._emit_post_call_err_check(getattr(src_expr, "span", None))
-        self.builder.call(
-            self.runtime["py_set_add"],
-            [dst_set, elem],
-        )
-        self._emit_post_call_err_check(getattr(src_expr, "span", None))
-        self.builder.branch(step_bb)
-        self.builder.position_at_end(step_bb)
-        nxt = self.builder.add(
-            cur,
-            ir.Constant(_I64, 1),
-            name=self._fresh("set.spread.idx.next"),
-        )
-        self.builder.store(nxt, idx_slot)
-        self.builder.branch(cond_bb)
-        self.builder.position_at_end(end_bb)

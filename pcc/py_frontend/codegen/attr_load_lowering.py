@@ -484,89 +484,19 @@ class AttrLoadLoweringMixin:
         method_fn: ir.Function,
         cache: bool = True,
     ) -> ir.Value:
-        ast_fd = self.class_lowering._find_method_def(owner_info.name, method_name)
-        runtime_args = tuple(a for a in ast_fd.args if a.name != "") if ast_fd else ()
-        adapter_name = (
-            f"user_{(self.ast_module.name or 'mod').replace('.', '_')}"
-            f"_{owner_info.name}_{method_name}_staticmethod_attr_adapter"
+        # The class namespace owns the function behind the staticmethod
+        # descriptor. Reusing it preserves identity and the normal signature
+        # binder for positional arguments, defaults and keyword arguments.
+        cls = self.class_lowering._load_class_object(
+            owner_info, self._fresh("staticmethod.class")
         )
-        existing = self.module.globals.get(adapter_name)
-        if isinstance(existing, ir.Function):
-            adapter = existing
-        else:
-            adapter_ty = ir.FunctionType(_CSTR, [_CSTR, _CSTR])
-            adapter = ir.Function(self.module, adapter_ty, name=adapter_name)
-            adapter.linkage = "internal"
-            saved_builder = self.builder
-            entry = adapter.append_basic_block(name="entry")
-            self.builder = ir.IRBuilder(entry)
-
-            forwarded: list[ir.Value] = []
-            for i, ast_arg in enumerate(runtime_args):
-                arg_obj = self.builder.call(
-                    self.runtime["py_tuple_get"],
-                    [adapter.args[1], ir.Constant(_I64, i)],
-                    name=f"arg.{i}",
-                )
-                param_ir_ty = method_fn.args[i].type
-                target_ty = ast_arg.annotation or DynType(name="dyn")
-                if isinstance(param_ir_ty, ir.PointerType):
-                    forwarded.append(arg_obj)
-                else:
-                    forwarded.append(
-                        marshal.marshal_from_object(
-                            self.builder,
-                            self.module,
-                            self.runtime,
-                            arg_obj,
-                            target_ty,
-                        )
-                    )
-
-            ret_ty = method_fn.function_type.return_type
-            if isinstance(ret_ty, ir.VoidType):
-                self.builder.call(method_fn, forwarded)
-                none_gv = declare_runtime_global(self.module, "py_None")
-                self.builder.ret(self.builder.load(none_gv, name="none"))
-            else:
-                result = self.builder.call(method_fn, forwarded, name="result")
-                if isinstance(ret_ty, ir.PointerType):
-                    self.builder.ret(result)
-                else:
-                    boxed = marshal.marshal_to_object(
-                        self.builder,
-                        self.module,
-                        self.runtime,
-                        result,
-                        ast_fd.return_ty if ast_fd is not None else DynType(name="dyn"),
-                    )
-                    self.builder.ret(boxed)
-            self.builder = saved_builder
-
-        if cache:
-            cache_name = (
-                f"user_{(self.ast_module.name or 'mod').replace('.', '_')}"
-                f"_{owner_info.name}_{method_name}_staticmethod_attr_value_cache"
-            )
-            return self._emit_cached_zero_capture_func_value(
-                adapter,
-                cache_name,
-                f"bound.{method_name}.staticmethod.func",
-                method_name,
-            )
-
-        captures = self.builder.call(
-            self.runtime["py_tuple_new"],
-            [ir.Constant(_I64, 0)],
-            name=self._fresh("bound.staticmethod.captures"),
+        value = self.builder.call(
+            self.runtime["py_class_getattr"], [cls, self._attr_name_ptr(method_name)],
+            name=self._fresh("staticmethod.value"),
         )
-        fn_obj = self.builder.call(
-            self.runtime["py_func_new_named"],
-            [adapter, captures, self._attr_name_ptr(method_name)],
-            name=self._fresh(f"bound.{method_name}.staticmethod.func"),
-        )
-        self._gc_release(captures)
-        return fn_obj
+        self._emit_post_call_err_check(None)
+        self._note_owned_object_value(value)
+        return value
 
     def _emit_unbound_instance_method_value(
         self,
@@ -1093,15 +1023,17 @@ class AttrLoadLoweringMixin:
             # silently failing. For cpy args fall through to the cpy Call-receiver
             # branch below, which routes ``type(a).__name__`` via libpython
             # (``py_cpy_getattr`` on the real type object). Inert in no-libpython.
-            type_name = self._static_runtime_type_name(expr.obj.args[0].ty)
-            if type_name is not None:
-                return self._emit_str_literal(type_name)
+            # Inference is not an exact runtime-type proof. Folding from it
+            # also drops evaluation of calls such as type(produce()).__name__.
             obj_val = self._emit_expr_as_pcc_object(expr.obj.args[0])
-            return self.builder.call(
+            result = self.builder.call(
                 self.runtime["py_obj_type_name"],
                 [obj_val],
                 name=self._fresh("type.name"),
             )
+            self._note_owned_dynamic_call_value(result)
+            self._gc_release_if_owned(obj_val, expr.obj.args[0])
+            return result
         module_object_export = self._native_module_object_export_info(
             expr.obj,
             expr.name,

@@ -50,6 +50,11 @@ py_clear_exception   = extern("py_clear_exception",   (), c_void)
 py_exc_builtin_class = extern("py_exc_builtin_class", (c_int64,), c_ptr)
 py_exc_matches       = extern("py_exc_matches",       (c_ptr, c_ptr), c_int64)
 py_gc_track          = extern("py_gc_track",          (c_ptr,),         c_void)
+py_weakref_invalidate = extern("py_weakref_invalidate", (c_ptr,), c_void)
+pcc_gc_pin = extern("pcc_gc_pin", (c_ptr,), c_void)
+pcc_gc_unpin = extern("pcc_gc_unpin", (c_ptr,), c_void)
+pcc_refcount_incref = extern("pcc_refcount_incref", (c_ptr,), c_int64)
+pcc_refcount_decref = extern("pcc_refcount_decref", (c_ptr,), c_int64)
 pcc_gc_publish_initialized = extern(
     "pcc_gc_publish_initialized", (c_ptr,), c_void
 )
@@ -220,6 +225,56 @@ def py_dealloc_gen(o) -> None:
     if not ptr_is_null(send_value):
         py_decref(send_value)
     pcc_gc_free_object_memory(o)
+
+
+@c_abi_export("py_gen_finalize")
+def py_gen_finalize(gen) -> None:
+    # An unstarted generator has not entered its try/finally body.
+    if ptr_is_null(gen) or load_i64(gen, 40) != 0 or load_i64(gen, 32) == 0:
+        return
+    flags: int = load_i32(gen, 12)
+    if (flags & 4) != 0:
+        return
+    store_i32(gen, 12, flags | 4)
+    py_incref(gen)
+    pcc_gc_pin(gen)
+    py_weakref_invalidate(gen)
+    saved = py_current_exception()
+    if ptr_is_null(saved) == 0:
+        py_incref(saved)
+        pcc_gc_pin(saved)
+    py_clear_exception()
+    closed = py_gen_close(gen)
+    if ptr_is_null(closed) == 0:
+        py_decref(closed)
+    # As with __del__, a cleanup error must not replace the caller's error.
+    # Reporting finalizer errors through the unraisable channel remains a
+    # shared diagnostics boundary.
+    py_clear_exception()
+    if ptr_is_null(saved) == 0:
+        py_raise(saved)
+        pcc_gc_unpin(saved)
+        py_decref(saved)
+    pcc_gc_unpin(gen)
+    py_decref(gen)
+
+
+@c_abi_export("py_gen_finalize_from_dealloc")
+def py_gen_finalize_from_dealloc(gen) -> int:
+    if load_i64(gen, 40) != 0 or load_i64(gen, 32) == 0 or (load_i32(gen, 12) & 4) != 0:
+        return 0
+    # Keep a guard owner while close() borrows the zero-refcount generator.
+    # Drop the guard with the shared counter primitive, avoiding recursive
+    # deallocation before the outer terminal-refcount path has resumed.
+    store_i32(gen, 12, load_i32(gen, 12) & ~524288)
+    pcc_refcount_incref(gen)
+    py_gen_finalize(gen)
+    remaining: int = pcc_refcount_decref(gen)
+    if remaining > 0:
+        py_gc_track(gen)
+        return 1
+    store_i32(gen, 12, load_i32(gen, 12) | 524288)
+    return 0
 
 
 def _checked_gen(gen):

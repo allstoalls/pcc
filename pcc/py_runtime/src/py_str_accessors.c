@@ -384,6 +384,41 @@ int64_t py_str_rfind_range(PyObject *s, PyObject *sub,
     return byte_offset_to_cp_offset(ss, start_byte + bo);
 }
 
+static int64_t str_tailmatch_one(PyObject *s, PyObject *needle,
+                                 int64_t start, int64_t end, int64_t suffix) {
+    if (needle == NULL || py_type_of(needle) != PY_TYPE_STR) {
+        py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "prefix or suffix must be str"));
+        return -1;
+    }
+    PyStrObject *text = (PyStrObject *)s;
+    PyStrObject *part = (PyStrObject *)needle;
+    int64_t length = str_cp_len(text);
+    str_find_adjust_indices(length, &start, &end);
+    if (start > length || end < start) return 0;
+    int64_t lo = utf8_byte_offset_for_codepoint(text, start);
+    int64_t hi = utf8_byte_offset_for_codepoint(text, end);
+    if (part->byte_len > hi - lo) return 0;
+    if (suffix) lo = hi - part->byte_len;
+    return memcmp(text->data + lo, part->data, (size_t)part->byte_len) == 0;
+}
+
+int64_t py_str_tailmatch_range(PyObject *s, PyObject *needle,
+                               int64_t start, int64_t end, int64_t suffix) {
+    if (s == NULL || py_type_of(s) != PY_TYPE_STR) {
+        py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "prefix/suffix receiver must be str"));
+        return -1;
+    }
+    if (needle != NULL && py_type_of(needle) == PY_TYPE_TUPLE) {
+        PyTupleObject *items = (PyTupleObject *)needle;
+        for (int64_t index = 0; index < items->len; index++) {
+            int64_t result = str_tailmatch_one(s, items->items[index], start, end, suffix);
+            if (result != 0) return result;
+        }
+        return 0;
+    }
+    return str_tailmatch_one(s, needle, start, end, suffix);
+}
+
 int64_t py_str_startswith(PyObject *s, PyObject *prefix) {
     if (s == NULL || prefix == NULL) return 0;
     if (py_type_of(prefix) == PY_TYPE_TUPLE) {

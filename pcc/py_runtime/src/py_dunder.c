@@ -190,7 +190,8 @@ PyObject *py_builtin_callable(PyObject *o) {
     if (o == NULL) return py_bool_from_bit(0);
     if (PY_IS_TAGGED_INT(o)) return py_bool_from_bit(0);
     int32_t tag = py_header(o)->type_tag;
-    if (tag == PY_TYPE_FUNC || tag == PY_TYPE_CLASS || tag == PY_TYPE_WEAKREF) {
+    if (tag == PY_TYPE_FUNC || tag == PY_TYPE_CLASS || tag == PY_TYPE_WEAKREF
+        || tag == PY_TYPE_STATICMETHOD) {
         return py_bool_from_bit(1);
     }
     if (tag == PY_TYPE_INSTANCE || tag >= PY_TYPE_USER_CLASS_START) {
@@ -388,6 +389,10 @@ void py_user_del_dispatch(PyObject *o) {
     if (o == NULL || PY_IS_TAGGED_INT(o)) return;
     PyObjectHeader *h = py_header(o);
     int32_t tag = h->type_tag;
+    if (tag == PY_TYPE_GEN) {
+        py_gen_finalize(o);
+        return;
+    }
     if (tag != PY_TYPE_INSTANCE && tag < PY_TYPE_USER_CLASS_START) return;
     if (pcc_capi_is_cext_type_tag((int64_t)tag) != 0) return;
     /* No class ever defined __del__: the MRO lookup cannot find one.  Mirrors

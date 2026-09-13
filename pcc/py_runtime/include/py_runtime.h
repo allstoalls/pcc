@@ -917,6 +917,9 @@ PyObject *py_str_replace(PyObject *s, PyObject *old, PyObject *replacement);
 PyObject *py_str_replace_count(PyObject *s, PyObject *old, PyObject *replacement, int64_t maxreplace);
 int64_t   py_str_startswith(PyObject *s, PyObject *prefix);
 int64_t   py_str_endswith(PyObject *s, PyObject *suffix);
+int64_t   py_str_tailmatch_range(PyObject *s, PyObject *needle,
+                                int64_t start, int64_t end, int64_t suffix);
+PyObject *py_re_finditer_flags(PyObject *pattern, PyObject *text, int64_t flags);
 PyObject *py_chr_from_i64(int64_t codepoint);
 PyObject *py_json_loads(PyObject *text);
 PyObject *py_json_dumps(PyObject *obj);
@@ -963,6 +966,7 @@ void      py_list_reverse(PyObject *lst);
 
 /* ---- Dict -------------------------------------------------------------- */
 PyObject *py_dict_new(void);
+PyObject *py_dict_new_presized(int64_t expected_items);
 void      py_dict_set(PyObject *d, PyObject *k, PyObject *v);
 PyObject *py_dict_get(PyObject *d, PyObject *k);     /* new ref; NULL if missing */
 PyObject *py_dict_getitem(PyObject *d, PyObject *k); /* d[k]; KeyError if missing */
@@ -986,6 +990,7 @@ void      py_dict_update(PyObject *dst, PyObject *src);
 
 /* ---- Tuple ------------------------------------------------------------- */
 PyObject *py_tuple_new(int64_t n);
+PyObject *py_tuple_from_static_items(PyObject *const *items, int64_t count);
 PyObject *py_tuple_from_list(PyObject *lst);         /* new tuple from list elems */
 PyObject *py_tuple_from_splat(PyObject *seq);        /* new tuple from tuple/list/len+getitem seq */
 void      py_tuple_set_item(PyObject *t, int64_t i, PyObject *item); /* during construction only */
@@ -1001,6 +1006,7 @@ PyObject *py_tuple_slice(PyObject *t, PyObject *lo, PyObject *hi, PyObject *step
 
 /* ---- Set --------------------------------------------------------------- */
 PyObject *py_set_new(void);
+PyObject *py_set_from_iterable(PyObject *src);
 void      py_set_add(PyObject *s, PyObject *item);
 void      py_set_update(PyObject *dst, PyObject *src);
 PyObject *py_set_intersection(PyObject *a, PyObject *b);
@@ -1020,6 +1026,8 @@ PyObject *py_set_pop(PyObject *s);                   /* set.pop(); KeyError if e
  * pcc-Python port (py_set.py) emits under pcc's default `int` lowering
  * without a type mismatch. */
 int64_t   py_set_contains(PyObject *s, PyObject *item);
+int64_t   py_set_contains_hash(PyObject *s, PyObject *item, int64_t hash);
+void      py_set_add_hash(PyObject *s, PyObject *item, int64_t hash);
 /* Removes item; returns 0 on success, -1 if item not present. */
 int64_t   py_set_remove(PyObject *s, PyObject *item);
 int64_t   py_set_len(PyObject *s);
@@ -1062,6 +1070,9 @@ PyObject *py_obj_subscript_i64(PyObject *o, int64_t idx);
 int64_t   py_obj_setitem(PyObject *o, PyObject *k, PyObject *v);
 int64_t   py_obj_setitem_i64(PyObject *o, int64_t idx, PyObject *v);
 int64_t   py_obj_delitem(PyObject *o, PyObject *k);
+/* User syntax wrappers retain the primitive status APIs above. */
+int64_t   py_obj_assign_subscript(PyObject *o, PyObject *k, PyObject *v);
+int64_t   py_obj_delete_subscript(PyObject *o, PyObject *k);
 int64_t   py_obj_len(PyObject *o);
 int64_t   py_obj_contains(PyObject *container, PyObject *item);
 PyObject *py_str_splitlines(PyObject *s);
@@ -1113,6 +1124,7 @@ int64_t   py_obj_gt(PyObject *a, PyObject *b);
 int64_t   py_obj_ge(PyObject *a, PyObject *b);
 int64_t   py_obj_hash(PyObject *o);
 int64_t   py_obj_index_i64(PyObject *o);
+int64_t   py_index_i64_checked(PyObject *o);
 int64_t   py_slice_index_i64(PyObject *o, int64_t default_value);
 PyObject *py_obj_repr(PyObject *o);
 PyObject *py_obj_ascii(PyObject *o);
@@ -1202,6 +1214,7 @@ PyObject *py_functools_partial_kw(PyObject *fn, PyObject *bound_args, PyObject *
 PyObject *py_instance_bind_method(PyObject *method, PyObject *self, const char *name);
 PyObject *py_property_new(PyObject *fget, PyObject *fset, PyObject *fdel);
 PyObject *py_classmethod_new(PyObject *func);
+PyObject *py_staticmethod_new(PyObject *func);
 PyObject *py_slice_new(PyObject *start, PyObject *stop, PyObject *step);
 /* isinstance(x, slice): 1 if x is a slice instance, else 0. */
 int64_t   py_obj_is_slice(PyObject *o);
@@ -1225,6 +1238,8 @@ PyObject *py_gen_next(PyObject *gen);
 PyObject *py_gen_send(PyObject *gen, PyObject *value);
 PyObject *py_gen_throw(PyObject *gen, PyObject *exc);
 PyObject *py_gen_close(PyObject *gen);
+void      py_gen_finalize(PyObject *gen);
+int64_t   py_gen_finalize_from_dealloc(PyObject *gen);
 int64_t   py_gen_close_preserving_exception(PyObject *gen);
 PyObject *py_gen_take_send(PyObject *gen);
 int64_t   py_gen_state(PyObject *gen);
@@ -1609,6 +1624,12 @@ int32_t     py_os_write(int32_t fd, PyObject *data);
 int64_t     py_http_download_to_file(PyObject *url, PyObject *dest_path);
 PyObject   *py_sha256_file_hex(PyObject *path);
 PyObject   *py_sha256_file_hex_bounded(PyObject *path, int64_t max_bytes);
+PyObject   *py_sha256_bytes_digest(PyObject *data);
+const char *py_bytes_data_ptr(PyObject *data);
+/* Private hashlib ABI: immutable 144-byte state, bytes input, owned results. */
+PyObject   *py_sha256_state_new(void);
+PyObject   *py_sha256_state_update(PyObject *state, PyObject *data);
+PyObject   *py_sha256_state_digest(PyObject *state);
 
 /* ---- Exceptions (Phase 3) --------------------------------------------- */
 

@@ -131,7 +131,7 @@ static int py_dict_alloc_tables(PyDictObject *d, int64_t capacity) {
     return 0;
 }
 
-PyObject *py_dict_new(void) {
+static PyObject *py_dict_new_with_capacity(int64_t capacity) {
     PyDictObject *d = (PyDictObject *)pcc_gc_alloc(
         (int64_t)sizeof(PyDictObject), PY_TYPE_DICT, 0
     );
@@ -141,13 +141,24 @@ PyObject *py_dict_new(void) {
     d->capacity     = 0;
     d->size         = 0;
     d->entries_used = 0;
-    if (py_dict_alloc_tables(d, PY_DICT_INITIAL_CAPACITY) != 0) {
+    if (py_dict_alloc_tables(d, capacity) != 0) {
         py_decref((PyObject *)d);
         return NULL;
     }
     py_gc_track((PyObject *)d);
     pcc_gc_publish_initialized((PyObject *)d);
     return (PyObject *)d;
+}
+
+PyObject *py_dict_new(void) {
+    return py_dict_new_with_capacity(PY_DICT_INITIAL_CAPACITY);
+}
+
+PyObject *py_dict_new_presized(int64_t expected_items) {
+    if (expected_items > INT64_C(0x10000000000000)) return NULL;
+    int64_t capacity = 4;
+    while (expected_items > capacity * 2 / 3) capacity *= 2;
+    return py_dict_new_with_capacity(capacity);
 }
 
 /* ---- Probing ---------------------------------------------------------- */

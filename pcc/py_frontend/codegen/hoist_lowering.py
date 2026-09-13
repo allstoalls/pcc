@@ -135,7 +135,7 @@ from .hoist_analysis import (
     update_name_map,
     write_hoist_profile,
 )
-from .hoist_boxing import box_outer_body
+from .hoist_boxing import box_outer_body, collect_scope_bindings, function_boxed_names, scope_declared_names
 from .hoist_free_names import compute_free_names as analyze_free_names
 from .hoist_predicates import (
     body_has_yield,
@@ -255,6 +255,10 @@ class _HoistLoweringPass:
             )
             return hoisted
         compute_free_names_cache = {}
+        boxed_function_defs = {}
+
+        def function_binds_cell(fd):
+            return boxed_function_defs.get(id(fd)) is fd
 
         module_scope_names_base_items = []
 
@@ -334,38 +338,7 @@ class _HoistLoweringPass:
 
         def mutable_captures_in_fd(fd, excluded):
             free = analyze_names(fd, excluded)
-            mutated = []
-
-            def collect_declared_nonlocals(stmts):
-                for stmt in stmts:
-                    if isinstance(stmt, _NL):
-                        extend_names_once(mutated, stmt.names)
-                        continue
-                    if isinstance(stmt, _If):
-                        collect_declared_nonlocals(stmt.body)
-                        collect_declared_nonlocals(stmt.else_body)
-                        continue
-                    if isinstance(stmt, _For):
-                        collect_declared_nonlocals(stmt.body)
-                        collect_declared_nonlocals(stmt.else_body)
-                        continue
-                    if isinstance(stmt, _While):
-                        collect_declared_nonlocals(stmt.body)
-                        collect_declared_nonlocals(stmt.else_body)
-                        continue
-                    if isinstance(stmt, _With):
-                        collect_declared_nonlocals(stmt.body)
-                        continue
-                    if isinstance(stmt, _Try):
-                        collect_declared_nonlocals(stmt.body)
-                        collect_declared_nonlocals(stmt.else_body)
-                        collect_declared_nonlocals(stmt.finally_body)
-                        for handler in stmt.handlers:
-                            collect_declared_nonlocals(
-                                _dataclass_field_value(handler, "body", ())
-                            )
-
-            collect_declared_nonlocals(fd.body)
+            mutated = list(scope_declared_names(fd.body, False, True))
             if not free and not mutated:
                 return ()
 
@@ -476,77 +449,6 @@ class _HoistLoweringPass:
         def body_reads_free_names(fd, excluded):
             return bool(analyze_names(fd, excluded))
 
-        def collect_scope_bindings(stmts):
-            """Return names bound somewhere in the current lexical scope."""
-            from ..py_ast import (
-                Import as _ImportStmt,
-                ImportFrom as _ImportFromStmt,
-                TupleExpr as _TupleExpr,
-            )
-
-            bindings = []
-
-            def add_target_names(t):
-                if isinstance(t, _Name):
-                    append_name_once(bindings, t.ident)
-                elif (
-                    isinstance(t, _Call)
-                    and isinstance(t.func, _Name)
-                    and t.func.ident in ("*", "__starred__")
-                    and t.args
-                ):
-                    add_target_names(t.args[0])
-                elif isinstance(t, _TupleExpr):
-                    for e in t.elems:
-                        add_target_names(e)
-
-            def walk(stmts):
-                for s in stmts:
-                    if isinstance(s, _Assign):
-                        for t in s.targets:
-                            add_target_names(t)
-                    elif isinstance(s, _For):
-                        add_target_names(s.target)
-                        walk(s.body)
-                        walk(s.else_body)
-                    elif isinstance(s, _If):
-                        walk(s.body)
-                        walk(s.else_body)
-                    elif isinstance(s, _While):
-                        walk(s.body)
-                        walk(s.else_body)
-                    elif isinstance(s, _With):
-                        for _, as_var in s.items:
-                            if as_var is not None:
-                                add_target_names(as_var)
-                        walk(s.body)
-                    elif isinstance(s, _Try):
-                        walk(s.body)
-                        walk(s.else_body)
-                        walk(s.finally_body)
-                        for h in s.handlers:
-                            handler_name = _dataclass_field_value(h, "name", "")
-                            if handler_name:
-                                append_name_once(bindings, handler_name)
-                            walk(_dataclass_field_value(h, "body", ()))
-                    elif isinstance(s, _ImportStmt):
-                        for mod_name, asname in s.names:
-                            bound = asname or mod_name.split(".", 1)[0]
-                            if bound:
-                                append_name_once(bindings, bound)
-                    elif _is_import_from_stmt(s):
-                        for imported_name, asname in _import_names_from_stmt(s):
-                            if imported_name == "*":
-                                continue
-                            append_name_once(
-                                bindings,
-                                asname or imported_name,
-                            )
-                    elif isinstance(s, (_FuncDef, _ClassDef)):
-                        append_name_once(bindings, s.name)
-
-            walk(stmts)
-            return tuple(bindings)
 
         def rewrite_body(
             stmts,
@@ -569,7 +471,10 @@ class _HoistLoweringPass:
             # inserted when the main loop reaches it.
             prescan_map = copy_name_map(rename_map)
             for st in stmts:
-                if isinstance(st, _FuncDef) and st.name not in prescan_map:
+                if (
+                    isinstance(st, _FuncDef) and st.name not in prescan_map
+                    and not function_binds_cell(st)
+                ):
                     # Placeholder value — actual hoisted name assigned
                     # during the hoist branch below. Existence in the
                     # map is what ``compute_free_names``' excluded
@@ -578,7 +483,7 @@ class _HoistLoweringPass:
             _hoist_log(debug_hoist, mod_name, "rewrite_body prescan done")
             sibling_names = []
             for st in stmts:
-                if isinstance(st, _FuncDef):
+                if isinstance(st, _FuncDef) and not function_binds_cell(st):
                     append_name_once(sibling_names, st.name)
 
             def filter_sibling_capture_names(names, current_sibling_names):
@@ -593,6 +498,8 @@ class _HoistLoweringPass:
                 for name in names:
                     discard = False
                     for key, mapped in rename_map.items():
+                        if isinstance(mapped, str) and mapped.startswith("__pcc_closure_value_"):
+                            continue
                         mapped_name = mapped[0] if isinstance(mapped, tuple) else mapped
                         if name == key or name == mapped_name:
                             discard = True
@@ -1042,7 +949,7 @@ class _HoistLoweringPass:
                     continue
                 effective_free_names[st.name] = sibling_effective_free_names(
                     st,
-                    (st.name,),
+                    () if function_binds_cell(st) else (st.name,),
                 )
             _hoist_log(debug_hoist, mod_name, "rewrite_body effective seed done")
             # Fixed-point propagation for sibling nested functions.
@@ -1315,50 +1222,15 @@ class _HoistLoweringPass:
                     # runtime — slower than the compile-time class
                     # layout path but correct, and good enough to
                     # unblock solo-compile on the affected files.
-                    # First-class nested function values need adapter-wrap
-                    # metadata when they capture outer values. The function
-                    # itself must still be hoisted in every case; leaving a
-                    # FuncDef in statement position creates no runtime local.
-                    if body_uses_name_as_value(stmts, st.name):
-                        runtime_params = []
-                        for a in st.args:
-                            if a.name != "":
-                                runtime_params.append(a)
-                        excluded_pre = []
-                        for k, v in prescan_map.items():
-                            append_name_once(excluded_pre, k)
-                            if isinstance(v, tuple):
-                                append_name_once(excluded_pre, v[0])
-                            else:
-                                append_name_once(excluded_pre, v)
-                        has_free = bool(
-                            effective_free_names.get(
-                                st.name,
-                                analyze_names(
-                                    st,
-                                    excluded_pre,
-                                    outer_scope_names=scope_names,
-                                ),
-                            )
-                        )
-                        if has_free:
-                            # Track this nested def for adapter-wrap at
-                            # value-position ``_emit_name``. The
-                            # hoisted function carries captures as
-                            # trailing kwarg params; the adapter
-                            # synthesized at value position reads those
-                            # captures from per-name internal globals
-                            # (populated at wrap time in the outer
-                            # scope) and calls the full-arity hoisted
-                            # version.
-                            # Actual capture list is computed further
-                            # below once ``free_names`` is resolved;
-                            # seed here with empty and patch later.
-                            hoist_wrap_caps[st.name] = {
-                                "original_arity": len(runtime_params),
-                                "free_names": (),
-                                "hoisted_name": None,
-                            }
+                    binds_cell = function_binds_cell(st)
+                    needs_binding = binds_cell or body_uses_name_as_value(stmts, st.name)
+                    if needs_binding:
+                        # Filled with the final symbol and captures below.
+                        hoist_wrap_caps[st.name] = {
+                            "original_arity": sum(1 for a in st.args if a.name != ""),
+                            "free_names": (),
+                            "hoisted_name": None,
+                        }
                     # Mutable-capture path: if the nested def mutates
                     # a free variable (``nonlocal X; X += 1`` pattern),
                     # the outer body has already been preprocessed by
@@ -1409,8 +1281,19 @@ class _HoistLoweringPass:
                         final_name = f"{hoist_name}_{suffix}"
                     free_names = filter_self_capture_names(
                         free_names,
-                        st.name,
+                        "" if binds_cell else st.name,
                         final_name,
+                    )
+                    # Each lexical owner creates its own cells. Captured
+                    # parameters of nested factories need entry-time boxing
+                    # under the hoisted function name used by codegen.
+                    inner_source_body = box_outer_body(
+                        st.body,
+                        final_name,
+                        tuple(a.name for a in st.args if a.name != ""),
+                        function_boxed_names(st, boxed_capture_names(st.body)),
+                        closure_boxed_params,
+                        boxed_function_defs,
                     )
                     while True:
                         # Closure conversion: prepend the free vars as
@@ -1456,17 +1339,18 @@ class _HoistLoweringPass:
                         # the free vars as trailing positional args.
                         inner_map = copy_name_map(prescan_map)
                         update_name_map(inner_map, rename_map)
-                        inner_map[st.name] = (final_name, free_names)
+                        if not binds_cell:
+                            inner_map[st.name] = (final_name, free_names)
                         inner_scope = copy_names(scope_names)
                         for a in st.args:
                             if a.name != "":
                                 append_name_once(inner_scope, a.name)
                         extend_names_once(
                             inner_scope,
-                            collect_scope_bindings(st.body),
+                            collect_scope_bindings(inner_source_body),
                         )
                         inner_body = rewrite_body(
-                            st.body,
+                            inner_source_body,
                             inner_map,
                             inner_scope,
                             enclosing_class_name,
@@ -1523,7 +1407,7 @@ class _HoistLoweringPass:
                         widened = tuple(sorted(widened_names))
                         widened = filter_self_capture_names(
                             widened,
-                            st.name,
+                            "" if binds_cell else st.name,
                             final_name,
                         )
                         widened = filter_sibling_capture_names(
@@ -1561,8 +1445,34 @@ class _HoistLoweringPass:
                         inner_body,
                     )
                     hoisted.append(hoisted_fd)
-                    rename_map[st.name] = (final_name, free_names)
-                    # Drop the original def from the current body.
+                    if binds_cell:
+                        new_stmts.append(_Assign(
+                            span=st.span,
+                            targets=(_Subscript(
+                                span=st.span, ty=_DYN,
+                                obj=_Name(span=st.span, ty=_DYN, ident=st.name),
+                                idx=IntLit(span=st.span, ty=IntType(name="int"), value=0),
+                            ),),
+                            value=_Name(span=st.span, ty=_DYN, ident=final_name),
+                            annotation=None,
+                        ))
+                    elif needs_binding:
+                        # Materialize once when this def executes. Re-reading
+                        # the hoisted symbol made distinct function objects,
+                        # dropping attributes assigned before a later return.
+                        binding = "__pcc_closure_value_" + final_name
+                        while name_in(scope_names, binding):
+                            binding = binding + "_"
+                        new_stmts.append(_Assign(
+                            span=st.span,
+                            targets=(_Name(span=st.span, ty=_DYN, ident=binding),),
+                            value=_Name(span=st.span, ty=_DYN, ident=final_name),
+                            annotation=None,
+                        ))
+                        append_name_once(scope_names, binding)
+                        rename_map[st.name] = binding
+                    else:
+                        rename_map[st.name] = (final_name, free_names)
                     continue
                 new_stmts.append(
                     rewrite_stmt(
@@ -1903,8 +1813,9 @@ class _HoistLoweringPass:
                         stmt.body,
                         stmt.name,
                         tuple(scope_names),
-                        boxed_capture_names(stmt.body),
+                        function_boxed_names(stmt, boxed_capture_names(stmt.body)),
                         closure_boxed_params,
+                        boxed_function_defs,
                     )
                     extend_names_once(scope_names, collect_scope_bindings(boxed_body))
                     new_body = rewrite_body(boxed_body, {}, scope_names)
@@ -1942,8 +1853,9 @@ class _HoistLoweringPass:
                                 m.body,
                                 method_owner_name,
                                 tuple(scope_names),
-                                boxed_capture_names(m.body),
+                                function_boxed_names(m, boxed_capture_names(m.body)),
                                 closure_boxed_params,
+                                boxed_function_defs,
                             )
                             extend_names_once(
                                 scope_names,

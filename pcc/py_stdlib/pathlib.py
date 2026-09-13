@@ -11,7 +11,7 @@ from os import path as _op
 
 
 class PurePath:
-    def __init__(self, path: str = "", *extra) -> None:
+    def __init__(self, path="", *extra) -> None:
         raw = str(path)
         for part in extra:
             raw = _op.join(raw, str(part))
@@ -139,6 +139,10 @@ class Path(PurePath):
     def is_dir(self) -> bool:
         # Same caveat as is_file.
         return _op.exists(self._raw)
+
+    def read_bytes(self) -> bytes:
+        with open(self._raw, "rb") as f:
+            return f.read()
 
     def read_text(
         self,

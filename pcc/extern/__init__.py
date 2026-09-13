@@ -98,9 +98,11 @@ c_ptr = _CType("ptr", "ptr")
 c_str = _CType("cstr", "ptr")
 # Return-position markers.  In normal (non-runtime-port) compilation a bare
 # ``c_ptr``/``c_str`` return is rejected because the frontend cannot tell a
-# PyObject* from raw memory: ``c_obj`` declares a Python object result and
+# PyObject* from raw memory: ``c_obj`` declares an owned Python object result and
 # ``c_rawptr`` a raw address, which pcc types as ``int`` so it never enters the
 # object refcount protocol.  Both lower to the same IR pointer type.
+# A foreign function returning a borrowed object must retain it in its ABI
+# adapter before exposing that result as c_obj.
 c_obj = _CType("obj", "ptr")
 c_rawptr = _CType("rawptr", "ptr")
 

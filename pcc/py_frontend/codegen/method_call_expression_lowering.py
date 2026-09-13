@@ -192,12 +192,12 @@ class MethodCallExpressionLoweringMixin:
             [obj_val, name_ptr],
             name=self._fresh(f"callable.attr.{attr_name}"),
         )
+        self._emit_post_call_err_check(span)
         kwdict_unpack = self._split_starstar_kwargs_unpack(args)
         arg_exprs = args
         kwargs_expr = None
         if kwdict_unpack is not None:
             arg_exprs, kwargs_expr = kwdict_unpack
-        args_owned = not self._is_starred_unpack(arg_exprs)
         args_tuple = self._emit_dynamic_call_args_tuple(arg_exprs)
         kwargs_obj = self._emit_dynamic_call_kwargs_object(
             kwargs,
@@ -209,8 +209,7 @@ class MethodCallExpressionLoweringMixin:
             [callable_obj, args_tuple, kwargs_obj],
             name=self._fresh(f"callable.attr.{attr_name}.call"),
         )
-        if args_owned:
-            self._gc_release(args_tuple)
+        self._gc_release(args_tuple)
         if kwargs:
             self._gc_release(kwargs_obj)
         self._gc_release(callable_obj)
@@ -281,7 +280,6 @@ class MethodCallExpressionLoweringMixin:
             kwargs_expr = None
             if kwdict_unpack is not None:
                 arg_exprs, kwargs_expr = kwdict_unpack
-            args_owned = not self._is_starred_unpack(arg_exprs)
             args_tuple = self._emit_dynamic_call_args_tuple(arg_exprs)
             kwargs_obj = self._emit_dynamic_call_kwargs_object(
                 expr.kwargs,
@@ -293,8 +291,7 @@ class MethodCallExpressionLoweringMixin:
                 [callable_obj, args_tuple, kwargs_obj],
                 name=self._fresh("type.call"),
             )
-            if args_owned:
-                self._gc_release(args_tuple)
+            self._gc_release(args_tuple)
             if expr.kwargs:
                 self._gc_release(kwargs_obj)
             self._emit_post_call_err_check(self._expr_span_or_none(expr))
@@ -1320,7 +1317,6 @@ class MethodCallExpressionLoweringMixin:
                 kwargs_expr = None
                 if kwdict_unpack is not None:
                     arg_exprs, kwargs_expr = kwdict_unpack
-                args_owned = not self._is_starred_unpack(arg_exprs)
                 args_tuple = self._emit_dynamic_call_args_tuple(arg_exprs)
                 kwargs_obj = self._emit_dynamic_call_kwargs_object(
                     expr.kwargs,
@@ -1332,8 +1328,7 @@ class MethodCallExpressionLoweringMixin:
                     [callable_obj, args_tuple, kwargs_obj],
                     name=self._fresh(f"callable.attr.{attr.name}.call"),
                 )
-                if args_owned:
-                    self._gc_release(args_tuple)
+                self._gc_release(args_tuple)
                 if expr.kwargs:
                     self._gc_release(kwargs_obj)
                 self._gc_release(callable_obj)
@@ -1849,7 +1844,6 @@ class MethodCallExpressionLoweringMixin:
             kwargs_expr = None
             if kwdict_unpack is not None:
                 arg_exprs, kwargs_expr = kwdict_unpack
-            args_owned = not self._is_starred_unpack(arg_exprs)
             args_tuple = self._emit_dynamic_call_args_tuple(arg_exprs)
             kwargs_obj = self._emit_dynamic_call_kwargs_object(
                 expr.kwargs,
@@ -1861,8 +1855,7 @@ class MethodCallExpressionLoweringMixin:
                 [method_obj, args_tuple, kwargs_obj],
                 name=self._fresh(f"dyn.method.{attr.name}"),
             )
-            if args_owned:
-                self._gc_release(args_tuple)
+            self._gc_release(args_tuple)
             if expr.kwargs or kwargs_expr is not None:
                 self._gc_release(kwargs_obj)
             # `py_obj_getattr` returns a NEW reference on every path: fields and
@@ -2032,21 +2025,13 @@ class MethodCallExpressionLoweringMixin:
                     "bytes.decode() accepts at most encoding and errors"
                 )
             recv = self._emit_expr(attr.obj)
-            encoding = (
-                self._emit_expr_as_pcc_object(encoding_arg)
-                if encoding_arg is not None
-                else self._emit_str_literal("utf-8")
-            )
-            errors = (
-                self._emit_expr_as_pcc_object(errors_arg)
-                if errors_arg is not None
-                else self._emit_str_literal("strict")
-            )
-            return self.builder.call(
-                self.runtime["py_bytes_decode_with_encoding"],
-                [recv, encoding, errors],
-                name=self._fresh("bytes.decode"),
-            )
+            operands = []
+            if expr.args:
+                operands.append(("encoding", expr.args[0]))
+            if len(expr.args) == 2:
+                operands.append(("errors", expr.args[1]))
+            operands.extend(expr.kwargs)
+            return self._emit_bytes_decode_call(recv, attr.obj, operands, expr.span)
         if (
             isinstance(obj_ty, (BytesType, ByteArrayType))
             and attr.name == "join"
@@ -2404,9 +2389,10 @@ class MethodCallExpressionLoweringMixin:
             receiver_hint = self._class_hint_for_expr(attr.obj)
             if receiver_hint is not None:
                 class_info = self.class_lowering.classes.get(receiver_hint)
-                if class_info is not None and self._class_attr_needs_runtime_lookup(
-                    class_info, attr.name
-                ):
+                if class_info is not None:
+                    # A mixin can call a helper supplied only by the runtime
+                    # subclass. Its native receiver remains native even when
+                    # the lexical class has no declaration for that helper.
                     return self._emit_callable_attribute_call(
                         attr.obj,
                         attr.name,
@@ -2414,12 +2400,8 @@ class MethodCallExpressionLoweringMixin:
                         expr.kwargs,
                         expr.span,
                     )
-            # A schema-bearing local class should have matched one of
-            # the direct method cases above. If it did not, or the type
-            # is only an unresolved imported annotation shell, preserve
-            # Python semantics by dispatching the runtime object through
-            # CPython instead of treating the annotation as a closed
-            # pcc class registry entry.
+            # An unresolved imported annotation shell still uses the explicit
+            # compatibility path; it supplies no native class/domain evidence.
             raw_val = self._emit_expr(attr.obj)
             cpy_val, owned = self._marshal_to_cpython_consuming_source(
                 raw_val,

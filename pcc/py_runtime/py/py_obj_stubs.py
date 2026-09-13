@@ -51,6 +51,7 @@ from pcc.unsafe import (
     load_i64,
     load_f64,
     load_ptr,
+    memcpy,
     memset,
     null,
     ptr_add,
@@ -784,7 +785,7 @@ def py_bytes_data_ptr(o):
     """Payload pointer of a bytes/bytearray/memoryview, or NULL.
 
     Exported so other runtime modules do not have to restate the object
-    layout offset; `py_http_runtime`'s SHA-256 entry point needs it.
+    layout offset; `py_hash_runtime`'s SHA-256 entry points need it.
     """
     return _bytes_data(o)
 
@@ -2244,6 +2245,27 @@ def _str_is_errors_name(obj, ignore: int) -> int:
     return 0
 
 
+def _str_is_ascii_name(obj) -> int:
+    if ptr_is_null(obj) or is_tagged_int(obj) or _type_of(obj) != PY_TYPE_STR:
+        return 0
+    n: int = py_str_byte_len(obj)
+    if n != 5 and n != 8:
+        return 0
+    wanted = cstr("ascii")
+    if n == 8:
+        wanted = cstr("us-ascii")
+    data = py_str_utf8(obj)
+    index: int = 0
+    while index < n:
+        actual: int = _ascii_lower(load_i8(data, index) & 255)
+        if n == 8 and index == 2 and actual == 95:
+            actual = 45
+        if actual != (load_i8(wanted, index) & 255):
+            return 0
+        index = index + 1
+    return 1
+
+
 @c_abi_export("py_bytes_decode_with_encoding")
 def py_bytes_decode_with_encoding(o, encoding, errors):
     if (
@@ -2253,8 +2275,26 @@ def py_bytes_decode_with_encoding(o, encoding, errors):
     ):
         py_raise_owned(py_exc_new(3, cstr("decoding to str: need bytes-like object")))
         return null()
+    if _str_is_ascii_name(encoding) != 0:
+        if ptr_is_null(errors) == 0 and _type_of(errors) != PY_TYPE_STR:
+            py_raise_owned(py_exc_new(3, cstr("decode errors must be a string")))
+            return null()
+        data = _bytes_data(o)
+        count: int = py_bytes_len(o)
+        if ptr_is_null(data) != 0 and count != 0:
+            py_raise_owned(py_exc_new(3, cstr("decoding requires an accessible bytes buffer")))
+            return null()
+        index: int = 0
+        while index < count:
+            if (load_i8(data, index) & 255) >= 128:
+                # UnicodeDecodeError still lacks a distinct native exception
+                # identity. Reject this capability instead of inventing text.
+                py_raise_owned(py_exc_new(11, cstr("pcc-native ASCII decoding of non-ASCII bytes is not supported")))
+                return null()
+            index = index + 1
+        return py_str_new(data, count)
     if _str_is_utf8_name(encoding) == 0:
-        py_raise_owned(py_exc_new(13, cstr("pcc-native bytes decode supports utf-8 only")))
+        py_raise_owned(py_exc_new(13, cstr("pcc-native bytes decode supports utf-8 and ascii only")))
         return null()
     if (
         ptr_is_null(errors)
@@ -2354,14 +2394,10 @@ def py_bytes_concat(a, b):
     bd = _bytes_data(b)
     if ptr_is_null(dst) or ptr_is_null(ad) or ptr_is_null(bd):
         return null()
-    i: int = 0
-    while i < la:
-        store_i8(dst, i, load_i8(ad, i))
-        i = i + 1
-    j: int = 0
-    while j < lb:
-        store_i8(dst, la + j, load_i8(bd, j))
-        j = j + 1
+    if la > 0:
+        memcpy(dst, ad, la)
+    if lb > 0:
+        memcpy(ptr_add(dst, la), bd, lb)
     store_i8(dst, total, 0)
     return out
 

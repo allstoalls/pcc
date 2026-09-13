@@ -11,6 +11,7 @@ from pcc.py_runtime.py.py_abi_constants import (
     PY_TYPE_THREAD_CONDITION,
     PY_TYPE_THREAD_EVENT,
     PY_TYPE_THREAD_LOCK,
+    PY_TYPE_THREAD_RLOCK,
     PY_TYPE_THREAD_SEMAPHORE,
 )
 
@@ -18,6 +19,7 @@ from pcc.extern import c_abi_export, c_int32, c_int64, c_ptr, c_void, extern
 from pcc.unsafe import (
     atomic_cas_i64,
     atomic_load_i64,
+    cstr,
     define_global_i64,
     define_global_ptr_null,
     free,
@@ -25,6 +27,7 @@ from pcc.unsafe import (
     global_load_ptr,
     global_store_ptr,
     int_to_ptr,
+    is_tagged_int,
     load_i64,
     load_ptr,
     malloc,
@@ -76,6 +79,8 @@ pcc_gc_scheduler_root_unregister_handle = extern(
 pcc_gc_alloc = extern("pcc_gc_alloc", (c_int64, c_int32, c_int32), c_ptr)
 pcc_gc_free_object_memory = extern("pcc_gc_free_object_memory", (c_ptr,), c_void)
 py_virtual_thread_current = extern("py_virtual_thread_current", (), c_ptr)
+py_virtual_thread_pin_enter = extern("py_virtual_thread_pin_enter", (c_ptr, c_ptr), c_int64)
+py_virtual_thread_pin_leave = extern("py_virtual_thread_pin_leave", (c_ptr,), c_int64)
 py_virtual_thread_park = extern("py_virtual_thread_park", (c_ptr,), c_int64)
 py_virtual_thread_unpark = extern("py_virtual_thread_unpark", (c_ptr,), c_int64)
 pcc_vthread_effect_note_waiter_root_enter = extern(
@@ -376,22 +381,66 @@ def py_dealloc_thread_lock(lock) -> None:
 
 @c_abi_export("py_threading_rlock_new")
 def py_threading_rlock_new():
-    return py_threading_lock_new()
+    # Mirror PyThreadRLockObject: header, mutex pointer, owner id, depth.
+    lock = _alloc_obj(PY_TYPE_THREAD_RLOCK, 40)
+    if ptr_is_null(lock):
+        return lock
+    mutex = pcc_mutex_new()
+    if ptr_is_null(mutex):
+        pcc_gc_free_object_memory(lock)
+        return null()
+    store_ptr(lock, 16, mutex)
+    store_i64(lock, 24, 0)
+    store_i64(lock, 32, 0)
+    return lock
 
 
 @c_abi_export("py_threading_rlock_acquire")
 def py_threading_rlock_acquire(lock) -> int:
-    return py_threading_lock_acquire(lock)
+    if ptr_is_null(lock) or is_tagged_int(lock):
+        return -1
+    owner: int = pcc_current_thread_id()
+    if load_i64(lock, 24) == owner:
+        store_i64(lock, 32, load_i64(lock, 32) + 1)
+        return 0
+    vthread = py_virtual_thread_current()
+    pinned: int = 0
+    if ptr_is_null(vthread) == 0 and ptr_eq(vthread, global_load_ptr("py_None")) == 0:
+        if py_virtual_thread_pin_enter(vthread, cstr("threading.RLock.acquire")) >= 0:
+            pinned = 1
+    status: int = pcc_mutex_lock(load_ptr(lock, 16))
+    if pinned != 0:
+        py_virtual_thread_pin_leave(vthread)
+    py_decref_extern(vthread)
+    if status != 0:
+        return -1
+    store_i64(lock, 24, owner)
+    store_i64(lock, 32, 1)
+    return 0
 
 
 @c_abi_export("py_threading_rlock_release")
 def py_threading_rlock_release(lock) -> int:
-    return py_threading_lock_release(lock)
+    if ptr_is_null(lock) or is_tagged_int(lock):
+        return -1
+    owner: int = pcc_current_thread_id()
+    depth: int = load_i64(lock, 32)
+    if load_i64(lock, 24) != owner or depth <= 0:
+        return -1
+    depth = depth - 1
+    store_i64(lock, 32, depth)
+    if depth == 0:
+        store_i64(lock, 24, 0)
+        return pcc_mutex_unlock(load_ptr(lock, 16))
+    return 0
 
 
 @c_abi_export("py_dealloc_thread_rlock")
 def py_dealloc_thread_rlock(lock) -> None:
-    py_dealloc_thread_lock(lock)
+    if ptr_is_null(lock) or is_tagged_int(lock):
+        return
+    pcc_mutex_free(load_ptr(lock, 16))
+    pcc_gc_free_object_memory(lock)
 
 
 @c_abi_export("py_threading_event_new")

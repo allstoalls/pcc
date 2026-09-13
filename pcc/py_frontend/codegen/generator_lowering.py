@@ -683,6 +683,17 @@ class GeneratorLoweringMixin:
         span = stmt.span
         return f"__pcc_finally_exception_{span.line}_{span.col}"
 
+    def _generator_with_context_name(self, item) -> str:
+        # Multiple items in one `with` can share a lifted expression span.
+        # Keep each item object alive and give it a deterministic ordinal;
+        # the multi-manager lowering retains these same item tuples.
+        for previous, name in self._generator_with_context_names:
+            if previous is item:
+                return name
+        name = "__pcc_with_context_" + str(len(self._generator_with_context_names))
+        self._generator_with_context_names.append((item, name))
+        return name
+
     def _generator_handler_exception_name(self, stmt: Try, index: int) -> str:
         span = stmt.span
         return f"__pcc_handler_exception_{span.line}_{span.col}_{index}"
@@ -849,7 +860,11 @@ class GeneratorLoweringMixin:
                     work.append(item)
                 continue
             if isinstance(s, With):
-                for _ctx, as_var in s.items:
+                for item in s.items:
+                    _ctx, as_var = item
+                    hidden = self._generator_with_context_name(item)
+                    if hidden not in names:
+                        names.append(hidden)
                     if as_var is not None:
                         self._collect_generator_target_names(names, as_var)
                 for item in s.body:

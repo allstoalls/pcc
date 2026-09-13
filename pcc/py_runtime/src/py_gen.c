@@ -125,6 +125,47 @@ void py_dealloc_gen(PyObject *o) {
     pcc_gc_free_object_memory(o);
 }
 
+void py_gen_finalize(PyObject *gen) {
+    if (gen == NULL) return;
+    PyGenObject *g = (PyGenObject *)gen;
+    if (g->done || g->state == 0 || (g->h.flags & PY_FLAG_FINALIZED)) return;
+    py_header_flags_or(&g->h, PY_FLAG_FINALIZED);
+    py_incref(gen);
+    pcc_gc_pin(gen);
+    py_weakref_invalidate(gen);
+    PyObject *saved = py_current_exception();
+    if (saved != NULL) {
+        py_incref(saved);
+        pcc_gc_pin(saved);
+    }
+    py_clear_exception();
+    PyObject *closed = py_gen_close(gen);
+    if (closed != NULL) py_decref(closed);
+    py_clear_exception();
+    if (saved != NULL) {
+        py_raise(saved);
+        pcc_gc_unpin(saved);
+        py_decref(saved);
+    }
+    pcc_gc_unpin(gen);
+    py_decref(gen);
+}
+
+int64_t py_gen_finalize_from_dealloc(PyObject *gen) {
+    PyGenObject *g = (PyGenObject *)gen;
+    if (g->done || g->state == 0 || (g->h.flags & PY_FLAG_FINALIZED)) return 0;
+    py_header_flags_and(&g->h, ~PY_FLAG_GC_DEALLOCATING);
+    pcc_refcount_incref(&g->h.refcount);
+    py_gen_finalize(gen);
+    int64_t remaining = pcc_refcount_decref(&g->h.refcount);
+    if (remaining > 0) {
+        py_gc_track(gen);
+        return 1;
+    }
+    py_header_flags_or(&g->h, PY_FLAG_GC_DEALLOCATING);
+    return 0;
+}
+
 
 static PyGenObject *checked_gen(PyObject *gen) {
     if (gen == NULL || PY_IS_TAGGED_INT(gen)) {

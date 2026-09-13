@@ -1018,8 +1018,7 @@ def _maybe_grow(d) -> int:
     return _rehash(d, new_cap)
 
 
-@c_abi_export("py_dict_new")
-def py_dict_new():
+def _dict_new_with_capacity(capacity: int):
     d = pcc_gc_alloc(PYDICTOBJECT_SIZE, PY_TYPE_DICT, 0)
     if ptr_is_null(d) != 0:
         return null()
@@ -1028,12 +1027,33 @@ def py_dict_new():
     store_ptr(d, PYDICTOBJECT_INDICES_OFFSET, null())  # indices
     store_ptr(d, PYDICTOBJECT_ENTRIES_OFFSET, null())  # entries
     store_i64(d, PYDICTOBJECT_ENTRIES_USED_OFFSET, 0)  # entries_used
-    if _alloc_tables(d, 8) != 0:
+    if _alloc_tables(d, capacity) != 0:
         py_decref(d)
         return null()
     py_gc_track(d)
     pcc_gc_publish_initialized(d)
     return d
+
+
+@c_abi_export("py_dict_new")
+def py_dict_new():
+    return _dict_new_with_capacity(8)
+
+
+@c_abi_export("py_dict_new_presized")
+def py_dict_new_presized(expected_items: int):
+    """Allocate for a known literal length using the ordinary growth limit.
+
+    Four slots suffice for up to two initial entries. Larger literals avoid
+    repeated table growth; subsequent mutations use the same dict machinery.
+    The bound keeps table byte counts within signed machine-size arithmetic.
+    """
+    if expected_items > 0x10000000000000:
+        return null()
+    capacity: int = 4
+    while expected_items > (capacity * 2) // 3:
+        capacity = capacity * 2
+    return _dict_new_with_capacity(capacity)
 
 
 @c_abi_export("py_dict_set")

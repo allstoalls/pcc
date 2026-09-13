@@ -697,6 +697,24 @@ def test_receipt_source_must_be_a_canonical_logical_path(
         verify_runtime_archive_manifest(archive, runtime_root=runtime_root)
 
 
+def test_logical_source_rejects_symlink_escape(tmp_path):
+    root = tmp_path / "runtime"
+    (root / "py").mkdir(parents=True)
+    outside = tmp_path / "outside.py"
+    outside.write_text("value = 42\n")
+    (root / "py/member.py").symlink_to(outside)
+    with pytest.raises(ProvenanceError, match="escapes runtime root"):
+        provenance_module._source_from_logical_path("pcc/py_runtime/py/member.py", root)
+    with pytest.raises(ProvenanceError, match="outside runtime root"):
+        provenance_module._logical_source_path(root / "py/member.py", root)
+
+
+@pytest.mark.parametrize("member", ["C:member.o", "1:member.o", ".", "..", " member.o", "a\x00.o"])
+def test_portable_archive_basename_rejects_drive_and_control_names(member):
+    with pytest.raises(ProvenanceError, match="unsafe archive member"):
+        provenance_module._validate_archive_member_name(member)
+
+
 def test_production_manifest_requires_at_least_one_member(tmp_path: Path) -> None:
     runtime_root = tmp_path / "pcc" / "py_runtime"
     runtime_root.mkdir(parents=True)

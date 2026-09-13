@@ -6,7 +6,7 @@ No dependencies beyond the pcc-native list / dict / str / int / float
 from __future__ import annotations
 
 
-class JSONDecodeError(Exception):
+class JSONDecodeError(ValueError):
     def __init__(self, msg: str, doc: str, pos: int) -> None:
         super().__init__(f"{msg} at pos {pos}")
         self.msg = msg
@@ -133,7 +133,8 @@ class _Decoder:
         return self._parse_number()
 
     def _parse_string(self) -> str:
-        assert self.s[self.pos] == '"'
+        if self.pos >= len(self.s) or self.s[self.pos] != '"':
+            raise JSONDecodeError("expected string", self.s, self.pos)
         self.pos += 1
         out: list[str] = []
         while self.pos < len(self.s):

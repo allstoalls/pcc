@@ -10,6 +10,7 @@ from pcc.llvm_capi.compat import ir
 
 from ..py_ast import (
     Attr,
+    BinOp,
     BoolType,
     ByteArrayType,
     BytesType,
@@ -29,6 +30,7 @@ from ..py_ast import (
     StrType,
     Subscript,
     TupleExpr,
+    UnaryOp,
     TupleType,
     Type,
     ValueArrayType,
@@ -550,20 +552,26 @@ class SubscriptLoweringMixin:
             raise NotImplementedError(
                 "tuples are immutable - subscript-assignment not allowed"
             )
-        if isinstance(idx_expr.ty, (IntType, BoolType)):
-            idx_i64 = self._emit_index_expr_as_i64(idx_expr)
-            self.builder.call(
-                self.runtime["py_obj_setitem_i64"],
-                [obj, idx_i64, rhs_obj],
-                name=self._fresh("obj.setitem.i64"),
-            )
-            self._emit_post_call_err_check(target.span)
-            release_rhs()
-            return
+        # The unknown receiver may be a mapping: preserve its Python key
+        # just as the dynamic load path does, including computed wide ints.
         key_obj = self._emit_subscript_key_object(idx_expr)
-        self.builder.call(self.runtime["py_obj_setitem"], [obj, key_obj, rhs_obj])
-        self._emit_post_call_err_check(target.span)
+        release_key = self._owned_release_needed(key_obj, idx_expr)
+        release_receiver = self._owned_release_needed(obj, target.obj)
+        release_value = (
+            release_expr is not None
+            and self._owned_release_needed(rhs, release_expr)
+        )
+        release_on_error = tuple(
+            value
+            for value, needed in (
+                (key_obj, release_key), (obj, release_receiver), (rhs, release_value)
+            )
+            if needed
+        )
+        self.builder.call(self.runtime["py_obj_assign_subscript"], [obj, key_obj, rhs_obj])
+        self._emit_post_call_err_check(target.span, release_on_error=release_on_error)
         self._gc_release_if_owned(key_obj, idx_expr)
+        self._gc_release_if_owned(obj, target.obj)
         release_rhs()
 
     def _emit_slice_bound_object(self, expr: Optional[Expr]) -> ir.Value:
@@ -922,24 +930,17 @@ class SubscriptLoweringMixin:
         # post-call check routes it to the handler or function exit like every
         # other raise-capable call.  An unconditionally owned operand
         # temporary is released on the exceptional edge as well.
-        release_on_error = (
-            (obj,) if self._value_is_owned_object(obj) else ()
-        )
-        if isinstance(expr.idx.ty, (IntType, BoolType)):
-            idx_i64 = self._emit_index_expr_as_i64(expr.idx)
-            result = self.builder.call(
-                self.runtime["py_obj_subscript_i64"],
-                [obj, idx_i64],
-                name=self._fresh("obj.subscript.i64"),
-            )
-            self._note_owned_object_value(result)
-            self._emit_post_call_err_check(
-                getattr(expr, "span", None),
-                release_on_error=release_on_error,
-            )
-            self._gc_release_if_owned(obj, expr.obj)
-            return result
+        # A dynamic receiver can be a mapping or a user __getitem__ method.
+        # Its key is a Python object, not a sequence's machine-sized index:
+        # the object boundary also emits exact integer expressions in modules
+        # that use extern/scaffold scalar lanes (for example, 1 << 70).
         key_obj = self._emit_subscript_key_object(expr.idx)
+        release_key = self._owned_release_needed(key_obj, expr.idx)
+        release_receiver = self._owned_release_needed(obj, expr.obj)
+        release_on_error = tuple(
+            value for value, needed in ((key_obj, release_key), (obj, release_receiver))
+            if needed
+        )
         result = self.builder.call(
             self.runtime["py_obj_subscript"],
             [obj, key_obj],
@@ -950,7 +951,12 @@ class SubscriptLoweringMixin:
             getattr(expr, "span", None),
             release_on_error=release_on_error,
         )
-        self._gc_release_if_owned(obj, expr.obj)
+        if release_key or release_receiver:
+            self._gc_pin(result)
+            if release_key:
+                self._gc_release_if_owned(key_obj, expr.idx)
+            self._gc_release_if_owned(obj, expr.obj)
+            self._gc_unpin(result)
         return result
 
     def _emit_subscript_key_object(self, expr: Expr) -> ir.Value:
@@ -965,4 +971,10 @@ class SubscriptLoweringMixin:
             )
             if boxed_valueclass is not None:
                 return boxed_valueclass
-        return self._emit_as_object(expr)
+        key = self._emit_as_object(expr)
+        if isinstance(expr, (BinOp, UnaryOp)) and isinstance(expr.ty, IntType):
+            # Exact integer arithmetic at this object boundary returns a NEW
+            # reference, even when the surrounding extern/scaffold module
+            # otherwise stores scalar ints. Names and fields stay borrowed.
+            self._note_owned_object_value(key)
+        return key

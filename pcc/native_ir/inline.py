@@ -111,7 +111,7 @@ def inline_module(
         arg_types = []
         ok_args = True
         for arg in fn.args:
-            am = re.match(r"(\S+)\s+%([\w\.]+)", arg.serialize().strip())
+            am = re.match(r"(\S+)\s+%([\w.$-]+)", arg.serialize().strip())
             if not am:
                 ok_args = False
                 break
@@ -237,7 +237,7 @@ _PASSTHROUGH_RET_TYPES = {
 
 
 _CALL_RE_TEMPLATE = (
-    r"^(?P<indent>\s*)%(?P<res>[\w\.]+)\s*=\s*"
+    r"^(?P<indent>\s*)%(?P<res>[\w.$-]+)\s*=\s*"
     r"(?:tail\s+|musttail\s+|notail\s+)?call\s+"
     r"[^@]*@(?P<callee>{callee})\s*\((?P<args>[^)]*)\)\s*$"
 )
@@ -247,7 +247,7 @@ _VOID_CALL_RE_TEMPLATE = (
     r"@(?P<callee>{callee})\s*\((?P<args>[^)]*)\)\s*$"
 )
 _NOOP_GEP_RE = re.compile(
-    r"^\s*%(?P<res>[\w\.]+)\s*=\s*getelementptr\s+[^,]+,\s+ptr\s+(?P<base>%[\w\.]+)\s*,\s+i\d+\s+0\s*$"
+    r"^\s*%(?P<res>[\w.$-]+)\s*=\s*getelementptr\s+[^,]+,\s+ptr\s+(?P<base>%[\w.$-]+)\s*,\s+i\d+\s+0\s*$"
 )
 _BARE_CALL_RE_TEMPLATE = (
     r"^(?P<indent>\s*)"
@@ -353,7 +353,7 @@ def _inline_calls_in_function(
                 arg_name: val for arg_name, val in zip(info["args"], actuals)
             }
             for body_line in info["body"]:
-                defn = re.match(r"^%([\w\.]+)\s*=", body_line)
+                defn = re.match(r"^%([\w.$-]+)\s*=", body_line)
                 if defn:
                     remap[defn.group(1)] = f"%{prefix}.{defn.group(1)}"
 
@@ -852,7 +852,7 @@ def _drop_dead_internal_callees(ir_text: str, candidates: dict[str, dict]) -> st
         if not is_function:
             out.append(chunk)
             continue
-        m = re.search(r"define\s+[^@]*@([\w\.]+)", chunk)
+        m = re.search(r"define\s+[^@]*@([\w.$-]+)", chunk)
         fn_name = m.group(1) if m else None
         if (
             fn_name in candidates

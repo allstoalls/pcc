@@ -432,6 +432,121 @@ static int re_str_has_byte(PyObject *s, char needle) {
  * replacement string (no backslash escapes / group templates — those raise
  * NotImplementedError, never expand wrongly). count <= 0 replaces all.
  */
+static int re_sub_hold(PyObject **slots, void **handles, int index,
+                       PyObject *value, int64_t backend) {
+    slots[index] = value;
+    if ((backend == 3 || backend == 4) && value != NULL) {
+        handles[index] = pcc_gc_scheduler_root_register_handle(&slots[index]);
+        if (handles[index] == NULL) {
+            py_raise_owned(py_exc_new(PY_EXC_MEMORYERROR, "re.sub: cannot root temporary"));
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static PyObject *re_sub_load(PyObject **slots, void **handles, int index) {
+    return handles[index] != NULL ? pcc_gc_load_ptr(NULL, &slots[index]) : slots[index];
+}
+
+static void re_sub_drop(PyObject **slots, void **handles, int index) {
+    PyObject *value = re_sub_load(slots, handles, index);
+    if (handles[index] != NULL) pcc_gc_scheduler_root_unregister_handle(handles[index]);
+    handles[index] = NULL;
+    slots[index] = NULL;
+    if (index >= 3) py_decref(value);
+}
+
+static int re_sub_append(PyObject **slots, void **handles, PyObject *piece, int64_t backend) {
+    int ok = re_sub_hold(slots, handles, 6, piece, backend);
+    if (piece == NULL) ok = 0;
+    if (ok) {
+        py_list_append(re_sub_load(slots, handles, 3), re_sub_load(slots, handles, 6));
+        if (py_err_occurred()) ok = 0;
+    }
+    re_sub_drop(slots, handles, 6);
+    return ok;
+}
+
+static PyObject *re_sub_callable(PyObject *pattern, PyObject *replacement,
+                                 PyObject *text, int64_t count, int64_t flags) {
+    PyObject *slots[7] = {NULL};
+    void *handles[7] = {NULL};
+    int64_t backend = pcc_gc_backend();
+    int ok = re_sub_hold(slots, handles, 0, pattern, backend);
+    if (ok) ok = re_sub_hold(slots, handles, 1, replacement, backend);
+    if (ok) ok = re_sub_hold(slots, handles, 2, text, backend);
+    if (ok) {
+        PyObject *parts = py_list_new(0);
+        ok = re_sub_hold(slots, handles, 3, parts, backend);
+        if (parts == NULL) ok = 0;
+    }
+    int64_t length = ok ? (int64_t)strlen(py_str_utf8(re_sub_load(slots, handles, 2))) : 0;
+    int64_t position = 0, last = 0, done = 0;
+    int64_t caps[64], ngroups = 0;
+    while (ok && position <= length && (count == 0 || done < count)) {
+        ngroups = 0;
+        int status = pcc_re_engine_run_flags(py_str_utf8(re_sub_load(slots, handles, 0)),
+            flags, py_str_utf8(re_sub_load(slots, handles, 2)), length, position,
+            1, caps, 64, &ngroups);
+        if (status == PCC_RE_NOMATCH) break;
+        if (status != PCC_RE_MATCH) {
+            re_engine_raise_for(status);
+            ok = 0;
+            break;
+        }
+        int64_t lo = caps[0], hi = caps[1];
+        if (lo == hi) {
+            py_raise_owned(py_exc_new(PY_EXC_NOTIMPLEMENTEDERROR,
+                "pcc re: callable replacement of empty matches is not supported"));
+            ok = 0;
+            break;
+        }
+        PyObject *before = py_str_byte_slice_i64(re_sub_load(slots, handles, 2), last, lo);
+        ok = re_sub_append(slots, handles, before, backend);
+        if (ok) {
+            PyObject *match = re_match_object_new(re_sub_load(slots, handles, 0),
+                re_sub_load(slots, handles, 2), caps, ngroups, flags);
+            ok = re_sub_hold(slots, handles, 4, match, backend);
+            if (match == NULL || match == py_None) ok = 0;
+        }
+        if (ok) {
+            PyObject *args = py_tuple_new(1);
+            ok = re_sub_hold(slots, handles, 5, args, backend);
+            if (args == NULL) ok = 0;
+        }
+        if (ok) {
+            py_tuple_set_item(re_sub_load(slots, handles, 5), 0, re_sub_load(slots, handles, 4));
+            PyObject *piece = py_obj_call(re_sub_load(slots, handles, 1),
+                                         re_sub_load(slots, handles, 5), NULL);
+            if (piece == NULL) ok = 0;
+            else if (py_type_of(piece) != PY_TYPE_STR) {
+                py_decref(piece);
+                py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "re.sub replacement callback must return str"));
+                ok = 0;
+            } else ok = re_sub_append(slots, handles, piece, backend);
+        }
+        re_sub_drop(slots, handles, 5);
+        re_sub_drop(slots, handles, 4);
+        done++;
+        last = hi;
+        position = hi;
+    }
+    PyObject *result = NULL;
+    if (ok) {
+        PyObject *tail = py_str_byte_slice_i64(re_sub_load(slots, handles, 2), last, length);
+        ok = re_sub_append(slots, handles, tail, backend);
+    }
+    if (ok) {
+        PyObject *empty = py_str_byte_slice_i64(re_sub_load(slots, handles, 2), 0, 0);
+        ok = re_sub_hold(slots, handles, 6, empty, backend);
+        if (empty != NULL && ok)
+            result = py_str_join(re_sub_load(slots, handles, 6), re_sub_load(slots, handles, 3));
+    }
+    for (int index = 6; index >= 0; index--) re_sub_drop(slots, handles, index);
+    return result;
+}
+
 PyObject *py_re_engine_sub(PyObject *pattern, PyObject *repl, PyObject *text,
                            int64_t count, int64_t flags) {
     int64_t caps[2 * 32];
@@ -446,12 +561,20 @@ PyObject *py_re_engine_sub(PyObject *pattern, PyObject *repl, PyObject *text,
     PyObject *empty;
     PyObject *out;
     if (pattern == NULL || repl == NULL || text == NULL) return py_None;
-    if (py_type_of(pattern) != PY_TYPE_STR || py_type_of(repl) != PY_TYPE_STR ||
+    if (py_type_of(pattern) != PY_TYPE_STR ||
         py_type_of(text) != PY_TYPE_STR) {
         py_raise_owned(py_exc_new(
             PY_EXC_TYPEERROR,
             "pcc re: sub expects string pattern, replacement, and text"
         ));
+        return NULL;
+    }
+    PyObject *callable_value = py_builtin_callable(repl);
+    int is_callable = py_obj_truthy(callable_value);
+    py_decref(callable_value);
+    if (is_callable) return re_sub_callable(pattern, repl, text, count, flags);
+    if (py_type_of(repl) != PY_TYPE_STR) {
+        py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "re.sub replacement must be str or callable"));
         return NULL;
     }
     if (re_str_has_byte(repl, '\\')) {
@@ -526,6 +649,114 @@ PyObject *py_re_engine_sub(PyObject *pattern, PyObject *repl, PyObject *text,
  * values are inserted between pieces (None for unmatched groups);
  * empty matches split too; maxsplit <= 0 means no limit.
  */
+static int64_t re_args_int_at(PyObject *args, int64_t idx, int64_t fallback);
+
+static int re_finditer_position(PyObject *state, int64_t position) {
+    PyObject *value = py_int_from_i64(position);
+    if (value == NULL) return 0;
+    py_tuple_set_item(state, 3, value);
+    py_decref(value);
+    return 1;
+}
+
+static PyObject *re_finditer_next(PyObject *state, PyObject *args) {
+    (void)args;
+    PyObject *slots[7] = {NULL};
+    void *handles[7] = {NULL};
+    int64_t backend = pcc_gc_backend();
+    int ok = re_sub_hold(slots, handles, 0, state, backend);
+    int64_t position = re_args_int_at(state, 3, 0);
+    int64_t end = re_args_int_at(state, 4, 0);
+    int64_t flags = re_args_int_at(state, 2, 0);
+    PyObject *result = NULL;
+    if (ok && position <= end) {
+        PyObject *pattern = py_tuple_get(re_sub_load(slots, handles, 0), 0);
+        ok = re_sub_hold(slots, handles, 3, pattern, backend);
+        if (pattern == NULL) ok = 0;
+        if (ok) {
+            PyObject *text = py_tuple_get(re_sub_load(slots, handles, 0), 1);
+            ok = re_sub_hold(slots, handles, 4, text, backend);
+            if (text == NULL) ok = 0;
+        }
+        if (ok) {
+            int64_t caps[64], ngroups = 0;
+            int status = pcc_re_engine_run_flags(py_str_utf8(re_sub_load(slots, handles, 3)),
+                flags, py_str_utf8(re_sub_load(slots, handles, 4)), end, position,
+                1, caps, 64, &ngroups);
+            if (status == PCC_RE_NOMATCH) {
+                if (re_finditer_position(re_sub_load(slots, handles, 0), end + 1)) result = py_None;
+            } else if (status != PCC_RE_MATCH) re_engine_raise_for(status);
+            else if (caps[0] == caps[1]) {
+                py_raise_owned(py_exc_new(PY_EXC_NOTIMPLEMENTEDERROR,
+                    "pcc re: finditer of empty matches is not supported"));
+            } else if (re_finditer_position(re_sub_load(slots, handles, 0), caps[1])) {
+                result = re_match_object_new(re_sub_load(slots, handles, 3),
+                    re_sub_load(slots, handles, 4), caps, ngroups, flags);
+            }
+        }
+    } else if (ok) result = py_None;
+    for (int index = 6; index >= 0; index--) re_sub_drop(slots, handles, index);
+    return result;
+}
+
+static PyObject *re_new_finditer(PyObject *pattern, PyObject *text,
+                                int64_t flags, int64_t start, int64_t end) {
+    if (text == NULL || py_type_of(text) != PY_TYPE_STR) {
+        py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "pcc re: finditer expects a string"));
+        return NULL;
+    }
+    int64_t length = ((PyStrObject *)text)->byte_len;
+    if (start < 0) start = 0;
+    else if (start > length) start = length;
+    if (end < 0) end = 0;
+    else if (end > length) end = length;
+    PyObject *slots[7] = {NULL};
+    void *handles[7] = {NULL};
+    int64_t backend = pcc_gc_backend();
+    int ok = re_sub_hold(slots, handles, 0, pattern, backend);
+    if (ok) ok = re_sub_hold(slots, handles, 1, text, backend);
+    if (ok) {
+        PyObject *captures = py_tuple_new(5);
+        ok = re_sub_hold(slots, handles, 3, captures, backend);
+        if (captures == NULL) ok = 0;
+    }
+    if (ok) {
+        py_tuple_set_item(re_sub_load(slots, handles, 3), 0, re_sub_load(slots, handles, 0));
+        py_tuple_set_item(re_sub_load(slots, handles, 3), 1, re_sub_load(slots, handles, 1));
+        for (int index = 2; index < 5 && ok; index++) {
+            int64_t number = index == 2 ? flags : (index == 3 ? start : end);
+            PyObject *value = py_int_from_i64(number);
+            if (value == NULL) ok = 0;
+            else {
+                py_tuple_set_item(re_sub_load(slots, handles, 3), index, value);
+                py_decref(value);
+            }
+        }
+    }
+    PyObject *result = NULL;
+    if (ok) {
+        PyObject *callback = py_func_new_named(re_finditer_next,
+            re_sub_load(slots, handles, 3), "re.finditer.next");
+        ok = re_sub_hold(slots, handles, 4, callback, backend);
+        if (callback != NULL && ok) result = py_iter_callable_new(re_sub_load(slots, handles, 4), py_None);
+    }
+    for (int index = 6; index >= 0; index--) re_sub_drop(slots, handles, index);
+    return result;
+}
+
+PyObject *py_re_finditer_flags(PyObject *pattern, PyObject *text, int64_t flags) {
+    if (pattern == NULL || py_type_of(pattern) != PY_TYPE_STR) {
+        py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "pcc re: finditer pattern must be a string"));
+        return NULL;
+    }
+    if ((flags & ~26) != 0 || !pcc_re_engine_supported_flags(py_str_utf8(pattern), flags)) {
+        py_raise_owned(py_exc_new(PY_EXC_NOTIMPLEMENTEDERROR,
+            "pcc re: finditer pattern or flags outside the native subset"));
+        return NULL;
+    }
+    return re_new_finditer(pattern, text, flags, 0, INT64_MAX);
+}
+
 PyObject *py_re_engine_split(PyObject *pattern, PyObject *text,
                              int64_t maxsplit, int64_t flags) {
     int64_t caps[2 * 32];
@@ -633,6 +864,45 @@ static int64_t re_args_int_at(PyObject *args, int64_t idx, int64_t fallback) {
     return out;
 }
 
+static PyObject *re_finditer_from_args(PyObject *pattern, PyObject *args, int64_t flags) {
+    int64_t count = args != NULL ? py_tuple_len(args) : 0;
+    if (count < 1 || count > 3) {
+        py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "Pattern.finditer expects one to three arguments"));
+        return NULL;
+    }
+    PyObject *slots[7] = {NULL};
+    void *handles[7] = {NULL};
+    int64_t backend = pcc_gc_backend();
+    int ok = re_sub_hold(slots, handles, 0, pattern, backend);
+    if (ok) ok = re_sub_hold(slots, handles, 1, args, backend);
+    if (ok) {
+        PyObject *text = py_tuple_get(re_sub_load(slots, handles, 1), 0);
+        ok = re_sub_hold(slots, handles, 3, text, backend);
+        if (text == NULL) ok = 0;
+    }
+    int64_t start = 0, end = INT64_MAX;
+    for (int64_t index = 1; index < count && ok; index++) {
+        PyObject *value = py_tuple_get(re_sub_load(slots, handles, 1), index);
+        ok = re_sub_hold(slots, handles, 4, value, backend);
+        if (value == NULL) ok = 0;
+        else if (value == py_None) {
+            py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "finditer bounds must be integers"));
+            ok = 0;
+        } else if (ok) {
+            int64_t bound = py_index_i64_checked(re_sub_load(slots, handles, 4));
+            if (py_err_occurred()) ok = 0;
+            else if (index == 1) start = bound;
+            else end = bound;
+        }
+        re_sub_drop(slots, handles, 4);
+    }
+    PyObject *result = NULL;
+    if (ok) result = re_new_finditer(re_sub_load(slots, handles, 0),
+        re_sub_load(slots, handles, 3), flags, start, end);
+    for (int index = 6; index >= 0; index--) re_sub_drop(slots, handles, index);
+    return result;
+}
+
 /* pattern-object method entry; captures = (pattern, kind, flags):
  * kind 0 match / 1 search / 2 findall / 3 sub / 4 split */
 static PyObject *re_pattern_method_call(PyObject *captures, PyObject *args) {
@@ -662,6 +932,11 @@ static PyObject *re_pattern_method_call(PyObject *captures, PyObject *args) {
     pat_flags = py_int_to_i64(flags_obj, &overflow);
     py_decref(flags_obj);
     if (overflow) pat_flags = 0;
+    if (kind == 5) {
+        PyObject *result = re_finditer_from_args(pattern, args, pat_flags);
+        py_decref(pattern);
+        return result;
+    }
     if (kind == 3) {
         /* sub(repl, string[, count]) */
         PyObject *repl;
@@ -809,6 +1084,7 @@ PyObject *py_re_compile_obj(PyObject *pattern, int64_t flags) {
     re_pattern_add_method(inst, "findall", pattern, 2, flags);
     re_pattern_add_method(inst, "sub", pattern, 3, flags);
     re_pattern_add_method(inst, "split", pattern, 4, flags);
+    re_pattern_add_method(inst, "finditer", pattern, 5, flags);
     return inst;
 }
 

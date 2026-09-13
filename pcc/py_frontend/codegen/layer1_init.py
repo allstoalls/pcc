@@ -122,6 +122,7 @@ class Layer1InitMixin:
         self._funcdef_yield_sentinel_cache: dict[int, bool] = {}
         self._vthread_binding_cache: dict = {}
         self._generator_ctx_stack: list = []
+        self._generator_with_context_names: list = []
         self._generator_func_names: set[str] = set()
         # Closed-world virtual-thread effect analysis fills these before
         # function declaration.  Keep exact FuncDef identities separate from

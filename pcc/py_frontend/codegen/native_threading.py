@@ -89,6 +89,8 @@ class NativeThreadingLoweringMixin:
     def _threading_kind_for_type(self, ty: Type) -> Optional[str]:
         if not isinstance(ty, ClassType):
             return None
+        if ty.module and ty.module != "threading":
+            return None
         if ty.name not in self._THREADING_CONSTRUCTOR_NAMES:
             return None
         # Avoid stealing a user-defined class that happens to be named

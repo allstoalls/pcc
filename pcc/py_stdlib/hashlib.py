@@ -1,15 +1,26 @@
-"""pcc.py_stdlib.hashlib — small pure Python SHA-256 subset.
+"""Owned hashlib algorithms with native incremental SHA-256 under pcc.
 
-The pure-Python compression below stays the fallback for incremental hashing.
-One-shot ``sha256(data).digest()`` routes to the runtime's native transform:
-signing one 6.6 MiB Mach-O image walks ~1600 pages, and the boxed-integer
-inner loop made that a 28-minute, 5 GiB step under self-host.
+CPython uses the Python implementation; pcc uses the same native context
+operations for constructor data, update(), copy(), and digest().
 """
 from __future__ import annotations
 
 from pcc.extern import c_obj, extern
+from pcc.unsafe import null, ptr_is_null
 
-_native_sha256_digest = extern("py_sha256_bytes_digest", (c_obj,), c_obj)
+_native_sha256_new = extern("py_sha256_state_new", (), c_obj)
+_native_sha256_update = extern("py_sha256_state_update", (c_obj, c_obj), c_obj)
+_native_sha256_digest = extern("py_sha256_state_digest", (c_obj,), c_obj)
+
+
+def _native_transform_available() -> bool:
+    try:
+        return ptr_is_null(null()) != 0
+    except NotImplementedError:
+        return False
+
+
+_NATIVE_TRANSFORM_AVAILABLE = _native_transform_available()
 
 _K = [
     0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
@@ -56,40 +67,26 @@ class _SHA256:
         ]
         self._buf = b""
         self._counter = 0
-        self._oneshot = b""
-        # Only plain SHA-256 has a native transform; subclasses with a
-        # different IV or truncation must keep the Python path.  A
-        # `self.name` check is not enough: the compiled MRO lookup
-        # resolves the class attribute through the subclass.
-        self._native_digest = True
+        self._native_state = b""
+        if _NATIVE_TRANSFORM_AVAILABLE:
+            self._native_state = _native_sha256_new()
         if data:
-            # Defer: a caller that only wants one digest never runs the
-            # Python compression loop at all.
-            self._oneshot = _as_bytes(data)
+            self.update(data)
 
     def copy(self):
         other = _SHA256()
         other._h = list(self._h)
         other._buf = self._buf
         other._counter = self._counter
-        other._oneshot = self._oneshot
-        other._native_digest = self._native_digest
+        # Snapshots are immutable; update replaces only this instance's state.
+        other._native_state = self._native_state
         return other
 
     def update(self, data):
         data = _as_bytes(data)
-        pending = self._oneshot
-        if pending:
-            # Incremental use after one-shot construction: fold the deferred
-            # payload into the Python state first, then continue as before.
-            self._oneshot = b""
-            self._counter += len(pending)
-            merged = self._buf + pending
-            index = 0
-            while index + 64 <= len(merged):
-                self._compress(merged[index:index + 64])
-                index += 64
-            self._buf = merged[index:]
+        if self._native_state:
+            self._native_state = _native_sha256_update(self._native_state, data)
+            return None
         self._counter += len(data)
         data = self._buf + data
         i = 0
@@ -137,8 +134,8 @@ class _SHA256:
         ]
 
     def digest(self):
-        if self._oneshot and self._native_digest:
-            return _native_sha256_digest(self._oneshot)
+        if self._native_state:
+            return _native_sha256_digest(self._native_state)
         clone = self.copy()
         bit_len = clone._counter * 8
         clone.update(b"\x80")
@@ -170,8 +167,7 @@ class _SHA224(_SHA256):
         ]
         self._buf = b""
         self._counter = 0
-        self._oneshot = b""
-        self._native_digest = False
+        self._native_state = b""
         if data:
             self.update(data)
 
@@ -218,8 +214,6 @@ class _SHA1:
         ]
         self._buf = b""
         self._counter = 0
-        self._oneshot = b""
-        self._native_digest = False
         if data:
             self.update(data)
 
@@ -296,28 +290,84 @@ def sha1(data=b""):
     return _SHA1(data)
 
 
-def md5(data=b""):
-    # Narrow placeholder until the MD5 port lands; keeps imports native.
-    h = sha256(data).digest()[:16]
-    return _BytesDigest(h, "md5")
+# RFC 1321 section 3.4: floor(2**32 * abs(sin(i))), i=1..64.
+# Stored as integers so native execution never needs a host math provider.
+# https://www.rfc-editor.org/rfc/rfc1321.html#section-3.4
+_K_MD5 = [
+    0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee, 0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
+    0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be, 0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821,
+    0xf61e2562, 0xc040b340, 0x265e5a51, 0xe9b6c7aa, 0xd62f105d, 0x2441453, 0xd8a1e681, 0xe7d3fbc8,
+    0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed, 0xa9e3e905, 0xfcefa3f8, 0x676f02d9, 0x8d2a4c8a,
+    0xfffa3942, 0x8771f681, 0x6d9d6122, 0xfde5380c, 0xa4beea44, 0x4bdecfa9, 0xf6bb4b60, 0xbebfbc70,
+    0x289b7ec6, 0xeaa127fa, 0xd4ef3085, 0x4881d05, 0xd9d4d039, 0xe6db99e5, 0x1fa27cf8, 0xc4ac5665,
+    0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039, 0x655b59c3, 0x8f0ccc92, 0xffeff47d, 0x85845dd1,
+    0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1, 0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391,
+]
+_S_MD5 = [
+    7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+    5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+    4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+    6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
+]
 
 
-class _BytesDigest:
+class _MD5(_SHA1):
+    digest_size = 16
     block_size = 64
+    name = "md5"
 
-    def __init__(self, value, name):
-        self._value = value
-        self.name = name
-        self.digest_size = len(value)
+    def __init__(self, data=b""):
+        self._h = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476]
+        self._buf = b""
+        self._counter = 0
+        if data:
+            self.update(data)
 
-    def update(self, data):
-        self._value = sha256(self._value + _as_bytes(data)).digest()[:self.digest_size]
+    def copy(self):
+        other = _MD5()
+        other._h = list(self._h)
+        other._buf = self._buf
+        other._counter = self._counter
+        return other
+
+    def _compress(self, block):
+        words = []
+        for index in range(16):
+            offset = index * 4
+            words.append(block[offset] | (block[offset + 1] << 8)
+                         | (block[offset + 2] << 16) | (block[offset + 3] << 24))
+        a, b, c, d = self._h
+        for index in range(64):
+            if index < 16:
+                mixed = (b & c) | ((~b) & d)
+                word = index
+            elif index < 32:
+                mixed = (d & b) | ((~d) & c)
+                word = (5 * index + 1) % 16
+            elif index < 48:
+                mixed = b ^ c ^ d
+                word = (3 * index + 5) % 16
+            else:
+                mixed = c ^ (b | (~d))
+                word = (7 * index) % 16
+            value = (a + mixed + _K_MD5[index] + words[word]) & 0xffffffff
+            rotated = _rotl32(value, _S_MD5[index])
+            a, d, c, b = d, c, b, (b + rotated) & 0xffffffff
+        self._h = [(self._h[0] + a) & 0xffffffff,
+                   (self._h[1] + b) & 0xffffffff,
+                   (self._h[2] + c) & 0xffffffff,
+                   (self._h[3] + d) & 0xffffffff]
 
     def digest(self):
-        return self._value
+        clone = self.copy()
+        bit_length = (clone._counter * 8) & 0xffffffffffffffff
+        padding = (55 - len(clone._buf)) % 64
+        clone.update(b"\x80" + b"\x00" * padding + bit_length.to_bytes(8, "little"))
+        return b"".join(word.to_bytes(4, "little") for word in clone._h)
 
-    def hexdigest(self):
-        return "".join(f"{b:02x}" for b in self._value)
+
+def md5(data=b""):
+    return _MD5(data)
 
 
 def new(name, data=b""):

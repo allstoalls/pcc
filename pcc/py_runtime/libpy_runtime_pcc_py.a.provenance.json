@@ -448,11 +448,11 @@
     "__PyObject_NewVar",
     "__Py_HashDouble"
   ],
-  "member_count": 170,
+  "member_count": 171,
   "members": [
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "f236f9719e6a2a918730ea7993af03c7bdfdf73229e17ecc144b2398d8a3865b",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "9952f111ce386f801174b41c106fb69487aca48684f249ca97ffd0969bac121a",
       "member": "py_tuple.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "cc5bfce9d32b0192793b8bf3949b3818811d8438fc497125f7b0ee2ace91dca6",
@@ -465,8 +465,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "9b575a05060cc5e4581c2e22d14c5a488e75bbc95d00a2ec300f4a5a031b41ea",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "0b170098cd089f31e506a3c6c0965507e80c73795c379c0eb1d1b047dfc52d00",
       "member": "py_tuple_slice.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "39fd5bff740acb42abb87d2182c2fd5700eb8d7ded87e6fe721f33427a9d3573",
@@ -479,22 +479,22 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "8281f4a0d9dab7e7f511333c787c881605660b4474e4facdabc47113580efa3b",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "fb9926a3e15deebc701b16ce5aae511dfd8156cffd1957d5279592482a5701ef",
       "member": "py_obj_stubs.o",
       "object_emitter": "pcc-self-backend-object-writer",
-      "object_sha256": "35a077900b67dc542fe4a90e863c281428e7298b7a9f2ab9d1cd10ac23a5add9",
+      "object_sha256": "ee8db7a87fec1322e2134d9f311c163c86b41f7446fe54d12681ef1a6edf6514",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_obj_stubs.py",
       "source_kind": "pcc-python",
-      "source_sha256": "633e24b4655a8ab330d36d762958f07bcaeded846a8409ebee03fadcca434616",
+      "source_sha256": "ad24de966f85549b56076dc82f13751f9a00e929219833ba77441b56300cf41a",
       "target_triple": "arm64-apple-darwin",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "df86174941e406d2ac5a48d3d0e4d0217c012764652dc320be15cff9bd7c20bf",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "91a6ac808354f4cb260f9d543e2f243225d577c560ade50ba8cedb6f468604ca",
       "member": "py_exc_tls.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "314b992d18cfdfaa9f5b4639748715579df36823ec19383ad65ab4633ada49fa",
@@ -507,8 +507,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "ed267cc218825dedff8e72767ea4b3352b1590cf3eb48905896f0d7185812d0c",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "cea1686f97c73a8107064d4e40c0693882b41440fb09ab9b0fd0df57e7e6d3bc",
       "member": "py_exc_objects.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "9baf98b9da68fd047156222e87ab1bf2e5b98000835c40c151dc1203713e460f",
@@ -521,8 +521,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "71931db374239f29ac0b2b6ca306dc68b96eb09dbfe56cfd200cae2e3809c76d",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "9c0d3ce3d0590bcb6838bdc5e5fe90e494cf04f60cbc1f669ea5c436a92c9927",
       "member": "py_exc_match.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "f6923e9307d8c7634c85b0013807d285a7f0c6f96445249c9af3e3bdd4ecb53a",
@@ -535,22 +535,22 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "cdcf52ac669d2939a3ffa9d8f60659df0902a3be72e9ac02281dabd3c0584ca4",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "a274a3295e2ee332c36afeb2e2696f23dbbe8ce5897a48d47aa5c444f283a89c",
       "member": "py_exc_table.o",
       "object_emitter": "pcc-self-backend-object-writer",
-      "object_sha256": "d772b27232ce7cc75efe0fe3964446cfa1971666ae1144f98b7cf1adf60de024",
+      "object_sha256": "7611611194ca5678384c0c082a96b07af31d0b483f60ccda81b1840e8a3c56c0",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_exc_table.py",
       "source_kind": "pcc-python",
-      "source_sha256": "258ae71ec766c18b6a48cb4fc78c261871b15a3f46bdc3d8424f923297ec0b34",
+      "source_sha256": "2587307d31b86abc138a69308918329752f141317f89f0d4896d1626c52a071e",
       "target_triple": "arm64-apple-darwin",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "413772ddc5e0d527ec8510e89adb3333c1fdb98c0e0a69f536b24987bbfc8a6c",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "a5cc045eff34067881964dacdbc9f091a02eedf78f4fecfd876acdf825ad7586",
       "member": "py_exc_traceback.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "8e8b9cdd062a024ca18ce781e0a239274d09c68ded8c7f559911925ca55db74a",
@@ -563,8 +563,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "2160ec896d9ac6b20fd38173a5b7678cb3d515c70c89646109248b30ff886738",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "41632d89a79b1d923a91f6f790bfc694240d23790d3d87c713a9a7474eaabb0f",
       "member": "py_obj_gc.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "fa9ad55326141bb1eae656227b0bdb5171268ee1200d6c1edf0f97673f6c06eb",
@@ -577,8 +577,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "e43e2c4e2c413ad3f23288e381d4eea3a763790e726c56b8a7554de7bb66a348",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "87c9ee7b330465b5a420fd818a036e18da831295af5825f662c0cfe6edc01906",
       "member": "py_gc_telemetry.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "0d9b3c9fd87e509d92aab92f303ea9de3642c4a6c595fc971c3b910fe701a4b6",
@@ -591,8 +591,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "825caad11e45f1b840dac9e92afe34c98b9a7b3ecc51da359358c14929f35428",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "bf0eec196f17066b19e735b909ddce19c4e4696285a8ca179aa5530976427e81",
       "member": "py_gc_backend.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "06038be574b7baeb06986e51007afa0e647f55c4c49a527f9b05be47d176c726",
@@ -605,22 +605,22 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "4b65a4f953154b28dff1a3ce0babcac3b531b364178fc508025b308b1d45ef67",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "d8855cba44897626edc024f2632936d1f7e6e9daeb3a855e7e3b2ff0c8a78276",
       "member": "py_set.o",
       "object_emitter": "pcc-self-backend-object-writer",
-      "object_sha256": "955fef7e3945f3d960b8b5a14bf1095374cba37598159623099d78f254c671ee",
+      "object_sha256": "51143b06e533edaacfa9f5eff1fbe422e583520fedea9c69c80bda6ce70aa209",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_set.py",
       "source_kind": "pcc-python",
-      "source_sha256": "1fd87d94fe4e749fb606056c830d594c335ada7ffeea422001331abaec37fe53",
+      "source_sha256": "ef8c4a8b3cbce7d7dad52309e6a855c7ec4a40729911e5cff81025b35e2635e1",
       "target_triple": "arm64-apple-darwin",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "4cfe76653a5ef48555ca86b6472f8a26ec1079361d6023e1c3f3f44a3b2c245a",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "1426d5b90900d1963a4bca1e2527035a974a3dc425b94a87dcf60b284f124ad2",
       "member": "py_os_env.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "822ac0f17a631fe9f35824a32033ad2df30a0e6daf460cf4928fca432f7505ec",
@@ -633,8 +633,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "9642c475f07ffc50fa4958237413e04dc4f2ae10791433e7e818ecf81aa01980",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "36012d209bab144b6453796777d02a2d5184cb7ac489e5640cfb159f998f02c7",
       "member": "py_os_system.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "671dc15001eb2574dd3b169af27f3a607f57b745378048a84aa8c89762c96965",
@@ -647,22 +647,22 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "5559db58877eadd317d713609314049b04fcc4a762cc570e4eaa5e5ea11ecfb5",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "ecc01fb1bc287609cba1aed3c921140de0fda5a463bfb6baed8a1669d38ffe0d",
       "member": "py_os_path.o",
       "object_emitter": "pcc-self-backend-object-writer",
-      "object_sha256": "9adf4a2ed5c08a6a52d4ced9b178b0b34d543199cb307db69561d4d6a0711b2c",
+      "object_sha256": "1c3602ccef8280d8f5ec87ce03043567718f74d02dba9c90c9ddd4cd9b8de83f",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_os_path.py",
       "source_kind": "pcc-python",
-      "source_sha256": "cd7f14320ed611d7128195adda2f663c200591ca73934b653fd9190070ce187c",
+      "source_sha256": "8de968cc343939598a22243b45dc87f6f1169acbf924dbebbd6d5506b1e6bad1",
       "target_triple": "arm64-apple-darwin",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "52cf1840f25b98b3b8a279d91976799469d92a464604300d696bd439e42ed9ce",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "583e944156a3dcf031b730309b5236e6e6f515f62c90ae0eea5e57585c6bab17",
       "member": "py_os_substrate.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "f0e7b746e0f3f19b492b161fdad3cf6f8a54a0fbbfdb9fb7f19c3ff03f9036a5",
@@ -675,8 +675,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "aa5eb37a248e924cdddadfbf51c4d8952649dc5880f269b104a46292ca7e73bd",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "42871766a4521ff4544b10d293b295412229a46b6b2fd3b09d044c0f40726e74",
       "member": "py_process.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "4a7ab12bcce9dd93716c4e1c7322a3164118159f2dc24dd99e55d9d179dbac11",
@@ -689,8 +689,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "d8557d07595f48d10e4c899958936babfe3ec0031630bd242f72dcf0d29fd237",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "ef58e7846560f57c7c4a3b74d5508c9dd6bae02ab02f0d86415b3d776d1fa70e",
       "member": "py_process_substrate.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "a7361b6bf865dbd84446460272f73710f99f25dec426f6ec39c3861b0158b246",
@@ -703,22 +703,22 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "92c9c866f1f67d0757f60461ab98a9b8f4a28f956764125c15ff35706b227f52",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "0d4b793c49811fe91766ee9d1ee86f0c7fda8a44a34385f9d2cd2d8a148608d6",
       "member": "py_process_timeout.o",
       "object_emitter": "pcc-self-backend-object-writer",
-      "object_sha256": "37769ea75644397e2ea96c7c2f87cdcb086012d87f8fcaf604b0a34decdba2c7",
+      "object_sha256": "e547e0ff7d1ede0fe0a4fc5420dbccff9295db5b981c3a2a4175f0c510e18cd2",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_process_timeout.py",
       "source_kind": "pcc-python",
-      "source_sha256": "e9615f435f5d535f87f7102821fd12e96dce96bcd79de7945ec60640c279508b",
+      "source_sha256": "8a8f19f05e62b0b8b310e23dd93fad229175e17215dfdaf674e0a72697a3bbc3",
       "target_triple": "arm64-apple-darwin",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "c55fceaf8d3bd39118b013c78da66aa39c477f6bcad8c0cf0791d629895a6d04",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "4f9600f4396242cce553b10d3b76a961d97430bdf154c7147c3e4b980a6d4bb0",
       "member": "py_print_sys.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "e10d684166d089759312afab652c78480306ff465cceab24acebe3ff9c0ea487",
@@ -731,8 +731,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "614bec965e8c57313763032f5859af81a59886c9a905e6a96b1bb5279c307a76",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "faebe138a7a08bd8c1deceb5504ef1da7af074decec703fc58959e541e4f8b94",
       "member": "py_print_fmt.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "413eeac96282ab24c0f375e9fa30edd58ff1ddd5d91e89bf2e7c5333a34c51f6",
@@ -745,8 +745,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "5a245c152fb9cfb087959fe353e67142afd27417819834a127311c2804cc1a87",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "e2c67a5233cdd9cd8efeaebdb176300fa2b51866d46810d37db1777445976815",
       "member": "py_format_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "71da0fff469c41f2442bee84fbbab0018247ef836fc2e1b1f8a8959c6b765867",
@@ -759,8 +759,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "87ef989a9ccdd28af68b2ab2f9fa04d59e4ecf8cdd8e6dc333828961a911dcb0",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "d8c42c4c05bdbbb0cbf6a656918db47d5e0f1652f9e5e7cd47188f6904237220",
       "member": "py_obj.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "40a137927873393942bded112fb1837fb8a0829126811c716aca7f2e13837275",
@@ -773,8 +773,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "fd732916e1877d81c34719e26f74b10b5397267d2d38d4c6046cbf917292e1fe",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "9eb5af0a41cc4a7d577b8b48798ed6031eeb2aa9804d803de4b00ca6a9001516",
       "member": "py_obj_dealloc.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "2cbe852ef76d6b743b7143b41f63d7fdc34d63c29bbf705b56ff36399d7871a1",
@@ -787,22 +787,22 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "e456231c0ad59f7badaefc206c614dcd9e9c07b411d42d7138c5da70a272f484",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "afd479307cd33b2252962cbbaf5dedfd9a68e8a9eef7b94ba4539bf85d481a9f",
       "member": "py_dict.o",
       "object_emitter": "pcc-self-backend-object-writer",
-      "object_sha256": "f69acff5ef1347256d5c270d78dc2c334852679fdfb22775152348f36201d3ee",
+      "object_sha256": "277ee7a0fb55d27fe293ba6d825127e9a345d3dd4c834062fee0ace5d668423a",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_dict.py",
       "source_kind": "pcc-python",
-      "source_sha256": "baab58a9695922fa23dcdaf03feaf8047e20fc67d7f7e34bf6091572f8e6195d",
+      "source_sha256": "d530a34310c77d727ad10e5d911df7ad7e080443240a6e9fbf10ec2c80c6e99a",
       "target_triple": "arm64-apple-darwin",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "ddbe0a19590f51886370eab0f58da6b53651ace4676a383b5cd68236beda85f3",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "2571225db540f2cce55d5b03d7a5744bb6c0b131d8d0123ef848503ee72aa46c",
       "member": "py_list.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "73d3225484c339187423fccae859285dbb862101c7356bc916aeef3a488f4301",
@@ -815,8 +815,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "93a2ff1cd9c6841fa1daf6ee548bb9ad84ab7afa449cd23e08e7d53ecc5f631c",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "887d2a7ff050d941adf77662370b221d774eafb5d596f1c23be068156dffc438",
       "member": "py_list_set_slice.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "43004448e66f527718cbf244b2b3e5443be3f7a54158799f669065b0103494f8",
@@ -829,8 +829,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "256ee44c16b48a459221ab017a97f1eeccae568e2bc6db95893cfbccb0922c6a",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "075439beded374fa7467a2233a59cbe5a457677dca41fb7121c77cea87e32a50",
       "member": "py_iter.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "c86a89800c9c067c51e67d37a01862474e606ac91340a1f08061ba0864518136",
@@ -843,8 +843,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "278fc0c2d068a9b0c8ea930e7f5f799f48124e6b3230d94540f06b173f972c8f",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "4d25bf3005c433f482281b751cb2370eb3b60b8597b339ed1050cc63edab5230",
       "member": "py_gen.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "61665c7dfee73819f762cc35648b697499b0262939c7e27d71ba1c56c1eb26db",
@@ -857,8 +857,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "4a2a2bb6942eccb9e5ce78057c7d924ad9dc7bdcbe750aa851b9c4395f146658",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "6e142162441d9457554804aad29be9b91890399df6fcaf9ee1e52c6e3aad1bf8",
       "member": "py_coroutine.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "01014754b03fabac9045d8fa6585d936f6eab5e6d4460c11a8dcc2510d3abd8c",
@@ -871,8 +871,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "d3e6e9f5a60a8ac2292d72e972fa5a104061e7a77a6bc1f2e37396d527d5117f",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "2cdc635fb01ffe119a45296e344fedabbcf02e3edaec3778d39afc24cfb9885b",
       "member": "py_context_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "5ec59ce762b1f88346ff5ac39eff02d13845b9bf417a0d2d1354eda96c98060e",
@@ -885,8 +885,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "ee68e67d49e648ed1994f192182a1954c4e8f40b6d82994c1dafd64894f3620a",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "9c43648b414b8397b59346c3df5851fcc40674e1f402c63cb25b591b9b14ec23",
       "member": "py_call_splat_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "60652d3a48a94df206d798fd3bace88adc3c71bb7ce7e5ea8f3aef701b4229d0",
@@ -899,8 +899,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "dd2fa3ecbefc57b62cc994aedd6024409f6650515eadcf9edea46f9172e37437",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "ed54eb73be5c67df1d699e872535d64335daec38ea28ced351bde0a6371eba0a",
       "member": "py_module_attrs_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "bd7a6684cd609a28d5e725d136ec1332820c6a1ec4efbdf0815fb2d87e67e64e",
@@ -913,8 +913,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "5036d88a5d8bc7366b3081472cb7ef0a3fcc4b7570e8d93ed44b4548a343fe6e",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "25c79c9113b0720beda55c56ab59a174af98789708d22900b83d812b2e28f3dd",
       "member": "py_compiled_module_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "37f6d60e1e40679a1f21f489674146ca8e76e6514b63b9571215f4020b448d73",
@@ -927,8 +927,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "07b34912938f6c9cdf57ac13614c4e2d6e412e81c7ac4731c9cc0dca0cb03a17",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "726c9621d8e39889e927305b90b7026a5ea259a7f0701225c2c4b03d4356cd5f",
       "member": "py_dlpack_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "40cbc4812bc496564ac39febfc55411b0488cf4ebee16aa22f74bf03951a9060",
@@ -941,8 +941,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "dd7069df21c5d06399e274a3a7b9e569c5b801984e187825bac9c3382e55f401",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "e89060f03f8563f8caa80f38c7a35173b8f02014f20d739944f02a76a35503ce",
       "member": "py_runtime_log.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "26cb677c3bf274f084736d9e2c8b313e0f782e4bcf1762ce4d1f1256a9ff7573",
@@ -955,8 +955,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "b1ccce8b3226c73330be8abf7b79dd64746e63a3ab8cd9f0bdb1f81486889c59",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "2aa5a19f39ee3e707b55c1f969630433ee442683d1f8a5b9a6a534c1e7e7c2d3",
       "member": "py_json_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "c16e9ae0e3c534ce8d6ee5fd909119bf6354a449ae46442f107e1a8546cae1c3",
@@ -969,8 +969,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "83bb07b33f915f72dfe5fb419398e9b996422677d4935d8afddf06dfaea7b351",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "1842e63f6702c89fa6d8f60beae869f53817ea89a17af056162ac8e1a5ee09ee",
       "member": "py_pickle_copy_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "f686a6b34dbaec32b13acf92d90a5c5a486ad11835c215065c58f653f97cbcd3",
@@ -983,22 +983,22 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "350d84784b20f3c7f65b5909e0864c4ab04c92d771307fcf3c493da586cc686a",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "11fe3390b5a5f9223e836a4d21696716582981071325c75626c3efa9887f8de6",
       "member": "py_protocol_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
-      "object_sha256": "a365476a9ea6842df8587c169bb5efccb27d136f3d873f57f9e585e4d2964fdc",
+      "object_sha256": "30a8ee31793c9d302af87a65cedae8dc86af68d29c12519cb9f86bb39faef629",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_protocol_runtime.py",
       "source_kind": "pcc-python",
-      "source_sha256": "f6f93dcf64aa4b2c13cdb55cf81b2f748b7026da9cf366379e790320d20557fb",
+      "source_sha256": "276c3d4735bc25a8f92218d56a7b9ba38dfd80f396b89d690249ce261122af88",
       "target_triple": "arm64-apple-darwin",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "3353b0e6af84e92bb6ac4f6020b67e8c9e0bbbccdb6142abf3c7d0e393ba83d1",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "c2616cfccf6509672f020770181ffeb48bc100be0cef460ba7c6ead378aee9a5",
       "member": "py_extension_loader_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "8689d19ca3766f2ec23cdfe018f0008e8275b4dee0f8a8476b3d496b3e3f186f",
@@ -1011,22 +1011,36 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "1298b11aacbdff0dad690468b0ca9bdde92ea19814a0189f7becf008b9ece902",
-      "member": "py_http_runtime.o",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "92512aea06ecff72f3cafb3c6786d053d6cef2225ef734caa63be643a7b36304",
+      "member": "py_hash_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
-      "object_sha256": "cbd32d6eaa8802df781374a7f56199e3437458174a0017976c85e4cc9cf65ec9",
+      "object_sha256": "4cf08179b206ba8cfb8841e59f692aaeef9b3547f697fce163abad2677d4c525",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
-      "source": "pcc/py_runtime/py/py_http_runtime.py",
+      "source": "pcc/py_runtime/py/py_hash_runtime.py",
       "source_kind": "pcc-python",
-      "source_sha256": "1538d442ef895406a9d01b32f409794f83b2b662f0985fcd80acf92b9405c2a5",
+      "source_sha256": "b45150dbffa97cd2c8b4fb58383d766141fb444643da1c25bb57ad48f49bd71a",
       "target_triple": "arm64-apple-darwin",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "2e4f25e0ab8072ee48f146bedc429a8b89c8a29a909ef97c96223045c09d5d20",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "e229b074e6caad4a7318a105a9d4e20b0d3a21f56244c8cefbac139b74819c8b",
+      "member": "py_http_runtime.o",
+      "object_emitter": "pcc-self-backend-object-writer",
+      "object_sha256": "3140679744495aa5a82e4d85154a759f3be0769ab9b9ffde4db66d66b666b5b2",
+      "producer_kind": "pcc-python-library-ir-to-obj",
+      "schema": "pcc.runtime-object-provenance.v1",
+      "source": "pcc/py_runtime/py/py_http_runtime.py",
+      "source_kind": "pcc-python",
+      "source_sha256": "d26d25c3de277c3592be2a1ef69a5a54cdd7993e08263c465732429e6b484f70",
+      "target_triple": "arm64-apple-darwin",
+      "uses_host_cc": false
+    },
+    {
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "6e602c7014474d9f5a34648f9ec3237f7d2ba3b8fbcdba206bcb90c152cc5bc7",
       "member": "py_asyncio_io_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "695000ffa55e2e906ed1020fc0b4fab57d90022835f00b15eb4b418cea53e940",
@@ -1039,22 +1053,22 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "8e876cdcf6c417a7886e4fb059eaa723e8a7dc256263398763f6bdcaee2b877d",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "a8c79befb6aaddfa0fde10bb89694738e838f2b12a6ecf16227177b9efc32930",
       "member": "py_re_engine_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
-      "object_sha256": "c314d6fca05079303199d3b099256b53d5bbb2faa9f4eafeaaadd733663e9587",
+      "object_sha256": "99dd92ede6d2ceb6788ee6704455b908b2c4631e7ed215fd932b7c6ea1c7f961",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_re_engine_runtime.py",
       "source_kind": "pcc-python",
-      "source_sha256": "748c3136034c2626a747a39427c22a4c92b18dcfecf27642d9fcdb05f6595e4c",
+      "source_sha256": "8d759a6c6690b3b025ca09916743c75255e573eb8844ca98e177654f1a3bf771",
       "target_triple": "arm64-apple-darwin",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "1f8bd363a3fb78250984c863171cc23468aa22f9cd21693bf77e3b2391ecd402",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "5640a93a571f3d7f7f7bf10fa93cbd9e20605b00f3c78eb22f326eec0e2b2d94",
       "member": "freestanding_io_waitset.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "7430d7cde1e869f36b0e5c1e4ee33abdab332a901d844ea160a796d4e9716ff8",
@@ -1067,8 +1081,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "32776d954eaadbd3eafd201bd3e5034bfdb5009e79a34e74eef50949f32ca8c4",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "aafb897b9adcb0dfac2f00429b7e893961e9accfdb307b15b10ca9c712839802",
       "member": "py_func.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "c6a26c8a952aecd9fa4e174b6a8922ad9f2e09e2f27a1fc317e23d984269d656",
@@ -1081,8 +1095,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "6ed0485a44516a00ab8bd26aa7188e656a89c6d6f8f9c1b74bca41d956da1d94",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "2ef14e61cae63e2f2936eec27c7bafee76b86c1285e82eec920c06d181e10822",
       "member": "py_re.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "4b57b029665f72e36fbf9013a83bd9a29c8b6844375ecfe636804d79478aa3df",
@@ -1095,8 +1109,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "06a48e17216a5a441c299cc579bd80da712607aa051a78d3eb7738860aa866a0",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "7050f3b000e1bca59cc179d41769fcbf85484926bc05d80cb66aefbfd12f4285",
       "member": "py_dunder.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "6da21b7da5c525ebcd98a1acdc49a5d578da0a3805203f5275a78c551d8464f0",
@@ -1109,8 +1123,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "7e724759999a851bbcff9849d36badf802bb9fed56e02b39bb4f5c6a998e47da",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "843eee782c66cc9e05253d8ad5c0fcea31be2f123e54ba341672f3527e6364f7",
       "member": "py_weakref.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "892ef04eb1e36091e98e3030d00107969dec34853ecadf962f52e260f9db3326",
@@ -1123,8 +1137,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "dba3db97f72adc079b5af9c9f230c3e24ed0f548e168f4a7685c5f9fe22b6825",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "dbd315913969349d4a2ea5438a11171ad1795299c5b4695b65681ef7bb2f40c8",
       "member": "py_file.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "6e7225ea76b82433bdf978ecaf1444a0744dbd8869b99db029ead5337d6c38b8",
@@ -1137,8 +1151,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "8978167425e3bfa799f12b4533ae1280cf0f575871e138416b07c809d297e057",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "7d77bec9b92671dd6fdddb128787969fe154561fa35c9882c292c4441d110d66",
       "member": "py_threading.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "63923833a14040c62a019e1ad457cfc964e070537a4c21394b005a7db485c8b9",
@@ -1151,8 +1165,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "9287d43a2c422b011d8452bcdc66aa25c1931935713cf69d5bac2c00e174bd17",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "34ce572af513854acfa3c782681088fca458d60e98a76636cab46cbbfbdcb52c",
       "member": "py_class.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "cc7ec6808cc6e08543e15b9996597cfbc8b403d283be93e643ced42fe0d0762b",
@@ -1165,22 +1179,22 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "e38de944ba8a11c65173dc8afbb02af2b93046a91aa27b0efe6ba9bcec41d8a8",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "74516de490b24bc64348ab10437500f0b05356f485e94c6dcb7c0818742dcb93",
       "member": "py_obj_ops_dispatch.o",
       "object_emitter": "pcc-self-backend-object-writer",
-      "object_sha256": "25b361a6d5b8100ddea51eead3695e8dcbf86b54acdd332d5cab2f3a80a7ac4a",
+      "object_sha256": "2c8afbf2960dac2505601b44d0024034e853515cb349670c3523b03e7747f2d3",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_obj_ops_dispatch.py",
       "source_kind": "pcc-python",
-      "source_sha256": "ba11adc555bf30ef9d53bc63f738b18001cf217f508244019bca6d173bd4f3d3",
+      "source_sha256": "a82cea25a0cc02925ea286bec9a173526eaf2c6388bcb1f93a06a2c5a58e9876",
       "target_triple": "arm64-apple-darwin",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "9d0d47a362496b5e771ca6831fa6499720a1eb7c7d5a2bd3174e296c606164ad",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "4ff410dbfe93c75bcc988d702f2ee042de75ba1455913d553c74ab2a1f685260",
       "member": "py_obj_ops_slice.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "de7151b50b89439786ea16bc4e0b092d14a0c17c095324fe369a085552ef420e",
@@ -1193,8 +1207,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "cb91aaa154d8d7dc65f3650b39589c6fe03616d24c76a8eb3b242897dbc33bba",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "357c0ca7abab6434f2e459d760824364489ce73ccc1cdd16da81e1e87d9aaf7b",
       "member": "py_obj_ops_set_slice.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "6e9c9b0ed7c89223b1de99a753aa0cf3defb04ef618be4241486f6b822971b13",
@@ -1207,8 +1221,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "4007f334019eb5c9075735eb73850cee2eae3c6c26c11dd2ca13cb4c0d4f91ed",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "2b106b79a0e47d2c661e1a0e60d2992ab71fc862ff65ae8edefae10ad8d4caca",
       "member": "py_obj_ops_mod.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "683707815e83b1ff0dde19a7326ea2befa69dbafbf0289cfdd48155e58d0b454",
@@ -1221,8 +1235,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "9fbaea10e136e112d945582e11c4cdbb1fb9df2f237b917aa22d3e99d4becf38",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "62a68b670d38ed47b2833cbe297b0eada1b2a434232bcebc7b8a8d06a8b94731",
       "member": "py_obj_ops_compare.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "85f27e57bdc7b4bf3dacbf924525302fdb4e0ccbb965eff9f21fa17e1cce4742",
@@ -1235,8 +1249,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "cb6f59ea360d4900fb913cc137fc3d45812a07730b8d63bdbe1525af6e9a364c",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "29dc01dbe1281acbab66c17f2feadad8638322b790ba3d3549c90de21b4e6ef1",
       "member": "py_str.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "548a9bc3c41c6e6e55950d39e72b61858994c7365ad722d69bae10e80179e53a",
@@ -1249,22 +1263,22 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "fcdaf30f670e4323685812bd484fc41a9484f3f2d152a5f58b86c65521644de9",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "c72cd35c00df12d343922457301a90a48548aa6506940040d9f18cb12dacd816",
       "member": "py_str_accessors.o",
       "object_emitter": "pcc-self-backend-object-writer",
-      "object_sha256": "f1f94d4a4cfbd68882a30eb031357dff69035c9fa41ed1225711d6fd6d5c55a7",
+      "object_sha256": "fd383359c9bf336d54adacc1de3219708423442efecc08a9306bd4ab88ec0a0c",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_str_accessors.py",
       "source_kind": "pcc-python",
-      "source_sha256": "1f46b8a5753cd8a54bfda858493c94357b15f36f79bc95faa6178cddc300ef2e",
+      "source_sha256": "7bb1976646649b1c2e167c387d251ee81e2b82a9bb3b1b00193da4f1cc63fdcb",
       "target_triple": "arm64-apple-darwin",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "fef5f9ddbf5aca92c88107d742243a24074ccf176e223bc32d502cc790b535ba",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "2f3a097dbff7301269783d01a103fcb47b85b369d03f457b87cb6730346c736c",
       "member": "py_str_slice.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "a921c08f17594e099f556f46203e6e9da67c93ee10b5f561b3ed99d4998b908d",
@@ -1277,8 +1291,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "565ef135eba1015afdaefe957b63efe904fd7c4db3804c92ceef512927cc90f4",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "0b1f3e2c20ad3a860bda54faf0a6b1b3916e7ca7d8bafcaae6cf21af0175b41d",
       "member": "py_int_core.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "afe8b48f3035fa13cca934e27d3caf4791006264f9d4cb471e5bcdd96c9663e6",
@@ -1291,8 +1305,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "f3b678d2301339c82bc0fc90e18a6525fee9b33ad71c6d3373b31337cdd8cc6e",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "9479f226e65dbf43b25f210b9deafbfabc9386fde973741a9ad69985b0d1d58b",
       "member": "py_int_decimal.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "4572ed6dbf87750ff36e42887dd0a1b7ca56c8309914854d971f3ea846ea0eb1",
@@ -1305,8 +1319,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "94a5e3721af2ffb05e976acf719b46338ea9a8180826cfcc3ce1953c02658593",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "05d58a7392ab65e020a141e1c118df73ddefaf28ad0a3d54bf68f1dd7b8b41d9",
       "member": "py_int_shift.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "444c1f258c38b9ea08f0ea0ef292d0e0bde21c6933eb4b088ab03e8169b76d80",
@@ -1319,8 +1333,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "5e8dccc1075aa761f84db9942e1c1a242b67ff4e71066f48035bd26b8bdfffc6",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "9c4024d739c20607098f9b298c81328be430e605bfd139f0387a0cc9db76eaa9",
       "member": "py_int_bitwise.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "05d336714501f5fe353f6929d1102dec7327e4223054e387ddd58cc0f57d758b",
@@ -1333,8 +1347,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "247c8f131e0b8f34663d13489c96fe9214dfefafcbc269c0eec2f653837516be",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "c4d5aaf7ee33cacef3e777972e2f29f0ffe9d620b7e284bc06c3b7e46b0ce587",
       "member": "py_int_addsub.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "ece76310b8fd2c7e1aa5d746dfeaee6b42702aed36df6d4e1d8e43c370ac8f17",
@@ -1347,8 +1361,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "8ce4ddc6cbe655cb528c847588796e14fe3709f270f11c48b6e0daf740fea1b1",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "227c11528f20b60eca7cfa7f2c2d718c1a3870f07f5b8eb80a0c04046c066a1d",
       "member": "py_int_mul.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "5a67eac70eb18d7c721af289393146d4d47ea48bab64a359db22602e68011265",
@@ -1361,8 +1375,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "a1a8fc9d473c02bcf9f449236ab8671b117f16b928b6a664e79d50415902d81f",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "e70e95450fefe6aa3aae488169a2564d54b50976f3e5f9fc16b3aa5fb01325d4",
       "member": "py_int_bigint_pow.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "05c1bea308bec3b51976025cbf3ef912755a71038341d11c49226bcf2970d407",
@@ -1375,8 +1389,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "fa6ecd56b40791c5027694d1cd70188a580cedcad2b40f7e3625959252189c19",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "d0dc8bac41e8b06a811bbba104766795ef6bb175fab5749b5d79a6e1ddd88eee",
       "member": "py_int_ops.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "9cccf174fa294ff1aaea569ccc08a84fb00dd8430c1fca4ac238434ffd3d61bf",
@@ -1389,8 +1403,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "c641a8ea3ec730346e21c2a51cebe595b7086efde1774516939eba181f67924f",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "f7d93e886ba19a5d9ca227f9f9c15df5f99df63c91f9017b369d4ca529aefe1e",
       "member": "py_int.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "026490e319e10d3cd7ec012331702206a70c112db17da91eb8b41a03feaa1ba0",
@@ -1403,8 +1417,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "e250b7d9ffa32f9818af81cb56c38efe262a787387a0c14dd2dbe0dc4b1fe970",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "0e3fb927c263c11be08434e40707c8279ed3c36635679f091445cb0e7438bc24",
       "member": "py_int_parse.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "5656575afc82f269a9b9593c18adc90a4f96ab23d3c9dd34649ad15ec91695b1",
@@ -1417,8 +1431,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "4e13e59cbc7d03f19d7e47f8028c4f14ed35f4c2ef944f325304c17987c96960",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "a48abb3b38aee5ef21485dffbb32951839dc4d37c1e1c62edea649e8dd68d4bc",
       "member": "py_int_convert.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "6626ae6eed67fdaed7d8031511a58b547996ac072a3aee2eee05e6ec6c8293d6",
@@ -1431,8 +1445,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "07a2ebfd40b8d5ce72a67edb43f485189ce6a211da256fb116d6f122fd6751fe",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "fd6585d306154e2fb6cb6240ff8428abefc7582247538f3af54c6aa8356933ee",
       "member": "py_int_bigint_convert.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "423ecf51b167c5d010605d168977602ebbb1b9c604340fe9a89f8412242889a5",
@@ -1445,22 +1459,22 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "9ca4bf130615eeeb49ba5f3b0f510f8a2929cbc852ea82ba9c5cf8e13761bedd",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "19827298cfd4821cf0ad245ba761c32fb07a5da0452524f160ea95aac3f31670",
       "member": "py_substrate.o",
       "object_emitter": "pcc-self-backend-object-writer",
-      "object_sha256": "c4dc80a0abc3fbac2beacc017d348cf7ba47652880667230bf130ae5e3c8957b",
+      "object_sha256": "fef62c301563c2e2fdcb09ce3ddd1cef4b9584326841a716c67c001afa53563e",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/py_substrate.py",
       "source_kind": "pcc-python",
-      "source_sha256": "985f0ee1b9263589d2f14458dfe7581cf1ef7247721c34dbf478cee33a002743",
+      "source_sha256": "b5d0bd1cdc3ebeff1a10648e50b62db59ab8edaef423ea4cc765dab03d511d53",
       "target_triple": "arm64-apple-darwin",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "75b26ca0c056751169989490c7f750f706855a194e0a5df8ebc60e76cc5dd1e1",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "bb1ba2d28f74f0938eec3aadfca60c7f5d08116861e3e1157c08f302b92d7869",
       "member": "py_virtual_thread_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "e568ada61dd6aa8a34d34dddf97a2bd36a9bc48d8b5582a44ca4a548e87966e4",
@@ -1473,8 +1487,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "14e17f30968266e5b9e30d0a307cd5936b5da494ef8d8bbb740edeafbf9abef1",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "0394a50c2fcc7d2a2acc2ffbf355d50804cf529537cfd3906ca61ec86034c120",
       "member": "freestanding_runtime_debug.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "7654120231d25deddc88013874bdc4eec1f50f341af898e08f62eb91e6961a00",
@@ -1487,8 +1501,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "a3a596eaae9d3a7bdf12f1b891d42fba9d5f3e2ef124e77b53c8f5810c8af37a",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "e3d6788da08bb21c8502ac3b69c75248b5af31282d663d7a02b328b8b445c67a",
       "member": "py_capi_core_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "9a2cceaeac3e2f8ac352e7fff977248d3cc15e6497533dfa0a18c18580bedb44",
@@ -1501,8 +1515,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "850588677716f8a3758609dbf841c1ba84d0c724e4405b9077b034774dfd468e",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "08888b10a8b29c73fbf756f3bfa97fad48709ed6a4b74e4df4f9d585156fcba0",
       "member": "py_capi_memory_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "673c10cedfcadc85d4ca735361ed28b4c38e2b23551b45abe81a93adceaf573f",
@@ -1515,8 +1529,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "f81cddcba863d9558c00da725263be36c9fb2e1e872dc7f81825ce1483786193",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "623bd1240c8ea26299324d141c6c668984a29d172110a96ff046e0d0f30200dc",
       "member": "py_capi_stdio_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "9db918bac3b7d19b3ccf67b4eda500513dcb9634618cc5fb9d2c34620879ddfd",
@@ -1529,8 +1543,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "39e3fcb3f68d78a6ef9f26fb1e7f6a314552dc1bcb038cb70ba0ba88b40a80e2",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "f37d8500a7b99fff58ecdf4626790af5caf998c3f8ec0c678385c608ac9c6eaa",
       "member": "py_capi_numeric_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "407bea4587866ff30ea1541a4ca6b9389d7676a812f6b927c26c341aab5069be",
@@ -1543,8 +1557,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "3cb9c0512b55efc296fb179b3f233ef961ead7095de0fc8eadcf31f1632b94a6",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "7ef868014fce2f8264ff6d471f8524b727d023e49a9a02978abf9db2c7cb80d6",
       "member": "py_capi_collections_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "256a9ff0d06990861f7560938de2e48e4e69645ae996d40720c153368f117c95",
@@ -1557,8 +1571,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "b44d93143f7f2f4481d5a6129510612bc9d64f9a201e4f38aec363b3e558e03f",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "10bee53420ba5d9492db05b5d99720b75d341f7e87b084740d91330bca75a02f",
       "member": "py_capi_exc_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "f486de79cf584932473525633d6680173dd75165ab6213a6fd8d30e1ebf1f50b",
@@ -1571,8 +1585,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "6bfe99b6f32b11d4daf3f0440c8ac885233d6a6478d91b78fb25eed7b51327a3",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "5a7277f3e395f03cfbcaba23326542449e11c26207278f9f658174ddc1178d16",
       "member": "py_capi_dict_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "0a0c77af4021b2923c9b3292fb3a7e69c72f03f8bd770895beb093f1064467b4",
@@ -1585,8 +1599,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "e7f24ef3386b0a6f722f6b0315ed2c26909dc96ab8d99f96b7a02981979d0051",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "7cceb29bc2438fbe5efa6e0c64a3eaa878dffa451246c2ab1efd268fd5b40253",
       "member": "py_capi_object_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "e93e12ce42479c913caa568c991717ab9c69af90c1a57a2d1c747b624656f17e",
@@ -1599,8 +1613,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "d62a5043b590736e27ba877acf95050e1207537269fa415304c96a616d30bb82",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "803bb3ee5ce8af3985652d667d6a5048978614b63479004788c07742204577bf",
       "member": "py_capi_type_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "c86df174b8a2ac9a2285c449cd90f5877902e8d3814486ccf03127a8eeab2658",
@@ -1613,8 +1627,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "c57d453ceafb7fddc8080f93a9fdcbac0bc7a93c2876bf2dae0e87d0e6999a3e",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "aea4796471965bb69111e553ce329a28f70583cb59908b92ae9f67b951893898",
       "member": "py_capi_unicode_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "3e35a81f0af2041a0676b9abe598d43f0a3a06d895dcc47aa7c5daf37b91e99a",
@@ -1627,8 +1641,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "51a7123996fa98ba0347a7417ae8ca62d4fb17c4a643d3a251cfe95cc5603c64",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "78fb9c47a4b0d44ef2b9b1f06c36456dc7f2dbe3945f1e80045f1fdb8f6bee3d",
       "member": "py_capi_capsule_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "a586907d737a47263e7a77d674e094f22d75aa41ebd2c933422bcde0ad29ef39",
@@ -1641,8 +1655,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "d6d69534e04f075117079f5ede4ab08af36de150e5f394e6ca30180f1f770ed4",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "ed932171f0776a8d52f05644abec2a4b082478fcbe1028aad1c4565c0bae818a",
       "member": "py_capi_set_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "b3778ab34b0d2ffa633772f6010da5f82347c6a964fe5976fd45c7243c045bd1",
@@ -1655,8 +1669,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "c4990384cf21e8204bc76daa446c4a22b479031a656305b7bf637c3b1d0d8bd2",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "99ee5dbed9cf929de0dc8ece8d2754d39f898ea0e28ab3975a83bc4d76a7acb9",
       "member": "py_capi_misc_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "cb8415de705d393942669d5facbfa5560722708a959b44ec9b115783cd0ac8f0",
@@ -1669,8 +1683,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "c559c0e7f0459e172b871d7baca50aa27ef3c3be0d8e40347fff3db27626551f",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "c1dacdaccd83801f99687af1570cfb66788680e73b2da86cb71cdd52b94586cc",
       "member": "py_capi_cfunction_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "d7b585465454cd9568cda6894c89f30ed09a795d60de39114edbf50912366a93",
@@ -1683,8 +1697,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "c83417edfff673bedc105427db3f4de2384336344b1865036f55568a6d6be3f5",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "816bd0bad3000e5f24b3c82e576b62b3639054268aedc1546ff2c18412f0b00c",
       "member": "py_capi_object_call_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "2c9862fa4fc379f1a8e09f9fdd30210628b241ae907dd564270f0f8f9ec7728d",
@@ -1697,8 +1711,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "20568616b9626751fd5e8f29070ec03ee889fb8cbe49e63c170ce4b35d768870",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "ee8857abe214ae612019b0c0f894933b027dd4e8cc8fd458fb06f1430cf4c90c",
       "member": "py_capi_method_bridge_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "3b88abdb70f1c7434c77d3b8a395311129206e85b38224812e2145a9eebc6fd3",
@@ -1711,8 +1725,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "7554d054d662d26528de88661cc4b26d0e06002cd41fee0496a61cfb220cdfab",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "d7bc25c079c57b8c17cd2c77f555d1b06bf9696ff6a700a408a5d9f49eca648f",
       "member": "py_capi_object_attr_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "d990dc51a415c8175054d78aed7fa7d47a5cbdbe362f2db9d5186aa98495aabb",
@@ -1725,8 +1739,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "9ab21de388cdba752ecaf3d14d487f4a351568479afb366b547922eb2330ecdc",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "74f294395a7bf6c91a255d052176ef6d1edf1850178a77e28ca5a1fdc5cad968",
       "member": "py_capi_number_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "e29a9cf060cbcb843e3b9ef3df11ab15e77a23ff3d0dba08ec4d686061afd2ea",
@@ -1739,8 +1753,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "440e4039dd24e01c78aa0b9831b5c5819ded26e7dd1055e1baa3d4b9a75693d6",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "76652ae045a200a44eb5dcff9517db7fefc7b4ac5aac0299f981cf6359ba8f44",
       "member": "py_capi_sequence_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "09e88b4b503bd4883934ca363631ebc00f1c24a27931de2fea5719a7ee98ec71",
@@ -1753,8 +1767,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "ff6b52eb8262266fd536f56ce8c84f204c1c19c979da9bc06c8785a94848bd8d",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "ccc79fa945f5a59ea47e1029b85df26ca27da76208085b8f58ee3b05cf9240a9",
       "member": "py_capi_mapping_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "69c1b6f716e54a312b958786965b0f572374bbdb8465e0727a982f85669c3b44",
@@ -1767,8 +1781,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "41df497aa3ccaabbd19c780049bc133f933b6afe0b32460d54300a354a7ad191",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "b4a341b27b0170aa0d6178e2f51b9bd560be4575c4e46055c57b36a5408f5bb8",
       "member": "py_capi_import_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "f0c3a5079b7801610bd152905c9f710211e7f3970a39f4b870087c7424d17bf9",
@@ -1781,8 +1795,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "cbf88597244682d7574c57089fb0649e0e419f0601099715c82c0a366c334e9d",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "74b6b90db32e163734a15290d93af64f844e65b45ce0b6532dfaa07a7b7ab79c",
       "member": "py_capi_unicode_search_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "1adfda9b79d3c1b4cc8674b39ac1e0ea2044564732f9b5c368206226f9f8bcfe",
@@ -1795,8 +1809,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "1e776878902637892427638774c76d3f937069a1ee13cfcbcead7c210229ae0b",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "1f21de1089985a4bb4e0e42a2b1e5245e568afc655047d08a3cf78b57e189c57",
       "member": "py_capi_unicode_writer_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "543bf9af8361ff8e7c6a2b7b0aaf332bf9c3453ca3410b6814c18a8ee96c086a",
@@ -1809,8 +1823,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "d7593721cbf0e62ca6079c0c8711f443ace0a7311a3b5e88c25fd108c416ab7b",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "c75e1327fa54384fd0b498dc6f1616b94b4f21516b7977823d5dc0d2e83af615",
       "member": "py_capi_buffer_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "6ab88f199810db08dd310896b8a67e87ce6cf9edbe773b4f556e22046c648959",
@@ -1823,8 +1837,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "0778945e983a655aa344d1b1b14eeaa46128e2ace85f4bd39fa6e526b0958eb7",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "867c3a73a210f0640c70a3f0f51c8015cbe940e143ccfccd1c9ee3fcbd32783f",
       "member": "py_capi_module_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "f318e702d54bbd0f6b4a512169ea76a1154f593a83f6880ca911346c97200691",
@@ -1837,8 +1851,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "ca3b46889c9dc7415d7b2e442cdccfea3cb089cfaa0d3549585f4dfaa345fd37",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "2aa2c297d27d83f123f465d3380c9d6ec501945d516ed8931cd6d85712a83638",
       "member": "py_capi_cext_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "4a1639eb9749fb1627e0db4fe15a79e177b57bdd7a3c064e4da87fc69871d201",
@@ -1851,8 +1865,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "d37b0c3b3b5e2838c5b9b367d3b20abcd7de7ea47c41d766eed70ee0b4174c53",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "c1d09b39c0b51f67f733d0d7febf5c9c9b7e32a6557d5edee231b85e4b6e0ee8",
       "member": "py_capi_module_state_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "3b96a383e4339416292bda3f08fd0a7ffb5020a7db07d5955bdced6c0028961b",
@@ -1865,8 +1879,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "19bb5b23da19a3f0a3ace5ead1b32646864b6a0c96fe4d571270c23394e60ac2",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "5ccb419ae67792d48162300d3697a87fae5fb194659d759a165ed0c1ece77beb",
       "member": "py_capi_private_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "7d5d081af27aa609b887c3b0793f7b73336bd82ebb0584a799cbfd0cb5a49890",
@@ -1879,8 +1893,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "d037c6025691b8d9f2589d8bb664be217db1a470759ac5cf3b818d8cf20efcfd",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "266ce250254331b8b1a8ab9dd3405bb014b02466e6e65d0b6136fb30dedeb1fa",
       "member": "py_capi_slice_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "583dc870cdaa1a4cc04b905aaf730b629e3f19d6d9727f5514804eae90569dac",
@@ -1893,8 +1907,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "d6772eb76d86d071edbf239d1fe4a7214b22facbfc264e7d742505c3868046aa",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "90fc5ca6ed04e0f9e419a2c9854d2e64d8f20942d15bb23670650910403cc01b",
       "member": "py_capi_seqiter_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "4e7cc478d9ebcb640b82bed636143063a8c17536a63c49eabe353a5d67020330",
@@ -1907,8 +1921,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "71dde474029a605d608b3f5424dadca02c55228ed7bd1bf5bbae4e579505ecf6",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "8e7d29bd2faf07ffc59bfc50f3792004ac9d7594ce671abb70c29796eb583bf3",
       "member": "py_capi_contextvar_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "afb5eb7e0ecfaab8bf051c537e425acaccafb4ea82333c5f212f9b25e5b522c2",
@@ -1921,8 +1935,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "ee0b3ca1ae2399bb0569ebaded5eadb5021cd9c9479ec1f1d221064d0516dbc7",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "84d5446c404a44a5d89c746690e390d2b71df0b18efe7832c97d084b35a32d7c",
       "member": "py_capi_call_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "511130106afc3ef50b88e9c62b5254af05a15e11556454844463a698e3f0b9a0",
@@ -1935,8 +1949,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "044e88636829da5599e112032a4ac7d6920f9e7e3bd1eabc3604d9bf0509f964",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "4699e8a6f58ee5c7e6e9d937565d764dde69f04c5f2d6cc6e4ab1c6c9f6f6262",
       "member": "py_capi_arg_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "1df3faa8bdcf4ffe807960cac839a441619bd3fd1c74eefd3cf799bf2b767483",
@@ -1949,8 +1963,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "725dde9130bd2c9ae6ce6c0458c3a4fe9ee6aee793c875fc169ae6498ba2824b",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "7f0f2ba5d0081b2780a18101b4c64fb61312e7f98cc4024e75706a23b0b5a794",
       "member": "py_capi_str_conv_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "4709989abe7e224947aca341d984a48fbe45b376f26a1926d8cf2decd0ba194d",
@@ -1963,8 +1977,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "a48a8a14f832e55199a9b3a71413bb30bcc8636df9e5cb73a08a6218c0408fc9",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "5bcdb3f07a5afd9883c880f51378eed1e9cc2a5163d6f3c8b543ebed404d30f6",
       "member": "py_capi_buildvalue_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "c528fb1b27284ea8a4217ffbf4394c44851eb4b683933089926bc3470da018ea",
@@ -1977,8 +1991,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "4387d263525682f8f0ad836d8ede087fc0149bd6d72a4edae21c2b82c7b0800f",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "d98ff7b957f62fb42b033c7e7f7d08848c5179c80ff943221ab2cac70fca3f96",
       "member": "py_capi_type_descriptor_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "7a8a12bdb44de4f742022149dc182abb646e10c896e35ba636de2c989de07d18",
@@ -1991,8 +2005,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "ba3eb8b3f9a8b7eca331591ed07a3be852dab9d8ba01bcab7ae9ec4d63ccded5",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "d626b8d3a3786b2e8d033047094ad07936c5b4b7d08ccf19717353594296e871",
       "member": "py_capi_visit_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "5ca87a430d81a447973f6856921d463d26b25f90836f9bf7298a21554a850294",
@@ -2005,8 +2019,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "c4e8f6efbbd84bf1908b9f94e70e97697efff331ac386e24e1213d18a67af8fc",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "2425c4f807646b0ef14d2907e8c4318a4d181b37ec8ae6e6be0ace3006f9a4b5",
       "member": "freestanding_mem_str.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "f9b98bc9a562639438b1e4e07a9b448d335ef61a081251958281d8348c46762c",
@@ -2019,8 +2033,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "400e7eff160a1096663a8b6da0d0a821fedbc1e1e66143ed623750fb60dce00d",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "800c9276c6fcfab61e1627cddacc7c77cd2c4cbded2aa8a43a1731a8d2608a40",
       "member": "freestanding_lfq_spsc.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "6a8f99aaf73d3a6016591767ad62e85ff287ff9b238241c71d6a9dc6dac35185",
@@ -2033,8 +2047,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "0de7b03eb88b13fb8fcdd88949fc9464e48e1319515f02fff496291ce8ccad74",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "37983e3dc1b259a013f96ddeaabfc1c968b5617ae0db36f07928687eb0f150fd",
       "member": "freestanding_iobuf_pool.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "5054150d50753f1c30e7ce2b98fb9ed7146bc743ff841c63c443e9ce79f78221",
@@ -2047,8 +2061,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "83886fb89761d2258543204ed846fea7d60ffadcd886273bc36498dbc67a0254",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "65ee0c40779be15a8e5a8a3909a47036a62c0a860d717a59d6ba987b4712969f",
       "member": "freestanding_uring.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "742ed57215cc6d1466b0a87ce3601d2f967b6f4ddd2abfd123c56919703720f6",
@@ -2061,8 +2075,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "62c0f1287ff5c66badd1a1a7074a8f3313b783d954bc47703529bd4fc1c55d17",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "ab74e3fd9ef1fa4f50a803e55dafcbbf7785471bd61f64e7a34d334746981b83",
       "member": "freestanding_libc_numeric.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "0aaf53427ed5e75712eccafb6dbe57e544cdf24dd8d830453695c6b6ae97b165",
@@ -2075,8 +2089,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "7ad9ecd416bd08603b281238eba35c8200981477dec22545ae3561c6faa393a9",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "8a3aa2c2d696dbed1102950fd4427cd2a27e16c950a3bb59fc80d0402ec42cb5",
       "member": "freestanding_strtoint.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "6a52410812c8bf8675807c11f020ed4359add3dd539dcc1136bd0949d1f3811a",
@@ -2089,8 +2103,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "9ed926b50226d13d76813d42e91ccf4c4384c60d9695699cedaae4049f18cf95",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "0c9e00a8acaa24dabf78826890d4bc0c606341a594a4431b1b28234b076d8419",
       "member": "freestanding_re_engine.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "b2bfa2f813a75574c3a8a08442b2dcd3f042b06383d6dc17344e944395e38a5a",
@@ -2103,8 +2117,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "009407852ec9961f12264d23d6158047e40a17663ad69abdc9e03400d3abeb4f",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "958df3aa0e29ba584a183e0485a1626c807945285ebda3a26a80e3143727a1e3",
       "member": "freestanding_allocator.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "b29c868f5f495536246451e2f48fa2a41f9d1107fb61e8a89dc31ebd80d5570d",
@@ -2117,8 +2131,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "194e79b2d132fa2d74dc19d33ae8278f3b5da33836b2f3f9a367727de45a6608",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "92224a158b1d4026718f03cca81e153a4e570423cda80b09320dba4ddf90be4f",
       "member": "freestanding_timer_heap.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "6c7866d615d1a2dec7ab0283c78487140bca2a29f81f1178521af75108e73f05",
@@ -2131,8 +2145,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "3e922ea93a26a48f840502a06f223d557099737cb729e16d9e44393410611806",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "4c29be2f9a4c9d122b7ba03adf4b00f9d7691c47f4e55d9ecace8048d93e1879",
       "member": "freestanding_runtime_high_substrate.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "30e478a8294ac99e2215dfddf4be665e8aa84522ab31c510e8c189c2a7787a1a",
@@ -2145,8 +2159,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "66b8e202c981dedbcde544939d3f982873b6ddef74a6c24557e0e5d6fe2fa374",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "495cebbe679a63ab5613d24f53e33b6930b2095b4eb8ee482684111db9855e32",
       "member": "freestanding_gc_index_table.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "83821efc4dd4cef467fec6117fd94ad06b847904ac6f7c402e93eb98543168b3",
@@ -2159,8 +2173,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "5c0090509121789961f243d537257821437c35253c02e6be224b36ae4f74aafc",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "564f00722960b8c69025194aecbb4f0ad2d083867a570d3039b116ed413ae10c",
       "member": "freestanding_gc_external_resource.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "ebb52d52f4208effbfeb13b2ff9ec3c93728fd743d152f8262ebf049f711fb79",
@@ -2173,8 +2187,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "21a6c388e439a932b9fda8066c6faa88949da210166abaa03dd820f1f928eb09",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "d2940595a8052e26695ce0c72978833e8836cf644b24ae8b1be3d41637eac222",
       "member": "freestanding_gc_state.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "2a1bb494e59182726e14b291f9a4b7dba1c048fcd3b9f2096734475d8032e2fe",
@@ -2187,8 +2201,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "ac975e142c2546fe2b03e1c574820d602a631862524b38e533e773fb076e5bfa",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "aba5a9e2af20ae6bc29ce1d9930b1e2aa05a7e93974c62358ded813796222b7d",
       "member": "freestanding_gc_control.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "a8394a8e04228155d35442ecddf7905f192e4c74b834d4ac1630a1bd5dfc5de8",
@@ -2201,8 +2215,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "8a6d1fadaabb4542287ca2160b44d8a8742a0faac84ac022ec65cd639fd40f18",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "334569e027029acbc61a9a7c5b5b609ea46049df679e596549e530870b2efe07",
       "member": "freestanding_gc_tracking.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "5be7c72c0d0ad76d99511698ad7a2edba218276ee212252872a093e9dbb480f4",
@@ -2215,8 +2229,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "6d07f504e3badfa582ed14e22d1e75f27be3119ba2b83387be134285b7fd1c9a",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "77848aab03e158abc5694066b6fa1188868c7cdfde6c9529133b5179a911bc87",
       "member": "freestanding_gc_root_registry.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "d9a48afdf8c676bbf03f18df2671a2a8ef81f5aeb929260e3349f001f1e7d060",
@@ -2229,8 +2243,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "28aaa91f5ad6125f7d201344f5130f818ba63d5f5c97abc4e1cd32e22172758e",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "6c26c00c61003d69c8345f94f2692fb6a7e7c350bc0f6a438f12d4efc9ed0782",
       "member": "freestanding_gc_frame_registry.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "bfb788903d2fee0ec95507bfbb2d7a31957e873225272d3355db396758a8fa99",
@@ -2243,8 +2257,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "7720ccac09c1ada9a7e1a5b3c1eae8ac60877ed123b46ba7b9d774f2795ee523",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "c2e9fb763a0582444c0a1e32e357a24024c8175f1bdf7edff22e00438c6649de",
       "member": "freestanding_gc_root_operations.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "3099052164b97e1dbece5d02f1141d0bd2cf9f77c76b11d3f2af45a5c9080f03",
@@ -2257,22 +2271,22 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "0c774290b9e5035ebfa00fa36823aa683035d98d209b9d0e9255c11a6039821d",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "69e6f96b13abe30ec26d2cf23737fbc199ed3b3a66b913aa9abe62a504be0175",
       "member": "freestanding_gc_mapped_roots.o",
       "object_emitter": "pcc-self-backend-object-writer",
-      "object_sha256": "bea9c387621bb1f300dc8123d407a29d633f16c5fb3ceb46408102c6e34882e4",
+      "object_sha256": "f5bcb8434774ee0c68187ebc94baf94fec49a7a7cd0afe17a523fb60a92e3499",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_mapped_roots.py",
       "source_kind": "pcc-python",
-      "source_sha256": "b62c135a47be3750028e7601819b37f9824b9f3e23e707ca8e48bef889a3d21b",
+      "source_sha256": "194bcbb3b446c0b159d7cb2f3589c43251f915c6f5f38ccf075727b373e25493",
       "target_triple": "arm64-apple-darwin",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "cfba6f83aecadd1022249f026013e5cbdcb35c9f9a25302cf9a33d2e922e6298",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "26eb7ed58c65811996b2a6f3132f4b65acc7ada51dce55aa4c987edeca5d63c7",
       "member": "freestanding_gc_object_root_seeding.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "fc7a6903d01900713fb66440425a0d3addf912fcda2f02286e9d48f5e6545541",
@@ -2285,8 +2299,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "7f18c39c49f854ad6e1d941ce75f46cfbd42488bc728f082e4b71eb410d845d8",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "8ce5d4ad9989e873a73327dc99e1f16c0fb9c25171bc9eaa459dcb0d8aa0c43d",
       "member": "freestanding_gc_refcount_roots.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "360cb5cd51092350de5993de13626b10f51be56c8034b7ce5a5d4fc4f6ea5f5c",
@@ -2299,8 +2313,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "e34042c125ef60c8b2f39031f9aded442ed176c7826bb978c19bec32a9a37b74",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "d28633e9400e3bec370ac6ca24b62b0774044eb08517568b7f78524d49336931",
       "member": "freestanding_gc_object_slots.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "8648240d34a4bfd8fe20bcd68a24b0d7b15dc1c0e2a0268ccca3d4ccc90891e5",
@@ -2313,8 +2327,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "be5e9ffd53833564685dfea26494c702faeeea7bb3c5480f935baaadc05470ae",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "6ea7f7f39e45dc349e148fe5afcdf3e598cc9fdf7e4ed9bb452fe78bc7640b3c",
       "member": "freestanding_gc_common_mark_cycle.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "00c24c94a0c4d089bdc237b7c1a71373909077eecff675b87361986cc8888fbd",
@@ -2327,8 +2341,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "79ff3bacc2730e4c4c580dc31ad90aecd5bfcbe70fa9429d48b39a089ab38d16",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "75d44a9ddce969668cd40853d660e9a7284f83eaadf2fb9b6d66b88437c4781d",
       "member": "freestanding_gc_backend0_slots.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "66250f3852aae11113049e882e9efb75e80d2892ec40ca28fffcb77ae3f7f68c",
@@ -2341,8 +2355,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "5eb4264b6cebdc620135b254829c4a9ab9a28f22e6b1cc2c6ba41dc7e5b93347",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "ab0fa683557bb58f52e9ad11f7a61125983588eb8850c503911882764d80d251",
       "member": "freestanding_gc_sweep_slots.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "0df7f584e4e9744326ec6675f9435f26f1120bf25a80edd8a150b18470166a6c",
@@ -2355,8 +2369,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "2562071920f169d1e008d0ead911b31d3c574afbdbc71fcef2461d38d6acc759",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "7b64cc112cb1c80279e73beadd84e725806ba5135e539e4f369cf523721f9198",
       "member": "freestanding_gc_tracing_sweep_collector.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "f48982519bb161f76aff2abd8d49ffcb33141944061317c79ea23dbfcadc0de7",
@@ -2369,8 +2383,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "0436d364ce08232b9daf6c315320c1113bbd2d95e20d1b57db588196ad078e99",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "434bbc8e404db7975e13b302e93a322881b875ce350390efc2bf348686a9746d",
       "member": "freestanding_gc_public_collection.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "a85624a23c1af19ba47a8ec443ca9ace085432f09fe3b9fe6346dee9ae14afba",
@@ -2383,8 +2397,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "e0958be24d74104c858c1beacb177e487dcfbc85ef95eb4b2b3c5577a5588cd8",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "1599f1573e147a2d00d8a304f53fe916e10204e1e9b0534fae96aa7350c4f39e",
       "member": "freestanding_gc_incremental_concurrent_scheduler.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "e1fefa54b97a5babc74b9d686f9f53139f01827d775799d2decec2ba63f0b9c3",
@@ -2397,8 +2411,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "7999ed24c9448465beae013c9141195a9d03806dbe4a28f22ab18978e11c16d5",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "1cfa75bd665fef0ff9e615b12ade247f310ab08d02a12c170f5419d479fcd756",
       "member": "freestanding_gc_forwarding_identity.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "fb85b3a4594db1d482f5cfa945d9a6e13dbe10f06d697b53fe98a42889e89e32",
@@ -2411,8 +2425,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "1e82775d1a5fb0829ab9b746d28954890b93af1825d55168b812a342307cfe0e",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "019cdbb48eaa7cd40b03bf7b31a2e45ec405e920e7c382c3bd4c6d5eab3feee8",
       "member": "freestanding_gc_object_nodes.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "d11b5b82d90ff985d438918e4a5ae228ef068d18b3cd38d70520caf7ab5926fa",
@@ -2425,8 +2439,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "55a29ea4170e3d69ec92d328c22469831f52468ba779f8ebb755de96ff27d879",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "9f41c26b1e12fd9188422858b0e6a6621021a068c5f03c839df1cba2de2ad3e7",
       "member": "freestanding_gc_generational_oldification.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "de8a8c0cc96cc12b893c2a405a896e1e2a0fa66bbcf57429d0ceaec37060ba26",
@@ -2439,8 +2453,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "88b3de1f8545f64b6cc76b51f1ed6c56ab14ba3b43f0356f8e484b0797e0ed5a",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "65b528a3bcbaa664418991ca51b76a64f08ec77cd0c9638953fac8b734d46f33",
       "member": "freestanding_gc_generational_remembered_owners.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "4ad952f06440e8dacaebad32b53cc4323f14a05672fc043919e3fea43815094c",
@@ -2453,8 +2467,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "b1626c9581f0dc51227d54b7989ac726a40834e8f3dbc0c99ec71b39e0d3a76a",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "c42ebbe544e4b4fdd2d20e7f3eb531ea33698a38b032e249d0299b3b176986fa",
       "member": "freestanding_gc_generational_promotion.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "4d302a29408c52e17906eb706a73bbce7429bda4fb7456017ae878af699babe5",
@@ -2467,22 +2481,22 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "27d56fca47fa73ab5b3ab8a4b3e40cc9119759d5090fde1092de65e2d0c16ccc",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "d36a6ee5bc79e5f7e580d823bf2b53c193a49a803855c572ea245c4f6f98ed0a",
       "member": "freestanding_gc_generational_scheduler.o",
       "object_emitter": "pcc-self-backend-object-writer",
-      "object_sha256": "11ebada824923e1be62d77d5362784d66f0a08c46a01d044d193408a150ad581",
+      "object_sha256": "bae10c35985001e8a473e33c47c6687b3fde64ec55740eeb0cd4ee6f8d2dc499",
       "producer_kind": "pcc-python-library-ir-to-obj",
       "schema": "pcc.runtime-object-provenance.v1",
       "source": "pcc/py_runtime/py/freestanding_gc_generational_scheduler.py",
       "source_kind": "pcc-python",
-      "source_sha256": "00d0337bf8fb5638e93b58a1a9b158d39348f0113237cc332b8bda7911ab81fe",
+      "source_sha256": "69312427fd5c7d9eff5c829998e08ba18a9703b3f97ea53064182f9d8eb6f656",
       "target_triple": "arm64-apple-darwin",
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "4a0e3ad59e5fa5261548a5c33ec08f4fc814159049929c35883010019030f85c",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "40cbfad7b7664bca08a409c21baf06ea2fa4558b4eb0d3342ea22044713fd2d9",
       "member": "freestanding_gc_relocation_remap.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "17dfcc3471d15020837f9562ba9ddaef59b6441223ae7cef2cf2892fd1185415",
@@ -2495,8 +2509,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "93295dedd862773601e206f9fdfb9e8661eb831465a2aada000638daf18b83ce",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "a152308199343827a06032904d1249458859e31569843a6c0ea6d34a5874817c",
       "member": "freestanding_gc_relocation_payload.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "d942bf9fd122d444a8c51680973fb46788b44968ad26db244ee3ea7ce8d3e656",
@@ -2509,8 +2523,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "b0a0811c6c7f5e0ecafea30f70fcc1208bce11b0a53ab09528af421a845ae963",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "857584932254dc2be332291e5a81da63131dbd09bf3281cbfa7e4d3ecabfe833",
       "member": "freestanding_gc_relocation_copy.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "78c7f6acaa18e20f0f0ee9bf622133edd4b895ae8f3d7d67689be958340b1670",
@@ -2523,8 +2537,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "28a77fc1c119d8cb33178574252e4fc8f0d924a65e58e6a34150e2c06c3ad97d",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "5647210d7e740143fa044d0f2dfaccc3e69e632a7b941d9e872a17a25efcbfbf",
       "member": "freestanding_gc_relocation_selector.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "2ff7e7254087af5498a5520e582285d786c351a8c85b90c89ecfec4b7659a8ef",
@@ -2537,8 +2551,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "fdad2817009a3c8aff969e30b3dc20fed69deeedb62a955ac9d5aa96cb4cac81",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "2d4604ba1d2834050c2bfe449d79d255c9462978e8017d49d0bdcc0f5f0aacfe",
       "member": "freestanding_gc_relocation_drain.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "6c849bebb151e7a52be99d4c949a395d7e81cceecb48792f74423f8b01dbe3fe",
@@ -2551,8 +2565,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "c1bdc78cdd67563ec32e0572930e733c9e5fd8464f5377712c11cdf92cd39581",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "5ab6ec43d965a37b8a828e4b4253a4f13aabd574c9c5d233b49c5089dd4f4ecc",
       "member": "freestanding_gc_zpage_mechanics.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "6c202c276730ec1a69ae96240714548e90ff48f65d0875eae5b2e795ff2da37b",
@@ -2565,8 +2579,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "3fa8a208fbe84f4f4ddf5fa4163041bfdd848237c34f437380213cfb086f5432",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "c37a035d9d1479f1ba9b802e0519634ccb1aa29aea4b15a5988447cf6743366c",
       "member": "freestanding_gc_zpage_lifecycle.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "93ae5e709659ef3d381b3f0290316aa8209bdc4f94643613f4d425817112537e",
@@ -2579,8 +2593,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "4b257f0caca931ec50c2e68c5c1bcf4fb02ed3ac8a41a55b1d28684987a48831",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "2788ea056d708728e273c443771b17fef779be44307dd27c533ffc1dc08d6b2d",
       "member": "freestanding_gc_forwarding_retirement.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "07358e42888df72127aac381c34305aca3b6f60a06660eb2b93d67372bdc6f66",
@@ -2593,8 +2607,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "16ace40fe72d7d460cca5ccb740849174e26ce880eec9ebdc88d7387164fad93",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "74f280772e40051967ba91a157c3de2df541b16d964fe2a398a05927b02bf7ad",
       "member": "freestanding_gc_barrier_dispatcher.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "8477b4c1f363733d3fe54fee25e3f8f4cf2c83c952e5b0a30bcd193e900ea0e9",
@@ -2607,8 +2621,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "c8a29a7579b0b54a12f7226f575f01e72cd9f767c11284630228bf7b0ec8c3f1",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "bbc6f54c73613e0b7ec768eb66381ea68455a0e8bd1895bda5d91f1dd2573de0",
       "member": "freestanding_gc_zpage_allocation.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "0681972b8daefccb7e4a25155dd6a7a682bde9f4d89ff954db4af804ee8b5b23",
@@ -2621,8 +2635,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "5892cf40802d42a951beda2b0961abea043a6031772600bf37c8950ed3b396ee",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "817a465e81055ae0bc353ec557c692828410e0c683d7ca38ab66820f7f5a603c",
       "member": "freestanding_gc_backend0_collector.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "70cd58363f7a1b1a9a9d966a05e34041208083f49dfc6082b4d12ccd7159ca13",
@@ -2635,8 +2649,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "17363d2a37808c05ce03c44e9b5dcecc59aee48afdc2ef19b744721d305196f3",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "3658730ec2c3b8ea9f67a85cb1d4bab859c9e0141ae275c8b4207276dcd1d066",
       "member": "freestanding_gc_root_introspection.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "b6de1653b49f3c93e43490916c3ad5040b7c401c3792fbe1b0d1b7c154cfca8d",
@@ -2649,8 +2663,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "775c3191a407c9c12b3ef2c1f99f48caec7af85b4a7caa3162e546940fb48370",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "327ff9ce79ce631d2044ecc5598230bffecc4fd6e3be5c22104b330347d64bdb",
       "member": "freestanding_platform_io.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "0044393374ff1a6ef1c5c7cee6bbcd1c6aed82814381e72abf06646af5bf3f77",
@@ -2663,8 +2677,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "0c8cb1f77018ea2182363045706322eecb2974a1323558df435c87a89ffd142f",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "e84b525699634f0ae6686faf073c0ca9b31b15f65719ae7f8ad004a002f74f4d",
       "member": "freestanding_platform_fs.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "d6df74f20637b39cf6d9763c56a5aae4c28b65d69a59a9a53e31e67a2b355d65",
@@ -2677,8 +2691,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "3372f63dff691dff20c0fff833230e2af4255c5e680a071e386443175fcbfb7a",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "663c8db5917173d4623ca06b46c96acf892e56610ba8b74477b11c04e4fafc30",
       "member": "freestanding_platform_env.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "12469adbd87aea7dabdbaeecb3ced480a6ca571ddcf89493203cf8e38f98fc11",
@@ -2691,8 +2705,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "be4e6d58c28f3a5b22171206300011ab1004cc19a57e07efb545772aacae8f7c",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "0fca7c78c5f1959e67c1d79efc0c6bb63b565ac0e7718eeb5f7f068e026951f0",
       "member": "freestanding_platform_system.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "2e72e0297d308e444383424414f49437ce780da9269689a36f5b428d021322ad",
@@ -2705,8 +2719,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "5eba2ae9b08a076fba755d85ae27807a7ba9bdaf246ab047705f8a3f7d6e5273",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "ae7ec4644a5038764d85bfc737ecb7c02194e0c1dddc5eae138e6dd852667183",
       "member": "freestanding_platform_time.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "3b6e66018407463041160c23c41658288104b40c5d6ee9eb03b10445272a8098",
@@ -2719,8 +2733,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "9902a3edf45eb331561f325820d10f85fac24123729e9a2dc5bbe0eb76a6873d",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "d6defdaeeb812d48d60ed1324872e2d9b81c2f70c5f0fc3e7c48cd4f2e3f2f3d",
       "member": "freestanding_platform_process.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "842c7720d840ce822e278b7d941ed09317c75083bcfc5100d1b08295275c9db6",
@@ -2733,8 +2747,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "b705234fe6332af72e42b4e1d70dc0251f622051be726b13d51d563d395878f2",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "6f1f05cc8b756f93a67720be668636c2d46b7eafa559a8c397f061fccb3bafb2",
       "member": "freestanding_platform_socket.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "6b6a700dc3eb1775e36c50b1da29504b3f968a5441059b34fb03970581418020",
@@ -2747,8 +2761,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "942976ebe3dba33d7e9fd042c7d7e49e80c51cd4398f805fca794e474478d704",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "63ac6f135c8370c5274d5bb7add9418a7ee614d40babf80646628b2ff440549a",
       "member": "freestanding_platform_rss.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "20c82d8e1ce53a448649bb5140e782dec9b8224fb082ea26bc9fd3e2f2b2f697",
@@ -2761,8 +2775,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "8c734626b19c14e288bc2c8695a0e24edf1b4e501c17469912087425dbfa9952",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "712892286c31c206f5663ee12d7e203ce97e2e50afb39da6dfcff5683f5bba24",
       "member": "freestanding_errno.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "0774e0e97772ca8a6f46cefdf929944b8daa992b483555ee05d679aa2732e4bc",
@@ -2775,8 +2789,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "1ae391ddd69b365938a9b34e43fd639d964030b8233843f44764e53e9536b8c5",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "36299264c8770c477887833077b313859d404e79504366323e8cab31071d942e",
       "member": "freestanding_metal_runtime.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "7d9f89d65371a4bf0c5d6c77cebb33d46e2335d0ed5cf31dcfdcacac5162a5fa",
@@ -2789,8 +2803,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "25e741736fc4288621d5e2301c7a0555564186c29e73d5646a1237e32d8fccab",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "4b55a8509cab87da533360b48b218816b090970a1778d8d28c4b96e1820b60c1",
       "member": "freestanding_stdio.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "6dd27dbef5a32533724b279eb73f2dd4f91d9dcbdedb2f21c9880ee85df6bbcc",
@@ -2803,8 +2817,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "6bfaf9bd300686de25deb4090c3ab89b29d6e346c4329a53ae7ea6c2bad29abb",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "7ee61271a79685ea9632787355ce90121ec35025870d2a22a065d917fccd9bec",
       "member": "freestanding_gateway_control.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "446a058bb29f92a5470a35aa75bdf15b242b7c294bd685d9c55bd77cd7ff6138",
@@ -2817,8 +2831,8 @@
       "uses_host_cc": false
     },
     {
-      "codegen_checksum": "14b4132b0453a9a4c14208344f0e9e647f4b53ba1e7ea2c661e5f395ea1360e1",
-      "ir_sha256": "3622765b5881853d5eda05cae0d41b82cb6ed82ad50053e53e8bb7af102fea8f",
+      "codegen_checksum": "495a5d3a5631b4d05e68467f74b25b2a2ff04cb2e7002cc126a1a7655d0cde59",
+      "ir_sha256": "93be571b2fea65a945529ce5fe5f6a0d6f58013cc4d2cea198d61b695c48c367",
       "member": "freestanding_thread_kernel.o",
       "object_emitter": "pcc-self-backend-object-writer",
       "object_sha256": "f6e32685e60a13f6a0f27c2a22c67ccb477488f02095edaca8e562f2e2b467f2",
@@ -2831,7 +2845,7 @@
       "uses_host_cc": false
     }
   ],
-  "members_sha256": "49928d02ea4596d62f3a122a8b4de8fd6e4e031ea0c5ada058605103915d3e5f",
+  "members_sha256": "5b764b9af999137cf656fa3d67728f05c5d882359f6f84457333df573b9f3fed",
   "policy": "pcc-production-no-handwritten-c.v1",
   "schema": "pcc.runtime-archive-provenance.v2",
   "target_triple": "arm64-apple-darwin"

@@ -218,6 +218,7 @@ def _maybe_finalize_unreachable(unreachable, count: i64) -> i64:
             if (
                 (
                     tag == abi_constant("object.type.instance")
+                    or tag == abi_constant("object.type.gen")
                     or tag >= abi_constant("object.type.user_class_start")
                 )
                 and pcc_capi_is_cext_type_tag(tag) == 0

@@ -63,6 +63,7 @@ from pcc.llvm_capi.ir import (
 )
 
 from ..export_meta import decode_type
+from .class_override_index import build_export_method_overrides
 from ..py_ast import (
     Arg,
     Assign,
@@ -2003,6 +2004,7 @@ class ClassLowering:
         # variable names.
         self._base_arr_pool: dict[tuple[str, ...], ir.GlobalVariable] = {}
         self._class_defs: list[ClassDef] = []
+        self._external_method_overrides = None
 
     # ------------------------------------------------------ declaration
 
@@ -4717,26 +4719,35 @@ class ClassLowering:
             builder.call(
                 runtime["py_class_add_method"], [cls_ptr, mname_ptr, func_as_obj]
             )
-            if method_kind == "classmethod":
+            if method_kind == "instance" and method_def is not None:
+                # The dispatch table alone does not publish the class body
+                # namespace. Reflection and MRO method collection must see
+                # the same unbound function object through cls.__dict__.
+                builder.call(
+                    runtime["py_class_setattr_raw"],
+                    [cls_ptr, mname_ptr, func_as_obj],
+                )
+            if method_kind in ("classmethod", "static"):
                 if method_def is not None:
+                    descriptor_kind = "staticmethod" if method_kind == "static" else "classmethod"
                     func_obj = self._emit_method_pyfunc_object(
                         cd,
                         mname,
                         mfunc,
                         method_def,
                         mname_ptr,
-                        "classmethod",
+                        descriptor_kind,
                     )
-                    classmethod_obj = builder.call(
-                        runtime["py_classmethod_new"],
+                    descriptor_obj = builder.call(
+                        runtime["py_" + descriptor_kind + "_new"],
                         [func_obj],
-                        name=self._fresh(f"classmethod.{mname}"),
+                        name=self._fresh(f"{descriptor_kind}.{mname}"),
                     )
                     builder.call(
                         runtime["py_class_setattr_raw"],
-                        [cls_ptr, mname_ptr, classmethod_obj],
+                        [cls_ptr, mname_ptr, descriptor_obj],
                     )
-                    builder.call(runtime["py_decref"], [classmethod_obj])
+                    builder.call(runtime["py_decref"], [descriptor_obj])
                     builder.call(runtime["py_decref"], [func_obj])
         self._emit_property_descriptor_class_attrs(cd, info, cls_ptr)
         hash_attr = info.class_attr_values.get("__hash__")
@@ -6159,6 +6170,18 @@ class ClassLowering:
         sound only when the closed-world class graph has no subclass override
         below the hinted receiver class.
         """
+        native_exports = self.parent._native_module_exports
+        if native_exports is not None:
+            if self._external_method_overrides is None:
+                self._external_method_overrides = build_export_method_overrides(
+                    native_exports
+                )
+            owner = info.owning_module or self.parent.ast_module.name
+            name = info.export_class_name or info.name
+            if method_name in self._external_method_overrides.get(
+                owner + "." + name, ()
+            ):
+                return True
         for other in self.classes.values():
             if other is info:
                 continue

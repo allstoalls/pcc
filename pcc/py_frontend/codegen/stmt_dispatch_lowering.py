@@ -111,7 +111,7 @@ class StmtDispatchLoweringMixin:
         while idx >= base:
             if self._builder_block_is_terminated():
                 break
-            self._emit_stmts(stack[idx])
+            self._emit_finally_entry(stack[idx])
             idx -= 1
         self._emitting_finally = prev
 

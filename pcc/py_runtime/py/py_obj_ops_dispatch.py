@@ -18,6 +18,7 @@ from pcc.py_runtime.py.py_abi_constants import (
     PYCLASSOBJECT_NAME_OFFSET,
     PYCLASSOBJECT_N_MRO_OFFSET,
     PYINSTANCEOBJECT_CLS_OFFSET,
+    PYSTATICMETHODOBJECT_FUNC_OFFSET,
     PY_TYPE_CONTINUATION,
     PY_TYPE_VIRTUAL_THREAD,
     PY_TYPE_VTHREAD_CHANNEL,
@@ -41,6 +42,7 @@ from pcc.py_runtime.py.py_abi_constants import (
     PY_TYPE_MEMORYVIEW,
     PY_TYPE_NONE,
     PY_TYPE_SET,
+    PY_TYPE_STATICMETHOD,
     PY_TYPE_STR,
     PY_TYPE_TUPLE,
     PY_TYPE_USER_CLASS_START,
@@ -72,6 +74,7 @@ from pcc.unsafe import (
 )
 
 py_int_value_i64 = extern("py_int_value_i64", (c_ptr,), c_int64)
+strcmp = extern("strcmp", (c_ptr, c_ptr), c_int32)
 py_int_from_i64 = extern("py_int_from_i64", (c_int64,), c_ptr)
 py_obj_index_i64 = extern("py_obj_index_i64", (c_ptr,), c_int64)
 
@@ -333,6 +336,14 @@ def _cstr_is_dunder_class(s) -> int:
     if load_i8(s, 8) != 95:
         return 0
     return 1
+
+
+def _cstr_is_dunder_dict(s) -> int:
+    return (load_i8(s, 0) == 95 and load_i8(s, 1) == 95
+            and load_i8(s, 2) == 100 and load_i8(s, 3) == 105
+            and load_i8(s, 4) == 99 and load_i8(s, 5) == 116
+            and load_i8(s, 6) == 95 and load_i8(s, 7) == 95
+            and load_i8(s, 8) == 0)
 
 
 def _cstr_is_dunder_name(s) -> int:
@@ -1439,6 +1450,25 @@ def py_obj_delitem(o, k) -> int:
     return -1
 
 
+@c_abi_export("py_obj_assign_subscript")
+def py_obj_assign_subscript(o, key, value) -> int:
+    status: int = py_obj_setitem(o, key, value)
+    if status < 0 and py_err_occurred() == 0:
+        py_raise_owned(py_exc_new(3, cstr("object does not support item assignment")))
+    return status
+
+
+@c_abi_export("py_obj_delete_subscript")
+def py_obj_delete_subscript(o, key) -> int:
+    status: int = py_obj_delitem(o, key)
+    if status < 0 and py_err_occurred() == 0:
+        if _type_of(o) == PY_TYPE_DICT:
+            py_raise_owned(py_exc_new_with_value(4, key))
+        else:
+            py_raise_owned(py_exc_new(3, cstr("object does not support item deletion")))
+    return status
+
+
 def _is_instance_tag(tag: int) -> int:
     if tag == PY_TYPE_INSTANCE:  # PY_TYPE_INSTANCE
         return 1
@@ -2189,6 +2219,12 @@ def py_obj_getattr(o, name):
     tag: int = load_i32(o, 8)
     pcc_runtime_log_event_code(7, 5, tag, 0, o)
 
+    if tag == PY_TYPE_STATICMETHOD:
+        if strcmp(name, cstr("__func__")) == 0 or strcmp(name, cstr("__wrapped__")) == 0:
+            func = pcc_gc_load_ptr(o, ptr_add(o, PYSTATICMETHODOBJECT_FUNC_OFFSET))
+            py_incref(func)
+            return func
+
     type_attr = pcc_capi_type_object_getattr(o, name)
     if ptr_is_null(type_attr) == 0 or py_err_occurred() != 0:
         return type_attr
@@ -2239,6 +2275,15 @@ def py_obj_getattr(o, name):
         return _raise_attribute_error(o, name)
     if tag == PY_TYPE_FUNC:  # PY_TYPE_FUNC
         attrs = pcc_gc_load_ptr(o, ptr_add(o, 88))
+        if _cstr_is_dunder_dict(name) != 0:
+            if ptr_is_null(attrs) != 0:
+                attrs = py_dict_new()
+                if ptr_is_null(attrs) != 0:
+                    return null()
+                pcc_gc_store_ptr(o, ptr_add(o, 88), attrs)
+                return attrs
+            py_incref(attrs)
+            return attrs
         if ptr_is_null(attrs) == 0:
             key = py_str_new(name, strlen(name))
             if ptr_is_null(key) != 0:
@@ -2482,6 +2527,12 @@ def py_obj_setattr(o, name, v) -> int:
         if py_err_occurred() != 0:
             return rc
     if tag == PY_TYPE_FUNC:  # PY_TYPE_FUNC
+        if _cstr_is_dunder_dict(name) != 0:
+            if _type_of(v) != PY_TYPE_DICT:
+                py_raise_owned(py_exc_new(3, cstr("function __dict__ must be set to a dictionary")))
+                return -1
+            pcc_gc_store_ptr(o, ptr_add(o, 88), v)
+            return 0
         attrs = pcc_gc_load_ptr(o, ptr_add(o, 88))
         attrs_created: int = 0
         if ptr_is_null(attrs) != 0:
@@ -2633,6 +2684,10 @@ def py_obj_call(callable, args, kwargs):
         return _raise_not_callable(callable, 2)
     tag: int = load_i32(callable, 8)
     pcc_runtime_log_event_code(7, 8, tag, 0, callable)
+
+    if tag == PY_TYPE_STATICMETHOD:
+        func = pcc_gc_load_ptr(callable, ptr_add(callable, PYSTATICMETHODOBJECT_FUNC_OFFSET))
+        return py_obj_call(func, args, kwargs)
 
     if pcc_capi_type_object_is_callable(callable) != 0:
         return _require_call_result(

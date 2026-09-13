@@ -50,6 +50,45 @@ _RET = b"\xc0\x03\x5f\xd6"
 _BL_PLACEHOLDER = b"\x00\x00\x00\x94"
 
 
+@pytest.mark.parametrize("kind", ["native", "packed", "macho"])
+def test_merge_rebases_each_relocation_without_an_intermediate_copy(tmp_path, monkeypatch, kind):
+    from pcc.backend import macho_link
+    from pcc.backend.macho_exec import link_prepared_executable
+
+    helper = NativeObject.from_sections([Section(
+        sectname="__text", segname="__TEXT", flags=TEXT_SECTION_FLAGS,
+        align_log2=2, data=b"\x40\x05\x80\x52" + _RET,
+        symbols=(TextSymbol("_helper", 0),),
+    )])
+    caller = NativeObject.from_sections([Section(
+        sectname="__text", segname="__TEXT", flags=TEXT_SECTION_FLAGS,
+        align_log2=2, data=b"\x00\x00\x00\x14",
+        symbols=(TextSymbol("_main", 0),),
+        relocations=(Relocation(0, "_helper", spec.ARM64_RELOC_BRANCH26, True),),
+    )], undefined=("_helper",))
+    objects = [helper, caller]
+    if kind == "packed":
+        objects = [decode_packed_native_object(encode_native_object(obj)) for obj in objects]
+    elif kind == "macho":
+        objects = [obj.to_macho() for obj in objects]
+    constructed = []
+
+    def relocation(*args, **kwargs):
+        result = Relocation(*args, **kwargs)
+        constructed.append(result)
+        return result
+
+    monkeypatch.setattr(macho_link, "Relocation", relocation)
+    merged = link_relocatable_native(objects)
+    assert len(constructed) == 1
+    assert constructed[0].offset == 8
+    binary = tmp_path / "rebased-call"
+    binary.write_bytes(link_prepared_executable(merged))
+    binary.chmod(0o755)
+    ran = subprocess.run([str(binary)], capture_output=True, timeout=10)
+    assert ran.returncode == 42, ran.stderr
+
+
 def test_worker_assembly_text_and_path_publish_identical_native_object(
     tmp_path: Path,
 ) -> None:

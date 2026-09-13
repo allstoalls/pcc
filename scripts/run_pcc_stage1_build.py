@@ -192,10 +192,12 @@ def _set_stage1_build_modes(
     *,
     with_threads: int,
     direct_indexed_emit: bool = False,
+    python_ir_passes: str = "default",
 ) -> None:
     if with_threads not in (0, 1):
         raise ValueError("stage1 thread mode must be 0 or 1")
     env["PCC_WITH_THREADS"] = str(with_threads)
+    env["PCC_PYTHON_IR_PASSES"] = python_ir_passes
     if direct_indexed_emit:
         env.update(
             {
@@ -280,6 +282,7 @@ def _run_build(args: argparse.Namespace, ab, *, run_token: str) -> dict[str, Any
         env,
         with_threads=args.with_threads,
         direct_indexed_emit=args.direct_indexed_emit,
+        python_ir_passes=args.python_ir_passes,
     )
     output = output_dir / "pcc1"
     time_path = output_dir / "stage1.time"
@@ -534,6 +537,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--gc-backend", type=int, default=0, choices=range(5))
     parser.add_argument("--with-threads", type=int, default=0, choices=(0, 1))
     parser.add_argument("--direct-indexed-emit", action="store_true")
+    parser.add_argument(
+        "--python-ir-passes", choices=("default", "off"), default="default",
+        help="owned IR pass policy for the compiler being built; off is an explicit diagnostic control",
+    )
     lock_group = parser.add_mutually_exclusive_group()
     lock_group.add_argument(
         "--performance-lock",

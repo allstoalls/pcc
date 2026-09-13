@@ -1063,7 +1063,7 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
 - [self-verifier-parallel-edge-phi.md](self-verifier-parallel-edge-phi.md) — **self verifier rejects valid PHIs with parallel CFG edges**
   - The same-IR self/LLVM O2 runtime codegen comparison stops before emission:
 - [sequence-builtins-len-getitem-not-iterator-protocol.md](sequence-builtins-len-getitem-not-iterator-protocol.md) — **list()/sum()/tuple()/set() consume DynType via len+getitem, silently yielding empty/wrong results for iterator-only objects (generators)**
-  - Under strict no-libpython (`--backend self --python-libpython=off`, DEFAULT
+  - Current-source evidence supersedes the broad historical inventory below.
 - [set-and-frozenset-of-dict-lower-to-empty.md](set-and-frozenset-of-dict-lower-to-empty.md) — **`set(d)` / `frozenset(d)` on a mapping lower to an EMPTY set in pcc-compiled code**
   - Predecessor:
 - [shared-refcount-contention-thread-scaling.md](shared-refcount-contention-thread-scaling.md) — **shared-object refcount contention destroys thread scaling; gc.immortalize restores it on backend 0**

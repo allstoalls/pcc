@@ -3,6 +3,82 @@
 ## Status
 active
 
+## 2026-09-13: remaining set constructor path blocks native gateway compilation
+
+Current-source evidence supersedes the broad historical inventory below.
+The source snapshot b39 is
+`c634dcbc98d246fdedeb8780fd1fb34391be60fc77cf461955cdf7abc103a943`;
+native stage1-R is
+`d44da0173e2811aca8567b6cec9445fc0f731a1b9e2d6d738a1e493347932533`.
+Evidence lives in `/private/tmp/pcc-owned-perf-20260912-rbrioqup`.
+
+`gateway-comparison-r.json` records host compilation in 7.825 seconds, then
+native compilation failing in 3.010 seconds with a missing managed delegation
+slot for `TaskScope._retire_child`. No QPS sweep ran; the short failure time is
+not a speedup. The compiler still has the separate normal 30-second smoke
+timeout. `vthread-frame-probe/{plain,quoted}.py` reproduces the frame error in
+13 lines with both ordinary and quoted class annotations.
+
+LLDB traces distinguish the two analyses. During effect discovery,
+`_receiver_class_name` sees `{'Scope'}` and `{'scope': 'Scope'}`. During frame
+planning, it sees an empty class set and hint dictionary. Incoming method-call
+arguments still contain the correct AST module and ordinary None defaults.
+See `vthread-receiver-lldb.stdout`, `vthread-planner-receiver-lldb.stdout` and
+`vthread-method-args-lldb.stdout`. After a heterogeneous cache lookup, the
+method dictionary is dynamically typed. The remaining `set(x)` fallback
+performs integer indexing, losing that dictionary's keys. This is not a
+gateway-specific effect-analysis requirement.
+
+The new `test_native_set_iterable_construction.py` initially returned empty
+sets for dictionaries and generators, and silently accepted None and integers.
+Nonliteral set/frozenset construction now uses `py_set_from_iterable`; set
+unpacking and update use the widened `py_set_update`. C and Python runtimes
+retain the existing set-to-set snapshot path and consume other inputs through
+`iter`/`next`. Owned iterator/item roots are balanced on success and failure;
+StopIteration from hashing propagates, while iteration exhaustion is cleared.
+Partial update remains observable after an iterator raises. Existing literal
+lowering remains separate; this does not qualify frozenset immutability.
+
+Lifetime tests exposed two adjacent implementation gaps:
+
+- Generic comprehensions did not release their iterator or each owned next
+  result. They now use the existing rooted local/loop-target protocol, with
+  cleanup on normal exhaustion, iterator errors and body errors. Temporary
+  source ownership is consumed after the iterator has a rooted owner.
+- Generator destruction discarded suspended frames without executing pending
+  finally bodies. Shared finalization now closes started unfinished generators
+  once, preserves the caller's exception and supports resurrection before
+  metadata is retired. GC0's cyclic finalizer filter now includes generators;
+  the tracing collectors already call the shared finalizer before clearing
+  fields and rechecking reachability. This follows the ordering and exception
+  requirements in [PEP 442](https://peps.python.org/pep-0442/). Unstarted
+  generators do not enter their bodies. The shared unraisable-error reporting
+  channel and the existing approximate GeneratorExit tag remain open.
+
+`gen-finalizer-tests.stdout` records three focused tests passing with emitted
+execution under GC0–4, including last-reference release, pending exception
+identity, cycles, reentrant collection, resurrection and one-shot cleanup.
+`park-finalizer-regressions-v2.stdout` records 48 passing checks and six
+deselected native gates. Earlier expanded runs stopped on stale diagnostic
+expectations: the current implementation already includes receiver type/module
+and chained rejection causes; the three assertions now check those exact
+messages. These diagnostics were not shortened to hide a boundary.
+
+Actual C differentials are separate receipts. `set-iterable-c-oracle-v2` uses
+the complete C set object with its graph-lock calls bound to the production
+Python collector provider. `gen-finalizer-c-oracle` substitutes C generator and
+finalizer dispatch objects while retaining the shared Python refcount/collector
+entry hooks. Both execute their regressions on all five GCs. External cc is an
+oracle only; these are not cold owned-runtime construction proofs.
+
+The next frozen compiler source b40 is
+`575ee975da1944d46eb984380966e3fccc5094b21219b60421762a2cb288ce67`;
+runtime archive SHA-256 is
+`923a7bd54b0c02a500bd0d8bbdb4b9fd6e050e1867a24436372aecaa3b7d4db7`.
+The full stage1-S rebuild and native gateway replay are pending. Host-generated
+test programs do not replace those native compiler gates. Runtime overlays
+still use diagnostic Make/ar orchestration.
+
 ## Problem Description
 Under strict no-libpython (`--backend self --python-libpython=off`, DEFAULT
 runtime ports), `list(gen())` and `sum(gen())` over a generator return an empty

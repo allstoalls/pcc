@@ -92,6 +92,7 @@ py_dealloc_set = extern("py_dealloc_set", (c_ptr,), c_void)
 py_dealloc_func = extern("py_dealloc_func", (c_ptr,), c_void)
 py_dealloc_iter = extern("py_dealloc_iter", (c_ptr,), c_void)
 py_dealloc_gen = extern("py_dealloc_gen", (c_ptr,), c_void)
+py_gen_finalize_from_dealloc = extern("py_gen_finalize_from_dealloc", (c_ptr,), c_int64)
 py_dealloc_coroutine = extern("py_dealloc_coroutine", (c_ptr,), c_void)
 py_dealloc_continuation = extern("py_dealloc_continuation", (c_ptr,), c_void)
 py_dealloc_task = extern("py_dealloc_task", (c_ptr,), c_void)
@@ -1359,6 +1360,8 @@ def _py_decref_finish(prepared) -> None:
     if new_rc > 0:
         if load_i32(global_addr("pcc_runtime_log_fast_state"), 0) != 0:
             pcc_runtime_log_event_code(3, 2, new_rc, tag_dbg, o)
+        return
+    if tag_dbg == PY_TYPE_GEN and py_gen_finalize_from_dealloc(o) != 0:
         return
     delay_zpage_freeing_note: int = 0
     if backend == 4 and (flags & 65536) != 0:

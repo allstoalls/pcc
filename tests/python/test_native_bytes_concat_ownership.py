@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import sys
 
 import pytest
 
@@ -39,3 +40,33 @@ main()
         assert (size, first, last) == (65536, 120, 120)
         if gc == 0:
             assert growth < 262144, (kind, statement, growth)
+
+
+def test_byte_concat_copies_both_payloads_and_preserves_family(tmp_path, pcc_py_runtime_archive):
+    source = tmp_path / "concat_payload.py"
+    source.write_text('''import gc
+def main():
+    for length in [0, 1, 16, 257, 4096]:
+        left = bytes([i % 256 for i in range(length)])
+        right = bytes([255 - i % 256 for i in range(length + 3)])
+        for a in [left, bytearray(left)]:
+            for b in [right, bytearray(right)]:
+                result = a + b
+                gc.collect()
+                print(type(result).__name__, len(result), result.hex())
+                if isinstance(result, bytearray):
+                    result[0] = 17
+                print(a.hex(), b.hex())
+main()
+''', encoding="utf-8")
+    expected = subprocess.run([sys.executable, str(source)], capture_output=True,
+                              text=True, timeout=10)
+    assert expected.returncode == 0, expected.stderr
+    output = tmp_path / "concat_payload"
+    compile_python(str(source), str(output), backend="self", libpython_mode="off",
+                   runtime_archive=str(pcc_py_runtime_archive))
+    for gc in range(5):
+        result = subprocess.run([str(output)], capture_output=True, text=True, timeout=15,
+                                env=dict(os.environ, PCC_GC_BACKEND=str(gc)))
+        assert result.returncode == 0, f"GC{gc}: {result.stderr}"
+        assert result.stdout == expected.stdout, f"GC{gc}: payload or family mismatch"

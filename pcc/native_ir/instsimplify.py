@@ -53,7 +53,7 @@ from .integer_fold_contract import (
 _BINOP_RE = re.compile(
     r"""
     ^(?P<indent>\s*)
-    %(?P<result>[\w\.]+)\s*=\s*
+    %(?P<result>[\w.$-]+)\s*=\s*
     (?P<op>add|sub|mul|and|or|xor|shl|lshr|ashr|udiv|sdiv|urem|srem)
     (?P<flags>(?:\s+(?:nsw|nuw|exact))*)
     \s+(?P<ty>i\d+)\s+
@@ -67,7 +67,7 @@ _BINOP_RE = re.compile(
 _ICMP_RE = re.compile(
     r"""
     ^(?P<indent>\s*)
-    %(?P<result>[\w\.]+)\s*=\s*icmp\s+
+    %(?P<result>[\w.$-]+)\s*=\s*icmp\s+
     (?P<pred>eq|ne|ugt|uge|ult|ule|sgt|sge|slt|sle)
     \s+(?P<ty>i\d+)\s+
     (?P<lhs>[^,\s][^,]*?)\s*,\s*
@@ -80,7 +80,7 @@ _ICMP_RE = re.compile(
 _SELECT_RE = re.compile(
     r"""
     ^(?P<indent>\s*)
-    %(?P<result>[\w\.]+)\s*=\s*select\s+
+    %(?P<result>[\w.$-]+)\s*=\s*select\s+
     i1\s+(?P<cond>[^,]+?)\s*,\s*
     (?P<ty1>[\w\*]+)\s+(?P<tval>[^,]+?)\s*,\s*
     (?P<ty2>[\w\*]+)\s+(?P<fval>.+?)\s*$

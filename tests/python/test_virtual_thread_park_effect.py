@@ -717,7 +717,7 @@ def dynamic_entry(worker) -> None:
 
     assert may_park == {"leaf"}
     assert rejected == {
-        "dynamic_entry": "unresolved user-method may park: .park",
+        "dynamic_entry": "unresolved user-method may park: .park (receiver type 'dyn', module None)",
     }
 
 
@@ -948,10 +948,11 @@ def handler(worker: Worker, dynamic_worker) -> None:
 
     assert methods == {"Worker.park"}
     assert rejected["Worker.forward"] == (
-        "unresolved user-method may park: .park"
+        "unresolved user-method may park: .park (receiver type 'dyn', module None)"
     )
     assert rejected["handler"] == (
-        "calls unresolved may_park method wrapper: Worker.forward"
+        "calls unresolved may_park method wrapper: Worker.forward: "
+        "unresolved user-method may park: .park (receiver type 'dyn', module None)"
     )
 
 

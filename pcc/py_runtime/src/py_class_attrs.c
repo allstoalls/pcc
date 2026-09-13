@@ -617,6 +617,19 @@ PyObject *py_classmethod_new(PyObject *func) {
     return (PyObject *)cm;
 }
 
+PyObject *py_staticmethod_new(PyObject *func) {
+    if (func == NULL) return NULL;
+    PyStaticMethodObject *sm = (PyStaticMethodObject *)pcc_gc_alloc(
+        (int64_t)sizeof(PyStaticMethodObject), PY_TYPE_STATICMETHOD, 0
+    );
+    if (sm == NULL) return NULL;
+    sm->func = NULL;
+    pcc_gc_store_ptr((PyObject *)sm, &sm->func, func);
+    py_gc_track((PyObject *)sm);
+    pcc_gc_publish_initialized((PyObject *)sm);
+    return (PyObject *)sm;
+}
+
 PyObject *py_property_new(PyObject *fget, PyObject *fset, PyObject *fdel) {
     PyPropertyObject *prop = (PyPropertyObject *)pcc_gc_alloc(
         (int64_t)sizeof(PyPropertyObject),
@@ -696,6 +709,14 @@ static PyObject *pcc_descriptor_call_get(
     PyObject *obj,
     PyClassObject *owner
 ) {
+    if (descriptor != NULL && !PY_IS_TAGGED_INT(descriptor)
+        && py_type_of(descriptor) == PY_TYPE_STATICMETHOD) {
+        PyObject *func = pcc_gc_load_ptr(
+            descriptor, &((PyStaticMethodObject *)descriptor)->func
+        );
+        py_incref(func);
+        return func;
+    }
     if (descriptor != NULL
         && !PY_IS_TAGGED_INT(descriptor)
         && py_type_of(descriptor) == PY_TYPE_PROPERTY) {

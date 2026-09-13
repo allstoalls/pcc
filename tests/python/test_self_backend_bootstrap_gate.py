@@ -222,7 +222,7 @@ def test_bootstrap_gate_child_env_pins_bounded_ir_pass_policy(monkeypatch):
     env = _child_env()
 
     assert "LC_ALL" not in env
-    assert env["PCC_PYTHON_IR_PASSES"] == "off"
+    assert env["PCC_PYTHON_IR_PASSES"] == "default"
 
 
 def test_bootstrap_gate_child_env_preserves_explicit_ir_pass_policy(monkeypatch):

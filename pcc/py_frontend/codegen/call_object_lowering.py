@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Optional
 
 from pcc.llvm_capi.compat import ir
+from pcc.py_runtime.py.py_abi_constants import PY_TYPE_TUPLE
 
 from ..py_ast import (
     DictExpr,
@@ -72,15 +73,40 @@ class CallObjectLoweringMixin:
         ))
 
     def _emit_dynamic_call_args_tuple(self, args: tuple[Expr, ...]) -> ir.Value:
-        """Materialize args for a pcc-native dynamic callable call.
-
-        The bootstrap-observability shape ``fn(*args, **kwargs)`` passes
-        an existing pcc tuple through directly. Mixed starred calls are
-        still represented as a pcc list; full tuple-normalization belongs
-        with the broader callable ABI work.
-        """
+        """Return one owned tuple for the native callable argument ABI."""
         if self._is_starred_unpack(args):
-            return self._emit_as_object(args[0].args[0])
+            source = args[0].args[0]
+            seq = self._emit_as_object(source)
+            tag = self.builder.call(self.runtime["py_obj_type_tag"], [seq])
+            exact_tuple = self.builder.icmp_signed("==", tag, ir.Constant(_I64, PY_TYPE_TUPLE))
+            function = self.current_function
+            reuse_bb = function.append_basic_block(self._fresh("call.splat.tuple"))
+            convert_bb = function.append_basic_block(self._fresh("call.splat.iterable"))
+            done_bb = function.append_basic_block(self._fresh("call.splat.done"))
+            self.builder.cbranch(exact_tuple, reuse_bb, convert_bb)
+            self.builder.position_at_end(reuse_bb)
+            retained = self._gc_retain(seq)
+            self._gc_release_if_owned(seq, source)
+            reuse_exit = self.builder.block
+            self.builder.branch(done_bb)
+            self.builder.position_at_end(convert_bb)
+            self._gc_pin(seq)
+            converted = self.builder.call(
+                self.runtime["py_tuple_from_splat"], [seq],
+                name=self._fresh("call.splat.normalized"),
+            )
+            self._gc_pin(converted)
+            self._gc_unpin(seq)
+            self._gc_release_if_owned(seq, source)
+            self._gc_unpin(converted)
+            self._emit_post_call_err_check(source.span)
+            convert_exit = self.builder.block
+            self.builder.branch(done_bb)
+            self.builder.position_at_end(done_bb)
+            result = self.builder.phi(_CSTR, name=self._fresh("call.splat.args"))
+            result.add_incoming(retained, reuse_exit)
+            result.add_incoming(converted, convert_exit)
+            return result
         if self._has_starred_unpack(args):
             lst = self._emit_pcc_args_list(args, "dyn")
             tup = self.builder.call(

@@ -14,6 +14,7 @@ unbound-call semantics).
 from __future__ import annotations
 
 import subprocess
+import re
 from pathlib import Path
 from textwrap import dedent
 
@@ -75,12 +76,14 @@ def test_unbound_call_cpy_base_compiles_via_dynamic_getattr(tmp_path):
     # class object as receiver; pin that the unbound base reference
     # `Mid.format_usage(self)` lowers to a dynamic getattr on the class
     # object and is NOT emitted as a direct call of Leaf's own method in the
-    # body. The raw method symbol is now *called* exactly once — by its own
-    # native adapter's forward thunk (added by the method dispatch rework);
-    # a buggy body dispatch would add a second call site.
-    total = ir_text.count("@user_mid_leaf_Leaf_format_usage(")
-    defines = ir_text.count("define ptr @user_mid_leaf_Leaf_format_usage(")
-    assert total - defines == 1, ir_text
+    # body. Count actual calls independently of the emitter's explicit
+    # linkage spelling, then inspect the method body for recursive dispatch.
+    symbol = "@user_mid_leaf_Leaf_format_usage"
+    calls = re.findall(r"(?m)^\s*[^\n]*\bcall\b[^\n]*" + symbol + r"\(", ir_text)
+    body = re.search(r"(?m)^define[^\n]*" + symbol + r"\([^\n]*\{\n([\s\S]*?)^\}", ir_text)
+    assert body is not None
+    assert len(calls) == 1, calls
+    assert symbol + "(" not in body[1], body[1]
 
 
 def test_unbound_call_missing_method_raises_attribute_error(tmp_path):

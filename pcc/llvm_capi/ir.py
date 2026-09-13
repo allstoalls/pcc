@@ -1782,6 +1782,9 @@ class Module:
         self._name_counters: dict[str, int] = {}
         self._direct_indexed_supported_records = 0
         self._direct_indexed_fallback_records = 0
+        # Owned IR passes currently consume the canonical text representation.
+        # Keep that input only when the direct object worker selected passes.
+        self._direct_indexed_retain_text = False
 
     def get_unique_name(self, base: str) -> str:
         """Return a unique variant of ``base`` within this module's
@@ -1969,6 +1972,9 @@ class IRBuilder:
         self._fn: Optional[Function] = block.parent if block else None
         self._direct_indexed_capture = _env_flag_enabled(
             "PCC_DIRECT_INDEXED_KERNEL_CAPTURE"
+        ) and not (
+            self._fn is not None
+            and self._fn.module._direct_indexed_retain_text
         )
         self._direct_indexed_no_text = (
             self._direct_indexed_capture
@@ -3761,6 +3767,16 @@ class FilterClause:
 # compiler being self-hosted. They allocate real pcc.llvm_capi.ir objects and
 # keep target-program runtime symbols as IR objects, not native addresses in
 # the compiler binary.
+
+
+def add_raw_function_attribute(function, attribute: str) -> None:
+    """Owned implementation of the compatibility facade's attribute helper."""
+    function.attributes.add(attribute)
+
+
+def set_struct_body(struct_ty, body, packed: bool = False) -> None:
+    """Set a body through the owned type API, without a foreign type adapter."""
+    struct_ty.set_body(body, packed=packed)
 
 
 def scaffold_IntType(width: int):

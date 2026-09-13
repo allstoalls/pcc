@@ -3411,6 +3411,10 @@ class NativeModuleAliasMixin:
                 pass
             else:
                 self.builder.call(init_fn, init_args)
+                # Imported constructors use the same exception channel as
+                # local __init__ calls. Do not return a failed instance and
+                # leave its exception pending past the caller's try block.
+                self._emit_post_call_err_check(None, release_on_error=(inst,))
         return inst
 
     def _emit_no_init_field_instance(
@@ -3666,7 +3670,6 @@ class NativeModuleAliasMixin:
         kwargs_expr = None
         if kwdict_unpack is not None:
             arg_exprs, kwargs_expr = kwdict_unpack
-        args_owned = not self._is_starred_unpack(arg_exprs)
         args_tuple = self._emit_dynamic_call_args_tuple(arg_exprs)
         kwargs_obj = self._emit_dynamic_call_kwargs_object(
             expr.kwargs,
@@ -3678,8 +3681,7 @@ class NativeModuleAliasMixin:
             [callable_obj, args_tuple, kwargs_obj],
             name=self._fresh(f"compiled.module.call.{attr.name}"),
         )
-        if args_owned:
-            self._gc_release(args_tuple)
+        self._gc_release(args_tuple)
         if expr.kwargs or kwargs_expr is not None:
             self._gc_release(kwargs_obj)
         self._gc_release(callable_obj)
@@ -3721,7 +3723,6 @@ class NativeModuleAliasMixin:
                 kwargs_expr = None
                 if kwdict_unpack is not None:
                     arg_exprs, kwargs_expr = kwdict_unpack
-                args_owned = not self._is_starred_unpack(arg_exprs)
                 args_tuple = self._emit_dynamic_call_args_tuple(arg_exprs)
                 kwargs_obj = self._emit_dynamic_call_kwargs_object(
                     expr.kwargs,
@@ -3733,8 +3734,7 @@ class NativeModuleAliasMixin:
                     [callable_obj, args_tuple, kwargs_obj],
                     name=self._fresh(f"compiled.module.call.{attr.name}"),
                 )
-                if args_owned:
-                    self._gc_release(args_tuple)
+                self._gc_release(args_tuple)
                 if expr.kwargs or kwargs_expr is not None:
                     self._gc_release(kwargs_obj)
                 self._gc_release(callable_obj)

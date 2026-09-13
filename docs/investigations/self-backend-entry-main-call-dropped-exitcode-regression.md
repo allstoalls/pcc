@@ -89,3 +89,31 @@ checks all CONFIRMED before touching the fix:
   `python_libpython=off --backend self` programs ending in a trailing
   zero-arg `main()` now map `None -> 0`, `int -> value`; a non-int non-None
   return raises through `py_int_to_i64` and exits via the unhandled path.
+
+## 2026-09-13: a distinct silent entry failure from threading owner inference
+
+The earlier trailing-call repair is present. A new reproduction using
+`test_asyncio_stdlib_objects_compile_without_libpython` still exited 0 with
+empty stdout on GC0 and GC4. Frozen source `source-candidate-b17` and the
+candidate with explicit `c_obj` return ownership both reproduced it, so the
+ownership change did not introduce this failure. Evidence is under
+`/private/tmp/pcc-owned-perf-20260912-rbrioqup/asyncio-extern-owner`.
+
+The binary contained `user_program_main__gen_resume`: ordinary `main` had
+become a generator factory. Worker-level instrumentation recorded
+`main.is_async=False`, `main` in the may-park set, and a receiver named `event`
+with class name `Event` and no threading constructor hints. The effect analysis
+ignored `ClassType.module`, treating imported `asyncio.Event.wait` as a native
+`threading.Event.wait`. The trailing-call path invoked the resulting factory,
+so the user body never ran. Parent-only instrumentation observed nothing
+because actual code generation ran in worker processes; its empty trace is
+not negative evidence.
+
+Both native threading method selection and effect analysis now reject a known
+non-threading class owner. The original asyncio scenario passes. A separate
+external `Event` class executes its `wait` method and prints 42 under GC0..4,
+and a real native threading event still parks and resumes a virtual thread
+under all five GCs (`threading-owner-green.stdout`,
+`threading-owner-positive.stdout`). This fixes the erroneous classification;
+it does not establish general generator-return exit-code handling or full
+asyncio semantics. A new full pcc1 build is still required for qualification.

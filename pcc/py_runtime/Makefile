@@ -71,7 +71,7 @@ OBJDIR_LIBPY = build_libpython
 # Runtime modules that exist as Python ports under py/ and are used by
 # the libpy_runtime_pcc_py.a variant in place of the cc-built .o.
 # Keep in sync with the list of @c_abi_export-decorated modules in py/.
-PY_MODULES = py_tuple py_tuple_slice py_obj_stubs py_exc_tls py_exc_objects py_exc_match py_exc_table py_exc_traceback py_obj_gc py_gc_telemetry py_gc_backend py_set py_os_env py_os_system py_os_path py_os_substrate py_process py_process_substrate py_process_timeout py_print_sys py_print_fmt py_format_runtime py_obj py_obj_dealloc py_dict py_list py_list_set_slice py_iter py_gen py_coroutine py_context_runtime py_call_splat_runtime py_module_attrs_runtime py_compiled_module_runtime py_dlpack_runtime py_runtime_log py_json_runtime py_pickle_copy_runtime py_protocol_runtime py_extension_loader_runtime py_http_runtime py_asyncio_io_runtime py_re_engine_runtime freestanding_io_waitset py_func py_re py_dunder py_weakref py_file py_threading py_class py_obj_ops_dispatch py_obj_ops_slice py_obj_ops_set_slice py_obj_ops_mod py_obj_ops_compare py_str py_str_accessors py_str_slice py_int_core py_int_decimal py_int_shift py_int_bitwise py_int_addsub py_int_mul py_int_bigint_pow py_int_ops py_int py_int_parse py_int_convert py_int_bigint_convert py_substrate
+PY_MODULES = py_tuple py_tuple_slice py_obj_stubs py_exc_tls py_exc_objects py_exc_match py_exc_table py_exc_traceback py_obj_gc py_gc_telemetry py_gc_backend py_set py_os_env py_os_system py_os_path py_os_substrate py_process py_process_substrate py_process_timeout py_print_sys py_print_fmt py_format_runtime py_obj py_obj_dealloc py_dict py_list py_list_set_slice py_iter py_gen py_coroutine py_context_runtime py_call_splat_runtime py_module_attrs_runtime py_compiled_module_runtime py_dlpack_runtime py_runtime_log py_json_runtime py_pickle_copy_runtime py_protocol_runtime py_extension_loader_runtime py_hash_runtime py_http_runtime py_asyncio_io_runtime py_re_engine_runtime freestanding_io_waitset py_func py_re py_dunder py_weakref py_file py_threading py_class py_obj_ops_dispatch py_obj_ops_slice py_obj_ops_set_slice py_obj_ops_mod py_obj_ops_compare py_str py_str_accessors py_str_slice py_int_core py_int_decimal py_int_shift py_int_bitwise py_int_addsub py_int_mul py_int_bigint_pow py_int_ops py_int py_int_parse py_int_convert py_int_bigint_convert py_substrate
 PY_MODULES += py_virtual_thread_runtime freestanding_runtime_debug py_capi_core_runtime py_capi_memory_runtime py_capi_stdio_runtime py_capi_numeric_runtime py_capi_collections_runtime py_capi_exc_runtime py_capi_dict_runtime py_capi_object_runtime py_capi_type_runtime py_capi_unicode_runtime py_capi_capsule_runtime py_capi_set_runtime py_capi_misc_runtime py_capi_cfunction_runtime py_capi_object_call_runtime py_capi_method_bridge_runtime py_capi_object_attr_runtime py_capi_number_runtime py_capi_sequence_runtime py_capi_mapping_runtime py_capi_import_runtime py_capi_unicode_search_runtime py_capi_unicode_writer_runtime py_capi_buffer_runtime py_capi_module_runtime py_capi_cext_runtime py_capi_module_state_runtime py_capi_private_runtime py_capi_slice_runtime py_capi_seqiter_runtime py_capi_contextvar_runtime py_capi_call_runtime py_capi_arg_runtime py_capi_str_conv_runtime py_capi_buildvalue_runtime py_capi_type_descriptor_runtime py_capi_visit_runtime
 ifeq ($(PCC_WITH_THREADS),1)
 PY_MODULES += freestanding_thread_kernel_pthread
@@ -80,7 +80,7 @@ endif
 # C objects that are replaced indirectly by a Python port with a different
 # module name. py_obj_stubs.py owns the exported bytes helpers in the
 # pcc-Python runtime archive, so the C py_bytes.o must not remain there.
-PY_REPLACED_C_MODULES = $(PY_MODULES) py_bytes py_call_splat py_compiled_module py_context py_module_attrs py_gc_index_table pcc_gc_external_resource py_os_native py_complex_pow py_float_fromhex py_json py_pickle_copy py_protocol py_extension_loader py_http py_asyncio_io py_io_waitset py_class_attrs py_format
+PY_REPLACED_C_MODULES = $(PY_MODULES) py_bytes py_call_splat py_compiled_module py_context py_module_attrs py_gc_index_table pcc_gc_external_resource py_os_native py_complex_pow py_float_fromhex py_json py_pickle_copy py_protocol py_extension_loader py_hash py_http py_asyncio_io py_io_waitset py_class_attrs py_format
 
 SRCS = \
 	$(SRCDIR)/py_obj.c \
@@ -145,6 +145,7 @@ SRCS = \
 	$(SRCDIR)/py_os_env.c \
 	$(SRCDIR)/py_os_path.c \
 	$(SRCDIR)/py_os_substrate.c \
+	$(SRCDIR)/py_hash.c \
 	$(SRCDIR)/py_http.c \
 	$(SRCDIR)/py_file.c \
 	$(SRCDIR)/py_process.c \

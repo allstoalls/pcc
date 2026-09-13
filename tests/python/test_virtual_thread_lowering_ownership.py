@@ -263,7 +263,7 @@ def test_rooted_operand_cleanup_reloads_and_unwinds_both_error_kinds() -> None:
     assert "for root_slot, release_owned in reversed(roots):" in release
     loaded = release.index('self.runtime["pcc_gc_load_ptr"]')
     left = release.index("self._leave_container_temp_root(root_slot)", loaded)
-    balanced = release.index("self._gc_release(rooted_value)", left)
+    balanced = release.index("self._gc_release(rooted_value, known_object=True)", left)
     assert loaded < left < balanced
     # Separate pcc and CPython unwind blocks each receive the same live roots.
     assert evaluate.count("rooted_pcc_lifetimes,") >= 2

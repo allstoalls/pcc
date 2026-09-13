@@ -2050,8 +2050,15 @@ def _threading_receiver_kind(
     """
     receiver_ty = getattr(receiver, "ty", None)
     if isinstance(receiver_ty, ClassType):
+        # Imported classes retain their defining module even when their name
+        # is an unqualified leaf. asyncio.Event and user Event classes do not
+        # have the native threading object's layout or suspension contract.
+        if receiver_ty.module and receiver_ty.module != "threading":
+            return None
         candidate = receiver_ty.name
         if "." in candidate:
+            if not candidate.startswith("threading."):
+                return None
             candidate = candidate.rsplit(".", 1)[1]
         if candidate in _THREADING_SUSPENSION_METHODS:
             for stmt in module.body:

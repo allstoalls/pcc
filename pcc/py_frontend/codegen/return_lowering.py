@@ -24,6 +24,12 @@ class ReturnLoweringMixin:
             "[pcc.codegen] " + mod_name + ":" + func_name + ":return " + label + "\n"
         )
 
+    def _emit_finally_entry(self, entry) -> None:
+        if callable(entry):
+            entry()
+        else:
+            self._emit_stmts(entry)
+
     def _emit_pending_finally_blocks(self) -> None:
         self._return_log("finally begin")
         stack = self._finally_stack
@@ -38,7 +44,7 @@ class ReturnLoweringMixin:
                 self._emitting_finally = prev
                 self._return_log("finally terminated")
                 return
-            self._emit_stmts(stack[idx])
+            self._emit_finally_entry(stack[idx])
             idx -= 1
         self._emitting_finally = prev
         self._return_log("finally end")

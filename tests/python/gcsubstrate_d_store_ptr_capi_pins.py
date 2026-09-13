@@ -292,36 +292,23 @@ def test_backend4_container_and_wrapper_tags_are_admitted_and_publish():
     )
 
 
-def test_backend4_staticmethod_admission_is_inert_for_lack_of_a_constructor():
-    """STATICMETHOD is admitted, and that admission can strand nothing.
-
-    The tag is relocate-copy supported, so leaving it out would be the only
-    inconsistency in the list; but static methods lower directly to their
-    wrapped callable, so no constructor allocates one and no object can be
-    left stuck fresh by admitting it.  If a constructor is ever added it must
-    publish, and this test is where that shows up.
-    """
+def test_backend4_staticmethod_constructor_publishes_its_owned_slot():
+    """Admitted staticmethod descriptors must leave the fresh allocation set."""
 
     c_alloc, py_alloc = _backend4_fresh_admission_sources()
     assert "PY_TYPE_STATICMETHOD" in c_alloc
     assert "PY_TYPE_STATICMETHOD" in py_alloc
 
-    allocations = []
-    for directory, suffix in (("src", ".c"), ("py", ".py")):
-        for path in sorted((RUNTIME_DIR / directory).glob("*" + suffix)):
-            text = path.read_text(encoding="utf-8")
-            for line in text.splitlines():
-                if "pcc_gc_alloc(" in line and "PY_TYPE_STATICMETHOD" in line:
-                    allocations.append(path.name + ": " + line.strip())
-    assert allocations == [], allocations
+    for name in ("src/py_class_attrs.c", "py/py_class.py"):
+        text = (RUNTIME_DIR / name).read_text(encoding="utf-8")
+        constructor = text.split("py_staticmethod_new(", 1)[1].split("py_property_new(", 1)[0]
+        assert "PY_TYPE_STATICMETHOD" in constructor
+        assert constructor.index("pcc_gc_store_ptr(") < constructor.index("pcc_gc_publish_initialized(")
 
     internal = (
         RUNTIME_DIR / "src" / "py_internal.h"
     ).read_text(encoding="utf-8")
-    assert "PY_TYPE_STATICMETHOD remains part of the runtime layout/GC contract" in (
-        internal
-    )
-    assert "has\n * no public constructor" in internal
+    assert "PyObject *py_staticmethod_new(PyObject *func);" in internal
 
 
 def test_backend4_function_and_iterator_tags_are_admitted_and_publish():

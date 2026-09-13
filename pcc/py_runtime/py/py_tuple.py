@@ -327,6 +327,8 @@ def _tuple_from_iterable(seq):
 def py_tuple_from_splat(seq):
     if ptr_is_null(seq):
         return null()
+    if is_tagged_int(seq):
+        return _tuple_from_iterable(seq)
     if not _ptr_can_have_header(seq):
         return null()
 
@@ -339,7 +341,7 @@ def py_tuple_from_splat(seq):
     else:
         return _tuple_from_iterable(seq)
     if n < 0:
-        py_raise_owned(py_exc_new(6, cstr("tuple() argument is not iterable")))  # PY_EXC_TYPEERROR
+        py_raise_owned(py_exc_new(3, cstr("tuple() argument is not iterable")))  # PY_EXC_TYPEERROR
         return null()
 
     out = py_tuple_new(n)

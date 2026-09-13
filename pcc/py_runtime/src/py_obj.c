@@ -1497,6 +1497,7 @@ static void pcc_decref_finish(const PccRefcountPrepared *prepared) {
         pcc_obj_runtime_log_event_code(3, 2, new_refcount, type_tag, o);
         return;
     }
+    if (type_tag == PY_TYPE_GEN && py_gen_finalize_from_dealloc(o) != 0) return;
     int delay_zpage_freeing_note = (
         prepared->backend == PCC_GC_KIND_COLORED_RELOCATING
         && (flags & PY_FLAG_GC_ZPAGE_ALLOC) != 0

@@ -224,3 +224,286 @@ comparison. Runtime archives used here are isolated, manifest-checked overlays
 whose construction still used legacy Make/ar orchestration. They do not prove
 an entirely owned runtime build. The gateway benchmark has no new completed
 comparison, and its 300-second compilation deadline was not increased.
+
+### Later scoped checks on 2026-09-13
+
+Source snapshot `source-candidate-b17` has identity
+`1cc27b3277be982d5ff1005d4479bd688c93374f387690fcc66ad16fd3947db4`.
+The scoped C API compiler `c-api-probe/compiler-v9` is 136,735,784 bytes,
+SHA-256 `cd8e5bd70f721e19d14e69259384e0cf9e4b6134979226895776d1875421729e`.
+It now completes the owned preprocessing of the tiny C input, then fails
+importing `functools` from `pcc.passes.llvm_python_registry`, before C AST
+passes run (`c-api-v9-boundary.json`, `c-api-tiny-v9.stderr`). This is still
+not a working C gate. The import policy excludes a compiled `functools`
+provider while its `lru_cache` from-import requires one; the existing LRU
+provider/decorator implementation also has semantic gaps. An import-only
+placeholder would not close this boundary.
+
+The preprocessing fixes cover callable regex replacements, bounded string
+prefix/suffix checks and lazy `Pattern.finditer` / `re.finditer`. The latter
+uses the existing callable iterator and a checked integer-protocol conversion:
+regex bounds raise `OverflowError`, whereas string slice bounds saturate.
+Each changed runtime slice has native GC0..4 execution and a labeled C oracle
+check (`re-callback-c-oracle/receipt.json`,
+`tailmatch-c-oracle-isolated/receipt.json`, `finditer-c-oracle/receipt.json`).
+The real comment scanner and macro expander also execute under GC0..4.
+Empty-match iteration/replacement and broader regex compatibility remain open.
+The runtime archive is `runtime-candidate-b17/libpy_runtime_pcc_py.a`, SHA-256
+`b287d28ef63af888abc3cacce37975b1ebb84f706084363196df5d5880fe6eb5`.
+Its legacy construction remains a separate ownership gap. The 166 PCO inputs
+to the diagnostic compiler's final link are preserved and hash-checked in
+`c-api-v9-link-inputs/manifest.json` for runtime-only relinking.
+
+The relocation decoder's first native component comparison now has execution
+evidence: 63.48 seconds becomes 59.00 seconds (1.076x), retired instructions
+fall 7.3%, and tree-RSS peak falls from 1,829,666,816 to 1,164,836,864 bytes.
+Both arms merge the same 170 objects to SHA-256
+`020cfdcbc47ad5df14190a317e01918399c08de5c77d3f0335b771ef2c8da543`
+(`relocation-ab/first-pair.json`). A separate five-second sample beginning
+eight seconds into the candidate run has 1,743 of 3,824 samples in stack-map
+scanning and 1,673 through `Struct.unpack_from`; those overlapping counts
+describe that sampled interval, not full-process owner shares. Precise internal
+plan annotations remove generic iteration/getitem from the hot IR but preserve
+dynamic comparisons. Their first additional run takes 56.75 seconds with the
+same output, and the 74-line integer-layout fixture matches CPython under all
+five GCs (`struct-plan-type-audit/receipt.json`,
+`struct-plan-execution/receipt.json`). These small component gains do not close
+the end-to-end compiler gap.
+
+
+## 2026-09-13: native archive verification and SHA owner correction
+
+The current scoped native verifier reaches successful verification, after fixes to
+Path copying/byte reads, ASCII decoding/error propagation, and iterable set
+predicates. Its initial successful GC0 run took 33.36 seconds. Sampling the actual
+verifier found SHA compression dominant, with bigint multiplication and GC below
+the runtime rotate helper. The supposedly native helper still expressed its high
+bits as Python multiplication by a shifted integer.
+
+With identical captured application inputs and the same 170-member b24 archive,
+ABBA execution times were 34.956 / 0.691 / 0.662 / 34.776 seconds. Only the rebuilt
+runtime rotate changed: existing `logical_shift_left_i64` replaces the Python
+shift/multiplication expression. The helper's generated IR changed from five
+allocas and bigint/GC calls to zero allocas and no calls. This approximately 52x
+improvement measures archive verification, not whole-compiler throughput.
+
+The following source revision also connects hashlib's incremental SHA256 to the
+existing native init/update/final core through immutable GC-owned state snapshots.
+Copy shares a snapshot; update replaces it; digest finalizes a stack copy. The
+`_oneshot` and `_native_digest` workarounds are removed. SHA now resides in
+`py_hash_runtime.py`; its C differential oracle resides in `src/py_hash.c` and is
+excluded from the production archive. SHA224 and SHA1 compression are unchanged.
+An added regression exposed an existing MD5 placeholder returning truncated SHA256;
+this was replaced with an actual MD5 implementation and checked against CPython.
+MD5 machine-intrinsic acceleration is still open.
+
+Source snapshot b25 is
+`f2381792e07c19ed3c45ee0e95d89b38b612c1fc05bff4b0192eb10ed49e3f63`;
+the 171-member diagnostic runtime archive is
+`1c76029a31514026a4cbd7ebdfe24299ae0af338fb852a3bf5ebaa4b118aa53e`.
+Nine focused tests passed, including emitted SHA/MD5/signature checks across all
+five GCs and actual archive-symbol ownership. A C-hash-only oracle also passed
+all five GCs. The rebuilt native verifier v9 checks the same b24 archive in
+0.590/0.740/0.711/0.749/0.832 seconds for GC0..4, returning 170 members each time.
+
+Repro scripts and receipts are under
+`/private/tmp/pcc-owned-perf-20260912-rbrioqup`: `run_sha_rotation_abba.py`,
+`sha-rotation-abba.json`, `sha-rotation-ir-audit.json`,
+`sha-module-tests.stdout`, `sha_state_c_oracle.py`,
+`sha-state-c-oracle/receipt.json`, `build_native_provenance_probe_v9.py`,
+`run_native_provenance_v9.py`, and `native-provenance-v9-execution.json`.
+Builds/tests used `run_process_tree_sample.py` with the shared lock, durable logs,
+timeouts and tree-RSS caps. Runtime overlay construction still used diagnostic
+Make/ar orchestration and cannot establish full toolchain ownership.
+The full stage1-i2 qualification is pending; the C functools boundary, stage2/3,
+full compiler performance and gateway results remain open.
+
+
+## 2026-09-13: native C frontend produces executable C functions
+
+This scoped experiment used frozen source
+`3732392c83a0d9a2692c10d0f68414d5e27f5f690aeb84294e16871b78cbcf48`
+(`source-candidate-b35`) and runtime archive
+`1612fe0a79c1a39c8c181d350fc09b532dc6f25bdbe1ea070932e1fe993d9a14`
+(`runtime-candidate-b33`, 171 members). Evidence is under
+`/private/tmp/pcc-owned-perf-20260912-rbrioqup/`.
+
+`build_native_c_frontend_phases_v6.py` compiled the actual C parser, pass
+pipeline and C code generator with the host self backend and libpython off.
+That emitted frontend ran under GC0–4 and produced IR for
+`add(int a, int b)` and `main()` calling `add(20, 22)`. The host-owned assembler
+and Mach-O linker consumed each IR result; all five C executables returned 42
+and had SHA-256
+`f545995e34b74b0f8b9df79e032ce368baa207c4af47b377043c05586d21d62a`.
+The frontend executable SHA-256 is
+`fc70416cbd8309a33bdfe14749070cad3f3cc2400d0af9382eb2b1bad5fd0d74`.
+Read `c-frontend-phases-probe-v6/receipt.json`, its five `.ll` files and
+`c-frontend-phases-probe-v6-watch.json` for commands/results. The watchdog was
+180 seconds with a 4 GiB tree-RSS cap and the shared performance lock.
+
+The failed earlier attempts exposed generic implementation gaps:
+
+- Methods were present in class dispatch tables but absent from class
+  namespaces. Publishing ordinary method objects made MRO-based C action
+  collection work; the driver was not replaced with a C-specific shortcut.
+- Cross-module subclass overrides were absent from the local declaration
+  table used for devirtualization. An annotated pass list called abstract
+  `Base.run`, returning `None` while the pass report still said the pass ran.
+  The override check now also uses the existing class export graph.
+- `type(node).__name__` was folded to the inferred `NoneType`, so the C visitor
+  selected its empty handler for real AST nodes. The same optimization dropped
+  calls and their exceptions in `type(f()).__name__`. Runtime evaluation now
+  preserves these operations and temporary ownership.
+- A mixin calling a helper supplied by its concrete subclass was bridged to
+  CPython despite a known native receiver. Native lookup now handles this
+  shape, including lookup failure before argument evaluation.
+- The owned `ChainMap` provider lacked scope mutation and parent operations.
+  Its completed core scope operations exposed a separate callable ABI defect:
+  a sole starred list was passed as though it were a tuple. Dynamic calls now
+  normalize iterables and use one owned argument-tuple contract at all 16
+  callers, retaining the existing tuple fast path.
+- Subscript mutation primitives can report failure by status. Python syntax
+  now uses raising wrappers, preserving missing dictionary keys in `KeyError`
+  and propagating callback errors. The C/Python object, protocol and tuple
+  mirrors passed the focused GC0–4 differential in
+  `mutation-c-oracle-v2/receipt.json`; external cc was an oracle only.
+- `ir.values.Constant` and runtime helpers imported from `compat` had no
+  closed-world binding. The existing owned value aliases now reuse scaffold
+  lowering; `add_raw_function_attribute` and `set_struct_body` bind real
+  implementations in the owned IR provider, including function-value aliases.
+
+This is **native frontend plus host-owned backend** evidence, not the complete
+native pcc1 C CLI gate. The probe selects frontend opt level 0, and its IR
+still contains the parameter allocas/loads/stores; the result is not an
+optimizer performance claim. The runtime archive still came from diagnostic
+Make/ar construction. Full runtime/toolchain ownership, stage1 qualification,
+stage2/3 fixed point and fresh gateway comparison remain open.
+
+## 2026-09-13: complete native C diagnostic reaches execution; cache and descriptors
+
+Stage1-P used frozen source b37
+`469af50457364e5fad90ea3ba193f20bf8f134fdfe0acc691890d9e55ffa8124`
+and the b33 runtime above. Its binary is
+`5a359b1a3f2b009c57e4d2c42a475d19577bf9ddf4b235cba036afe223c0915d`.
+Host construction took 375.02 seconds; the unchanged 30-second Python function
+compilation smoke timed out. The stage1 manifest is ERROR, not qualification.
+
+That pcc1 nevertheless compiled and linked `tiny.c` through its complete native
+C pipeline with `--backend=self --python-libpython=off --ir-scaffold=on
+--no-cache`, and the emitted executable returned 42. Read
+`native-p-c-no-cache-watch.json`, `native-p-c-no-cache-execution.json` and
+`native-p-tiny-c-no-cache` under the evidence root above. The emitted binary
+SHA-256 is `f545995e34b74b0f8b9df79e032ce368baa207c4af47b377043c05586d21d62a`.
+Disabling cache is a diagnostic exception: the default C gate remained blocked
+by the strict `_load_compiled_artifact` stub.
+
+The default-cache blocker followed correction of exception-class filtering:
+the redundant qualified `json.JSONDecodeError` reference had no native binding.
+The cache now catches `(OSError, ValueError)`, including their subclasses, and
+the owned JSON provider correctly derives `JSONDecodeError` from `ValueError`.
+Malformed object keys also exposed `_parse_string` indexing past EOF or asserting;
+it now raises `JSONDecodeError`. `json-cache-error-native.stdout` records 20
+passing focused checks, including owned JSON execution on GC0–4 and host C cache
+regressions. This does not yet prove the rebuilt pcc1 default-cache route.
+
+The larger C probe containing stdio, arrays, a struct and a loop then failed
+with `unsupported operand type(s) for +`. The relocated LLDB breakpoints in
+`native-p-c-plus-offset-lldb.stdout` locate the error in
+`LLVMCodeGenerator._tag_type_key`, called through an instance-method wrapper.
+It is a static method. `test_native_staticmethod_descriptor.py` reproduced the
+same failure with `getattr(obj, "key")("x")`: direct compiler dispatch knew
+the method kind, but the runtime class namespace had no staticmethod descriptor.
+
+The generic repair publishes a real staticmethod descriptor with the normal
+function signature binder; its runtime getter returns the function without a
+receiver. Explicit `staticmethod(function)` constructs the descriptor too.
+Callable dispatch, `__func__` and `__wrapped__` use the same owned function slot.
+A further identity regression found that `Base.key` synthesized a different
+function object from `getattr(Base, "key")`; static method value lowering now
+loads the class-owned object. Descriptor construction uses the existing tag,
+slot/barrier/deallocation contract and publishes its initialized GC slots.
+`staticmethod-fixed.stdout` records 14 checks and
+`staticmethod-identity-fixed.stdout` records 15 checks, including emitted GC0–4
+execution, descriptor precedence, defaults, keyword arguments and errors.
+
+The four C class/class-attrs/object/dunder mirrors were substituted into the
+otherwise identical Python runtime for a labeled external-cc oracle. The
+replacement also supplies the exact `pcc_class_del_defined_count` global from
+C substrate, since replacing the Python class object removes its definition.
+`staticmethod-c-oracle-v2/receipt.json` records matching execution on all five
+GCs for staticmethods, class namespaces and exception classes. This is a
+differential oracle, not an owned runtime construction claim.
+
+The next source snapshot b38 is
+`8f7c205a43dd08a8e13db52012b857e7361d59ad0dee8a09c1db52f987bcad48`;
+its diagnostic runtime archive is
+`5501d92a135465cde8a0fc5ebcbd9b86e38145e0c4ff144fda50bb5ff5492911`.
+The runtime receipt records correction of a copied platform stamp to the
+`arm64-apple-darwin` target present in all 171 verified member receipts; archive
+payload bytes were unchanged. The reproduction commands are in
+`staticmethod-overlay-watch.json`, `staticmethod-c-oracle-v2-watch.json` and
+`stage1-q-watch.json`. New-source pcc1 execution, default-cache C compilation,
+the larger C program, normal stage1 qualification and all later stages remain
+pending at this checkpoint.
+
+## 2026-09-13: Q passes default-cache C execution; linking dominates Python compile
+
+Stage1-Q built b38 in 386.05 seconds (980.43 user, 20.88 system), producing
+`815058b51a57f3d517db5b814bd9f305508b4a774b8fb2ae97271ffb8f5b9150`.
+Its normal 30-second Python compilation smoke still timed out: no qualified
+stage1 receipt or stage2/3 claim.
+
+`run_native_q_c_gate.py` now passes with the default cache enabled. Cold, warm
+and corrupt-cache recompilation all emit the same tiny C executable returning
+42. The warm artifact is not republished, and corrupted JSON is replaced with
+valid IR. The stdio/array/struct/loop executable prints
+`42`, `12`, `v0=20`, `v1=22`, `v2=42` and exits zero. Its SHA-256 is
+`5bf2e50fb3254cf5988094681049579e707009b1e2f7714faefa7912e449c61d`.
+Read `native-q-c-gate/receipt.json` and `native-q-c-gate-watch.json`.
+This closes these native C execution regressions, not the full C language or
+runtime construction boundary. Cached `func_return_types` values remain null
+in these native artifacts and need separate API/metadata qualification.
+
+Q also compiles the actual staticmethod/identity/JSON feature program, then its
+emitted binary matches CPython on GC0–4. Read `native-q-features/receipt.json`;
+the emitted SHA-256 is
+`d3fd9364cd939954ee0a89c4d1f936c30e6bcf629c6c8da6f22de106d27f679e`.
+The diagnostic run was sampled and took 57.08 seconds, so this wall time is
+not an A/B performance result. Its phase profile attributes 48.484 seconds to
+`link_self_pcc_driver`, 2.587 to frontend codegen and 2.270 to IR passes.
+The raw late sample, `native-q-features/compile-late.sample.txt`, resolves
+against Q's own image: 3,108 of 3,748 on-CPU samples (82.9%) have leaf
+`py_bytes_concat` under `macho_exec.link_prepared_executable`. Read the folded
+stacks and `compile-late-owners.json`; this five-second window is not a claim
+that the same fraction applies to the entire link.
+
+Source inspection confirms the C byte-concat mirror already uses two `memcpy`
+calls, while its Python port copied both operands in byte-at-a-time loops.
+The port now uses the existing `memcpy` intrinsic, preserving allocation,
+family, terminator and ownership. `bytes-copy-tests.stdout` records 14 passing
+checks, including content/family independence and ownership on GC0–4. The
+test labeled `cc` in the existing join test still used the explicitly selected
+Python archive; that label is not C differential evidence. Actual C evidence is
+`bytes-concat-c-oracle/receipt.json`: compile the current complete C bytes
+implementation as an external-cc oracle, rename its defined symbols through the
+owned object linker, and execute its concat function on all five GCs.
+
+`bytes-copy-abba-v2/receipt.json` binds one application IR/object/emitter and
+two runtimes differing only in `py_obj_stubs.o`. ABBA elapsed times are
+0.304 / 0.072 / 0.069 / 0.299 seconds; native instructions fall from roughly
+4.53 billion to 0.85 billion (81.2%). Outputs match and RSS stays about 3.7 MB.
+This is a 128 MiB copy microbenchmark, not whole-compiler acceleration. The
+first attempt failed before execution because its explicit emitter target was
+missing; its failed logs remain separate. `bytes-concat-ir-audit.json` confirms
+the new helper contains two memcpy calls.
+
+The new runtime is
+`0ddeb7583b450da8d440d9a7030babe2b83319c77fbc5f844a8811ad01feae85`;
+frozen source b39 is
+`c634dcbc98d246fdedeb8780fd1fb34391be60fc77cf461955cdf7abc103a943`.
+Stage1-R is the pending full-compiler validation. The compiler's direct indexed
+bootstrap still selects IR passes off and emitter `optimize=False`; the copy
+optimization does not close that pipeline gap. Bytearray growth also still
+replaces the object in the current frontend/runtime, so alias/identity and
+amortized growth semantics remain open. No linker-specific source rewrite was
+used to conceal that boundary.

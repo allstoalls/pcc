@@ -824,7 +824,7 @@ def _load_compiled_artifact(cache_dir, cache_key):
     try:
         with open(path, encoding="utf-8") as f:
             artifact = json.load(f)
-    except (FileNotFoundError, OSError, ValueError, json.JSONDecodeError):
+    except (OSError, ValueError):
         return None
     if not isinstance(artifact, dict):
         return None

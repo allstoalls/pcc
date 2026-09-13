@@ -159,6 +159,8 @@ class ExternScaffoldMixin:
             result = self.builder.ptrtoint(
                 result, _I64, name=self._fresh(f"extern.{symbol}.addr")
             )
+        elif restype_name == "c_obj":
+            self._note_owned_object_value(result)
         return result
 
     def _pointer_or_address_operand(self, v: ir.Value, ty: "Type") -> ir.Value:

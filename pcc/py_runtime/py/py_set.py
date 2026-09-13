@@ -81,6 +81,12 @@ pcc_gc_backend4_retarget_mutator_payload_locked = extern(
 py_obj_hash          = extern("py_obj_hash",          (c_ptr,),                     c_int64)
 py_obj_eq            = extern("py_obj_eq",            (c_ptr, c_ptr),               c_int32)
 py_err_occurred      = extern("py_err_occurred",      (),                           c_int64)
+py_obj_iter = extern("py_obj_iter", (c_ptr,), c_ptr)
+py_obj_next = extern("py_obj_next", (c_ptr,), c_ptr)
+py_current_exception = extern("py_current_exception", (), c_ptr)
+py_exc_builtin_class = extern("py_exc_builtin_class", (c_int64,), c_ptr)
+py_exc_matches = extern("py_exc_matches", (c_ptr, c_ptr), c_int64)
+py_clear_exception = extern("py_clear_exception", (), c_void)
 py_exc_new           = extern("py_exc_new",           (c_int64, c_ptr),             c_ptr)
 py_raise             = extern("py_raise",             (c_ptr,),                     c_void)
 # py_raise increfs; a caller that created the exception must release it.
@@ -335,7 +341,7 @@ def _set_add_rooted_slot(
     return committed
 
 
-def _set_lookup_rooted(s, item, mode: int) -> int:
+def _set_lookup_rooted(s, item, mode: int, hash_val: int, hash_known: int) -> int:
     backend: int = pcc_gc_backend()
     set_slot = stack_alloc(8)
     item_slot = stack_alloc(8)
@@ -348,7 +354,8 @@ def _set_lookup_rooted(s, item, mode: int) -> int:
         _set_read_finish_root(set_handle)
         return 0
     item = _set_read_reload_root(item_slot, item_handle)
-    hash_val: int = py_obj_hash(item)
+    if hash_known == 0:
+        hash_val = py_obj_hash(item)
     s = _set_read_reload_root(set_slot, set_handle)
     item = _set_read_reload_root(item_slot, item_handle)
     if py_err_occurred() != 0:
@@ -719,7 +726,7 @@ def py_set_add(s, item) -> None:
         return
     if ptr_is_null(item) != 0:
         return
-    _set_lookup_rooted(s, item, 2)
+    _set_lookup_rooted(s, item, 2, 0, 0)
 
 
 @c_abi_export("py_set_update")
@@ -742,6 +749,7 @@ def py_set_update(dst, src) -> None:
         return
     src = _set_read_reload_root(src_slot, src_handle)
     if not _ptr_is_set(src):
+        _set_update_iterable(_set_read_reload_root(dst_slot, dst_handle), src)
         _set_read_finish_root(src_handle)
         _set_read_finish_root(dst_handle)
         return
@@ -943,12 +951,164 @@ def py_set_symmetric_difference_update(dst, other) -> None:
     py_decref(result)
 
 
+def _set_predicate_hold(slots, handles, index: int, value, backend: int) -> int:
+    slot = ptr_add(slots, index * 8)
+    handle = _set_read_prepare_root(slot, value, backend)
+    store_ptr(handles, index * 8, handle)
+    if _set_read_root_failed(value, backend, handle) != 0:
+        py_raise_owned(py_exc_new(19, cstr("cannot root set predicate value")))
+        return 0
+    return 1
+
+
+def _set_predicate_load(slots, handles, index: int):
+    return _set_read_reload_root(ptr_add(slots, index * 8), load_ptr(handles, index * 8))
+
+
+def _set_predicate_drop(slots, handles, index: int) -> None:
+    value = _set_predicate_load(slots, handles, index)
+    _set_read_finish_root(load_ptr(handles, index * 8))
+    store_ptr(handles, index * 8, null())
+    store_ptr(slots, index * 8, null())
+    if index >= 2:
+        py_decref(value)
+
+
+def _set_update_iterable(dst, src) -> None:
+    # Borrowed destination/input, owned iterator/current item.
+    slots = stack_alloc(32)
+    handles = stack_alloc(32)
+    memset(slots, 0, 32)
+    memset(handles, 0, 32)
+    backend: int = pcc_gc_backend()
+    ok: int = _set_predicate_hold(slots, handles, 0, dst, backend)
+    if ok != 0:
+        ok = _set_predicate_hold(slots, handles, 1, src, backend)
+    if ok != 0:
+        iterator = py_obj_iter(_set_predicate_load(slots, handles, 1))
+        ok = _set_predicate_hold(slots, handles, 2, iterator, backend)
+        if ptr_is_null(iterator) != 0:
+            if py_err_occurred() == 0:
+                py_raise_owned(py_exc_new(3, cstr("object is not iterable")))
+            ok = 0
+    while ok != 0:
+        item = py_obj_next(_set_predicate_load(slots, handles, 2))
+        if ptr_is_null(item) != 0:
+            if py_err_occurred() != 0:
+                if py_exc_matches(py_current_exception(), py_exc_builtin_class(8)) != 0:
+                    py_clear_exception()
+            else:
+                py_raise_owned(py_exc_new(7, cstr("set update iterator returned NULL without an exception")))
+            break
+        ok = _set_predicate_hold(slots, handles, 3, item, backend)
+        if ok != 0:
+            py_set_add(_set_predicate_load(slots, handles, 0),
+                       _set_predicate_load(slots, handles, 3))
+            if py_err_occurred() != 0:
+                ok = 0
+        _set_predicate_drop(slots, handles, 3)
+    index: int = 3
+    while index >= 0:
+        _set_predicate_drop(slots, handles, index)
+        index = index - 1
+
+
+@c_abi_export("py_set_from_iterable")
+def py_set_from_iterable(src):
+    slots = stack_alloc(24)
+    handles = stack_alloc(24)
+    memset(slots, 0, 24)
+    memset(handles, 0, 24)
+    backend: int = pcc_gc_backend()
+    ok: int = _set_predicate_hold(slots, handles, 0, src, backend)
+    result = null()
+    if ok != 0:
+        out = py_set_new()
+        ok = _set_predicate_hold(slots, handles, 2, out, backend)
+        if ptr_is_null(out) != 0:
+            py_raise_owned(py_exc_new(19, cstr("cannot allocate set")))
+            ok = 0
+    if ok != 0:
+        py_set_update(_set_predicate_load(slots, handles, 2),
+                      _set_predicate_load(slots, handles, 0))
+        if py_err_occurred() == 0:
+            result = _set_predicate_load(slots, handles, 2)
+            py_incref(result)
+    index: int = 2
+    while index >= 0:
+        _set_predicate_drop(slots, handles, index)
+        index = index - 1
+    return result
+
+
+def _set_predicate_iterable(a, b, superset: int) -> int:
+    # Borrowed receiver/input, owned iterator/matched-set/current item.
+    slots = stack_alloc(40)
+    handles = stack_alloc(40)
+    memset(slots, 0, 40)
+    memset(handles, 0, 40)
+    backend: int = pcc_gc_backend()
+    ok: int = _set_predicate_hold(slots, handles, 0, a, backend)
+    if ok != 0:
+        ok = _set_predicate_hold(slots, handles, 1, b, backend)
+    if ok != 0:
+        iterator = py_obj_iter(_set_predicate_load(slots, handles, 1))
+        ok = _set_predicate_hold(slots, handles, 2, iterator, backend)
+        if ptr_is_null(iterator) != 0:
+            ok = 0
+    if ok != 0 and superset == 0:
+        matched = py_set_new()
+        ok = _set_predicate_hold(slots, handles, 3, matched, backend)
+        if ptr_is_null(matched) != 0:
+            py_raise_owned(py_exc_new(19, cstr("cannot allocate set predicate state")))
+            ok = 0
+    result: int = 0
+    while ok != 0:
+        item = py_obj_next(_set_predicate_load(slots, handles, 2))
+        if ptr_is_null(item) != 0:
+            if py_err_occurred() != 0:
+                if py_exc_matches(py_current_exception(), py_exc_builtin_class(8)) != 0:
+                    py_clear_exception()
+                    if superset != 0:
+                        result = 1
+                    elif load_i64(_set_predicate_load(slots, handles, 3), 16) == load_i64(_set_predicate_load(slots, handles, 0), 16):
+                        result = 1
+            else:
+                py_raise_owned(py_exc_new(7, cstr("set predicate iterator returned NULL without an exception")))
+            break
+        ok = _set_predicate_hold(slots, handles, 4, item, backend)
+        if ok != 0:
+            hash_val: int = py_obj_hash(_set_predicate_load(slots, handles, 4))
+            found: int = 0
+            if py_err_occurred() == 0:
+                found = py_set_contains_hash(_set_predicate_load(slots, handles, 0),
+                                              _set_predicate_load(slots, handles, 4), hash_val)
+            if py_err_occurred() != 0:
+                ok = 0
+            elif superset != 0 and found == 0:
+                break
+            elif superset == 0 and found != 0:
+                py_set_add_hash(_set_predicate_load(slots, handles, 3),
+                                _set_predicate_load(slots, handles, 4), hash_val)
+                if py_err_occurred() != 0:
+                    ok = 0
+                elif load_i64(_set_predicate_load(slots, handles, 3), 16) == load_i64(_set_predicate_load(slots, handles, 0), 16):
+                    result = 1
+                    break
+        _set_predicate_drop(slots, handles, 4)
+    index: int = 4
+    while index >= 0:
+        _set_predicate_drop(slots, handles, index)
+        index = index - 1
+    return result
+
+
 @c_abi_export("py_set_issubset")
 def py_set_issubset(a, b) -> int:
     if not _ptr_is_set(a):
         return 0
     if not _ptr_is_set(b):
-        return 0
+        return _set_predicate_iterable(a, b, 0)
     size_a: int = load_i64(a, 16)
     size_b: int = load_i64(b, 16)
     if size_a > size_b:
@@ -961,7 +1121,7 @@ def py_set_issubset(a, b) -> int:
         key = _entry_key(a, entries, i * 16)
         if ptr_is_null(key) == 0:
             if ptr_eq(key, dummy) == 0:
-                if py_set_contains(b, key) == 0:
+                if py_set_contains_hash(b, key, load_i64(entries, i * 16)) == 0:
                     return 0
         i = i + 1
     return 1
@@ -969,6 +1129,10 @@ def py_set_issubset(a, b) -> int:
 
 @c_abi_export("py_set_issuperset")
 def py_set_issuperset(a, b) -> int:
+    if not _ptr_is_set(a):
+        return 0
+    if not _ptr_is_set(b):
+        return _set_predicate_iterable(a, b, 1)
     return py_set_issubset(b, a)
 
 
@@ -1027,7 +1191,17 @@ def py_set_contains(s, item) -> int:
         return 0
     if ptr_is_null(item) != 0:
         return 0
-    return _set_lookup_rooted(s, item, 0)
+    return _set_lookup_rooted(s, item, 0, 0, 0)
+
+
+@c_abi_export("py_set_contains_hash")
+def py_set_contains_hash(s, item, hash_val: int) -> int:
+    return _set_lookup_rooted(s, item, 0, hash_val, 1)
+
+
+@c_abi_export("py_set_add_hash")
+def py_set_add_hash(s, item, hash_val: int) -> None:
+    _set_lookup_rooted(s, item, 2, hash_val, 1)
 
 
 @c_abi_export("py_set_remove")
@@ -1036,7 +1210,7 @@ def py_set_remove(s, item) -> int:
         return -1
     if ptr_is_null(item) != 0:
         return -1
-    if _set_lookup_rooted(s, item, 1) != 0:
+    if _set_lookup_rooted(s, item, 1, 0, 0) != 0:
         return 0
     return -1
 

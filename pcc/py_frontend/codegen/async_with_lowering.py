@@ -356,6 +356,7 @@ class AsyncWithLoweringMixin:
         stmt: With,
         ctx_val: ir.Value,
         enter_val: ir.Value,
+        cleanup_runtime: Optional[str] = None,
     ) -> None:
         """Emit the body/exit control flow for a pcc-native manager.
 
@@ -364,35 +365,82 @@ class AsyncWithLoweringMixin:
         both cases ``py_context_exit`` owns Python's exception-suppression
         protocol, so the body must use the same unwind graph.
         """
-        _ctx_expr, as_expr = stmt.items[0]
+        ctx_expr, as_expr = stmt.items[0]
+        context_name = (
+            self._generator_with_context_name(stmt.items[0])
+            if self._generator_ctx_stack else self._fresh("with.context")
+        )
+        context_target = Name(span=ctx_expr.span, ty=DynType(name="dyn"), ident=context_name)
+        # A private owned local is independent of the user's `as` binding.
+        # The generator collector reserves this same name before emission.
+        retained_context = self._gc_retain(ctx_val)
+        self._store_unpack_target(context_target, retained_context, context_target.ty,
+                                  value_is_owned=True)
+        self._gc_release_if_owned(ctx_val, ctx_expr)
         if as_expr is not None:
             if not isinstance(as_expr, Name):
                 raise NotImplementedError(
                     "Layer 1 native with: as-clause must be a bare name"
                 )
-            self._store_value_at_name(as_expr, enter_val, as_expr.ty)
+            self._store_unpack_target(as_expr, enter_val, as_expr.ty, value_is_owned=True)
+        else:
+            self._gc_release(enter_val)
+
+        def clear_context():
+            self._store_unpack_target(context_target, self._emit_none_literal(), context_target.ty,
+                                      value_is_owned=True)
+            if self._generator_ctx_stack:
+                generator = self._generator_ctx_stack[-1]
+                index, _slot = generator["frame_slots"][context_name]
+                self.builder.call(self._generator_frame_helper("set"),
+                                  [generator["frame"], ir.Constant(_I64, index), self._emit_none_literal()])
 
         fn = self.current_function
         err_bb = fn.append_basic_block(name=self._fresh("with.err"))
         after_bb = fn.append_basic_block(name=self._fresh("with.after"))
         prev_err_block = getattr(self, "_try_err_block", None)
+        def exit_normal():
+            # Return/break/continue must run this same exit, just like an
+            # enclosing finally. An exception from __exit__ belongs outside
+            # this manager rather than re-entering its own exception path.
+            saved_err_block = getattr(self, "_try_err_block", None)
+            self._try_err_block = prev_err_block
+            try:
+                context_value = self._emit_name(context_target)
+                none_gv = declare_runtime_global(self.module, "py_None")
+                none = self.builder.load(none_gv, name=self._fresh("with.none"))
+                if cleanup_runtime is None:
+                    self.builder.call(
+                        self.runtime["py_context_exit"],
+                        [context_value, none, none, none],
+                        name=self._fresh("with.exit"),
+                    )
+                else:
+                    self.builder.call(self.runtime[cleanup_runtime], [context_value])
+                clear_context()
+                self._emit_post_call_err_check()
+            finally:
+                self._try_err_block = saved_err_block
+        outer_finallys = list(self._finally_stack)
+        self._finally_stack = outer_finallys + [exit_normal]
         self._try_err_block = err_bb
         try:
             self._emit_stmts(stmt.body)
         finally:
             self._try_err_block = prev_err_block
+            self._finally_stack = outer_finallys
 
         if not self._builder_block_is_terminated():
-            none_gv = declare_runtime_global(self.module, "py_None")
-            none = self.builder.load(none_gv, name=self._fresh("with.none"))
-            self.builder.call(
-                self.runtime["py_context_exit"],
-                [ctx_val, none, none, none],
-                name=self._fresh("with.exit"),
-            )
+            exit_normal()
             self.builder.branch(after_bb)
 
         self.builder.position_at_end(err_bb)
+        if cleanup_runtime is not None:
+            self.builder.call(self.runtime[cleanup_runtime], [self._emit_name(context_target)])
+            clear_context()
+            self.builder.branch(prev_err_block or self._ensure_fn_err_exit())
+            self.builder.position_at_end(after_bb)
+            return
         current_exc = self.builder.call(
             self.runtime["py_current_exception"],
             [],
@@ -407,7 +455,7 @@ class AsyncWithLoweringMixin:
         none = self.builder.load(none_gv, name=self._fresh("with.err.none"))
         suppress = self.builder.call(
             self.runtime["py_context_exit"],
-            [ctx_val, exc_type, current_exc, none],
+            [self._emit_name(context_target), exc_type, current_exc, none],
             name=self._fresh("with.exit.err"),
         )
         suppress_i1 = self.builder.icmp_signed(
@@ -422,9 +470,11 @@ class AsyncWithLoweringMixin:
 
         self.builder.position_at_end(suppress_bb)
         self.builder.call(self.runtime["py_clear_exception"], [])
+        clear_context()
         self.builder.branch(after_bb)
 
         self.builder.position_at_end(propagate_bb)
+        clear_context()
         outer = prev_err_block or self._ensure_fn_err_exit()
         self.builder.branch(outer)
 

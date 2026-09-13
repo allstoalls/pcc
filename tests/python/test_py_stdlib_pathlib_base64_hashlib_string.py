@@ -49,3 +49,20 @@ def test_string_template_and_capwords():
     assert t.substitute(greeting="hi", name="pcc") == "hi, pcc!"
     assert string.Template("$missing").safe_substitute({}) == "$missing"
     assert string.Template("$$x").substitute({}) == "$x"
+
+
+def test_hashlib_md5_vectors_incremental_and_copy():
+    import hashlib as reference
+
+    for data in [b"", b"a", b"abc", b"message digest", bytes(range(256)) * 3,
+                 b"x" * 55, b"x" * 56, b"x" * 63, b"x" * 64, b"x" * 65]:
+        actual = hashlib.md5(data)
+        assert actual.digest() == reference.md5(data).digest()
+        clone = actual.copy()
+        actual.update(b"suffix")
+        assert actual.digest() == reference.md5(data + b"suffix").digest()
+        assert clone.digest() == reference.md5(data).digest()
+        chunks = hashlib.md5()
+        for offset in range(0, len(data), 7):
+            chunks.update(data[offset:offset + 7])
+        assert chunks.digest() == clone.digest()

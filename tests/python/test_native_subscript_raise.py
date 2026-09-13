@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import inspect
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -147,7 +148,7 @@ def test_exact_container_getitem_former_entrypoints_emit_same_raising_shape(tmp_
         assert "subscript.dict.getitem" in body
 
 
-def test_dynamic_int_subscript_uses_i64_helper_without_losing_dict_keys(tmp_path):
+def test_dynamic_int_subscript_keeps_python_keys(tmp_path):
     source = (
         "def get_item(o, i: int):\n"
         "    return o[i]\n"
@@ -165,8 +166,9 @@ def test_dynamic_int_subscript_uses_i64_helper_without_losing_dict_keys(tmp_path
         "    print(xs[0], d[2])\n"
         "main()\n"
     )
-    ir_text = _compile_to_ll(tmp_path, source, "dyn_int_subscript_i64")
-    assert "@py_obj_getitem_i64" in ir_text, ir_text
-    assert "@py_obj_setitem_i64" in ir_text, ir_text
+    ir_text = _compile_to_ll(tmp_path, source, "dyn_int_subscript_keys")
+    assert re.search(r"call[^\n]*@py_obj_subscript\(", ir_text)
+    assert re.search(r"call[^\n]*@py_obj_setitem\(", ir_text)
+    assert not re.search(r"call[^\n]*@py_obj_(?:subscript|setitem)_i64\(", ir_text)
     out = _run_pcc_program(tmp_path, source)
     assert out.splitlines() == ["5", "7", "one", "9 two"], out

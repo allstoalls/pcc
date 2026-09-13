@@ -57,6 +57,7 @@ from pcc.py_runtime.py.py_abi_constants import (
     PYPROPERTYOBJECT_FSET_OFFSET,
     PYPROPERTYOBJECT_SIZE,
     PYSTATICMETHODOBJECT_FUNC_OFFSET,
+    PYSTATICMETHODOBJECT_SIZE,
     PY_TYPE_CLASS,
     PY_TYPE_CLASSMETHOD,
     PY_TYPE_DICT,
@@ -574,6 +575,22 @@ def py_classmethod_new(func):
         descriptor,
         ptr_add(descriptor, PYCLASSMETHODOBJECT_FUNC_OFFSET),
         func,
+    )
+    py_gc_track(descriptor)
+    pcc_gc_publish_initialized(descriptor)
+    return descriptor
+
+
+@c_abi_export("py_staticmethod_new")
+def py_staticmethod_new(func):
+    if ptr_is_null(func) != 0:
+        return null()
+    descriptor = pcc_gc_alloc(PYSTATICMETHODOBJECT_SIZE, PY_TYPE_STATICMETHOD, 0)
+    if ptr_is_null(descriptor) != 0:
+        return null()
+    store_ptr(descriptor, PYSTATICMETHODOBJECT_FUNC_OFFSET, null())
+    pcc_gc_store_ptr(
+        descriptor, ptr_add(descriptor, PYSTATICMETHODOBJECT_FUNC_OFFSET), func
     )
     py_gc_track(descriptor)
     pcc_gc_publish_initialized(descriptor)
@@ -1145,6 +1162,12 @@ def _descriptor_is_data(descriptor) -> bool:
 def _descriptor_call_get(descriptor, obj, owner):
     if ptr_is_null(descriptor) == 0:
         if is_tagged_int(descriptor) == 0:
+            if load_i32(descriptor, PYOBJECTHEADER_TYPE_TAG_OFFSET) == PY_TYPE_STATICMETHOD:
+                func = pcc_gc_load_ptr(
+                    descriptor, ptr_add(descriptor, PYSTATICMETHODOBJECT_FUNC_OFFSET)
+                )
+                py_incref(func)
+                return func
             if load_i32(descriptor, PYOBJECTHEADER_TYPE_TAG_OFFSET) == PY_TYPE_PROPERTY:
                 fget = pcc_gc_load_ptr(
                     descriptor,

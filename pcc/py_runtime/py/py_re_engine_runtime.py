@@ -23,12 +23,15 @@ from pcc.unsafe import (
     load_i8,
     load_i32,
     load_i64,
+    load_ptr,
+    memset,
     null,
     ptr_add,
     ptr_is_null,
     stack_alloc,
     store_i32,
     store_i64,
+    store_ptr,
 )
 
 
@@ -55,6 +58,16 @@ py_class_new = extern(
 py_instance_new = extern("py_instance_new", (c_ptr,), c_ptr)
 py_obj_setattr = extern("py_obj_setattr", (c_ptr, c_ptr, c_ptr), c_int64)
 py_decref = extern("py_decref", (c_ptr,), c_void)
+py_obj_call = extern("py_obj_call", (c_ptr, c_ptr, c_ptr), c_ptr)
+py_builtin_callable = extern("py_builtin_callable", (c_ptr,), c_ptr)
+py_obj_truthy = extern("py_obj_truthy", (c_ptr,), c_int64)
+py_iter_callable_new = extern("py_iter_callable_new", (c_ptr, c_ptr), c_ptr)
+py_index_i64_checked = extern("py_index_i64_checked", (c_ptr,), c_int64)
+py_err_occurred = extern("py_err_occurred", (), c_int64)
+pcc_gc_backend = extern("pcc_gc_backend", (), c_int64)
+pcc_gc_load_ptr = extern("pcc_gc_load_ptr", (c_ptr, c_ptr), c_ptr)
+pcc_gc_scheduler_root_register_handle = extern("pcc_gc_scheduler_root_register_handle", (c_ptr,), c_ptr)
+pcc_gc_scheduler_root_unregister_handle = extern("pcc_gc_scheduler_root_unregister_handle", (c_ptr,), c_void)
 py_raise = extern("py_raise", (c_ptr,), c_void)
 # py_raise increfs; a caller that created the exception must release it.
 py_raise_owned = extern("py_raise_owned", (c_ptr,), c_void)
@@ -540,6 +553,135 @@ def _str_has_backslash(value) -> int:
     return 0
 
 
+def _sub_hold(slots, handles, index: int, value, backend: int) -> int:
+    slot = ptr_add(slots, index * 8)
+    store_ptr(slot, 0, value)
+    if (backend == 3 or backend == 4) and ptr_is_null(value) == 0:
+        handle = pcc_gc_scheduler_root_register_handle(slot)
+        store_ptr(handles, index * 8, handle)
+        if ptr_is_null(handle) != 0:
+            py_raise_owned(py_exc_new(19, cstr("re.sub: cannot root temporary")))
+            return 0
+    return 1
+
+
+def _sub_load(slots, handles, index: int):
+    slot = ptr_add(slots, index * 8)
+    if ptr_is_null(load_ptr(handles, index * 8)) == 0:
+        return pcc_gc_load_ptr(null(), slot)
+    return load_ptr(slot, 0)
+
+
+def _sub_drop(slots, handles, index: int) -> None:
+    value = _sub_load(slots, handles, index)
+    handle = load_ptr(handles, index * 8)
+    if ptr_is_null(handle) == 0:
+        pcc_gc_scheduler_root_unregister_handle(handle)
+    store_ptr(handles, index * 8, null())
+    store_ptr(slots, index * 8, null())
+    if index >= 3:
+        py_decref(value)
+
+
+def _sub_append(slots, handles, piece, backend: int) -> int:
+    ok: int = _sub_hold(slots, handles, 6, piece, backend)
+    if ptr_is_null(piece) != 0:
+        ok = 0
+    if ok != 0:
+        py_list_append(_sub_load(slots, handles, 3), _sub_load(slots, handles, 6))
+        if py_err_occurred() != 0:
+            ok = 0
+    _sub_drop(slots, handles, 6)
+    return ok
+
+
+def _sub_callable(pattern, replacement, text, count: int, flags: int):
+    # Borrowed pattern/replacement/text; owned parts/match/args/piece. Each
+    # pointer survives replacement callbacks, including explicit collection.
+    slots = stack_alloc(56)
+    handles = stack_alloc(56)
+    memset(slots, 0, 56)
+    memset(handles, 0, 56)
+    backend: int = pcc_gc_backend()
+    ok: int = _sub_hold(slots, handles, 0, pattern, backend)
+    if ok != 0:
+        ok = _sub_hold(slots, handles, 1, replacement, backend)
+    if ok != 0:
+        ok = _sub_hold(slots, handles, 2, text, backend)
+    if ok != 0:
+        parts = py_list_new(0)
+        ok = _sub_hold(slots, handles, 3, parts, backend)
+        if ptr_is_null(parts) != 0:
+            ok = 0
+    text_length: int = 0
+    if ok != 0:
+        text_length = _cstrlen(py_str_utf8(_sub_load(slots, handles, 2)))
+    position: int = 0
+    last: int = 0
+    done: int = 0
+    caps = stack_alloc(512)
+    ngroups = stack_alloc(8)
+    while ok != 0 and position <= text_length and (count == 0 or done < count):
+        store_i64(ngroups, 0, 0)
+        status: int = _run(_sub_load(slots, handles, 0), _sub_load(slots, handles, 2),
+                           flags, 1, position, text_length, caps, ngroups)
+        if status == 0:
+            break
+        if status != 1:
+            _raise_engine_status(status)
+            ok = 0
+            break
+        lo: int = load_i64(caps, 0)
+        hi: int = load_i64(caps, 8)
+        if lo == hi:
+            py_raise_owned(py_exc_new(11, cstr("pcc re: callable replacement of empty matches is not supported")))
+            ok = 0
+            break
+        before = py_str_byte_slice_i64(_sub_load(slots, handles, 2), last, lo)
+        ok = _sub_append(slots, handles, before, backend)
+        if ok != 0:
+            match = _new_match(_sub_load(slots, handles, 0), _sub_load(slots, handles, 2),
+                               caps, load_i64(ngroups, 0), flags)
+            ok = _sub_hold(slots, handles, 4, match, backend)
+            if ptr_is_null(match) != 0 or match == _none():
+                ok = 0
+        if ok != 0:
+            args = py_tuple_new(1)
+            ok = _sub_hold(slots, handles, 5, args, backend)
+            if ptr_is_null(args) != 0:
+                ok = 0
+        if ok != 0:
+            py_tuple_set_item(_sub_load(slots, handles, 5), 0, _sub_load(slots, handles, 4))
+            piece = py_obj_call(_sub_load(slots, handles, 1), _sub_load(slots, handles, 5), null())
+            if ptr_is_null(piece) != 0:
+                ok = 0
+            elif _type_of(piece) != PY_TYPE_STR:
+                py_decref(piece)
+                py_raise_owned(py_exc_new(3, cstr("re.sub replacement callback must return str")))
+                ok = 0
+            else:
+                ok = _sub_append(slots, handles, piece, backend)
+        _sub_drop(slots, handles, 5)
+        _sub_drop(slots, handles, 4)
+        done = done + 1
+        last = hi
+        position = hi
+    result = null()
+    if ok != 0:
+        tail = py_str_byte_slice_i64(_sub_load(slots, handles, 2), last, text_length)
+        ok = _sub_append(slots, handles, tail, backend)
+    if ok != 0:
+        empty = py_str_byte_slice_i64(_sub_load(slots, handles, 2), 0, 0)
+        ok = _sub_hold(slots, handles, 6, empty, backend)
+        if ptr_is_null(empty) == 0 and ok != 0:
+            result = py_str_join(_sub_load(slots, handles, 6), _sub_load(slots, handles, 3))
+    index: int = 6
+    while index >= 0:
+        _sub_drop(slots, handles, index)
+        index = index - 1
+    return result
+
+
 @c_abi_export("py_re_engine_sub")
 def py_re_engine_sub(pattern, replacement, text, count: int, flags: int):
     none = _none()
@@ -549,10 +691,18 @@ def py_re_engine_sub(pattern, replacement, text, count: int, flags: int):
         or ptr_is_null(text) != 0
     ):
         return none
-    if _type_of(pattern) != PY_TYPE_STR or _type_of(replacement) != PY_TYPE_STR or _type_of(text) != PY_TYPE_STR:
+    if _type_of(pattern) != PY_TYPE_STR or _type_of(text) != PY_TYPE_STR:
         py_raise_owned(
             py_exc_new(3, cstr("pcc re: sub expects string pattern, replacement, and text"))
         )
+        return null()
+    callable_value = py_builtin_callable(replacement)
+    is_callable: int = py_obj_truthy(callable_value)
+    py_decref(callable_value)
+    if is_callable != 0:
+        return _sub_callable(pattern, replacement, text, count, flags)
+    if _type_of(replacement) != PY_TYPE_STR:
+        py_raise_owned(py_exc_new(3, cstr("re.sub replacement must be str or callable")))
         return null()
     if _str_has_backslash(replacement) != 0:
         py_raise_owned(
@@ -610,6 +760,132 @@ def py_re_engine_sub(pattern, replacement, text, count: int, flags: int):
     py_decref(empty)
     py_decref(parts)
     return result
+
+
+def _finditer_position(state, position: int) -> int:
+    value = py_int_from_i64(position)
+    if ptr_is_null(value) != 0:
+        return 0
+    py_tuple_set_item(state, 3, value)
+    py_decref(value)
+    return 1
+
+
+def _finditer_next(state, args):
+    slots = stack_alloc(56)
+    handles = stack_alloc(56)
+    memset(slots, 0, 56)
+    memset(handles, 0, 56)
+    backend: int = pcc_gc_backend()
+    ok: int = _sub_hold(slots, handles, 0, state, backend)
+    position: int = _arg_int(state, 3, 0)
+    end: int = _arg_int(state, 4, 0)
+    flags: int = _arg_int(state, 2, 0)
+    result = null()
+    if ok != 0 and position <= end:
+        pattern = py_tuple_get(_sub_load(slots, handles, 0), 0)
+        ok = _sub_hold(slots, handles, 3, pattern, backend)
+        if ptr_is_null(pattern) != 0:
+            ok = 0
+        if ok != 0:
+            text = py_tuple_get(_sub_load(slots, handles, 0), 1)
+            ok = _sub_hold(slots, handles, 4, text, backend)
+            if ptr_is_null(text) != 0:
+                ok = 0
+        if ok != 0:
+            caps = stack_alloc(512)
+            ngroups = stack_alloc(8)
+            store_i64(ngroups, 0, 0)
+            status: int = pcc_re_engine_run_flags(
+                py_str_utf8(_sub_load(slots, handles, 3)), flags,
+                py_str_utf8(_sub_load(slots, handles, 4)), end, position, 1, caps, 64, ngroups)
+            if status == 0:
+                ok = _finditer_position(_sub_load(slots, handles, 0), end + 1)
+                if ok != 0:
+                    result = _none()
+            elif status != 1:
+                _raise_engine_status(status)
+            elif load_i64(caps, 0) == load_i64(caps, 8):
+                py_raise_owned(py_exc_new(11, cstr("pcc re: finditer of empty matches is not supported")))
+            else:
+                ok = _finditer_position(_sub_load(slots, handles, 0), load_i64(caps, 8))
+                if ok != 0:
+                    result = _new_match(_sub_load(slots, handles, 3), _sub_load(slots, handles, 4),
+                                        caps, load_i64(ngroups, 0), flags)
+    elif ok != 0:
+        result = _none()
+    index: int = 6
+    while index >= 0:
+        _sub_drop(slots, handles, index)
+        index = index - 1
+    return result
+
+
+def _new_finditer(pattern, text, flags: int, start: int, end: int):
+    if ptr_is_null(text) != 0 or _type_of(text) != PY_TYPE_STR:
+        py_raise_owned(py_exc_new(3, cstr("pcc re: finditer expects a string")))
+        return null()
+    length: int = load_i64(text, 16)
+    if start < 0:
+        start = 0
+    elif start > length:
+        start = length
+    if end < 0:
+        end = 0
+    elif end > length:
+        end = length
+    slots = stack_alloc(56)
+    handles = stack_alloc(56)
+    memset(slots, 0, 56)
+    memset(handles, 0, 56)
+    backend: int = pcc_gc_backend()
+    ok: int = _sub_hold(slots, handles, 0, pattern, backend)
+    if ok != 0:
+        ok = _sub_hold(slots, handles, 1, text, backend)
+    if ok != 0:
+        captures = py_tuple_new(5)
+        ok = _sub_hold(slots, handles, 3, captures, backend)
+        if ptr_is_null(captures) != 0:
+            ok = 0
+    if ok != 0:
+        py_tuple_set_item(_sub_load(slots, handles, 3), 0, _sub_load(slots, handles, 0))
+        py_tuple_set_item(_sub_load(slots, handles, 3), 1, _sub_load(slots, handles, 1))
+        index: int = 2
+        while index < 5 and ok != 0:
+            number: int = flags
+            if index == 3:
+                number = start
+            elif index == 4:
+                number = end
+            value = py_int_from_i64(number)
+            if ptr_is_null(value) != 0:
+                ok = 0
+            else:
+                py_tuple_set_item(_sub_load(slots, handles, 3), index, value)
+                py_decref(value)
+            index = index + 1
+    result = null()
+    if ok != 0:
+        callback = py_func_new_named(_finditer_next, _sub_load(slots, handles, 3), cstr("re.finditer.next"))
+        ok = _sub_hold(slots, handles, 4, callback, backend)
+        if ptr_is_null(callback) == 0 and ok != 0:
+            result = py_iter_callable_new(_sub_load(slots, handles, 4), _none())
+    index: int = 6
+    while index >= 0:
+        _sub_drop(slots, handles, index)
+        index = index - 1
+    return result
+
+
+@c_abi_export("py_re_finditer_flags")
+def py_re_finditer_flags(pattern, text, flags: int):
+    if ptr_is_null(pattern) != 0 or _type_of(pattern) != PY_TYPE_STR:
+        py_raise_owned(py_exc_new(3, cstr("pcc re: finditer pattern must be a string")))
+        return null()
+    if (flags & ~26) != 0 or pcc_re_engine_supported_flags(py_str_utf8(pattern), flags) == 0:
+        py_raise_owned(py_exc_new(11, cstr("pcc re: finditer pattern or flags outside the native subset")))
+        return null()
+    return _new_finditer(pattern, text, flags, 0, 9223372036854775807)
 
 
 @c_abi_export("py_re_engine_split")
@@ -686,6 +962,58 @@ def _arg_int(args, index: int, fallback: int) -> int:
     return result
 
 
+def _finditer_from_args(pattern, args, flags: int):
+    count: int = 0
+    if ptr_is_null(args) == 0:
+        count = py_tuple_len(args)
+    if count < 1 or count > 3:
+        py_raise_owned(py_exc_new(3, cstr("Pattern.finditer expects one to three arguments")))
+        return null()
+    slots = stack_alloc(56)
+    handles = stack_alloc(56)
+    memset(slots, 0, 56)
+    memset(handles, 0, 56)
+    backend: int = pcc_gc_backend()
+    ok: int = _sub_hold(slots, handles, 0, pattern, backend)
+    if ok != 0:
+        ok = _sub_hold(slots, handles, 1, args, backend)
+    if ok != 0:
+        text = py_tuple_get(_sub_load(slots, handles, 1), 0)
+        ok = _sub_hold(slots, handles, 3, text, backend)
+        if ptr_is_null(text) != 0:
+            ok = 0
+    start: int = 0
+    end: int = 9223372036854775807
+    index: int = 1
+    while index < count and ok != 0:
+        value = py_tuple_get(_sub_load(slots, handles, 1), index)
+        ok = _sub_hold(slots, handles, 4, value, backend)
+        if ptr_is_null(value) != 0:
+            ok = 0
+        elif value == _none():
+            py_raise_owned(py_exc_new(3, cstr("finditer bounds must be integers")))
+            ok = 0
+        elif ok != 0:
+            bound: int = py_index_i64_checked(_sub_load(slots, handles, 4))
+            if py_err_occurred() != 0:
+                ok = 0
+            elif index == 1:
+                start = bound
+            else:
+                end = bound
+        _sub_drop(slots, handles, 4)
+        index = index + 1
+    result = null()
+    if ok != 0:
+        result = _new_finditer(_sub_load(slots, handles, 0), _sub_load(slots, handles, 3),
+                               flags, start, end)
+    index: int = 6
+    while index >= 0:
+        _sub_drop(slots, handles, index)
+        index = index - 1
+    return result
+
+
 def _pattern_method_call(captures, args):
     none = _none()
     if ptr_is_null(captures) != 0 or py_tuple_len(captures) < 3:
@@ -708,6 +1036,10 @@ def _pattern_method_call(captures, args):
     nargs: int = 0
     if ptr_is_null(args) == 0:
         nargs = py_tuple_len(args)
+    if kind == 5:
+        result = _finditer_from_args(pattern, args, flags)
+        py_decref(pattern)
+        return result
     if kind == 3:
         if nargs < 2:
             py_decref(pattern)
@@ -818,6 +1150,7 @@ def py_re_compile_obj(pattern, flags: int):
     _add_pattern_method(instance, cstr("findall"), pattern, 2, flags)
     _add_pattern_method(instance, cstr("sub"), pattern, 3, flags)
     _add_pattern_method(instance, cstr("split"), pattern, 4, flags)
+    _add_pattern_method(instance, cstr("finditer"), pattern, 5, flags)
     return instance
 
 

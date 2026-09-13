@@ -127,6 +127,92 @@ def _str_find_range_bounds(host, expr: Call):
 
 
 class StringMethodLoweringMixin:
+    def _emit_bytes_decode_call(self, recv, receiver_expr, operands, span):
+        if not self._owned_release_needed(recv, receiver_expr):
+            recv = self._gc_retain(recv, name=self._fresh("decode.receiver.retain"))
+        self._gc_pin(recv)
+        pinned = [(recv, True)]
+        encoding = self._emit_str_literal("utf-8")
+        errors = self._emit_str_literal("strict")
+        for key, operand in operands:
+            value = self._emit_expr_with_cpy_operand_cleanup(
+                operand, (), pinned_pcc=tuple(pinned), as_pcc_object=True,
+            )
+            if not self._owned_release_needed(value, operand):
+                value = self._gc_retain(value, name=self._fresh("decode.argument.retain"))
+            self._gc_pin(value)
+            pinned.append((value, True))
+            if key == "encoding":
+                encoding = value
+            else:
+                errors = value
+        old_target = self._current_try_err_block()
+        target = old_target if old_target is not None else self._ensure_fn_err_exit()
+        self._try_err_block = self._make_cpy_operand_cleanup_block(
+            (), (), target, "decode.error.cleanup", tuple(pinned),
+        )
+        try:
+            result = self.builder.call(
+                self.runtime["py_bytes_decode_with_encoding"],
+                [recv, encoding, errors], name=self._fresh("bytes.decode"),
+            )
+            self._emit_post_call_err_check(span)
+        finally:
+            self._try_err_block = old_target
+        self._note_owned_object_value(result)
+        self._gc_pin(result)
+        for value, _owned in pinned:
+            self._gc_unpin(value)
+            self._gc_release(value)
+        self._gc_unpin(result)
+        return result
+
+    def _emit_str_tailmatch_range(self, expr: Call, recv: ir.Value):
+        # Bounds invoke __index__ only after all call arguments are evaluated.
+        arguments = []
+        pinned = []
+        for arg in expr.args:
+            value = self._emit_expr_with_cpy_operand_cleanup(
+                arg, (), pinned_pcc=tuple(pinned), as_object=True,
+            )
+            if not self._owned_release_needed(value, arg):
+                value = self._gc_retain(value, name=self._fresh("str.tailmatch.retain"))
+            self._gc_pin(value)
+            arguments.append(value)
+            pinned.append((value, True))
+        old_target = self._current_try_err_block()
+        target = old_target if old_target is not None else self._ensure_fn_err_exit()
+        self._try_err_block = self._make_cpy_operand_cleanup_block(
+            (), (), target, "str.tailmatch.cleanup", tuple(pinned),
+        )
+        try:
+            start = self.builder.call(
+                self.runtime["py_slice_index_i64"],
+                [arguments[1], ir.Constant(_I64, 0)],
+                name=self._fresh("str.tailmatch.start"),
+            )
+            self._emit_post_call_err_check(expr.span)
+            end = ir.Constant(_I64, _STR_FIND_END_DEFAULT)
+            if len(arguments) == 3:
+                end = self.builder.call(self.runtime["py_slice_index_i64"],
+                                        [arguments[2], end],
+                                        name=self._fresh("str.tailmatch.end"))
+                self._emit_post_call_err_check(expr.span)
+            result = self.builder.call(
+                self.runtime["py_str_tailmatch_range"],
+                [recv, arguments[0], start, end,
+                 ir.Constant(_I64, int(expr.func.name == "endswith"))],
+                name=self._fresh("str.tailmatch.range"),
+            )
+            self._emit_post_call_err_check(expr.span)
+        finally:
+            self._try_err_block = old_target
+        for value in arguments:
+            self._gc_unpin(value)
+            self._gc_release(value)
+        return self.builder.icmp_signed("!=", result, ir.Constant(_I64, 0),
+                                        name=self._fresh("str.tailmatch.bit"))
+
     def _emit_native_str_join(self, recv: ir.Value, arg_expr: Expr, prefix: str):
         """Call ``py_str_join`` while its temporary sequence stays rooted.
 
@@ -654,6 +740,8 @@ class StringMethodLoweringMixin:
                 [recv, _str_method_arg(self, expr.args[0])],
                 name=self._fresh("dyn.str.rfind"),
             )
+        if name in ("startswith", "endswith") and 2 <= len(expr.args) <= 3:
+            return self._emit_str_tailmatch_range(expr, recv)
         if name in ("startswith", "endswith") and len(expr.args) == 1:
             fn = {"startswith": "py_str_startswith", "endswith": "py_str_endswith"}[
                 name
@@ -769,21 +857,13 @@ class StringMethodLoweringMixin:
             self.builder.cbranch(is_bytes_like, bytes_bb, object_bb)
 
             self.builder.position_at_end(bytes_bb)
-            encoding = (
-                self._emit_expr_as_pcc_object(encoding_arg)
-                if encoding_arg is not None
-                else self._emit_str_literal("utf-8")
-            )
-            errors = (
-                self._emit_expr_as_pcc_object(errors_arg)
-                if errors_arg is not None
-                else self._emit_str_literal("strict")
-            )
-            bytes_result = self.builder.call(
-                self.runtime["py_bytes_decode_with_encoding"],
-                [recv, encoding, errors],
-                name=self._fresh("dyn.bytes.decode"),
-            )
+            operands = []
+            if expr.args:
+                operands.append(("encoding", expr.args[0]))
+            if len(expr.args) == 2:
+                operands.append(("errors", expr.args[1]))
+            operands.extend(expr.kwargs)
+            bytes_result = self._emit_bytes_decode_call(recv, attr.obj, operands, expr.span)
             self.builder.branch(end_bb)
             bytes_exit = self.builder.block
 
@@ -798,7 +878,6 @@ class StringMethodLoweringMixin:
             kwargs_expr = None
             if kwdict_unpack is not None:
                 arg_exprs, kwargs_expr = kwdict_unpack
-            args_owned = not self._is_starred_unpack(arg_exprs)
             args_tuple = self._emit_dynamic_call_args_tuple(arg_exprs)
             kwargs_obj = self._emit_dynamic_call_kwargs_object(
                 expr.kwargs,
@@ -810,8 +889,7 @@ class StringMethodLoweringMixin:
                 [callable_obj, args_tuple, kwargs_obj],
                 name=self._fresh("dyn.decode.call"),
             )
-            if args_owned:
-                self._gc_release(args_tuple)
+            self._gc_release(args_tuple)
             if expr.kwargs:
                 self._gc_release(kwargs_obj)
             self._gc_release(callable_obj)
@@ -826,6 +904,7 @@ class StringMethodLoweringMixin:
             )
             result.add_incoming(bytes_result, bytes_exit)
             result.add_incoming(object_result, object_exit)
+            self._note_owned_object_value(result)
             return result
         if name == "hex" and not expr.args and not expr.kwargs:
             return self.builder.call(
@@ -1245,6 +1324,8 @@ class StringMethodLoweringMixin:
             self._emit_post_call_err_check(getattr(expr, "span", None))
             return res
         if name in ("startswith", "endswith"):
+            if 2 <= len(expr.args) <= 3:
+                return self._emit_str_tailmatch_range(expr, recv)
             if len(expr.args) != 1:
                 return None
             fn = {"startswith": "py_str_startswith", "endswith": "py_str_endswith"}[

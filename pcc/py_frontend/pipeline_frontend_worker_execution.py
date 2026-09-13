@@ -12,6 +12,23 @@ def _worker_failure(message: str) -> Exception:
     return Exception(message)
 
 
+def _direct_owned_pass_names(module_name: str) -> list[str]:
+    """Select the same owned tier as ordinary self compilation."""
+    from .codegen.debug_info_lowering import debug_info_requested
+    from .compiled_owned_passes import owns_passes
+    from .pipeline_pass_config import (
+        python_ir_pass_should_skip_module,
+        resolve_python_ir_pass_names,
+    )
+
+    if debug_info_requested() or python_ir_pass_should_skip_module(module_name):
+        return []
+    names = resolve_python_ir_pass_names(default_raw="default")
+    if names and not owns_passes(names):
+        raise _worker_failure("self optimizer does not own requested passes: " + ", ".join(names))
+    return names
+
+
 def _release_direct_frontend_state(codegen) -> None:
     """Release frontend-only graphs after the direct module is frozen."""
     frontend_module = codegen.module
@@ -443,19 +460,36 @@ def run_codegen_worker(
                     "off",
                 )
                 indexed_sidecar_output = indexed_sidecar_requested
-                # Direct native-object publication consumes the indexed
-                # module, not LLVM text.  Rendering that module first retained
-                # a second multi-megabyte graph in each worker and was the
-                # missing half of the old text-round-trip removal.  The text
-                # remains authoritative for validation, text-control and all
-                # non-PCO modes.
+                direct_passes = (
+                    _direct_owned_pass_names(module_name)
+                    if emit_direct or emit_text_control else []
+                )
+                codegen.module._direct_indexed_retain_text = bool(direct_passes)
+                # With passes off, publish directly without retaining a text
+                # graph. Selected owned passes need their canonical text input;
+                # their transformed result is the indexed emitter's input.
                 render_ir_text = not (
                     emit_direct
                     and not validate_direct
                     and not emit_text_control
+                    and not direct_passes
                 )
                 generated_module = codegen.generate(typed_module)
                 ir_text = str(generated_module) if render_ir_text else ""
+                if direct_passes:
+                    from .compiled_owned_passes import run_owned_passes
+
+                    pass_started = time.monotonic()
+                    ir_text = run_owned_passes(
+                        ir_text, direct_passes, libpython_mode == "off",
+                    )
+                    if worker_timing:
+                        sys.stderr.write(
+                            "pcc direct owned passes module=" + module_name
+                            + " passes=" + ",".join(direct_passes)
+                            + " elapsed_ms=" + str(int((time.monotonic() - pass_started) * 1000))
+                            + "\n"
+                        )
                 if validate_direct or emit_direct or emit_text_control:
                     from pcc.backend.self_backend_aarch64_darwin import (
                         emit_aarch64_darwin_asm,
@@ -464,7 +498,15 @@ def run_codegen_worker(
                     )
 
                     if validate_direct or emit_direct:
-                        direct_module = codegen._direct_indexed_module
+                        if direct_passes:
+                            from pcc.backend.self_backend_parse import parse_self_backend_module
+
+                            # Only the transformed program needs an indexed
+                            # representation. Do not also build/discard the
+                            # pre-pass capture of the same module.
+                            direct_module = parse_self_backend_module(ir_text)
+                        else:
+                            direct_module = codegen._direct_indexed_module
                         if direct_module is None:
                             raise _worker_failure(
                                 "direct indexed kernel output requested without capture"

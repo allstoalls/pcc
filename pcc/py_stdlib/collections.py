@@ -1,7 +1,7 @@
 """pcc.py_stdlib.collections — skeleton for pcc's self-host path.
 
 Only the types pcc imports: ``OrderedDict``, ``defaultdict``,
-``Counter``, ``deque``, ``namedtuple``. Implementations lean on
+``Counter``, ``deque``, ``namedtuple`` and scoped ``ChainMap`` mappings. Implementations lean on
 dict/list primitives pcc already ships natively.
 """
 from __future__ import annotations
@@ -164,19 +164,59 @@ class ChainMap:
 
     def __getitem__(self, key):
         for mapping in self.maps:
-            if key in mapping:
+            try:
                 return mapping[key]
+            except KeyError:
+                pass
+        return self.__missing__(key)
+
+    def __missing__(self, key):
         raise KeyError(key)
 
-    def get(self, key, default=None):
-        try:
-            return self[key]
-        except KeyError:
-            return default
+    def __setitem__(self, key, value):
+        self.maps[0][key] = value
 
-    def new_child(self, m=None):
+    def __delitem__(self, key):
+        del self.maps[0][key]
+
+    def __contains__(self, key):
+        for mapping in self.maps:
+            if key in mapping:
+                return True
+        return False
+
+    def __iter__(self):
+        keys = {}
+        for mapping in reversed(self.maps):
+            for key in mapping:
+                keys[key] = None
+        return iter(keys)
+
+    def __len__(self):
+        keys = set()
+        for mapping in self.maps:
+            for key in mapping:
+                keys.add(key)
+        return len(keys)
+
+    def __bool__(self):
+        for mapping in self.maps:
+            if mapping:
+                return True
+        return False
+
+    def get(self, key, default=None):
+        return self[key] if key in self else default
+
+    def new_child(self, m=None, **kwargs):
         child = {} if m is None else m
-        return ChainMap(child, *self.maps)
+        if kwargs:
+            child.update(kwargs)
+        return type(self)(child, *self.maps)
+
+    @property
+    def parents(self):
+        return type(self)(*self.maps[1:])
 
 
 class _NamedTupleType:

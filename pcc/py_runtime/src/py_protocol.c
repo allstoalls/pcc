@@ -230,6 +230,40 @@ int64_t py_obj_index_i64(PyObject *o) {
     return 0;
 }
 
+int64_t py_index_i64_checked(PyObject *obj) {
+    if (obj == NULL) {
+        py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "object cannot be interpreted as an integer"));
+        return 0;
+    }
+    PyObject *value = obj;
+    int owned = 0;
+    int32_t tag = py_type_of(obj);
+    if (tag == PY_TYPE_BOOL) return obj == py_True ? 1 : 0;
+    if (tag != PY_TYPE_INT) {
+        PyObject *method = lookup_dunder(obj, "__index__");
+        if (method == NULL) {
+            py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "object cannot be interpreted as an integer"));
+            return 0;
+        }
+        value = call_unary(method, obj);
+        if (value == NULL) return 0;
+        owned = 1;
+        if (py_type_of(value) != PY_TYPE_INT) {
+            py_decref(value);
+            py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "__index__ returned non-int"));
+            return 0;
+        }
+    }
+    int overflow = 0;
+    int64_t result = py_int_to_i64(value, &overflow);
+    if (owned) py_decref(value);
+    if (overflow) {
+        py_raise_owned(py_exc_new(PY_EXC_OVERFLOWERROR, "Python int too large to convert to platform index"));
+        return 0;
+    }
+    return result;
+}
+
 static int64_t slice_integer_i64(PyObject *value) {
     int overflow = 0;
     int64_t result = py_int_to_i64(value, &overflow);
@@ -505,10 +539,14 @@ int64_t py_user_delitem_dispatch(PyObject *o, PyObject *key,
             PyObject *d = dict_subclass_backing(o, 0);
             if (handled) *handled = 1;
             if (d == NULL) {
-                py_raise_owned(py_exc_new(PY_EXC_KEYERROR, "key not found"));
+                py_raise_owned(py_exc_new_with_value(PY_EXC_KEYERROR, key));
                 return -1;
             }
-            return py_dict_del(d, key);
+            int64_t status = py_dict_del(d, key);
+            if (status < 0 && !py_err_occurred()) {
+                py_raise_owned(py_exc_new_with_value(PY_EXC_KEYERROR, key));
+            }
+            return status;
         }
         return -1;
     }

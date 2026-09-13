@@ -58,6 +58,7 @@ py_decref = extern("py_decref", (c_ptr,), c_void)
 py_raise = extern("py_raise", (c_ptr,), c_void)
 py_raise_owned = extern("py_raise_owned", (c_ptr,), c_void)
 py_exc_new = extern("py_exc_new", (c_int64, c_ptr), c_ptr)
+py_exc_new_with_value = extern("py_exc_new_with_value", (c_int64, c_ptr), c_ptr)
 py_runtime_error_if_unset = extern(
     "py_runtime_error_if_unset", (c_ptr, c_ptr), c_ptr
 )
@@ -390,6 +391,43 @@ def py_obj_index_i64(obj) -> int:
     return 0
 
 
+@c_abi_export("py_index_i64_checked")
+def py_index_i64_checked(obj) -> int:
+    """Integer protocol for APIs whose platform index conversion must overflow."""
+    if ptr_is_null(obj) != 0:
+        py_raise_owned(py_exc_new(3, cstr("object cannot be interpreted as an integer")))
+        return 0
+    value = obj
+    owned: int = 0
+    tag: int = _type_of(obj)
+    if tag == PY_TYPE_BOOL:
+        if ptr_eq(obj, global_load_ptr("py_True")) != 0:
+            return 1
+        return 0
+    if tag != PY_TYPE_INT:
+        method = _lookup_dunder(obj, cstr("__index__"))
+        if ptr_is_null(method) != 0:
+            py_raise_owned(py_exc_new(3, cstr("object cannot be interpreted as an integer")))
+            return 0
+        value = _call_unary(method, obj)
+        if ptr_is_null(value) != 0:
+            return 0
+        owned = 1
+        if _type_of(value) != PY_TYPE_INT:
+            py_decref(value)
+            py_raise_owned(py_exc_new(3, cstr("__index__ returned non-int")))
+            return 0
+    overflow = stack_alloc(4)
+    store_i32(overflow, 0, 0)
+    result: int = py_int_to_i64(value, overflow)
+    if owned != 0:
+        py_decref(value)
+    if load_i32(overflow, 0) != 0:
+        py_raise_owned(py_exc_new(15, cstr("Python int too large to convert to platform index")))
+        return 0
+    return result
+
+
 def _slice_integer_i64(value) -> int:
     overflow = stack_alloc(4)
     store_i32(overflow, 0, 0)
@@ -655,9 +693,12 @@ def py_user_delitem_dispatch(obj, key, handled) -> int:
             backing = _dict_subclass_backing(obj, 0)
             _write_handled(handled, 1)
             if ptr_is_null(backing) != 0:
-                py_raise_owned(py_exc_new(4, cstr("key not found")))
+                py_raise_owned(py_exc_new_with_value(4, key))
                 return -1
-            return py_dict_del(backing, key)
+            status: int = py_dict_del(backing, key)
+            if status < 0 and py_err_occurred() == 0:
+                py_raise_owned(py_exc_new_with_value(4, key))
+            return status
         return -1
     _write_handled(handled, 1)
     result = _call_binary(method, obj, key)

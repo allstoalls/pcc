@@ -445,6 +445,9 @@ def _runtime_signatures_part_7():
     "py_bytes_len": (_I64, [_PYOBJ], False),
     "py_bytes_data_ptr": (_CSTR, [_PYOBJ], False),
     "py_sha256_bytes_digest": (_PYOBJ, [_PYOBJ], False),
+    "py_sha256_state_new": (_PYOBJ, [], False),
+    "py_sha256_state_update": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
+    "py_sha256_state_digest": (_PYOBJ, [_PYOBJ], False),
     "py_i64_buffer_new": (_PYOBJ, [_I64], False),
     "py_i64_buffer_set_item": (_I64, [_PYOBJ, _I64, _PYOBJ], False),
     "py_i64_buffer_get_item": (_PYOBJ, [_PYOBJ, _I64], False),
@@ -559,6 +562,7 @@ def _runtime_signatures_part_9():
     "py_str_replace_count": (_PYOBJ, [_PYOBJ, _PYOBJ, _PYOBJ, _I64], False),
     "py_str_startswith": (_I64, [_PYOBJ, _PYOBJ], False),
     "py_str_endswith": (_I64, [_PYOBJ, _PYOBJ], False),
+    "py_str_tailmatch_range": (_I64, [_PYOBJ, _PYOBJ, _I64, _I64, _I64], False),
     "py_chr_from_i64": (_PYOBJ, [_I64], False),
     "py_json_loads": (_PYOBJ, [_PYOBJ], False),
     "py_json_dumps": (_PYOBJ, [_PYOBJ], False),
@@ -608,6 +612,7 @@ def _runtime_signatures_part_10():
     "py_list_reverse": (_VOID, [_PYOBJ], False),
     # ---- Dict ------------------------------------------------------
     "py_dict_new": (_PYOBJ, [], False),
+    "py_dict_new_presized": (_PYOBJ, [_I64], False),
     "py_dict_set": (_VOID, [_PYOBJ, _PYOBJ, _PYOBJ], False),
     # Constant module-level table: a static [k0, v0, k1, v1, ...] array
     # and one call, in place of one py_dict_set per pair wrapped in the
@@ -650,9 +655,11 @@ def _runtime_signatures_part_10():
     # ---- Descriptor wrappers --------------------------------------
     "py_property_new": (_PYOBJ, [_PYOBJ, _PYOBJ, _PYOBJ], False),
     "py_classmethod_new": (_PYOBJ, [_PYOBJ], False),
+    "py_staticmethod_new": (_PYOBJ, [_PYOBJ], False),
     "py_slice_new": (_PYOBJ, [_PYOBJ, _PYOBJ, _PYOBJ], False),
     # ---- Set -------------------------------------------------------
     "py_set_new": (_PYOBJ, [], False),
+    "py_set_from_iterable": (_PYOBJ, [_PYOBJ], False),
     "py_set_add": (_VOID, [_PYOBJ, _PYOBJ], False),
     "py_set_update": (_VOID, [_PYOBJ, _PYOBJ], False),
     "py_set_intersection": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
@@ -719,6 +726,8 @@ def _runtime_signatures_part_11():
     "py_obj_setitem": (_I64, [_PYOBJ, _PYOBJ, _PYOBJ], False),
     "py_obj_setitem_i64": (_I64, [_PYOBJ, _I64, _PYOBJ], False),
     "py_obj_delitem": (_I64, [_PYOBJ, _PYOBJ], False),
+    "py_obj_assign_subscript": (_I64, [_PYOBJ, _PYOBJ, _PYOBJ], False),
+    "py_obj_delete_subscript": (_I64, [_PYOBJ, _PYOBJ], False),
     "py_obj_len": (_I64, [_PYOBJ], False),
     "py_obj_contains": (_I64, [_PYOBJ, _PYOBJ], False),
     "py_obj_sorted": (_PYOBJ, [_PYOBJ], False),
@@ -728,6 +737,7 @@ def _runtime_signatures_part_11():
 def _runtime_signatures_part_12():
     return {
     "py_obj_index_i64": (_I64, [_PYOBJ], False),
+    "py_index_i64_checked": (_I64, [_PYOBJ], False),
     "py_obj_repr": (_PYOBJ, [_PYOBJ], False),
     "py_obj_ascii": (_PYOBJ, [_PYOBJ], False),
     "py_obj_str": (_PYOBJ, [_PYOBJ], False),
@@ -1008,6 +1018,7 @@ def _runtime_signatures_part_16():
     "py_re_search": (_PYOBJ, [_PYOBJ, _PYOBJ], False),
     "py_re_search_flags": (_PYOBJ, [_PYOBJ, _PYOBJ, _I64], False),
     "py_re_findall_flags": (_PYOBJ, [_PYOBJ, _PYOBJ, _I64], False),
+    "py_re_finditer_flags": (_PYOBJ, [_PYOBJ, _PYOBJ, _I64], False),
     "py_re_compile_method": (_PYOBJ, [_PYOBJ, _I64, _I64], False),
     "py_re_compile_obj": (_PYOBJ, [_PYOBJ, _I64], False),
     "py_re_engine_sub": (_PYOBJ, [_PYOBJ, _PYOBJ, _PYOBJ, _I64, _I64], False),

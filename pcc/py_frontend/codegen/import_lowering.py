@@ -279,6 +279,7 @@ class ImportLoweringMixin:
     # the real definitions behind every emitted ``user_pcc_llvm_capi_ir_*``
     # call, so its top-level init has to run before the first scaffold call.
     _IR_RUNTIME_PROVIDER_MODULE = "pcc.llvm_capi.ir"
+    _IR_RUNTIME_COMPAT_HELPERS = ("add_raw_function_attribute", "set_struct_body")
     _UNSAFE_SCAFFOLD_MODULES = frozenset(
         {
             "pcc.unsafe",
@@ -1086,6 +1087,15 @@ class ImportLoweringMixin:
         if self._is_extern_scaffold_import_module(import_module):
             self._register_extern_scaffold_imports(stmt)
             self._emit_ir_scaffold_provider_init(import_module)
+            if import_module == self._IR_RUNTIME_COMPAT_MODULE:
+                helpers = []
+                for name, alias in stmt.names:
+                    if name in self._IR_RUNTIME_COMPAT_HELPERS:
+                        helpers.append((name, alias))
+                if helpers:
+                    self._emit_compiled_module_import_from(
+                        self._IR_RUNTIME_PROVIDER_MODULE, helpers
+                    )
             return
         if self._is_test_facade_import_module(import_module):
             return
@@ -1287,6 +1297,23 @@ class ImportLoweringMixin:
             self._extern_bindings: dict[str, str] = {}
         for attr_name, as_name in stmt.names:
             local = as_name or attr_name
+            if (
+                stmt.module == self._IR_RUNTIME_COMPAT_MODULE
+                and attr_name in self._IR_RUNTIME_COMPAT_HELPERS
+            ):
+                provider = self._IR_RUNTIME_PROVIDER_MODULE
+                exports = (self._native_module_exports or {}).get(provider, {})
+                info = exports.get(attr_name)
+                if info is None:
+                    raise NotImplementedError(
+                        "IR compatibility helper requires compiled provider: "
+                        + provider + "." + attr_name
+                    )
+                self._bind_native_cross_module_export(
+                    local_name=local, src_module=provider,
+                    attr_name=attr_name, info=info,
+                )
+                continue
             self._extern_bindings[local] = attr_name
 
     def _register_unsafe_scaffold_imports(self, stmt: "ImportFrom") -> None:

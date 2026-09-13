@@ -39,6 +39,12 @@ def test_backend_aliases_and_unsupported_capi_mode_are_stable():
         pipeline_modes.resolve_native_backend("llvm-capi")
 
 
+def test_default_api_backend_is_owned_self(monkeypatch):
+    monkeypatch.delenv("PCC_BACKEND", raising=False)
+    assert pipeline_modes.resolve_native_backend(None) == "self"
+    assert pipeline_modes.resolve_native_backend("") == "self"
+
+
 def test_mixed_extension_object_models_fail_closed():
     with pytest.raises(
         pipeline_modes.PyPipelineError,

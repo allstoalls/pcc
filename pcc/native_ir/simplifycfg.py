@@ -35,23 +35,23 @@ from .text_tokens import replace_local_names
 
 
 _DEFINE_HEADER_RE = re.compile(
-    r"^\s*define\b(?P<body>.*?@(?P<name>[\w\.\$]+)\([^)]*\)[^{]*)\{",
+    r"^\s*define\b(?P<body>.*?@(?P<name>[\w.$-]+)\([^)]*\)[^{]*)\{",
     re.DOTALL,
 )
-_BLOCK_LABEL_RE = re.compile(r"^\s*(?P<label>[\w\.\-]+):")
+_BLOCK_LABEL_RE = re.compile(r"^\s*(?P<label>[\w.$-]+):")
 _COND_BR_RE = re.compile(
-    r"^br\s+i1\s+(?P<cond>[^,]+)\s*,\s*label\s+%(?P<true>[\w\.]+)\s*,\s*label\s+%(?P<false>[\w\.]+)\s*$"
+    r"^br\s+i1\s+(?P<cond>[^,]+)\s*,\s*label\s+%(?P<true>[\w.$-]+)\s*,\s*label\s+%(?P<false>[\w.$-]+)\s*$"
 )
-_BR_RE = re.compile(r"^br\s+label\s+%(?P<label>[\w\.]+)\s*$")
+_BR_RE = re.compile(r"^br\s+label\s+%(?P<label>[\w.$-]+)\s*$")
 _RET_RE = re.compile(r"^ret\s+(?P<ty>[^ ]+)\s+(?P<value>.+?)\s*$")
 _PHI_HEAD_RE = re.compile(
-    r"^%(?P<name>[\w\.]+)\s*=\s*phi\s+(?P<ty>[^ ]+)\s+(?P<rest>.+?)\s*$"
+    r"^%(?P<name>[\w.$-]+)\s*=\s*phi\s+(?P<ty>[^ ]+)\s+(?P<rest>.+?)\s*$"
 )
 _PHI_INCOMING_RE = re.compile(
-    r"\[\s*(?P<val>[^,\]]+?)\s*,\s*%(?P<label>[\w\.]+)\s*\]"
+    r"\[\s*(?P<val>[^,\]]+?)\s*,\s*%(?P<label>[\w.$-]+)\s*\]"
 )
-_SSA_NAME_RE = re.compile(r"%([\w\.]+)\b")
-_ASSIGN_RE = re.compile(r"^%(?P<name>[\w\.]+)\s*=\s*(?P<body>.+?)\s*$")
+_SSA_NAME_RE = re.compile(r"%([\w.$-]+)")
+_ASSIGN_RE = re.compile(r"^%(?P<name>[\w.$-]+)\s*=\s*(?P<body>.+?)\s*$")
 _PURE_OP_HEAD_RE = re.compile(
     r"^(?P<op>"
     r"add|sub|mul|udiv|sdiv|urem|srem|"

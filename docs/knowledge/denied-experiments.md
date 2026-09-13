@@ -9,7 +9,7 @@ Search by symbol/symptom; inspect the matching experiment and its updates.
 Verify current code, source revision and artifacts before reusing a verdict.
 Do not repeat a matching failed experiment without identifying new evidence.
 
-648 verdicts across 136 investigations.
+649 verdicts across 136 investigations.
 
 ## [Investigation: backend-0 finalizer re-enters the tracked-object table lock](../investigations/backend0-finalizer-table-lock-reentrancy.md)
 
@@ -945,6 +945,7 @@ Do not repeat a matching failed experiment without identifying new evidence.
 
 - The obvious fix is already denied, and its prerequisite is the real work — Removing that probe is Phase B in
 - (line 7230). It was written, measured and **DENIED**: dropping it on GC0..2
+- `PCC_PYTHON_IR_PASSES=default` therefore had no effect on that route. The new
 
 ## [Investigation: self AArch64 spills block-local integer call results](../investigations/self-aarch64-call-result-spills.md)
 

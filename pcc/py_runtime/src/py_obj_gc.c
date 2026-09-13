@@ -238,7 +238,8 @@ static int py_gc_maybe_finalize_unreachable(PyGcNode **unreachable,
         if (obj == NULL || PY_IS_TAGGED_INT(obj)) continue;
         PyObjectHeader *h = py_header(obj);
         int32_t tag = h->type_tag;
-        if (tag != PY_TYPE_INSTANCE && tag < PY_TYPE_USER_CLASS_START) continue;
+        if (tag != PY_TYPE_INSTANCE && tag != PY_TYPE_GEN
+            && tag < PY_TYPE_USER_CLASS_START) continue;
         if (pcc_capi_is_cext_type_tag((int64_t)tag) != 0) continue;
         int32_t flags_before = h->flags;
         py_user_del_dispatch(obj);

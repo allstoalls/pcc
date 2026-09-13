@@ -971,6 +971,14 @@ static PyObject *descriptor_call_get(
     PyObject *obj,
     PyClassObject *owner
 ) {
+    if (descriptor != NULL && !PY_IS_TAGGED_INT(descriptor)
+        && py_type_of(descriptor) == PY_TYPE_STATICMETHOD) {
+        PyObject *func = pcc_gc_load_ptr(
+            descriptor, &((PyStaticMethodObject *)descriptor)->func
+        );
+        py_incref(func);
+        return func;
+    }
     if (descriptor != NULL
         && !PY_IS_TAGGED_INT(descriptor)
         && py_type_of(descriptor) == PY_TYPE_PROPERTY) {

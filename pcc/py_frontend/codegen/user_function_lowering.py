@@ -2738,7 +2738,6 @@ class UserFunctionLoweringMixin:
         kwargs_expr = None
         if kwdict_unpack is not None:
             arg_exprs, kwargs_expr = kwdict_unpack
-        args_owned = not self._is_starred_unpack(arg_exprs)
         args_tuple = self._emit_dynamic_call_args_tuple(arg_exprs)
         kwargs_obj = self._emit_dynamic_call_kwargs_object(
             kwargs,
@@ -2750,8 +2749,7 @@ class UserFunctionLoweringMixin:
             [fn_obj, args_tuple, kwargs_obj],
             name=self._fresh(f"{name}.decorated.call"),
         )
-        if args_owned:
-            self._gc_release(args_tuple)
+        self._gc_release(args_tuple)
         if kwargs:
             self._gc_release(kwargs_obj)
         self._emit_post_call_err_check(ast_func_def.span)

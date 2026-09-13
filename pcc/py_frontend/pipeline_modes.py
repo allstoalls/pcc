@@ -107,7 +107,7 @@ def normalize_native_backend_name(value: Optional[str]) -> str:
         value = os.environ.get("PCC_BACKEND")
     candidate = str(value or "").strip().lower()
     if not candidate:
-        return "llvm"
+        return "self"
     if candidate == "llvmlite":
         return "llvm"
     if candidate == "llvm-capi":

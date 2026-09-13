@@ -74,7 +74,7 @@ from .text_tokens import replace_local_names
 _DEFINE_HEADER_RE = re.compile(
     r"""
     ^(?P<prefix>\s*define\s+.+?\s+@)
-    (?P<name>[\w\.]+)\s*
+    (?P<name>[\w.$-]+)\s*
     \((?P<args>[^)]*)\)
     (?P<trailing>[^{\n]*)
     \s*\{\s*$
@@ -83,9 +83,9 @@ _DEFINE_HEADER_RE = re.compile(
 )
 
 _DECLARE_RE = re.compile(r"^\s*declare\s+")
-_BLOCK_LABEL_RE = re.compile(r"^\s*([\w\.]+):\s*(?:;.*)?$")
-_ASSIGN_RE = re.compile(r"^\s*%([\w\.]+)\s*=")
-_OPCODE_RE = re.compile(r"^\s*(?:%[\w\.]+\s*=\s*)?(\w+)")
+_BLOCK_LABEL_RE = re.compile(r"^\s*([\w.$-]+):\s*(?:;.*)?$")
+_ASSIGN_RE = re.compile(r"^\s*%([\w.$-]+)\s*=")
+_OPCODE_RE = re.compile(r"^\s*(?:%[\w.$-]+\s*=\s*)?(\w+)")
 
 _TERMINATORS = {
     "ret", "br", "switch", "indirectbr", "invoke",
@@ -158,7 +158,7 @@ class Instruction:
         """
         out: list[str] = []
         seen_result = False
-        for name in re.findall(r"%([\w\.]+)", self.text):
+        for name in re.findall(r"%([\w.$-]+)", self.text):
             if not seen_result and name == self.result_name:
                 seen_result = True
                 continue
@@ -546,7 +546,7 @@ def _parse_function(lines: list[str], start: int) -> tuple[Function, int]:
             if not piece:
                 continue
             # Normalize: find last `%name` as arg name, rest as type.
-            mm = re.match(r"(.+?)\s+%([\w\.]+)\s*$", piece)
+            mm = re.match(r"(.+?)\s+%([\w.$-]+)\s*$", piece)
             if mm:
                 args.append(Argument(ty=mm.group(1).strip(), name=mm.group(2)))
             else:

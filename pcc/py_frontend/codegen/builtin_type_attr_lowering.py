@@ -325,17 +325,10 @@ class BuiltinTypeAttrLoweringMixin:
         """``str(x)`` -> owned PCC string, matching CPython's new-ref result."""
         if len(expr.args) in (2, 3) and not expr.kwargs:
             source = self._emit_expr_as_pcc_object(expr.args[0])
-            encoding = self._emit_expr_as_pcc_object(expr.args[1])
-            errors = (
-                self._emit_expr_as_pcc_object(expr.args[2])
-                if len(expr.args) == 3
-                else self._emit_str_literal("strict")
-            )
-            return self.builder.call(
-                self.runtime["py_bytes_decode_with_encoding"],
-                [source, encoding, errors],
-                name=self._fresh("str.decode.bytes"),
-            )
+            operands = [("encoding", expr.args[1])]
+            if len(expr.args) == 3:
+                operands.append(("errors", expr.args[2]))
+            return self._emit_bytes_decode_call(source, expr.args[0], operands, expr.span)
         if len(expr.args) != 1:
             raise NotImplementedError("str() with multi-arg not supported")
         arg = expr.args[0]

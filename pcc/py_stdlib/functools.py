@@ -1,20 +1,33 @@
-"""pcc.py_stdlib.functools — narrow skeleton for the self-host path.
+"""Owned functools helpers for the native standard-library provider.
 
-``wraps``, ``lru_cache`` (LRU-free in this scaffold — just caches
-all calls), ``reduce``, ``partial``. Full-strength LRU eviction +
-typed cache key generation is P6C.4 work.
+LRU caches preserve finite capacity, keyword order, typed keys and statistics.
+The cache_info surface currently returns the existing four-element tuple.
 """
 from __future__ import annotations
 
+from threading import RLock
 
-def wraps(wrapped):
-    """Minimal @wraps with CPython-visible metadata copying."""
+_CACHE_LOCK = RLock()
+WRAPPER_ASSIGNMENTS = ("__module__", "__name__", "__qualname__", "__doc__", "__annotations__", "__type_params__")
+WRAPPER_UPDATES = ("__dict__",)
+
+
+def update_wrapper(wrapper, wrapped, assigned=WRAPPER_ASSIGNMENTS, updated=WRAPPER_UPDATES):
+    for name in assigned:
+        try:
+            value = getattr(wrapped, name)
+        except AttributeError:
+            continue
+        setattr(wrapper, name, value)
+    for name in updated:
+        getattr(wrapper, name).update(getattr(wrapped, name, {}))
+    wrapper.__wrapped__ = wrapped
+    return wrapper
+
+
+def wraps(wrapped, assigned=WRAPPER_ASSIGNMENTS, updated=WRAPPER_UPDATES):
     def _decorate(fn):
-        fn.__name__ = getattr(wrapped, "__name__", fn.__name__)
-        fn.__doc__ = getattr(wrapped, "__doc__", fn.__doc__)
-        fn.__module__ = getattr(wrapped, "__module__", fn.__module__)
-        fn.__wrapped__ = wrapped
-        return fn
+        return update_wrapper(fn, wrapped, assigned, updated)
     return _decorate
 
 
@@ -43,39 +56,77 @@ class partial:
         return self._fn(*self._args, *more_args, **kw)
 
 
-def lru_cache(maxsize=None, typed=False):
-    """Cache-forever skeleton. Decorator form accepts optional maxsize
-    and typed flags for API compatibility; ignores them. Real LRU
-    eviction is pending P6C.4 full stdlib work."""
+def _cache_key(args, kwargs, typed):
+    # Keep keyword insertion order, and distinguish single int/str fast keys
+    # from the general tuple keys as CPython does when typed=False.
+    ordered = tuple(kwargs.items())
+    if typed:
+        return (args, ordered, tuple(type(value) for value in args),
+                tuple(type(value) for value in kwargs.values()))
+    if not kwargs and len(args) == 1 and type(args[0]) in (int, str):
+        return args[0]
+    return args, ordered
+
+
+def lru_cache(maxsize=128, typed=False):
+    """Cache results, evicting the least recently used finite-cache entry."""
+    if isinstance(maxsize, int):
+        if maxsize < 0:
+            maxsize = 0
+    elif maxsize is not None and not callable(maxsize):
+        raise TypeError("Expected first argument to be an integer, a callable, or None")
+
     def _decorate(fn):
         cache: dict = {}
         stats = {"hits": 0, "misses": 0}
 
         def wrapper(*args, **kwargs):
-            key = (args, tuple(sorted(kwargs.items())))
-            if key in cache:
-                stats["hits"] += 1
-                return cache[key]
-            stats["misses"] += 1
-            v = fn(*args, **kwargs)
-            cache[key] = v
-            return v
+            if maxsize == 0:
+                with _CACHE_LOCK:
+                    stats["misses"] += 1
+                return fn(*args, **kwargs)
+            key = _cache_key(args, kwargs, typed)
+            with _CACHE_LOCK:
+                if key in cache:
+                    if maxsize is None:
+                        value = cache[key]
+                    else:
+                        value = cache.pop(key)
+                        cache[key] = value
+                    stats["hits"] += 1
+                    return value
+                stats["misses"] += 1
+            # User code may recurse or run concurrently. It runs outside the
+            # cache lock; preserve any entry installed by another invocation.
+            value = fn(*args, **kwargs)
+            with _CACHE_LOCK:
+                if key not in cache:
+                    if maxsize is not None and len(cache) >= maxsize:
+                        del cache[next(iter(cache))]
+                    cache[key] = value
+            return value
 
         def cache_info():
-            return (stats["hits"], stats["misses"], maxsize, len(cache))
+            with _CACHE_LOCK:
+                return (stats["hits"], stats["misses"], maxsize, len(cache))
 
         def cache_clear():
-            cache.clear()
-            stats["hits"] = 0
-            stats["misses"] = 0
+            with _CACHE_LOCK:
+                cache.clear()
+                stats["hits"] = 0
+                stats["misses"] = 0
+
+        def cache_parameters():
+            return {"maxsize": maxsize, "typed": typed}
 
         wrapper.cache_info = cache_info
         wrapper.cache_clear = cache_clear
-        return wrapper
-    # Support both @lru_cache and @lru_cache() / @lru_cache(maxsize=…).
+        wrapper.cache_parameters = cache_parameters
+        return wraps(fn)(wrapper)
+
     if callable(maxsize):
         fn = maxsize
-        maxsize = None
+        maxsize = 128
         return _decorate(fn)
     return _decorate
 

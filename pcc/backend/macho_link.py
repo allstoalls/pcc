@@ -400,6 +400,7 @@ def _read_relocations(
     section,
     symbols,
     local_rename: dict[str, str],
+    offset_bias: int = 0,
 ) -> list[Relocation]:
     """Relocations with ADDEND/SUBTRACTOR companions folded atomically.
 
@@ -407,7 +408,8 @@ def _read_relocations(
     1-based index and the value being relocated is stored in the payload as
     an address in this object's own address space. It is carried through as a
     (segname, sectname) target so the merge can rewrite that stored address
-    once the section's new home is known.
+    once the section's new home is known. Apply the destination section's
+    offset while constructing the record, avoiding a second immutable copy.
     """
     if isinstance(obj, PackedNativeObject):
         out: list[Relocation] = []
@@ -447,7 +449,7 @@ def _read_relocations(
                     context="packed native SUBTRACTOR minuend relocation",
                 )
             out.append(Relocation(
-                offset=offset,
+                offset=offset + offset_bias,
                 symbol=symbol_name,
                 type=relocation_type,
                 pcrel=pcrel,
@@ -489,7 +491,7 @@ def _read_relocations(
                     context="native SUBTRACTOR minuend relocation",
                 )
             out.append(Relocation(
-                offset=entry.offset,
+                offset=entry.offset + offset_bias,
                 symbol=symbol_name,
                 type=entry.type,
                 pcrel=entry.pcrel,
@@ -520,7 +522,7 @@ def _read_relocations(
                     "same-width extern UNSIGNED entry"
                 )
             out.append(Relocation(
-                offset=pending_subtractor["r_address"],
+                offset=pending_subtractor["r_address"] + offset_bias,
                 symbol=_relocation_symbol_name(
                     symbols,
                     pending_subtractor["r_symbolnum"],
@@ -581,7 +583,7 @@ def _read_relocations(
                 )
             target = sections[index - 1]
             out.append(Relocation(
-                offset=entry["r_address"], symbol="",
+                offset=entry["r_address"] + offset_bias, symbol="",
                 type=entry["r_type"], pcrel=bool(entry["r_pcrel"]),
                 length=entry["r_length"], addend=0,
                 section=(target["segname_str"], target["sectname_str"]),
@@ -595,7 +597,7 @@ def _read_relocations(
         )
         pending_addend = None
         out.append(Relocation(
-            offset=entry["r_address"],
+            offset=entry["r_address"] + offset_bias,
             symbol=_relocation_symbol_name(
                 symbols,
                 entry["r_symbolnum"],
@@ -991,19 +993,9 @@ def link_relocatable_native(objects: list[LinkInput]) -> NativeObject:
             )
 
             for reloc in _read_relocations(
-                obj, sec, symbols, local_rename,
+                obj, sec, symbols, local_rename, offset_bias=base,
             ):
-                target.relocations.append(Relocation(
-                    offset=reloc.offset + base,
-                    symbol=reloc.symbol,
-                    type=reloc.type,
-                    pcrel=reloc.pcrel,
-                    length=reloc.length,
-                    addend=reloc.addend,
-                    section=reloc.section,
-                    minuend=reloc.minuend,
-                    target_offset=reloc.target_offset,
-                ))
+                target.relocations.append(reloc)
                 if reloc.section is None:
                     referenced.add(reloc.symbol)
                     if reloc.minuend is not None:
@@ -1013,7 +1005,7 @@ def link_relocatable_native(objects: list[LinkInput]) -> NativeObject:
                     # record what it has to be rebased by once the merged
                     # layout is known.
                     rebases.append((
-                        target, reloc.offset + base, reloc.section,
+                        target, reloc.offset, reloc.section,
                         input_section_addr,
                     ))
 

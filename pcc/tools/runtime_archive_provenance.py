@@ -13,7 +13,7 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path
 import tempfile
 from typing import Iterable, Sequence
 
@@ -40,7 +40,7 @@ _EMITTER_BY_IR_TO_OBJ_NAME = {
     "pcc": _PCC_OBJECT_EMITTER,
     "llvmlite": _LLVM_OBJECT_EMITTER,
 }
-_LOGICAL_RUNTIME_ROOT = PurePosixPath("pcc/py_runtime")
+_LOGICAL_RUNTIME_ROOT = "pcc/py_runtime"
 _REGULAR_AR_MAGIC = b"!<arch>\n"
 _RECEIPT_REQUIRED_FIELDS = frozenset(
     {
@@ -128,38 +128,36 @@ def _write_json_atomic(path: Path, value: object) -> None:
 
 
 def _logical_source_path(source_path: Path, runtime_root: Path) -> str:
-    source = source_path.resolve()
-    root = runtime_root.resolve()
+    source = os.path.realpath(str(source_path))
+    root = os.path.realpath(str(runtime_root))
     try:
-        relative = source.relative_to(root)
+        if os.path.commonpath([source, root]) != root:
+            raise ValueError("source is outside root")
     except ValueError as exc:
         raise ProvenanceError(
             f"runtime source is outside runtime root: {source_path}"
         ) from exc
-    if relative.suffix != ".py" or not relative.parts or relative.parts[0] != "py":
+    relative = os.path.relpath(source, root).replace(os.sep, "/")
+    if not relative.startswith("py/") or not relative.endswith(".py") or relative.rsplit("/", 1)[-1] == ".py":
         raise ProvenanceError(
             "pcc-Python runtime source must be a .py file under py/: "
-            + relative.as_posix()
+            + relative
         )
-    return (_LOGICAL_RUNTIME_ROOT / PurePosixPath(relative.as_posix())).as_posix()
+    return _LOGICAL_RUNTIME_ROOT + "/" + relative
 
 
 def _validate_archive_member_name(member: object) -> str:
     if not isinstance(member, str):
         raise ProvenanceError(f"unsafe archive member name: {member!r}")
-    posix = PurePosixPath(member)
-    windows = PureWindowsPath(member)
     if (
         not member
         or member != member.strip()
         or member in {".", ".."}
         or "/" in member
         or "\\" in member
-        or posix.is_absolute()
-        or windows.is_absolute()
-        or bool(windows.drive)
-        or posix.name != member
-        or windows.name != member
+        # With both separators forbidden, only a drive-relative Windows
+        # basename remains to reject (for example C:member.o).
+        or (len(member) >= 2 and member[1] == ":")
         or any(ord(character) < 32 for character in member)
     ):
         raise ProvenanceError(f"unsafe archive member name: {member!r}")
@@ -169,34 +167,34 @@ def _validate_archive_member_name(member: object) -> str:
 def _source_from_logical_path(source: object, runtime_root: Path) -> Path:
     if not isinstance(source, str) or not source:
         raise ProvenanceError("member source must be a non-empty logical path")
-    logical = PurePosixPath(source)
+    parts = source.split("/")
     if (
         source != source.strip()
         or "\\" in source
-        or source != logical.as_posix()
-        or logical.is_absolute()
-        or ".." in logical.parts
+        or any(part in ("", ".", "..") for part in parts)
         or any(ord(character) < 32 for character in source)
     ):
         raise ProvenanceError(
             f"member source is not a normalized relative path: {source}"
         )
-    try:
-        relative = logical.relative_to(_LOGICAL_RUNTIME_ROOT)
-    except ValueError as exc:
+    prefix = _LOGICAL_RUNTIME_ROOT + "/"
+    if source != _LOGICAL_RUNTIME_ROOT and not source.startswith(prefix):
         raise ProvenanceError(
-            f"member source is outside {_LOGICAL_RUNTIME_ROOT.as_posix()}: {source}"
-        ) from exc
-    if relative.suffix != ".py" or not relative.parts or relative.parts[0] != "py":
+            f"member source is outside {_LOGICAL_RUNTIME_ROOT}: {source}"
+        )
+    relative = source[len(prefix):]
+    if not relative.startswith("py/") or not relative.endswith(".py") or relative.rsplit("/", 1)[-1] == ".py":
         raise ProvenanceError(
             "pcc-Python member source must be a .py file under py/: " + source
         )
-    resolved = (runtime_root / Path(*relative.parts)).resolve()
+    root = os.path.realpath(str(runtime_root))
+    resolved = os.path.realpath(os.path.join(root, relative.replace("/", os.sep)))
     try:
-        resolved.relative_to(runtime_root.resolve())
-    except ValueError as exc:  # pragma: no cover - guarded by PurePosixPath checks
+        if os.path.commonpath([resolved, root]) != root:
+            raise ValueError("source is outside root")
+    except ValueError as exc:
         raise ProvenanceError(f"member source escapes runtime root: {source}") from exc
-    return resolved
+    return Path(resolved)
 
 
 def receipt_path_for_object(object_path: Path) -> Path:
@@ -426,7 +424,7 @@ def manifest_is_stale_for_current_codegen(manifest: object) -> bool:
 
 
 def _require_regular_archive(archive_path: Path) -> None:
-    with archive_path.open("rb") as stream:
+    with open(str(archive_path), "rb") as stream:
         magic = stream.read(len(_REGULAR_AR_MAGIC))
     if magic != _REGULAR_AR_MAGIC:
         raise ProvenanceError(
@@ -508,7 +506,7 @@ def _validate_member_record(
     if record.get("object_sha256") != _sha256_bytes(member_bytes):
         raise ProvenanceError(f"{member}: archived object does not match its receipt")
     source = _source_from_logical_path(record.get("source"), runtime_root)
-    if not source.is_file():
+    if not os.path.isfile(str(source)):
         raise ProvenanceError(
             f"{member}: source file is missing: {record.get('source')}"
         )

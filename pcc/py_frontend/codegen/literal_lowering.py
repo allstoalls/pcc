@@ -1226,8 +1226,8 @@ class LiteralLoweringMixin:
             for k_expr, v_expr in expr.pairs
         ):
             d = self.builder.call(
-                self.runtime["py_dict_new"],
-                [],
+                self.runtime["py_dict_new_presized"],
+                [ir.Constant(_I64, len(expr.pairs))],
                 name=self._fresh("dict.new"),
             )
             # py_list_new / py_dict_new / py_tuple_new only allocate; neither they

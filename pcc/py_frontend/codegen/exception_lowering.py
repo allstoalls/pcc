@@ -1023,15 +1023,10 @@ class ExceptionLoweringMixin:
         return self._expr_returns_owned_object(exc_expr)
 
     def _emit_exception_class_ref(self, expr: Expr) -> ir.Value:
-        """Build a PyObject* for an exception class used in
-        ``except <Expr>:``. Supports a bare builtin Name, a local user
-        class, or a CPython-imported class (routed through the
-        libpython fallback). Falls back to the builtin ``Exception``
-        class when the name can't be resolved — catches strictly more
-        than requested, but lets pcc continue compiling files that
-        reference exception classes declared in modules not yet
-        reachable on the self-host path."""
+        """Resolve the actual class expression used by an except clause."""
         if isinstance(expr, Name):
+            if expr.ident in self.env or expr.ident in self._module_globals:
+                return self._emit_as_object(expr)
             tag = _builtin_exc_tag_or_missing(expr.ident)
             if tag >= 0:
                 return self.builder.call(
@@ -1058,32 +1053,9 @@ class ExceptionLoweringMixin:
                     cpy_gv,
                     name=self._fresh(f"exc.cpy.{expr.ident}"),
                 )
-            # Fall back to the generic ``Exception`` base so the except
-            # clause still compiles. Runtime semantics are broader than
-            # CPython's, but the goal here is self-host compile coverage
-            # — the narrow type match is recovered once the referenced
-            # exception class reaches pcc's ClassInfo registry.
-            return self.builder.call(
-                self.runtime["py_exc_builtin_class"],
-                [ir.Constant(_I64, 1)],
-                name=self._fresh(f"exc.cls.fallback.{expr.ident}"),
-            )
-        # Attribute access: ``except json.JSONDecodeError:`` etc. Fall
-        # back to the generic Exception class so the clause at least
-        # compiles. Runtime match is broader than CPython would do;
-        # recovering the narrow type match requires exposing the
-        # imported class's CPython PyTypeObject through py_exc_matches,
-        # which is a separate runtime extension.
-        try:
-            from ..py_ast import Attr as _AttrExpr  # local import
-        except Exception:
-            _AttrExpr = None
-        if _AttrExpr is not None and isinstance(expr, _AttrExpr):
-            return self.builder.call(
-                self.runtime["py_exc_builtin_class"],
-                [ir.Constant(_I64, 1)],
-                name=self._fresh(f"exc.cls.attr_fallback.{expr.name}"),
-            )
+            return self._emit_as_object(expr)
+        if isinstance(expr, Attr):
+            return self._emit_as_object(expr)
         raise NotImplementedError(
             f"Layer 1 except-clause class expression {type(expr).__name__} "
             "not supported"

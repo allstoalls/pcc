@@ -1301,13 +1301,18 @@ def test_http_and_sha256_runtime_is_owned_by_pcc_python(
 ) -> None:
     members = _archive_members(pcc_py_runtime_archive)
     assert "py_http.o" not in members
+    assert "py_hash.o" not in members
     assert "py_http_runtime.o" in members
+    assert "py_hash_runtime.o" in members
 
     owners = _defined_symbol_owners(pcc_py_runtime_archive)
-    expected_owner = {"py_http_runtime.o"}
-    assert owners["py_sha256_file_hex"] == expected_owner
-    assert owners["py_sha256_file_hex_bounded"] == expected_owner
-    assert owners["py_http_download_to_file"] == expected_owner
+    for symbol in (
+        "py_sha256_file_hex", "py_sha256_file_hex_bounded",
+        "py_sha256_bytes_digest", "py_sha256_state_new",
+        "py_sha256_state_update", "py_sha256_state_digest",
+    ):
+        assert owners[symbol] == {"py_hash_runtime.o"}
+    assert owners["py_http_download_to_file"] == {"py_http_runtime.o"}
 
 
 def test_asyncio_socket_runtime_is_owned_by_pcc_python(

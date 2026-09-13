@@ -48,7 +48,9 @@ def test_stage1_thread_mode_is_explicit_and_receipt_bound() -> None:
     environment: dict[str, str] = {}
 
     tool._set_stage1_build_modes(environment, with_threads=1)
-    assert environment == {"PCC_WITH_THREADS": "1"}
+    assert environment == {
+        "PCC_WITH_THREADS": "1", "PCC_PYTHON_IR_PASSES": "default",
+    }
     assert tool._parser().parse_args(
         [
             "--arm",
@@ -92,6 +94,7 @@ def test_stage1_direct_indexed_mode_is_explicit_and_receipt_bound() -> None:
 
     assert environment == {
         "PCC_WITH_THREADS": "0",
+        "PCC_PYTHON_IR_PASSES": "default",
         "PCC_DIRECT_INDEXED_KERNEL_CAPTURE": "1",
         "PCC_DIRECT_INDEXED_KERNEL_EMIT": "1",
         "PCC_DIRECT_INDEXED_KERNEL_REQUIRE_ZERO_FALLBACK": "1",
@@ -116,6 +119,12 @@ def test_stage1_direct_indexed_mode_is_explicit_and_receipt_bound() -> None:
     assert not tool._parser().parse_args(
         common + ["--no-performance-lock"]
     ).performance_lock
+    assert tool._parser().parse_args(common).python_ir_passes == "default"
+    control = tool._parser().parse_args(common + ["--python-ir-passes", "off"])
+    tool._set_stage1_build_modes(
+        environment, with_threads=0, python_ir_passes=control.python_ir_passes,
+    )
+    assert environment["PCC_PYTHON_IR_PASSES"] == "off"
 
 
 def test_stage1_function_smoke_exercises_compile_and_runtime() -> None:

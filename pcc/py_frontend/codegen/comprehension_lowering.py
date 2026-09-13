@@ -932,6 +932,7 @@ class ComprehensionLoweringMixin:
     ) -> None:
         """Generic object iteration via ``iter(obj)`` / ``next(it)``."""
         fn = self.current_function
+        source_owned = self._owned_release_needed(iter_val, generators[idx][1])
         if not isinstance(iter_val.type, ir.PointerType):
             iter_val = marshal.marshal_to_object(
                 self.builder,
@@ -940,19 +941,39 @@ class ComprehensionLoweringMixin:
                 iter_val,
                 iter_ty,
             )
+            source_owned = True
+        source_root = (
+            self._enter_container_temp_root(iter_val, self._fresh("comp.iter.source"))
+            if source_owned else None
+        )
         iterator = self.builder.call(
             self.runtime["py_obj_iter"],
             [iter_val],
             name=self._fresh("comp.iter.obj"),
         )
+        owned_iter_name = self._fresh("comp.iter.owner")
+        iter_slot = self._alloca_in_entry(_CSTR, name=self._fresh("comp.iter.root"))
+        self._store_entry_initializer(iter_slot, ir.Constant(_CSTR, None))
+        self.env[owned_iter_name] = (iter_slot, _CSTR, DynType(name="dyn"))
+        self._ensure_owned_local_gc_root(owned_iter_name, iter_slot, _CSTR)
+        self.builder.call(self.runtime["pcc_gc_store_root"], [iter_slot, iterator])
+        self._owned_local_names.add(owned_iter_name)
+        self._owned_local_has_value.add(owned_iter_name)
+        iter_flag = self._ensure_owned_local_flag(owned_iter_name, iter_slot)
+        self.builder.store(ir.Constant(_I1, 1), iter_flag)
+        if source_root is not None:
+            self._leave_container_temp_root(source_root)
+            self._gc_release(iter_val, self._release_context_label("comp.iter.source"))
         self._emit_post_call_err_check(getattr(target, "span", None))
 
+        outer_error = self._current_try_err_block()
+        outer_cpy_error = getattr(self, "_cpy_operand_cleanup_block", None)
+        cleanup_bb = fn.append_basic_block(self._fresh("comp.iter.error"))
+        self._try_err_block = cleanup_bb
+        self._cpy_operand_cleanup_block = cleanup_bb
         target_ident = target.ident
-        alloca = self._alloca_in_entry(
-            _CSTR,
-            name=f"{target_ident}.addr",
-        )
-        self.env[target_ident] = (alloca, _CSTR, DynType(name="dyn"))
+        target_slot = _for_prepare_owned_object_target(self, target_ident, DynType(name="dyn"))
+        alloca = target_slot[0]
 
         header_bb = fn.append_basic_block(name=self._fresh("comp.iter.next"))
         body_bb = fn.append_basic_block(name=self._fresh("comp.iter.body"))
@@ -963,9 +984,11 @@ class ComprehensionLoweringMixin:
 
         self.builder.branch(header_bb)
         self.builder.position_at_end(header_bb)
+        iterator_current = self.builder.call(self.runtime["pcc_gc_load_ptr"],
+            [ir.Constant(_CSTR, None), iter_slot], name=self._fresh("comp.iter.current"))
         item = self.builder.call(
             self.runtime["py_obj_next"],
-            [iterator],
+            [iterator_current],
             name=self._fresh("comp.iter.item"),
         )
         is_null = self.builder.icmp_unsigned(
@@ -977,7 +1000,7 @@ class ComprehensionLoweringMixin:
         self.builder.cbranch(is_null, maybe_end_bb, body_bb)
 
         self.builder.position_at_end(body_bb)
-        self.builder.store(item, alloca)
+        _for_store_owned_target(self, target_ident, target_slot, item)
         self._emit_comprehension_after_bind(
             kind,
             container,
@@ -1020,12 +1043,22 @@ class ComprehensionLoweringMixin:
         self.builder.branch(end_bb)
 
         self.builder.position_at_end(propagate_bb)
-        err_target = getattr(self, "_try_err_block", None)
-        if err_target is None:
-            err_target = self._ensure_fn_err_exit()
-        self.builder.branch(err_target)
+        self.builder.branch(cleanup_bb)
 
-        self.builder.position_at_end(end_bb)
+        self._try_err_block = outer_error
+        self._cpy_operand_cleanup_block = outer_cpy_error
+        for block in (cleanup_bb, end_bb):
+            self.builder.position_at_end(block)
+            self.builder.call(self.runtime["pcc_gc_store_root"],
+                [self._as_gc_ptr(alloca), ir.Constant(_CSTR, None)])
+            target_flag = self._ensure_owned_local_flag(target_ident, alloca)
+            self.builder.store(ir.Constant(_I1, 0), target_flag)
+            self._emit_release_owned_local_if_flagged(owned_iter_name, iter_slot)
+            self.builder.call(self.runtime["pcc_gc_store_root"],
+                [iter_slot, ir.Constant(_CSTR, None)])
+            if block is cleanup_bb:
+                self.builder.branch(outer_error if outer_error is not None else self._ensure_fn_err_exit())
+
     def _emit_comprehension_generator(
         self,
         kind: str,

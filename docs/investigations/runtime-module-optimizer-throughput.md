@@ -1111,3 +1111,281 @@ test_fallback_baseline.py + test_ir_py_fallback_baseline.py
                                                   45 passed (711 s)
 freestanding closure, py_obj.py and py_set.py     clean
 ```
+
+## Update — 2026-09-13: current runtime emitter and pass-order attribution
+
+This corrects the suggestion that the gateway's current ~20k QPS result means
+`native_ir` passes were removed. Current `pipeline_pass_config.py` selects
+`mem2reg,sroa`; `pipeline_pass_driver.apply_passes` runs `run_owned_passes`,
+including the full `native_ir.mem2reg` implementation. The captured actual
+application pass boundary reduces benchmark allocas 141 → 96, loads 616 → 385,
+stores 569 → 244, and increases PHIs 18 → 97. This tier is effectful. It does
+not include the extra cross-module runtime pipeline used in the historical
+86,862 QPS result.
+
+Evidence root: `/private/tmp/pcc-owned-perf-20260912-rbrioqup`.
+Compiler source is frozen `source-candidate-b40`, identity
+`575ee975da1944d46eb984380966e3fccc5094b21219b60421762a2cb288ce67`.
+Application archive is `frozen-runtime-b40/runtime-bundle/libpy_runtime_pcc_py.a`,
+SHA-256 `923a7bd54b0c02a500bd0d8bbdb4b9fd6e050e1867a24436372aecaa3b7d4db7`.
+This remains a scoped legacy Make/ar-produced runtime, not a cold owned-build
+qualification. Native stage1-S can compile and execute the measured gateway
+but failed the unchanged 30-second normal Python compile smoke; it is an
+unqualified candidate, not a new-source fixed point.
+
+The complete `gateway-comparison-s.json` has 180 validated runs, six arms,
+C1/C10/C100, waits 0/100ms, and five repetitions. At C100/zero wait:
+ordinary pcc1 virtual threads 20,210.8 QPS, asyncio-vthread prototype 10,338.5,
+CPython asyncio 91,900.6, and CPython gather 87,210.4. Host/native generated
+program throughput is close. Host compile took 7.66s, native compile 49.66s;
+the prototype compile took 7.60s/51.48s. The 300s compile timeout was unchanged.
+These are validated handler batches, not socket/HTTP throughput.
+
+`gateway-flags-b40.json` fixes source, application runtime and self emitter,
+and changes only the four existing compile switches (`PCC_KNOWN_OBJECT_REFS`,
+`PCC_GENERATOR_FIRST_ENTRY_INIT`, `PCC_FAST_COMPLETED_CONTINUATIONS`,
+`PCC_DIRECT_GENERATOR_TASKS`) from 0 to 1. Five rotating repeats, 20k requests,
+C100/zero wait: 19,095.5 → 24,694.7 QPS, and 930,738 → 725,607 process
+instructions/request. Process counters include startup/warmups; QPS excludes
+both. No default was promoted.
+
+### Same-IR emitter comparison
+
+`diagnose_gateway_runtime_b40.py` and
+`gateway-runtime-attribution-b40/build-report.json` retain every source,
+IR, object and application hash. Two fixed application objects come from the
+actual flag-enabled pass outputs. Thirteen runtime sources are byte-equal to
+the archive's source receipts and are regenerated once under frozen b40.
+Both emitter arms consume those identical IR bytes and the same remaining
+archive. Regenerated IR is **not** byte-identical to the old archive IR
+(path constants and additional declarations differ); the independent prebuilt
+control measures this distinction instead of silently equating the receipts.
+The prebuilt control gives 24,344.8 QPS, regenerated self 24,188.6, LLVM
+reference 50,168.7 (`gateway-emitter-ab-b40.json`, five rotating repetitions).
+All three binaries execute the small matched batch under GC0–4 (15 passes).
+
+### Same-post-pass emitter / same-emitter pass matrix
+
+`diagnose_gateway_merged_b40.py` merges exactly the same 13 input IR modules
+using **external LLVM as an explicitly labeled reference merger**. It then
+runs two rounds of the existing owned
+`inline-defined,instcombine,simplifycfg,dce` dispatcher. Each saved post-pass
+IR is sent unchanged to both emitters. This experiment does not implement or
+qualify an owned module merger. The four resulting binaries execute the
+matched batch under all five collectors (20 passes).
+
+`gateway-merged-ab-b40.json` is complete: 35 validated rotating runs,
+20k requests each, C100/zero wait, five repetitions:
+
+| Selected runtime pipeline | QPS median | Process instructions/request |
+| --- | ---: | ---: |
+| Self emitter, separate modules | 24,098.7 | 727,939 |
+| LLVM reference emitter, separate modules | 50,027.4 | 322,318 |
+| Self emitter, merged, no additional passes | 24,008.9 | 731,176 |
+| LLVM reference emitter, merged, no additional passes | 49,851.1 | 322,454 |
+| Self emitter, merged, two owned pass rounds | 31,807.3 | 544,546 |
+| LLVM reference emitter, same optimized IR | 70,315.6 | 267,757 |
+| CPython asyncio | 85,920.7 | 175,684 |
+
+Merging alone gives no useful gain; the existing owned transformations do.
+Their self-emitted gain is about 32%. Even on the same optimized IR the self
+emitter is about 2.2x slower, with about twice the process instructions.
+This establishes substantial emitter and selected-pipeline deficits; it does
+not attribute all drift since September 10, or blame adding C language support.
+The other 158 archive members remain fixed/self-emitted in these experiments,
+whereas the historical runtime used LLVM emission more broadly.
+
+**Historical O0 label correction:** `optimization_level=0` in `ir_to_obj`
+skips LLVM's module pass manager. Its `create_target_machine()` still uses
+llvmlite's default `opt=2`. "O0" in the old combined-runtime report therefore
+does not mean machine-code optimization was disabled. This was checked in
+local `llvmlite/binding/targets.py`, not inferred from the label.
+
+### Separate prototype path and open work
+
+The prototype uses the same virtual-thread scheduler but adds `_drive`,
+coroutine shells, and `_Sleep`/`_Gather.__await__` generators. It is not the
+same lowered program. `gateway-s-prototype-profile/receipt.json` validates
+500k requests, with 16,788 CPU samples. `py_await_iterator` is in 4,462 stacks
+(26.6%, inclusive); method binding, calls and destruction dominate that path.
+The process reaches 2,273,427,456 bytes RSS. This is suspicious growth, not a
+proven leak attribution. The new native await temporary-lifetime regression
+passes against CPython under GC0–4 (`await-owners-before.stdout`, 1 passed),
+so ordinary immediate/suspended await temporaries alone do not reproduce it.
+
+Outstanding: integrate the needed owned runtime optimization pipeline, remove
+the reference merge owner, diagnose the self-emitter machine-code gap on real
+hot IR, and isolate prototype lifetime/dispatch overhead. Compiler bootstrap
+also has a distinct `PCC_PYTHON_IR_PASSES=off` default in
+`run_self_backend_bootstrap_gate.py`; application pass evidence does not prove
+that the compiler executable itself received those optimizations. No fallback,
+GC or fixed-point requirement was relaxed, and no installation was promoted.
+
+### Follow-up: remaining owned passes and actual hot assembly
+
+`gateway-runtime-cleanup-b40/build-report.json` applies the remaining scalar/
+memory cleanup to the saved round-2 IR: `mem2reg,sroa,instsimplify,instcombine`
+and `dce` make no change; another `simplifycfg` removes 17 loads, 18 stores and
+6 calls. Both emitted variants execute the small batch under GC0–4 (10 passes).
+No QPS gain is claimed for this follow-up, and no default was changed. Merely
+running more existing pass names does not remove the established emitter gap.
+
+`gateway-codegen-audit-b40/hot-functions.json` and the adjacent assembly files
+compare the same unmerged IR with the two emitters. Static whole-function
+instruction/frame-memory counts are: `py_incref` self 264/81, LLVM reference
+95/6; `py_decref` 343/102 versus 117/8; the uncached allocator object-start
+predicate 529/123 versus 86/0. These are static counts, not dynamically weighted
+savings. The self allocator's documented/current proof is block-local; values
+crossing calls or blocks and PHI values retain spill slots. A broader allocation
+change still requires a measured mechanism and ABI/GC execution qualification.
+
+The sibling gateway README, benchmark methods and September 10 receipt now
+label 86,862 QPS prominently as a historical LLVM-assisted result. Original
+numbers and raw receipts are preserved. The prior implication that this result
+satisfied the user's LLVM-free performance target is withdrawn.
+
+### Historical bench ownership replay, beyond report labels
+
+The original build directory's full `source_hashes` record identifies
+`pcc/tools/ir_to_obj.py` as SHA-256
+`e7a4249f5c582201d9ee670d1a7d89f14bd17edfa7181debf0e2214c60030940`.
+That exact file matches Git version `080c3cf720f34a461449584a0704a366c7766ac3`;
+this identifies the emitter file, not the whole compiler revision. Its
+implementation imports llvmlite and directly calls `TargetMachine.emit_object`.
+
+`verify_historical_gateway_owner.py` replays the exact historical round-2 IR
+with that emitter and LLVM 20.1.8. The resulting object is byte-identical to
+historical `owned_round2.o`, SHA-256
+`cdc3a38a49b0af86ecdcb1a8f6fc3b90e90c02dd7d0717df7a38f29f4fee6d32`.
+The original benchmark executable also completes 200,000 validated requests
+plus 200 warmups in a separate health run (2,282.753ms). This single replay is
+not a new median comparison. Receipt under the same evidence root:
+`historical-gateway-owner-proof/receipt.json`, PASS; bounded watchdog COMPLETE.
+
+This verifies the historical runtime emission owner from source and exact
+artifact reproduction rather than trusting an old scope label. It supports
+real historical throughput artifacts, while leaving the claimed completion
+of LLVM-free performance explicitly withdrawn.
+
+## Update — direct PCO worker executes selected owned passes (qualification pending)
+
+The direct-indexed frontend worker produced PCO before the coordinator's
+`apply_passes` stage, then the coordinator linked and returned. An explicit
+`PCC_PYTHON_IR_PASSES=default` therefore had no effect on that route. The new
+`test_direct_indexed_owned_passes.py` first reproduced identical emitter inputs
+for off/default: 7 allocas, 6 loads, 13 stores, 2 PHIs.
+
+The worker now resolves the existing owned pass policy (including existing
+module skips and debug policy), retains canonical instruction text only when
+passes are selected, runs `run_owned_passes` in the worker, and feeds its result
+to the existing indexed/structured PCO emitter. Unknown passes fail explicitly.
+The off control still emits PCO without rendering module text. This reuses the
+current optimizer's **text IR interface**; it is not a claim of a newly indexed
+in-memory optimizer. The module's text-retention choice survives `generate`'s
+module reset. No LLVM optimizer/emitter or host-helper fallback was introduced.
+
+After the fix, the same regression reaches the emitter with 6 allocas, 5 loads,
+9 stores, 3 PHIs. Both off/default objects link and execute `choose(True)` and
+`choose(False)` as `41 42` under GC0–4. The test rejects llvmlite imports and
+checks that an unowned pass produces no PCO. Evidence under the root above:
+`direct-passes-before.stdout` (red), `direct-passes-after-v2.stdout` (2 passed),
+`direct-passes-sensitive.stdout` (31 passed), `direct-passes-policy.stdout`
+(78 passed), and `direct-passes-final-focused.stdout` (9 passed, including
+recorded emitter-input counts). These are overlapping focused packets, not a distinct-test total or a
+full-suite qualification.
+
+`run_pcc_stage1_build.py` now defaults to the existing default tier, with
+`--python-ir-passes=off` as the explicit diagnostic control. The bootstrap gate
+also defaults to the tier while preserving explicit overrides. Receipt validation
+accepts the new default and recorded historical off builds, keeping their actual
+policy in the evidence; it does not relabel older builds as optimized.
+
+Qualification source: `source-candidate-b41`, manifest SHA-256
+`021aa8d7394b0cffd295148c4da56ef7d240e0cbc0a1a2031b7123bedee21dbb`,
+with the unchanged explicit b40 runtime archive. `stage1-t-watch.json` tracks
+one frozen build with the unchanged 420s build / 30s function-smoke deadlines,
+four frontend workers and an 8GiB tree-RSS cap. Native qualification is pending;
+no compiler speedup or gateway QPS gain is claimed from the focused tests.
+
+### Native direct-worker proof and removal of the unused capture
+
+Stage1-T exceeded the unchanged 420s build deadline. Its 389 object files and
+all worker result records were nevertheless complete. The original failed
+manifest is retained. A separate 82.17s owned link produced the diagnostic
+compiler `stage1-t-component-link/pcc1`, SHA-256
+`9023c68cc178b056869e75559fd146055f04356fc879932f1777744abfa88218`.
+This is explicitly `LINKED_COMPONENT_ONLY`, not a successful full build receipt.
+
+That compiler executes the actual direct worker with off/default, then emits
+PCO; the default worker log records `passes=mem2reg,sroa`. Both output programs
+execute `41 42` under GC0–4 (`native-t-direct-passes/receipt.json`, PASS).
+Host Python links these isolated worker objects. This proves native execution
+of the integrated pass/PCO path. With PATH disabled, two failed `ls` attempts
+were also visible: the existing `py_os_listdir` in `py_process_substrate.py`
+uses `popen("ls -1A -- …")`. Therefore this is not a no-external-attempts claim;
+the directory-enumeration owner remains a concrete dependency defect.
+
+The first integration also built an unused pre-pass indexed module before
+parsing the optimized text into another indexed module. B42 removes this
+redundancy: selected-pass codegen retains text without direct capture, and only
+the optimized program is indexed for emission. The off route retains its
+original no-text direct capture. The focused direct/PHI/inline-error packet
+passes ten tests, including a counter requiring one off capture and zero
+unused pre-pass captures with optimization enabled.
+
+A profile of the frozen real `pcc.backend.self_backend_x86_64_linux` worker
+found 1,226 CPU samples: emission 43.15%, parsing 16.80%, owned passes 12.48%,
+frontend generation 15.74%; finalizing the unused capture alone was 3.26%
+(inclusive, not the whole instruction-publication cost). The external Tachyon
+attempt failed for macOS permissions; the existing in-process host flamegraph
+sampler produced the profile. No elevated retry was needed.
+
+The uninstrumented ABBA replay fixes that worker's AST/exports and pass options:
+B41 16.919/16.881s; B42 15.145/15.226s. CPU 16.83/16.78s → 15.05/15.12s;
+process instructions about 220.1B → 203.8B; peak RSS 557–564MB → 514–517MB.
+All four output PCOs are byte-identical, SHA-256
+`f20113be0c9219b1bcc0b53b8d2fdeed7a29bd722cf032cdf2fbe2b5af28a0f3`.
+Receipt: `direct-pass-kernel-ab/receipt.json`, COMPLETE. This establishes a
+10.1% host-worker wall reduction and 7.4% instruction reduction, not an
+end-to-end bootstrap or gateway gain.
+
+B42 source identity is
+`b4773656daf12eedd20aecf4353ed23b20fe73b244d8edc09dfeedfbe1f61350`.
+Stage1-U qualification uses six frontend workers, based on T's observed maximum
+single-worker RSS of 1,038,532,608 bytes, with the same 8GiB tree cap and
+420s/30s deadlines. The parallelism change is separate from the controlled
+code gain. Its result is pending; source and outputs remain isolated.
+
+## Paused checkpoint — 2026-09-14
+
+The corrected cold host-link pair (`link-relocation-copy-ab-v2/receipt.json`)
+fixes 389 PCO inputs, the runtime and both cache policies. Applying destination
+offsets during relocation construction removes the second immutable record
+copy: 81.9048s → 76.1697s, 1.363T → 1.255T process instructions, ~5.01GB RSS
+in both arms, byte-identical final executable. Thirty-seven focused link tests
+pass. The first pair was invalid because only the control hit an incremental
+cache; its receipt explicitly records `INVALID_CACHE_ASYMMETRY`.
+
+Native U validates the direct owned-pass/PCO path and the C cache/program
+regressions. Its full 420s build and 30s ordinary Python compile gates remain
+failed. A native-worker compilation of the changed linker closure exposed a
+separate frontend failure in `macho_parallel`'s `with lock` path. A small
+Collector/Gate source reproduces the unterminated with-error block even with
+passes disabled. LLDB finds the compiler's pending error:
+`__pcc_closure_value___nested_clear_context` is undefined; emit-IR nonetheless
+exits zero. This identifies closure binding and also leaves error propagation
+as an open boundary, not an optimizer verdict.
+
+The current closure correction publishes nested function definitions into their
+lexical cells and preserves sibling/recursive captures. Its focused packet
+(`sibling-binding-qualified.stdout`) passes four tests with GC0–4 emitted
+execution, covering function identity/attributes, independent factories,
+rebinding, forward/mutual recursion and existing with/generator cleanup.
+It has not yet been rebuilt into pcc1 or replayed against the native with failure.
+Current source snapshot B44 identity:
+`ecaf4d7d5b3b59d82297c55b4f16a21a6a12e3512279d31458c1799db851cd3d`.
+
+The user requested a pause after this regression run. No further builds or
+benchmarks were started. The dated handoff in the existing evidence directory
+is `HANDOFF-2026-09-14-paused.md`; all failed gates and pending native checks
+remain explicit. No commit or installation promotion occurred.

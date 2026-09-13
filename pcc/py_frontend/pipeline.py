@@ -2164,7 +2164,8 @@ def compile_python(
     emit_llvm_only:
         If True, stop after writing LLVM IR (used by ``--emit-llvm``).
     backend:
-        Native emission backend for executable output. ``llvm`` keeps
+        Native emission backend for executable output. Defaults to ``self``.
+        Explicit ``llvm`` keeps
         the historical clang ``.ll`` path; ``self`` lowers ``.ll``
         through the in-repo asm backend before linking.
     target_triple:
@@ -2247,6 +2248,11 @@ def compile_python(
         auto_seen,
     )
     _profile_end(profile, "expand_native_extension_module_object_ports", t)
+    if should_auto_close and libpython_mode != "on":
+        # Runtime providers must be admitted before choosing the single-file
+        # path. In auto mode, missing providers otherwise become CPython
+        # imports even though an owned implementation is available.
+        _expand_required_native_builtin_providers(auto_srcs, auto_mods, auto_seen)
     t = _profile_begin(profile)
     _validate_package_site_no_libpython_abi(
         auto_srcs,

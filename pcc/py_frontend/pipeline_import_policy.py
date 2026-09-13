@@ -74,7 +74,9 @@ NATIVE_BUILTIN_IMPORTS_WITH_COMPILED_PROVIDER = frozenset(
     # imports both at module scope, so a pcc1 carrying the C frontend emitted
     # a native module import for a module its closure did not contain and
     # died at runtime with "No module named 'contextlib'".
-    {"platform", "subprocess", "contextvars", "contextlib"}
+    # functools also exposes real factories and metadata-bearing callable
+    # values; recognizing decorator syntax alone cannot own its imports.
+    {"platform", "subprocess", "contextvars", "contextlib", "functools"}
 )
 
 # A shallow explicit multi-file compile normally admits every directly
@@ -82,7 +84,7 @@ NATIVE_BUILTIN_IMPORTS_WITH_COMPILED_PROVIDER = frozenset(
 # also classified as compiler-owned builtin dispatch but still exposes
 # semantic objects that require its compiled provider.
 REQUIRED_COMPILED_STDLIB_PROVIDERS = frozenset(
-    {"platform", "subprocess", "contextvars", "contextlib"}
+    {"platform", "subprocess", "contextvars", "contextlib", "functools"}
 )
 
 NATIVE_IMPORT_FROMS = {

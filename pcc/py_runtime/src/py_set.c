@@ -254,7 +254,9 @@ static int py_set_add_rooted_slot(
 static int64_t py_set_lookup_rooted(
     PyObject *set,
     PyObject *item,
-    int mode
+    int mode,
+    int64_t hash,
+    int hash_known
 ) {
     PyObject *set_storage = set;
     PyObject *item_storage = item;
@@ -266,7 +268,7 @@ static int64_t py_set_lookup_rooted(
         return 0;
     }
     item = py_set_reload_moving_root(&item_storage, item_handle);
-    int64_t hash = py_obj_hash(item);
+    if (!hash_known) hash = py_obj_hash(item);
     set = py_set_reload_moving_root(&set_storage, set_handle);
     item = py_set_reload_moving_root(&item_storage, item_handle);
     if (py_err_occurred()) {
@@ -634,8 +636,10 @@ static int py_set_maybe_grow(PySetObject *s) {
 
 void py_set_add(PyObject *set, PyObject *item) {
     if (set == NULL || item == NULL) return;
-    (void)py_set_lookup_rooted(set, item, 2);
+    (void)py_set_lookup_rooted(set, item, 2, 0, 0);
 }
+
+static void set_update_iterable(PyObject *dst, PyObject *src);
 
 void py_set_update(PyObject *dst, PyObject *src) {
     if (dst == NULL || src == NULL) return;
@@ -653,6 +657,7 @@ void py_set_update(PyObject *dst, PyObject *src) {
         PY_IS_TAGGED_INT(src)
         || py_header(src)->type_tag != PY_TYPE_SET
     ) {
+        set_update_iterable(py_set_reload_moving_root(&dst_storage, dst_handle), src);
         py_set_finish_moving_root(src_handle);
         py_set_finish_moving_root(dst_handle);
         return;
@@ -838,23 +843,156 @@ void py_set_symmetric_difference_update(PyObject *dst, PyObject *other) {
     py_decref(result);
 }
 
+static int set_predicate_hold(PyObject **slots, void **handles, int index, PyObject *value) {
+    slots[index] = value;
+    if (py_set_prepare_moving_root(&slots[index], &handles[index]) != 0) {
+        py_raise_owned(py_exc_new(PY_EXC_MEMORYERROR, "cannot root set predicate value"));
+        return 0;
+    }
+    return 1;
+}
+
+static PyObject *set_predicate_load(PyObject **slots, void **handles, int index) {
+    return py_set_reload_moving_root(&slots[index], handles[index]);
+}
+
+static void set_predicate_drop(PyObject **slots, void **handles, int index) {
+    PyObject *value = set_predicate_load(slots, handles, index);
+    py_set_finish_moving_root(handles[index]);
+    handles[index] = NULL;
+    slots[index] = NULL;
+    if (index >= 2) py_decref(value);
+}
+
+static void set_update_iterable(PyObject *dst, PyObject *src) {
+    PyObject *slots[4] = {NULL};
+    void *handles[4] = {NULL};
+    int ok = set_predicate_hold(slots, handles, 0, dst);
+    if (ok) ok = set_predicate_hold(slots, handles, 1, src);
+    if (ok) {
+        PyObject *iterator = py_obj_iter(set_predicate_load(slots, handles, 1));
+        ok = set_predicate_hold(slots, handles, 2, iterator);
+        if (iterator == NULL) {
+            if (!py_err_occurred()) py_raise_owned(py_exc_new(PY_EXC_TYPEERROR, "object is not iterable"));
+            ok = 0;
+        }
+    }
+    while (ok) {
+        PyObject *item = py_obj_next(set_predicate_load(slots, handles, 2));
+        if (item == NULL) {
+            if (py_err_occurred()) {
+                if (py_exc_matches(py_current_exception(), py_exc_builtin_class(PY_EXC_STOPITERATION))) py_clear_exception();
+            } else {
+                py_raise_owned(py_exc_new(PY_EXC_RUNTIMEERROR, "set update iterator returned NULL without an exception"));
+            }
+            break;
+        }
+        ok = set_predicate_hold(slots, handles, 3, item);
+        if (ok) {
+            py_set_add(set_predicate_load(slots, handles, 0), set_predicate_load(slots, handles, 3));
+            if (py_err_occurred()) ok = 0;
+        }
+        set_predicate_drop(slots, handles, 3);
+    }
+    for (int index = 3; index >= 0; index--) set_predicate_drop(slots, handles, index);
+}
+
+PyObject *py_set_from_iterable(PyObject *src) {
+    PyObject *slots[3] = {NULL};
+    void *handles[3] = {NULL};
+    int ok = set_predicate_hold(slots, handles, 0, src);
+    PyObject *result = NULL;
+    if (ok) {
+        PyObject *out = py_set_new();
+        ok = set_predicate_hold(slots, handles, 2, out);
+        if (out == NULL) {
+            py_raise_owned(py_exc_new(PY_EXC_MEMORYERROR, "cannot allocate set"));
+            ok = 0;
+        }
+    }
+    if (ok) {
+        py_set_update(set_predicate_load(slots, handles, 2), set_predicate_load(slots, handles, 0));
+        if (!py_err_occurred()) {
+            result = set_predicate_load(slots, handles, 2);
+            py_incref(result);
+        }
+    }
+    for (int index = 2; index >= 0; index--) set_predicate_drop(slots, handles, index);
+    return result;
+}
+
+static int64_t set_predicate_iterable(PyObject *a, PyObject *b, int superset) {
+    PyObject *slots[5] = {NULL};
+    void *handles[5] = {NULL};
+    int ok = set_predicate_hold(slots, handles, 0, a);
+    if (ok) ok = set_predicate_hold(slots, handles, 1, b);
+    if (ok) {
+        PyObject *iterator = py_obj_iter(set_predicate_load(slots, handles, 1));
+        ok = set_predicate_hold(slots, handles, 2, iterator);
+        if (iterator == NULL) ok = 0;
+    }
+    if (ok && !superset) {
+        PyObject *matched = py_set_new();
+        ok = set_predicate_hold(slots, handles, 3, matched);
+        if (matched == NULL) {
+            py_raise_owned(py_exc_new(PY_EXC_MEMORYERROR, "cannot allocate set predicate state"));
+            ok = 0;
+        }
+    }
+    int64_t result = 0;
+    while (ok) {
+        PyObject *item = py_obj_next(set_predicate_load(slots, handles, 2));
+        if (item == NULL) {
+            if (py_err_occurred()) {
+                if (py_exc_matches(py_current_exception(), py_exc_builtin_class(PY_EXC_STOPITERATION))) {
+                    py_clear_exception();
+                    if (superset || py_set_len(set_predicate_load(slots, handles, 3)) == py_set_len(set_predicate_load(slots, handles, 0))) result = 1;
+                }
+            } else py_raise_owned(py_exc_new(PY_EXC_RUNTIMEERROR,
+                "set predicate iterator returned NULL without an exception"));
+            break;
+        }
+        ok = set_predicate_hold(slots, handles, 4, item);
+        if (ok) {
+            int64_t hash = py_obj_hash(set_predicate_load(slots, handles, 4));
+            int64_t found = 0;
+            if (!py_err_occurred()) found = py_set_contains_hash(set_predicate_load(slots, handles, 0), set_predicate_load(slots, handles, 4), hash);
+            if (py_err_occurred()) ok = 0;
+            else if (superset && !found) break;
+            else if (!superset && found) {
+                py_set_add_hash(set_predicate_load(slots, handles, 3), set_predicate_load(slots, handles, 4), hash);
+                if (py_err_occurred()) ok = 0;
+                else if (py_set_len(set_predicate_load(slots, handles, 3)) == py_set_len(set_predicate_load(slots, handles, 0))) {
+                    result = 1;
+                    break;
+                }
+            }
+        }
+        set_predicate_drop(slots, handles, 4);
+    }
+    for (int index = 4; index >= 0; index--) set_predicate_drop(slots, handles, index);
+    return result;
+}
+
 int64_t py_set_issubset(PyObject *a, PyObject *b) {
     if (a == NULL || b == NULL) return 0;
-    if (PY_IS_TAGGED_INT(a) || PY_IS_TAGGED_INT(b)) return 0;
+    if (PY_IS_TAGGED_INT(a)) return 0;
     if (py_header(a)->type_tag != PY_TYPE_SET) return 0;
-    if (py_header(b)->type_tag != PY_TYPE_SET) return 0;
+    if (PY_IS_TAGGED_INT(b) || py_type_of(b) != PY_TYPE_SET) return set_predicate_iterable(a, b, 0);
     PySetObject *sa = (PySetObject *)a;
     PySetObject *sb = (PySetObject *)b;
     if (sa->size > sb->size) return 0;
     for (int64_t i = 0; i < sa->capacity; i++) {
         PyObject *k = py_set_entry_key(sa, &sa->entries[i]);
         if (k == NULL || k == py_set_dummy) continue;
-        if (!py_set_contains(b, k)) return 0;
+        if (!py_set_contains_hash(b, k, sa->entries[i].hash)) return 0;
     }
     return 1;
 }
 
 int64_t py_set_issuperset(PyObject *a, PyObject *b) {
+    if (a == NULL || PY_IS_TAGGED_INT(a) || py_type_of(a) != PY_TYPE_SET) return 0;
+    if (b == NULL || PY_IS_TAGGED_INT(b) || py_type_of(b) != PY_TYPE_SET) return set_predicate_iterable(a, b, 1);
     return py_set_issubset(b, a);
 }
 
@@ -896,12 +1034,20 @@ PyObject *py_set_pop(PyObject *set) {
 
 int64_t py_set_contains(PyObject *set, PyObject *item) {
     if (set == NULL || item == NULL) return 0;
-    return py_set_lookup_rooted(set, item, 0);
+    return py_set_lookup_rooted(set, item, 0, 0, 0);
+}
+
+int64_t py_set_contains_hash(PyObject *set, PyObject *item, int64_t hash) {
+    return py_set_lookup_rooted(set, item, 0, hash, 1);
+}
+
+void py_set_add_hash(PyObject *set, PyObject *item, int64_t hash) {
+    (void)py_set_lookup_rooted(set, item, 2, hash, 1);
 }
 
 int64_t py_set_remove(PyObject *set, PyObject *item) {
     if (set == NULL || item == NULL) return -1;
-    return py_set_lookup_rooted(set, item, 1) ? 0 : -1;
+    return py_set_lookup_rooted(set, item, 1, 0, 0) ? 0 : -1;
 }
 
 int64_t py_set_len(PyObject *set) {

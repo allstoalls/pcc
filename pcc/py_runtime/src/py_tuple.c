@@ -91,6 +91,16 @@ PyObject *py_tuple_new(int64_t n) {
     return (PyObject *)t;
 }
 
+/* Compiler-owned static arrays contain immortal objects or tagged integers. */
+PyObject *py_tuple_from_static_items(PyObject *const *items, int64_t count) {
+    PyObject *tuple = py_tuple_new(count);
+    if (tuple == NULL) return NULL;
+    for (int64_t i = 0; i < count; i++) {
+        py_tuple_set_item(tuple, i, items[i]);
+    }
+    return tuple;
+}
+
 /* Build a new tuple from a pcc list's elements (returns a new ref).
  * Used by the dynamic-call lowering to normalize mixed ``f(a, *rest)``
  * argument lists to the tuple the native callable ABI requires. */

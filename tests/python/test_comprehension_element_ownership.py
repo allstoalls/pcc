@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import subprocess
+import sys
 import pytest
 
 @pytest.mark.parametrize("expression", [
@@ -96,3 +97,52 @@ main()
                              capture_output=True, text=True, timeout=15)
         assert ran.returncode == 0, f"GC{backend}: " + ran.stdout + ran.stderr
         assert ran.stdout.strip() == "['early-key', 'key', 'list', 'set', 'value']"
+
+
+def test_generic_comprehension_releases_iterator_and_current_item(tmp_path, pcc_py_runtime_archive):
+    from pcc.py_frontend.pipeline import compile_python
+    source = tmp_path / "iterator_owners.py"
+    source.write_text('''import gc
+released = []
+class Item:
+    def __init__(self, label):
+        self.label = label
+    def __del__(self):
+        released.append(self.label)
+def rows(fail):
+    try:
+        yield Item("one")
+        if fail:
+            raise ValueError("iterator")
+        yield Item("two")
+    finally:
+        released.append("iterator")
+def value(item, fail):
+    gc.collect()
+    if fail:
+        raise ValueError("body")
+    return item.label
+def exercise(iterator_fail, body_fail):
+    try:
+        print([value(item, body_fail) for item in rows(iterator_fail)])
+    except ValueError:
+        print("failed")
+def main():
+    for iterator_fail, body_fail in [(False, False), (True, False), (False, True)]:
+        exercise(iterator_fail, body_fail)
+        gc.collect()
+        print(sorted(released))
+        released.clear()
+main()
+''', encoding="utf-8")
+    expected = subprocess.run([sys.executable, str(source)], capture_output=True,
+                              text=True, timeout=10)
+    assert expected.returncode == 0, expected.stderr
+    binary = tmp_path / "iterator_owners"
+    compile_python(str(source), str(binary), backend="self", libpython_mode="off",
+                   runtime_archive=str(pcc_py_runtime_archive))
+    for gc in range(5):
+        result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=15,
+                                env=dict(os.environ, PCC_GC_BACKEND=str(gc)))
+        assert result.returncode == 0, f"GC{gc}: {result.stderr}; {result.stdout}"
+        assert result.stdout == expected.stdout, f"GC{gc}: {result.stdout}"
