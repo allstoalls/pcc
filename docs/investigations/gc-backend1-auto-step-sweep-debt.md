@@ -170,3 +170,57 @@ all loop-local container roots are proven to the tracing backend at allocation
 time. Keeping automatic work to mark/cut and deferring reclamation to explicit
 collection preserves the observed correctness envelope while restoring bounded
 debt behavior.
+
+## Correction (2026-10-22): automatic reclamation at application gates
+
+Keeping automatic work to mark/cut meant GC1..GC4 never reclaimed a cycle
+unless the program called `gc.collect()`. A loop dropping self-referencing
+`__del__` objects finalized none of them before that call, and GC1/GC2's
+collector thread (d58306406) began one full marking cycle after another,
+since every allocation requests one: 200,000 such objects took 85 s against
+5 s with `gc.disable()`.
+
+The denied No.1 swept inside allocation-time steps, where loop-local
+references were not yet rooted. Reclamation now runs where compiled code
+reaches an application gate (`pcc_gc_safepoint`, polled through the
+automatic-step flag): every managed reference is rooted there, as at an
+explicit `gc.collect()` call, and GC4 already relocates only there. It
+collects with the world stopped, exactly as an explicit collect does, but a
+single cycle.
+
+- GC1/GC2: the collector thread begins a cycle only once allocation debt
+  reaches the pacing threshold or tracking has grown by
+  max(threshold0, survivors of the last automatic collection), never while a
+  completed mark waits for its sweep, and asks the next gate to sweep each
+  mark it completes. `gc.disable()` and `gc.set_threshold(0)` pause it.
+- GC3 (no collector thread): `py_gc_track` schedules one stop-the-world
+  cycle at the next gate, as for GC0.
+- GC4: its automatic step continues a mark within its budget until the mark
+  completes (one call ends at each phase boundary, so a mark spanned several
+  debt intervals and kept what died meanwhile); the gate then sweeps it.
+- Pacing: the pause applies to the bytes the last completed mark found
+  reachable (`pcc_gc_tracing_marked_bytes`), and a completed cycle pays the
+  debt. Computed from the current live bytes, which include garbage awaiting
+  a sweep, the default pause of 1000 made the threshold grow faster than the
+  debt, and GC4 never stepped again once garbage accumulated.
+- GC4 relocation: the collector's own evacuation
+  (`pcc_gc_backend4_select_relocation_pages`) admits only objects a mark has
+  reached, as in ZGC. It copied churned garbage, whose forwarding edge's hold
+  kept the copy alive: 76,993 forwards in one 50,000-object loop. The
+  explicit `pcc_gc_select_relocation_set` keeps its rule.
+- GC4 explicit collect: retiring forwarding edges requests one more mark;
+  garbage held only by an edge outlived `gc.collect()` (45,994 of 50,000
+  finalized).
+
+Measured with 50,000 objects (`node.self = node`, `__del__`), finalized
+before the explicit collect, loop time and peak RSS: GC0 49,945, 0.49 s,
+7.5 MB; GC1 41,889, 1.0 s, 21 MB; GC2 43,780, 1.0 s, 23 MB; GC3 49,945,
+1.2 s, 9.2 MB; GC4 49,480, 1.5 s, 35 MB. Before: none for GC1..GC4; GC4
+peaked at 116 MB.
+
+Tests: `tests/python/test_tracing_gc_automatic_cycle_collection.py` (fails
+before: "enabled False" on GC1), the pacing case of
+`test_freestanding_gc_public_collection.py::test_pcc_python_cms_worker_starts_drains_and_joins`,
+`test_gc4_idle_step_debt.py`. Five GC4 probes that relocate through the
+automatic path now first mark their objects (`pcc_gc_set_mark_color(obj,
+32)`), the state a completed mark leaves.

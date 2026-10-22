@@ -88,7 +88,7 @@ def load(func, value, ty, assignments):
     if value in ("zeroinitializer", "undef", "poison"):
         literal = b"\0" * ty.slot_size
     elif is_aggregate_literal_value(value):
-        literal = aggregate_literal_to_bytes(ty, value)
+        literal = aggregate_literal_to_bytes(ty, value, type_context=func.type_context)
     lines = [] if literal is not None else _materialize_aggregate_value_address(func, value, ty, "r10")
     ordered = sorted(assignments, key=lambda row: row[0] == "rax")
     for register, offset, size, kind in ordered:

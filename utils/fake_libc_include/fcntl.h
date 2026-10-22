@@ -57,7 +57,11 @@
 #endif
 
 #ifndef O_NONBLOCK
+#if defined(__linux__)
+#define O_NONBLOCK 2048
+#else
 #define O_NONBLOCK 4
+#endif
 #endif
 
 #ifndef O_NDELAY
@@ -70,6 +74,10 @@
 
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
+#endif
+
+#ifndef F_DUPFD
+#define F_DUPFD 0
 #endif
 
 #ifndef F_GETFD

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import inspect
 
-from pcc import cli_bootstrap, cli_contract, cli_core, pcc
+from pcc.driver import cli_bootstrap
+from pcc.driver import cli_contract
+from pcc.driver import cli_core
+from pcc.driver import cli_launcher
 
 
 def test_shared_cli_contract_is_complete_and_self_consistent():
@@ -32,11 +35,10 @@ def test_host_and_bootstrap_parsers_consume_shared_choice_owners():
     assert cli_bootstrap._DEFAULT_EMIT_LL == cli_contract.DEFAULT_EMIT_LL
 
 
-def test_legacy_click_adapter_consumes_shared_choice_owners():
-    source = inspect.getsource(pcc._build_click_main)
-    assert "PYTHON_LIBPYTHON_CHOICES" in source
-    assert "BACKEND_CHOICES" in source
-    assert "DEFAULT_EMIT_LL" in source
+def test_console_launcher_uses_the_shared_package_dispatcher():
+    source = inspect.getsource(cli_launcher.main)
+    assert "from pcc.driver.cli_bootstrap import bootstrap_cli_main" in source
+    assert "return bootstrap_cli_main(list(argv))" in source
 
 
 def test_every_nonshared_feature_group_has_explicit_surface_delta():

@@ -107,8 +107,9 @@ def _parse_build_command(entry: dict[str, object]) -> BuildCommand:
     arguments = entry.get("arguments")
     if isinstance(arguments, list):
         tokens = [str(item) for item in arguments]
-        if not raw_command:
-            raw_command = " ".join(tokens)
+        # The structured argv is authoritative and must survive paths/defines
+        # containing spaces when consumers later reconstruct it with shlex.
+        raw_command = " ".join(shlex.quote(token) for token in tokens)
     else:
         try:
             tokens = shlex.split(raw_command)
@@ -148,9 +149,10 @@ def _parse_build_command(entry: dict[str, object]) -> BuildCommand:
             frameworks.append(tokens[i + 1])
             i += 2
             continue
-        if token == "-o" and i + 1 < len(tokens):
-            output = tokens[i + 1]
-            i += 2
+        value, new_i = _consume_joined_flag(tokens, i, "-o")
+        if value is not None:
+            output = value
+            i = new_i + 1
             continue
         i += 1
     return BuildCommand(

@@ -44,7 +44,7 @@ def architecture():
         @ stage("LowerC", "cast -> ir"),
         "#d7e8f5",
         "C preprocessing, parsing and semantic lowering: "
-        "pcc/evaluater/c_evaluator.py, pcc/parse/, pcc/codegen/c_codegen.py. "
+        "pcc/frontends/c/evaluator/c_evaluator.py, pcc/frontends/c/parse/, pcc/frontends/c/codegen/c_codegen.py. "
         "Some current routes still use external owners; the owned C path is a contract.",
     )
     python_frontend = group(
@@ -54,8 +54,8 @@ def architecture():
         @ stage("LowerPy", "typed -> ir"),
         "#e5ddf4",
         "Python parsing, type inference and native lowering: "
-        "pcc/parse/py_parse.py, pcc/py_frontend/type_infer.py, "
-        "pcc/py_frontend/codegen/.",
+        "pcc/frontends/python/py_parse.py, pcc/frontends/python/type_infer.py, "
+        "pcc/frontends/python/codegen/.",
     )
     frontends = group(
         "Source-mode alternatives",
@@ -66,7 +66,7 @@ def architecture():
         "The driver selects one route for an input. The two displayed lanes "
         "are alternatives, not two frontends executed for every file. "
         "Host and native entrypoints have a parity contract; check actual gaps "
-        "in pcc/cli_core.py and pcc/cli_bootstrap.py.",
+        "in pcc/driver/cli_core.py and pcc/driver/cli_bootstrap.py.",
     )
     compiler = group(
         "Compiler and owned CPU backend",
@@ -76,8 +76,8 @@ def architecture():
             "IR passes",
             stage("Passes", "ir -> optir"),
             "#d8e8df",
-            "Python pass dispatch is in pcc/py_frontend/pipeline_pass_driver.py; "
-            "C pass orchestration is in pcc/evaluater/c_evaluator.py. "
+            "Python pass dispatch is in pcc/frontends/python/pipeline_pass_driver.py; "
+            "C pass orchestration is in pcc/frontends/c/evaluator/c_evaluator.py. "
             "Effective pass selection depends on mode and options.",
         )
         @ group(
@@ -85,7 +85,7 @@ def architecture():
             stage("Emit", "optir -> obj"),
             "#d9e5f0",
             "pcc/backend/ owns machine lowering and native object emission. "
-            "The public default is self (pcc/cli_contract.py). "
+            "The public default is self (pcc/driver/cli_contract.py). "
             "LLVM and LLVM-CAPI remain explicit reference or migration paths.",
         ),
         "#e9edf4",
@@ -100,8 +100,8 @@ def architecture():
         @ stage("GC5", "rtsem -> gc")
         @ stage("Archive", "gc -> rtobj"),
         "#d9eadf",
-        "pcc/py_runtime/py/ is the production migration target; "
-        "pcc/py_runtime/src/ is a C transition implementation and oracle. "
+        "pcc/runtime/py/ is the production migration target; "
+        "pcc/runtime/src/ is a C transition implementation and oracle. "
         "The five selectable backends share slot/root tracing and update "
         "contracts: refcount-cycle, incremental-tricolor, concurrent-mark-sweep, "
         "generational-minor-major and colored-relocating.",

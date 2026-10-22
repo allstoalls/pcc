@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-from pcc.parse.c_parser import (
+from pcc.frontends.c.parse.c_parser import (
     CParser,
     _DEFAULT_PLY_LEXTAB,
     _DEFAULT_PLY_YACCTAB,

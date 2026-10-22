@@ -2,7 +2,7 @@
   "schema": "pcc.cpython-replacement.workloads.v1",
   "python_baseline": {
     "language": "3.13",
-    "oracle": "CPython 3.15.0rc1"
+    "oracle": "CPython 3.15.0"
   },
   "targets": [
     {
@@ -219,7 +219,7 @@
         "cleanup"
       ],
       "oracle": {
-        "implementation": "CPython 3.15.0rc1",
+        "implementation": "CPython 3.15.0",
         "role": "behavioral-reference-only",
         "execution_is_separate": true
       },
@@ -290,7 +290,7 @@
         "cleanup"
       ],
       "oracle": {
-        "implementation": "CPython 3.15.0rc1",
+        "implementation": "CPython 3.15.0",
         "role": "behavioral-reference-only",
         "execution_is_separate": true
       },
@@ -361,7 +361,7 @@
         "cleanup"
       ],
       "oracle": {
-        "implementation": "CPython 3.15.0rc1",
+        "implementation": "CPython 3.15.0",
         "role": "behavioral-reference-only",
         "execution_is_separate": true
       },
@@ -432,7 +432,7 @@
         "cleanup"
       ],
       "oracle": {
-        "implementation": "CPython 3.15.0rc1",
+        "implementation": "CPython 3.15.0",
         "role": "behavioral-reference-only",
         "execution_is_separate": true
       },
@@ -503,7 +503,7 @@
         "cleanup"
       ],
       "oracle": {
-        "implementation": "CPython 3.15.0rc1",
+        "implementation": "CPython 3.15.0",
         "role": "behavioral-reference-only",
         "execution_is_separate": true
       },
@@ -574,7 +574,7 @@
         "cleanup"
       ],
       "oracle": {
-        "implementation": "CPython 3.15.0rc1",
+        "implementation": "CPython 3.15.0",
         "role": "behavioral-reference-only",
         "execution_is_separate": true
       },
@@ -645,7 +645,7 @@
         "cleanup"
       ],
       "oracle": {
-        "implementation": "CPython 3.15.0rc1",
+        "implementation": "CPython 3.15.0",
         "role": "behavioral-reference-only",
         "execution_is_separate": true
       },
@@ -716,7 +716,7 @@
         "cleanup"
       ],
       "oracle": {
-        "implementation": "CPython 3.15.0rc1",
+        "implementation": "CPython 3.15.0",
         "role": "behavioral-reference-only",
         "execution_is_separate": true
       },
@@ -787,7 +787,7 @@
         "cleanup"
       ],
       "oracle": {
-        "implementation": "CPython 3.15.0rc1",
+        "implementation": "CPython 3.15.0",
         "role": "behavioral-reference-only",
         "execution_is_separate": true
       },
@@ -858,7 +858,7 @@
         "cleanup"
       ],
       "oracle": {
-        "implementation": "CPython 3.15.0rc1",
+        "implementation": "CPython 3.15.0",
         "role": "behavioral-reference-only",
         "execution_is_separate": true
       },

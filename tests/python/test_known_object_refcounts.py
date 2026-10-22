@@ -6,8 +6,8 @@ import pytest
 
 @pytest.mark.parametrize("enabled", ["0", "1"])
 @pytest.mark.parametrize("verify_checks", [0, 1])
-def test_known_object_cleanup_gc_backends(tmp_path: Path, monkeypatch, pcc_py_runtime_archive, enabled, verify_checks):
-    from pcc.py_frontend.pipeline import compile_python
+def test_known_object_cleanup_gc_backends(tmp_path: Path, monkeypatch, pcc_runtime_archive, enabled, verify_checks):
+    from pcc.frontends.python.pipeline import compile_python
     monkeypatch.setenv("PCC_KNOWN_OBJECT_REFS", enabled)
     source = tmp_path / "known_objects.py"
     source.write_text('''import gc
@@ -69,7 +69,7 @@ main()
 '''.replace("VERIFY_CHECKS", str(verify_checks)))
     binary = tmp_path / "known_objects"
     ir = tmp_path / "known_objects.ll"
-    options = dict(backend="self", libpython_mode="off", ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+    options = dict(backend="self", libpython_mode="off", ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     compile_python(str(source), str(ir), emit_llvm_only=True, **options)
     text = ir.read_text()
     has_known = any("call " in line and "@pcc_gc_release_known(" in line for line in text.splitlines())
@@ -84,7 +84,7 @@ main()
 
 
 def test_runtime_port_generator_keeps_checked_frame_access(tmp_path: Path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
     monkeypatch.setenv("PCC_KNOWN_OBJECT_REFS", "1")
     source = tmp_path / "raw_frame.py"
     source.write_text('''__pcc_runtime_port__ = True

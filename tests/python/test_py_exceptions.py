@@ -21,7 +21,7 @@ class PyExceptionTests(unittest.TestCase):
         return dst
 
     def test_user_defined_exception_raise_and_catch(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "user_exc.py",
@@ -52,7 +52,7 @@ class PyExceptionTests(unittest.TestCase):
         self.assertEqual(run.stdout, "boom\n")
 
     def test_user_defined_exception_catches_via_builtin_base(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "user_exc_base.py",
@@ -87,7 +87,7 @@ class PyExceptionTests(unittest.TestCase):
         self.assertEqual(run.stdout, "caught boom\n")
 
     def test_unhandled_exception_traceback_has_frames(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "traceback_frames.py",
@@ -137,7 +137,7 @@ class PyExceptionTests(unittest.TestCase):
         self.assertIn("TypeError: boom\n", run.stderr)
 
     def test_not_callable_failure_keeps_runtime_dispatch_reason(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "not_callable_reason.py",
@@ -172,7 +172,7 @@ class PyExceptionTests(unittest.TestCase):
         )
 
     def test_nested_function_except_as_name_is_local_binding(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "nested_except_binding.py",
@@ -194,7 +194,7 @@ class PyExceptionTests(unittest.TestCase):
         self.assertTrue(os.path.isfile(ll_path))
 
     def test_import_exception_matching_is_narrow_and_hierarchical(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "import_exception_matching.py",
@@ -254,7 +254,7 @@ class PyExceptionTests(unittest.TestCase):
         # whose lifecycle is managed by their slot ownership, so this is safe.
         # See investigation
         # python-class-init-phantom-symbol-link-fail.md.
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "no_init_exception.py",

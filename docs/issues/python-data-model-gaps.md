@@ -39,7 +39,7 @@ A quick map of where pcc currently stands on each data-model area:
 
 | Area | Status | Where |
 |---|---|---|
-| Attribute lookup MRO | focused D1 contract passes: data vs non-data descriptor priority is locked; broader introspection edges still open | `pcc/py_runtime/src/py_class.c`, `py_obj_ops_dispatch.c`, `tests/test_descriptor_protocol.py` |
+| Attribute lookup MRO | focused D1 contract passes: data vs non-data descriptor priority is locked; broader introspection edges still open | `pcc/runtime/src/py_class.c`, `py_obj_ops_dispatch.c`, `tests/test_descriptor_protocol.py` |
 | `@property` | getter/setter/read-only focused contract passes; docstring/introspection edges incomplete | runtime + codegen typed-class field access |
 | `staticmethod` / `classmethod` | focused dispatch contract passes; `__func__` introspection / subclass-call edge cases incomplete | `class_gen.py` method-kind classification |
 | `__slots__` | focused storage/no-`__dict__` contract passes; inheritance and weakref slots still need coverage | `tests/test_descriptor_protocol.py` |

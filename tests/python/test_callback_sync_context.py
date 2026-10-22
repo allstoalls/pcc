@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 import subprocess
 import pytest
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 PROGRAMS = {
     'ordinary': ('''import gc
@@ -376,7 +376,7 @@ def _archive():
         pytest.fail('PCC_CALLBACK_RUNTIME_ARCHIVE must name a matching threaded archive')
     archive = Path(value).resolve(strict=True)
     from pcc.tools.runtime_archive_provenance import verify_runtime_archive_manifest
-    manifest = verify_runtime_archive_manifest(archive, runtime_root=Path(__file__).resolve().parents[2] / 'pcc/py_runtime')
+    manifest = verify_runtime_archive_manifest(archive, runtime_root=Path(__file__).resolve().parents[2] / 'pcc/runtime')
     members = {row['member'] for row in manifest['members']}
     assert 'freestanding_thread_kernel_pthread.o' in members
     assert 'freestanding_thread_kernel.o' not in members
@@ -467,19 +467,41 @@ def _callable_role_records(text, entry_suffix):
     records = []
     for function in re.finditer(r'^define[^\n]*@([^ (]+)\([^\n]*\)[^\n]*\{\n(.*?)^\}', text, re.M | re.S):
         body = function.group(2)
-        objects = re.findall(r'^\s*(%[^ ]+) = call[^\n]*@py_func_new_(?:named|bound)\(ptr @([^, )]+)', body, re.M)
         aliases = dict(re.findall(r'^\s*(%[^ ]+) = bitcast ptr (%[^ ]+) to ptr', body, re.M))
+
+        def resolve(value):
+            while value in aliases:
+                value = aliases[value]
+            return value
+
+        objects = re.findall(r'^\s*(%[^ ]+) = call[^\n]*@py_func_new_(?:named|bound)\(ptr @([^, )]+)', body, re.M)
+        # The slot constructor publishes into its output slot; the role is
+        # written to the header of a value loaded back from that slot.
+        loaded = {}
+        for value, slot in re.findall(r'^\s*(%[^ ]+) = load ptr, ptr (%[^ ,\n]+)', body, re.M):
+            loaded[value] = resolve(slot)
+        for adapter, slot in re.findall(
+            r'call i64[^\n]*@py_func_new_signature_slots\(ptr [^,]+, ptr [^,]+, ptr @([^, )]+), ptr [^\n]*?, ptr (%[^ ,)]+)\)',
+            body,
+        ):
+            objects.append((resolve(slot), adapter))
         headers = dict(re.findall(r'^\s*(%[^ ]+) = getelementptr i8, ptr (%[^, ]+), i64 12', body, re.M))
         roles = {}
         for address, mask in re.findall(r'atomicrmw or ptr (%[^, ]+), i32 ([0-9]+)', body):
-            while address in aliases:
-                address = aliases[address]
-            owner = headers.get(address)
+            owner = headers.get(resolve(address))
             if owner is not None:
+                owner = loaded.get(owner, owner)
                 roles[owner] = roles.get(owner, 0) | int(mask)
         for owner, adapter in objects:
             if entry_suffix in adapter:
                 records.append((function.group(1), owner, adapter, roles.get(owner, 0)))
+        # The static constructor takes the role as an argument.
+        for adapter, role in re.findall(
+            r'call i64[^\n]*@py_func_new_static_def\(ptr @([^, )]+), [^\n]*?, i64 ([0-9]+), ptr',
+            body,
+        ):
+            if entry_suffix in adapter:
+                records.append((function.group(1), None, adapter, int(role)))
     return records
 
 

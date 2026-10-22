@@ -30,7 +30,7 @@ BACKEND_COLORED_RELOCATING = 4
 
 
 def _compile_and_run(tmp_path, source: str) -> subprocess.CompletedProcess[str]:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -50,7 +50,7 @@ def _compile_and_run_capture_rss(
     extract maximum-resident-set-size. Returns (proc_result, rss_kib).
     On platforms where time-l isn't available, returns (-1) for rss.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"

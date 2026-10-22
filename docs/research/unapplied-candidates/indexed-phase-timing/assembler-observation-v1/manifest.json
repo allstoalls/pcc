@@ -1,0 +1,93 @@
+{
+  "assembly": {
+    "bytes": 76565862,
+    "sha256": "8ad079c23208ef05f5385e975d45421ac5c50f882a14b68d942cf9134567f919"
+  },
+  "codegen_checksum": "e0145952375a080377be0084bcb6b91ce825102c213b5453473c3896d2fac36c",
+  "driver_sha256": "638cf97ca423d737dd1f9cef5d912c029eb9a4ac6183029eb37edd34eb6f2806",
+  "execution_claims": {
+    "frontend_compilation": false,
+    "native_execution": false,
+    "optimization_implemented": false,
+    "pcc1": false,
+    "performance_benefit": false,
+    "runtime_build": false,
+    "whole_stage1_timing": false
+  },
+  "historical_compiler_checksum": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+  "historical_input_cfg": {
+    "blocks": 48161,
+    "functions": 231,
+    "instructions": 219614
+  },
+  "historical_source_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "input_scope": "Sealed real c_ast Windows assembly from the historical pre-class-outline cold-slot compiler; assembler/encoder identical to current, no current frontend frequency or whole-Stage1 representativeness claim.",
+  "limits": {
+    "exclusive_shared_lock": true,
+    "free_reserve_bytes": 4294967296,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "max_output_growth_bytes": 536870912,
+    "runs": 1,
+    "seconds": 300
+  },
+  "pcc_tree": "ee02ba6bf0d79e9706c1791aa650093f5f91c338",
+  "public_files": [
+    "README.md",
+    "manifest.json",
+    "observe_assembler.py"
+  ],
+  "readme_sha256": "352fbf3b6e4fbf0f6504fd3b859aa6bd754a33e1213b1a207d9bddd90bdd2a99",
+  "reference_object": {
+    "bytes": 12228800,
+    "name": "module.obj",
+    "sha256": "4d910a121adc58f3f57f9d5041abcb406ff9ad3c6a5748581c6671d6cdcfcb6a"
+  },
+  "reference_qualification_sha256": "4864338559a67bcd79b003832fbbad6983bf35160ded8741253c58f5d9f1ab9b",
+  "reference_result_sha256": "6afb6237c6075a64b54c7076e53cfb1fea7e3aff220282586a704293fe927ef4",
+  "retained_output_budget_bytes": 16777216,
+  "schema": "pcc.x86-assembler-observation.v1",
+  "screening_thresholds": {
+    "minimum_layout_share_percent": 25,
+    "minimum_opportunity_per_final_instruction_percent": 10
+  },
+  "source_commit": "d2334624197b5fc14aaca93bb916683fb1afcb79",
+  "source_inventory_sha256": "568c44d837939cde5ab4da2c2f0115ab30f978716bc423a40e07d9cf2bdc0185",
+  "source_relation": {
+    "pcc/backend/coff_x86_64.py": {
+      "byte_identical": false,
+      "changed_top_level_definition_names": [
+        "assemble_object"
+      ],
+      "current_bytes": 14262,
+      "current_source_sha256": "15939bf25b6b8cffd853ac82cd99fbbe1708a3e8d3c8b7bf6599578a8bc440f5",
+      "reference_source_sha256": "f564767a154adae848e53f1286833c08b618c9b6311a688096bfdd5548be1aeb"
+    },
+    "pcc/backend/elf_x86_64.py": {
+      "byte_identical": true,
+      "current_bytes": 53777,
+      "current_source_sha256": "79db187fd9c19106d9730627dad5cf171daafd0429afd8a537179eb6df319b0c",
+      "reference_source_sha256": "79db187fd9c19106d9730627dad5cf171daafd0429afd8a537179eb6df319b0c"
+    },
+    "pcc/backend/target_objects.py": {
+      "byte_identical": false,
+      "current_bytes": 3710,
+      "current_source_sha256": "5ea98a6c8b37ff5b0555865164df73ea14a4b58e50e2e3abdc4833cb0a57e4a8",
+      "reference_source_sha256": "43328564860270186bd597549c39a70d891715d388613353c1667f1f2265aba6"
+    },
+    "pcc/backend/x86_64_asm_driver.py": {
+      "byte_identical": true,
+      "current_bytes": 33123,
+      "current_source_sha256": "cc71a7b5b5c5db56d665fc83afe670b021c20f76403fb5a381a085cdf37cf84d",
+      "reference_source_sha256": "cc71a7b5b5c5db56d665fc83afe670b021c20f76403fb5a381a085cdf37cf84d"
+    },
+    "pcc/backend/x86_64_encode.py": {
+      "byte_identical": true,
+      "current_bytes": 44159,
+      "current_source_sha256": "b5f50803d5fee0da05accbd0e331cdfe5a6a6a6505a50480b10aef570b363a82",
+      "reference_source_sha256": "b5f50803d5fee0da05accbd0e331cdfe5a6a6a6505a50480b10aef570b363a82"
+    }
+  },
+  "status": "UNRUN_EXTERNAL_OBSERVATION_ONLY",
+  "target": "x86_64-pc-windows-msvc"
+}

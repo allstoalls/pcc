@@ -6,16 +6,52 @@ import shlex
 import shutil
 import signal
 import subprocess
+import sys
 import time
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_MAKEFILE = REPO_ROOT / "pcc" / "py_runtime" / "Makefile"
+RUNTIME_MAKEFILE = REPO_ROOT / "pcc" / "runtime" / "Makefile"
 
 
 def _write_executable(path: Path, source: str) -> None:
     path.write_text(source, encoding="utf-8")
     path.chmod(0o755)
+
+
+def _fixture_python_dispatch(tmp_path: Path) -> str:
+    # Inventory queries use the real target/configuration contract. These
+    # publication tests still select their single transaction-marker object
+    # explicitly; they do not build or certify a native runtime archive.
+    shutil.copyfile(RUNTIME_MAKEFILE, tmp_path / "Makefile")
+    return (
+        "#!/bin/sh\n"
+        "set -eu\n"
+        'case "$1:$2" in\n'
+        '  -m:pcc.tools.runtime_module_inventory)\n'
+        f'    exec {shlex.quote(sys.executable)} "$@" ;;\n'
+        '  -m:pcc.ir.optimization.driver)\n'
+        '    test "$#" -eq 5\n'
+        # The fixture's IR is a transaction marker, not executable IR.
+        '    cp "$4" "$5"\n'
+        '    exit 0 ;;\n'
+        '  -m:pcc.tools.runtime_archive_provenance)\n'
+        '    case "$3" in\n'
+        '      assemble) ;;\n'
+        '      stamp-target)\n'
+        '        test "$#" -eq 5 && test "$4" = --archive\n'
+        # Check the published marker bundle without inventing target metadata.
+        '        IFS= read -r build_id < "$5"\n'
+        '        IFS= read -r capi_symbol < "$5.capi_syms"\n'
+        '        IFS= read -r receipt < "$5.provenance.json"\n'
+        '        test "$capi_symbol" = "Py$build_id"\n'
+        '        test "$receipt" = "$build_id:$capi_symbol"\n'
+        '        exit 0 ;;\n'
+        '      *) echo "unexpected provenance command: $3" >&2; exit 1 ;;\n'
+        '    esac ;;\n'
+        '  *) echo "unexpected Python command: $*" >&2; exit 1 ;;\n'
+        'esac\n'
+    )
 
 
 def _wait_for_file(path: Path, process: subprocess.Popen[str]) -> None:
@@ -88,9 +124,8 @@ def test_direct_make_serializes_runtime_archive_publication(
     fake_python = tool_dir / "python"
     _write_executable(
         fake_python,
-        "#!/bin/sh\n"
-        "set -eu\n"
-        "archive=\n"
+        _fixture_python_dispatch(tmp_path)
+        + "archive=\n"
         "output=\n"
         "capi_inventory=\n"
         'while [ "$#" -gt 0 ]; do\n'
@@ -294,9 +329,8 @@ def _real_direct_make_fixture(
     fake_python = tool_dir / "python"
     _write_executable(
         fake_python,
-        "#!/bin/sh\n"
-        "set -eu\n"
-        "archive=\n"
+        _fixture_python_dispatch(tmp_path)
+        + "archive=\n"
         "output=\n"
         "capi_inventory=\n"
         "object=\n"
@@ -331,8 +365,11 @@ def _real_direct_make_fixture(
         "set -eu\n"
         "destination=\n"
         'for argument in "$@"; do destination=$argument; done\n'
-        'printf "%s:publish:%s\\n" "$BUILD_ID" "$destination" '
-        '>> "$EVENT_LOG"\n'
+        'case "$destination" in\n'
+        '  runtime.a|runtime.a.capi_syms|runtime.a.provenance.json)\n'
+        '    printf "%s:publish:%s\\n" "$BUILD_ID" "$destination" '
+        '>> "$EVENT_LOG" ;;\n'
+        'esac\n'
         f"exec {shlex.quote(real_mv)} \"$@\"\n",
     )
 

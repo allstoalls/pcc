@@ -13,6 +13,17 @@ CALL_FLAG_CONTINUATION = 64
 CALL_FLAG_LOOP_SAFEPOINT = 128
 
 CALL_FLAG_FRAME_PROTOCOL = CALL_FLAG_FRAME_ENTER | CALL_FLAG_FRAME_LEAVE
+
+# The ``_mapped`` entries register a stack frame only when no precise stack
+# walk roots it; for planning they are the same enter/leave protocol.
+_FRAME_ENTER_CALLEES = frozenset((
+    "pcc_gc_frame_enter", "pcc_gc_frame_enter_lifo",
+    "pcc_gc_frame_enter_mapped", "pcc_gc_frame_enter_lifo_mapped",
+))
+_FRAME_LEAVE_CALLEES = frozenset((
+    "pcc_gc_frame_leave", "pcc_gc_frame_leave_lifo",
+    "pcc_gc_frame_leave_mapped", "pcc_gc_frame_leave_lifo_mapped",
+))
 CALL_FLAG_STACKMAP_SKIP = CALL_FLAG_FRAME_PROTOCOL | CALL_FLAG_LLVM_INTRINSIC
 
 
@@ -29,9 +40,9 @@ def classify_call_flags(
     )
     if is_indirect:
         return flags
-    if callee == "pcc_gc_frame_enter" or callee == "pcc_gc_frame_enter_lifo":
+    if callee.startswith("pcc_gc_frame_enter") and callee in _FRAME_ENTER_CALLEES:
         return flags | CALL_FLAG_FRAME_ENTER
-    if callee == "pcc_gc_frame_leave" or callee == "pcc_gc_frame_leave_lifo":
+    if callee.startswith("pcc_gc_frame_leave") and callee in _FRAME_LEAVE_CALLEES:
         return flags | CALL_FLAG_FRAME_LEAVE
     if callee.startswith("llvm."):
         return flags | CALL_FLAG_LLVM_INTRINSIC
@@ -43,7 +54,11 @@ def classify_call_flags(
         or "__vthread_resume" in callee
     ):
         return flags | CALL_FLAG_CONTINUATION
-    if callee == "pcc_thread_safepoint" or callee == "pcc_gc_safepoint":
+    if (
+        callee == "pcc_thread_safepoint"
+        or callee == "pcc_thread_safepoint_gate"
+        or callee == "pcc_gc_safepoint"
+    ):
         return flags | CALL_FLAG_LOOP_SAFEPOINT
     return flags
 

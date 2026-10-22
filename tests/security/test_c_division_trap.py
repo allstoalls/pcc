@@ -26,7 +26,7 @@ repo_root = os.path.dirname(os.path.dirname(this_dir))
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
-from pcc.evaluater.c_evaluator import CEvaluator
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
 
 _IS_AARCH64 = platform.machine().lower() in ("arm64", "aarch64")
 _aarch64_only = pytest.mark.pcc_gate(

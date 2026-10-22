@@ -39,7 +39,7 @@ in a separate part of the codebase:
 | Layer | Defined by | CPython's implementation | pcc's implementation |
 |---|---|---|---|
 | **Language semantics** — control flow, expression evaluation order, scope rules, exception propagation, `for`/`while`/`try`/`finally`, comprehensions, generator/coroutine state machines | Python language reference | bytecode + `ceval.c` interpreter loop | codegen lowers AST directly to native code that performs the same observable steps |
-| **Data model semantics** — `PyObject*` identity, `__add__` / `__getattr__` MRO dispatch, container `__contains__` / `__iter__`, refcount, descriptor protocol, exceptions as objects | Python language reference + data model docs | C runtime in `Objects/*.c` (`PyDict_*`, `PyList_*`, `PyNumber_*`, ...) | pcc's own runtime: `pcc/py_runtime/src/*.c` and the pcc-Python ports in `pcc/py_runtime/py/*.py` (`py_int`, `py_str`, `py_list`, `py_dict`, `py_obj_ops_*`) |
+| **Data model semantics** — `PyObject*` identity, `__add__` / `__getattr__` MRO dispatch, container `__contains__` / `__iter__`, refcount, descriptor protocol, exceptions as objects | Python language reference + data model docs | C runtime in `Objects/*.c` (`PyDict_*`, `PyList_*`, `PyNumber_*`, ...) | pcc's own runtime: `pcc/runtime/src/*.c` and the pcc-Python ports in `pcc/runtime/py/*.py` (`py_int`, `py_str`, `py_list`, `py_dict`, `py_obj_ops_*`) |
 
 pcc is therefore **two from-scratch implementations** of the same
 two surfaces CPython covers, plus a codegen that wires them
@@ -83,7 +83,7 @@ The same pattern holds for every Python construct. `for x in xs:`
 becomes calls to `py_iter` + `py_iter_next`. `obj.attr` becomes
 `py_obj_getattr`. `try / except` becomes basic blocks with
 return-code-style exception checks plus thread-local exception
-state. Each lowering rule is documented in `pcc/py_frontend/codegen/`.
+state. Each lowering rule is documented in `pcc/frontends/python/codegen/`.
 
 ## Four independent checks that lock semantics in
 
@@ -93,7 +93,7 @@ modes.
 
 ### Check 1 — Runtime contract mirrors CPython by design
 
-Every runtime function in `pcc/py_runtime/include/py_runtime.h` is
+Every runtime function in `pcc/runtime/include/py_runtime.h` is
 specified to behave the same way the corresponding CPython API
 behaves. Examples:
 
@@ -108,7 +108,7 @@ behaves. Examples:
 - Exception model: thread-local current exception read via
   `py_err_occurred()`, matching `PyErr_Occurred()` semantics.
 
-Each entry in `RUNTIME_SIGNATURES` (`pcc/py_frontend/codegen/runtime_abi.py`)
+Each entry in `RUNTIME_SIGNATURES` (`pcc/frontends/python/codegen/runtime_abi.py`)
 maps 1:1 to a prototype in `py_runtime.h`, and each prototype
 documents the contract. **The implementation is rewritten; the
 contract is mirrored.**
@@ -299,16 +299,16 @@ pcc does **not** claim:
 pytest tests/test_runtime_oracle_diff.py -v
 
 # Check 3: bootstrap fix-point byte-equality
-scripts/bootstrap.sh
-# pcc2 ≡ pcc3 after Mach-O signature normalisation
+uv run python scripts/bootstrap.py
+# pcc2 ≡ pcc3 byte-for-byte (Mach-O must not be normalised into agreement)
 
 # Check 4: Python program corpus end-to-end
 pytest tests/ -k "runtime_oracle"
 ```
 
 For Check 1 (runtime contract review) the entry point is
-`pcc/py_runtime/include/py_runtime.h` for the prototype list and
-`pcc/py_frontend/codegen/runtime_abi.py` for the codegen-side
+`pcc/runtime/include/py_runtime.h` for the prototype list and
+`pcc/frontends/python/codegen/runtime_abi.py` for the codegen-side
 mirror.
 
 ## Open questions

@@ -11,7 +11,7 @@ Usage::
 
 Exit 0 if all samples parity-identical, 1 otherwise.
 
-Runs the full preprocessor pipeline (pcc.preprocessor) on each file
+Runs the full preprocessor pipeline (pcc.frontends.c.preprocessor) on each file
 so ``#include`` / typedef-name tracking works correctly.
 """
 from __future__ import annotations
@@ -22,10 +22,10 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
-from pcc.parse.c_parser import CParser  # PLY-based  # noqa: E402
-from pcc.parse.c_parse_driver import CParseDriver  # native  # noqa: E402
-from pcc.parse.ast_normalize import normalize, diff  # noqa: E402
-from pcc.preprocessor import preprocess  # noqa: E402
+from pcc.frontends.c.parse.c_parser import CParser  # PLY-based  # noqa: E402
+from pcc.frontends.c.parse.c_parse_driver import CParseDriver  # native  # noqa: E402
+from pcc.frontends.c.parse.ast_normalize import normalize, diff  # noqa: E402
+from pcc.frontends.c.preprocessor import preprocess  # noqa: E402
 
 
 # Small but real files from each upstream project.

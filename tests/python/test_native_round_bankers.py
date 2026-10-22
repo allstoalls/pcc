@@ -75,13 +75,13 @@ def test_round_two_arg_bankers_native_no_libpython(tmp_path):
     assert out.split("\n")[2] == "2.67", out
 
 
-def test_round_two_arg_bankers_pcc_python_runtime(tmp_path, pcc_py_runtime_archive):
+def test_round_two_arg_bankers_pcc_python_runtime(tmp_path, pcc_runtime_archive):
     out = _run_pcc_program(
         tmp_path,
         "print(round(2.675, 2))\n"
         "print(round(0.125, 2))\n",
         runtime_cc="pcc",
         runtime_high="py",
-        runtime_archive=pcc_py_runtime_archive,
+        runtime_archive=pcc_runtime_archive,
     )
     assert out.split("\n")[:2] == ["2.67", "0.12"], out

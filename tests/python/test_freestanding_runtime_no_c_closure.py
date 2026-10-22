@@ -19,7 +19,7 @@ from pcc.tools.runtime_archive_provenance import (
 
 REPO = Path(__file__).resolve().parents[2]
 REPO_ROOT = REPO
-RUNTIME_MAKEFILE = REPO / "pcc" / "py_runtime" / "Makefile"
+RUNTIME_MAKEFILE = REPO / "pcc" / "runtime" / "Makefile"
 
 
 def _make_variable_tokens(makefile: str, variable: str) -> set[str]:
@@ -93,24 +93,24 @@ def _undefined_symbol_users(archive: Path) -> dict[str, set[str]]:
 
 
 def test_thread_runtime_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The production archive must not retain the mixed C thread runtime."""
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "pcc_threads.o" not in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected = {
-        "pcc_threads_enabled": "freestanding_thread_kernel.o",
-        "pcc_thread_stop_requested_acquire": "freestanding_thread_kernel.o",
-        "pcc_thread_no_park_enter": "freestanding_thread_kernel.o",
-        "pcc_thread_no_park_exit": "freestanding_thread_kernel.o",
-        "pcc_thread_no_park_depth": "freestanding_thread_kernel.o",
-        "pcc_thread_owns_stopped_world": "freestanding_thread_kernel.o",
-        "pcc_thread_registration_waiter_count": "freestanding_thread_kernel.o",
-        "pcc_thread_unregister_current": "freestanding_thread_kernel.o",
-        "pcc_refcount_incref": "freestanding_thread_kernel.o",
-        "pcc_mutex_new": "freestanding_thread_kernel.o",
+        "pcc_threads_enabled": "freestanding_thread_kernel_pthread.o",
+        "pcc_thread_stop_requested_acquire": "freestanding_thread_kernel_pthread.o",
+        "pcc_thread_no_park_enter": "freestanding_thread_kernel_pthread.o",
+        "pcc_thread_no_park_exit": "freestanding_thread_kernel_pthread.o",
+        "pcc_thread_no_park_depth": "freestanding_thread_kernel_pthread.o",
+        "pcc_thread_owns_stopped_world": "freestanding_thread_kernel_pthread.o",
+        "pcc_thread_registration_waiter_count": "freestanding_thread_kernel_pthread.o",
+        "pcc_thread_unregister_current": "freestanding_thread_kernel_pthread.o",
+        "pcc_refcount_incref": "freestanding_thread_kernel_pthread.o",
+        "pcc_mutex_new": "freestanding_thread_kernel_pthread.o",
         "py_virtual_thread_new": "py_virtual_thread_runtime.o",
         "py_virtual_thread_run_until_idle": "py_virtual_thread_runtime.o",
         "py_virtual_thread_effect_count": "py_virtual_thread_runtime.o",
@@ -136,7 +136,7 @@ def test_thread_quiescence_symbols_have_exact_owner() -> None:
     # Each archive links exactly one thread kernel, and that kernel alone
     # defines the quiescence protocol.
     for runtime, kernel in (
-        (cached_pcc_python_runtime(), "freestanding_thread_kernel.o"),
+        (cached_pcc_python_runtime(), "freestanding_thread_kernel_pthread.o"),
         (
             cached_threaded_pcc_python_runtime(),
             "freestanding_thread_kernel_pthread.o",
@@ -148,12 +148,12 @@ def test_thread_quiescence_symbols_have_exact_owner() -> None:
 
 
 def test_production_archive_has_no_handwritten_c_runtime_helpers(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """Every member is bound to its pcc-Python source and object emitter."""
     manifest = verify_runtime_archive_manifest(
-        pcc_py_runtime_archive,
-        runtime_root=pcc_py_runtime_archive.parent,
+        pcc_runtime_archive,
+        runtime_root=pcc_runtime_archive.parent,
     )
     records = manifest["members"]
 
@@ -167,9 +167,9 @@ def test_production_archive_has_no_handwritten_c_runtime_helpers(
 
 
 def test_c_api_core_runtime_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_core_runtime.o"}
     for symbol in {
         "Py_INCREF",
@@ -189,7 +189,7 @@ def test_c_api_core_runtime_is_owned_by_pcc_python(
 
 def test_c_api_core_runtime_preserves_refcount_and_noop_contracts(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = tmp_path / "capi_core_probe.c"
     executable = tmp_path / "capi_core_probe"
@@ -243,7 +243,7 @@ int main(void) {
             os.environ.get("CC", "cc"),
             "-std=c11",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(executable),
@@ -260,10 +260,10 @@ int main(void) {
 
 
 def test_c_api_memory_allocators_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyMem/PyObject allocation facade is not owned by the C shim."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected = {
         "PyMem_Malloc",
         "PyMem_RawMalloc",
@@ -284,7 +284,7 @@ def test_c_api_memory_allocators_are_owned_by_pcc_python(
 
 def test_c_api_memory_runtime_preserves_zero_size_realloc_and_overflow(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = tmp_path / "capi_memory_probe.c"
     executable = tmp_path / "capi_memory_probe"
@@ -353,7 +353,7 @@ int main(void) {
             os.environ.get("CC", "cc"),
             "-std=c11",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(executable),
@@ -370,16 +370,16 @@ int main(void) {
 
 
 def test_c_api_stdio_wrappers_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     assert owners["PyOS_snprintf"] == {"py_capi_stdio_runtime.o"}
     assert owners["PyOS_vsnprintf"] == {"py_capi_stdio_runtime.o"}
 
 
 def test_c_api_stdio_wrappers_preserve_variadic_c_abi(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = tmp_path / "capi_stdio_probe.c"
     executable = tmp_path / "capi_stdio_probe"
@@ -423,7 +423,7 @@ int main(void) {
             os.environ.get("CC", "cc"),
             "-std=c11",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(executable),
@@ -440,9 +440,9 @@ int main(void) {
 
 
 def test_c_api_bool_float_scalars_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     for symbol in {
         "PyBool_FromLong",
         "PyBool_Check",
@@ -456,7 +456,7 @@ def test_c_api_bool_float_scalars_are_owned_by_pcc_python(
 
 def test_c_api_bool_float_scalars_preserve_values_tags_and_errors(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = tmp_path / "capi_bool_float_probe.c"
     executable = tmp_path / "capi_bool_float_probe"
@@ -502,7 +502,7 @@ int main(void) {
             os.environ.get("CC", "cc"),
             "-std=c11",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(executable),
@@ -519,9 +519,9 @@ int main(void) {
 
 
 def test_c_api_signed_long_scalars_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     for symbol in {
         "PyLong_FromLong",
         "PyLong_FromLongLong",
@@ -546,7 +546,7 @@ def test_c_api_signed_long_scalars_are_owned_by_pcc_python(
 
 def test_c_api_signed_long_scalars_preserve_bounds_and_overflow_direction(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = tmp_path / "capi_signed_long_probe.c"
     executable = tmp_path / "capi_signed_long_probe"
@@ -623,7 +623,7 @@ int main(void) {
             os.environ.get("CC", "cc"),
             "-std=c11",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(executable),
@@ -640,9 +640,9 @@ int main(void) {
 
 
 def test_c_api_unsigned_long_scalars_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     for symbol in {
         "PyLong_FromUnsignedLong",
         "PyLong_FromUnsignedLongLong",
@@ -665,7 +665,7 @@ def test_c_api_unsigned_long_scalars_are_owned_by_pcc_python(
 
 def test_c_api_unsigned_long_scalars_preserve_all_64_bits(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = tmp_path / "capi_unsigned_long_probe.c"
     executable = tmp_path / "capi_unsigned_long_probe"
@@ -737,7 +737,7 @@ int main(void) {
             os.environ.get("CC", "cc"),
             "-std=c11",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(executable),
@@ -754,9 +754,9 @@ int main(void) {
 
 
 def test_c_api_tuple_list_and_bytes_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     for symbol in {
         "PyTuple_Size",
         "PyTuple_GetItem",
@@ -787,7 +787,7 @@ def test_c_api_tuple_list_and_bytes_are_owned_by_pcc_python(
 
 def test_c_api_tuple_list_and_bytes_preserve_layout_refs_and_variadic_abi(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = tmp_path / "capi_collections_probe.c"
     executable = tmp_path / "capi_collections_probe"
@@ -903,7 +903,7 @@ int main(void) {
             os.environ.get("CC", "cc"),
             "-std=c11",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(executable),
@@ -1116,16 +1116,16 @@ def test_explicit_pcc_python_thread_kernel_serializes_stw_requesters(
 
 
 def test_small_semantic_helpers_are_owned_by_existing_pcc_python_modules(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert {
         "py_enumerate.o",
         "py_obj_min_max.o",
         "py_tuple_methods.o",
     }.isdisjoint(members)
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     assert owners["py_enumerate_list"] == {"py_iter.o"}
     assert owners["py_obj_min_max"] == {"py_obj_ops_compare.o"}
     assert owners["py_tuple_count"] == {"py_tuple.o"}
@@ -1134,13 +1134,13 @@ def test_small_semantic_helpers_are_owned_by_existing_pcc_python_modules(
 
 
 def test_os_native_path_semantics_are_owned_by_pcc_python_path_module(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_os_native.o" not in members
     assert "py_os_path.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_os_path.o"}
     assert owners["py_os_path_commonpath"] == expected_owner
     assert owners["py_os_path_expandvars"] == expected_owner
@@ -1148,48 +1148,48 @@ def test_os_native_path_semantics_are_owned_by_pcc_python_path_module(
 
 
 def test_complex_power_is_owned_by_existing_pcc_python_complex_module(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_complex_pow.o" not in members
     assert "py_obj_stubs.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     assert owners["py_complex_pow"] == {"py_obj_stubs.o"}
 
 
 def test_float_fromhex_is_owned_by_existing_pcc_python_float_module(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_float_fromhex.o" not in members
     assert "py_obj_stubs.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     assert owners["py_float_fromhex"] == {"py_obj_stubs.o"}
 
 
 def test_rss_sampling_is_owned_by_freestanding_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_os_rss.o" not in members
     assert "freestanding_platform_rss.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"freestanding_platform_rss.o"}
     assert owners["pcc_os_current_rss_bytes"] == expected_owner
     assert owners["pcc_os_peak_rss_bytes"] == expected_owner
 
 
 def test_metal_prebuilt_bridge_is_owned_by_freestanding_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "pcc_metal_runtime.o" not in members
     assert "freestanding_metal_runtime.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"freestanding_metal_runtime.o"}
     for symbol in (
         "pcc_metal_source_runtime_call_prebuilt",
@@ -1204,13 +1204,13 @@ def test_metal_prebuilt_bridge_is_owned_by_freestanding_pcc_python(
 
 
 def test_json_runtime_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_json.o" not in members
     assert "py_json_runtime.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_json_runtime.o"}
     assert owners["py_json_loads"] == expected_owner
     assert owners["py_json_dumps_ex"] == expected_owner
@@ -1218,13 +1218,13 @@ def test_json_runtime_is_owned_by_pcc_python(
 
 
 def test_copy_pickle_runtime_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_pickle_copy.o" not in members
     assert "py_pickle_copy_runtime.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_pickle_copy_runtime.o"}
     assert owners["py_copy_copy"] == expected_owner
     assert owners["py_copy_deepcopy"] == expected_owner
@@ -1233,13 +1233,13 @@ def test_copy_pickle_runtime_is_owned_by_pcc_python(
 
 
 def test_user_protocol_runtime_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_protocol.o" not in members
     assert "py_protocol_runtime.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_protocol_runtime.o"}
     for symbol in (
         "py_user_len_dispatch",
@@ -1262,26 +1262,26 @@ def test_user_protocol_runtime_is_owned_by_pcc_python(
 
 
 def test_extension_loader_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_extension_loader.o" not in members
     assert "py_extension_loader_runtime.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_extension_loader_runtime.o"}
     assert owners["py_native_extension_import"] == expected_owner
     assert owners["py_native_extension_import_by_name"] == expected_owner
 
 
 def test_io_waitset_is_owned_by_freestanding_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_io_waitset.o" not in members
     assert "freestanding_io_waitset.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"freestanding_io_waitset.o"}
     for symbol in (
         "pcc_io_waitset_init",
@@ -1309,15 +1309,15 @@ def test_io_waitset_is_owned_by_freestanding_pcc_python(
 
 
 def test_http_and_sha256_runtime_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_http.o" not in members
     assert "py_hash.o" not in members
     assert "py_http_runtime.o" in members
     assert "py_hash_runtime.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     for symbol in (
         "py_sha256_file_hex", "py_sha256_file_hex_bounded",
         "py_sha256_bytes_digest", "py_sha256_state_new",
@@ -1330,13 +1330,13 @@ def test_http_and_sha256_runtime_is_owned_by_pcc_python(
 
 
 def test_asyncio_socket_runtime_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_asyncio_io.o" not in members
     assert "py_asyncio_io_runtime.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_asyncio_io_runtime.o"}
     for symbol in (
         "py_asyncio_tcp_listen",
@@ -1356,13 +1356,13 @@ def test_asyncio_socket_runtime_is_owned_by_pcc_python(
 
 
 def test_class_attribute_runtime_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_class_attrs.o" not in members
     assert "py_class.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_class.o"}
     for symbol in (
         "py_instance_bind_method",
@@ -1382,13 +1382,13 @@ def test_class_attribute_runtime_is_owned_by_pcc_python(
 
 
 def test_format_runtime_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_format.o" not in members
     assert "py_format_runtime.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_format_runtime.o"}
     for symbol in (
         "pcc_float_round_fixed_f64",
@@ -1412,9 +1412,9 @@ def test_format_runtime_is_owned_by_pcc_python(
 
 
 def test_residual_numeric_libc_is_owned_by_freestanding_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert {
         "vendor_atoi.o",
         "vendor_strtod.o",
@@ -1438,7 +1438,7 @@ def test_residual_numeric_libc_is_owned_by_freestanding_pcc_python(
         "py_libc_fortify.o",
     }.isdisjoint(members)
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"freestanding_libc_numeric.o"}
     for symbol in {
         "atan2",
@@ -1460,13 +1460,13 @@ def test_residual_numeric_libc_is_owned_by_freestanding_pcc_python(
 
 
 def test_regex_object_bridge_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_re_engine_obj.o" not in members
     assert "py_re_engine_runtime.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_re_engine_runtime.o"}
     for symbol in (
         "py_re_engine_findall",
@@ -1483,13 +1483,13 @@ def test_regex_object_bridge_is_owned_by_pcc_python(
 
 
 def test_regex_core_is_owned_by_freestanding_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_re_engine.o" not in members
     assert "freestanding_re_engine.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"freestanding_re_engine.o"}
     for symbol in (
         "pcc_re_engine_supported",
@@ -1506,7 +1506,7 @@ def test_regex_core_is_owned_by_freestanding_pcc_python(
 
 def test_freestanding_regex_core_reuses_compiled_program(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = tmp_path / "freestanding_re_cache_probe.c"
     executable = tmp_path / "freestanding_re_cache_probe"
@@ -1538,7 +1538,7 @@ int main(void) {
         [
             "clang",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-pthread",
             "-lm",
             "-o",
@@ -1557,7 +1557,7 @@ int main(void) {
 
 def test_pcc_python_path_semantics_cover_components_environment_and_relpath(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = tmp_path / "os_path_pcc_python_probe.c"
     executable = tmp_path / "os_path_pcc_python_probe"
@@ -1648,9 +1648,9 @@ int main(void) {
         [
             "clang",
             "-std=c11",
-            f"-I{REPO / 'pcc' / 'py_runtime' / 'include'}",
+            f"-I{REPO / 'pcc' / 'runtime' / 'include'}",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-pthread",
             "-o",
             str(executable),
@@ -1670,34 +1670,34 @@ int main(void) {
 
 
 def test_int_bytes_is_owned_by_pcc_python_int_conversion(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_int_bytes.o" not in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     assert owners["py_int_to_bytes"] == {"py_int_convert.o"}
     assert owners["py_int_from_bytes"] == {"py_int_convert.o"}
 
 
 def test_modexp_and_isqrt_are_owned_by_pcc_python_int_ops(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_int_modexp.o" not in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     assert owners["py_int_pow_mod"] == {"py_int_ops.o"}
     assert owners["py_int_isqrt"] == {"py_int_ops.o"}
 
 
 def test_cpy_handle_is_owned_by_pcc_python_object_deallocation(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_cpy_handle.o" not in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_obj_dealloc.o"}
     assert owners["py_cpy_handle_set_release_fn"] == expected_owner
     assert owners["py_cpy_handle_new"] == expected_owner
@@ -1708,7 +1708,7 @@ def test_cpy_handle_is_owned_by_pcc_python_object_deallocation(
 
 def test_pcc_python_cpy_handle_releases_foreign_reference_once(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     repo = Path(__file__).resolve().parents[2]
     source = tmp_path / "cpy_handle_probe.c"
@@ -1740,10 +1740,10 @@ int main(void) {
         [
             "clang",
             "-std=c11",
-            f"-I{repo / 'pcc' / 'py_runtime' / 'include'}",
-            f"-I{repo / 'pcc' / 'py_runtime' / 'src'}",
+            f"-I{repo / 'pcc' / 'runtime' / 'include'}",
+            f"-I{repo / 'pcc' / 'runtime' / 'src'}",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-pthread",
             "-o",
             str(executable),
@@ -1768,13 +1768,13 @@ def test_context_runtime_recipe_uses_only_the_pcc_python_owner() -> None:
 
 
 def test_context_runtime_symbols_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_context.o" not in members
     assert "py_context_runtime.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     assert owners["py_context_enter"] == {"py_context_runtime.o"}
     assert owners["py_context_exit"] == {"py_context_runtime.o"}
 
@@ -1785,13 +1785,13 @@ def test_call_splat_recipe_uses_only_the_pcc_python_owner() -> None:
 
 
 def test_call_splat_symbols_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_call_splat.o" not in members
     assert "py_call_splat_runtime.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_call_splat_runtime.o"}
     assert owners["py_call_merge_posargs"] == expected_owner
     assert owners["py_zip_star"] == expected_owner
@@ -1807,13 +1807,13 @@ def test_module_attrs_recipe_uses_only_the_pcc_python_owner() -> None:
 
 
 def test_module_attrs_symbols_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_module_attrs.o" not in members
     assert "py_module_attrs_runtime.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_module_attrs_runtime.o"}
     assert owners["py_module_attrs_dict"] == expected_owner
     assert owners["py_module_attr_set"] == expected_owner
@@ -1827,7 +1827,7 @@ def test_module_attrs_symbols_are_owned_by_pcc_python(
 
 def test_pcc_python_module_attrs_side_table_roundtrip(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = tmp_path / "module_attrs_pcc_python_probe.c"
     executable = tmp_path / "module_attrs_pcc_python_probe"
@@ -1855,10 +1855,10 @@ int main(void) {
         [
             "clang",
             "-std=c11",
-            f"-I{REPO / 'pcc' / 'py_runtime' / 'include'}",
-            f"-I{REPO / 'pcc' / 'py_runtime' / 'src'}",
+            f"-I{REPO / 'pcc' / 'runtime' / 'include'}",
+            f"-I{REPO / 'pcc' / 'runtime' / 'src'}",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-pthread",
             "-o",
             str(executable),
@@ -1885,13 +1885,13 @@ def test_compiled_module_recipe_uses_only_the_pcc_python_owner() -> None:
 
 
 def test_compiled_module_symbols_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_compiled_module.o" not in members
     assert "py_compiled_module_runtime.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_compiled_module_runtime.o"}
     assert owners["pcc_runtime_module_class"] == expected_owner
     assert owners["py_compiled_module_register_init"] == expected_owner
@@ -1900,25 +1900,25 @@ def test_compiled_module_symbols_are_owned_by_pcc_python(
 
 
 def test_heap_metrics_are_owned_by_the_freestanding_allocator(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_os_heap.o" not in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"freestanding_allocator.o"}
     assert owners["pcc_os_heap_in_use_bytes"] == expected_owner
     assert owners["pcc_os_heap_capacity_bytes"] == expected_owner
 
 
 def test_timer_heap_is_owned_by_freestanding_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_timer_heap.o" not in members
     assert "freestanding_timer_heap.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"freestanding_timer_heap.o"}
     for symbol in (
         "pcc_timer_heap_init",
@@ -1934,13 +1934,13 @@ def test_timer_heap_is_owned_by_freestanding_pcc_python(
 
 
 def test_runtime_high_substrate_is_owned_by_freestanding_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_runtime_high_substrate.o" not in members
     assert "freestanding_runtime_high_substrate.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"freestanding_runtime_high_substrate.o"}
     for symbol in (
         "pcc_py_gc_minor_current_get",
@@ -1955,12 +1955,12 @@ def test_runtime_high_substrate_is_owned_by_freestanding_pcc_python(
 
 def test_runtime_high_substrate_tls_and_reentrant_lock_behavior(
     tmp_path: Path,
-    threaded_pcc_py_runtime_archive: Path,
+    threaded_pcc_runtime_archive: Path,
 ) -> None:
     # Four raw pthreads contend on the graph lock, so this needs the pthread
     # kernel: the threads-off kernel elides the lock (no second thread can
     # exist there), which makes the mutual-exclusion check meaningless.
-    pcc_py_runtime_archive = threaded_pcc_py_runtime_archive
+    pcc_runtime_archive = threaded_pcc_runtime_archive
     source = tmp_path / "runtime_high_substrate_probe.c"
     executable = tmp_path / "runtime_high_substrate_probe"
     source.write_text(
@@ -2025,7 +2025,7 @@ int main(void) {
             "clang",
             "-std=c11",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-pthread",
             "-o",
             str(executable),
@@ -2045,13 +2045,13 @@ int main(void) {
 
 
 def test_dlpack_runtime_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "pcc_dlpack_runtime.o" not in members
     assert "py_dlpack_runtime.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_dlpack_runtime.o"}
     for symbol in (
         "pcc_dlpack_buffer_handle_packet_size",
@@ -2065,7 +2065,7 @@ def test_dlpack_runtime_is_owned_by_pcc_python(
 
 def test_pcc_python_dlpack_capsule_roundtrip_and_one_shot_release(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = tmp_path / "dlpack_runtime_probe.c"
     executable = tmp_path / "dlpack_runtime_probe"
@@ -2137,10 +2137,10 @@ int main(void) {
         [
             "clang",
             "-std=c11",
-            f"-I{REPO / 'pcc' / 'py_runtime' / 'include'}",
-            f"-I{REPO / 'pcc' / 'py_runtime' / 'src'}",
+            f"-I{REPO / 'pcc' / 'runtime' / 'include'}",
+            f"-I{REPO / 'pcc' / 'runtime' / 'src'}",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-pthread",
             "-o",
             str(executable),
@@ -2161,7 +2161,7 @@ int main(void) {
 
 def test_pcc_python_dlpack_nbytes_preserves_u64_overflow_rules(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = tmp_path / "dlpack_nbytes_probe.c"
     executable = tmp_path / "dlpack_nbytes_probe"
@@ -2203,7 +2203,7 @@ int main(void) {
             "clang",
             "-std=c11",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-pthread",
             "-o",
             str(executable),
@@ -2223,22 +2223,22 @@ int main(void) {
 
 
 def test_runtime_log_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    members = _archive_members(pcc_py_runtime_archive)
-    assert "pcc_runtime_log.o" not in members
+    members = _archive_members(pcc_runtime_archive)
+    assert "pcc_diagnostics_runtime_log.o" not in members
     assert "py_runtime_log.o" in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_runtime_log.o"}
     for symbol in (
-        "pcc_runtime_log_fast_state",
+        "pcc_diagnostics_runtime_log_fast_state",
         "pcc_runtime_now_us",
         "pcc_runtime_monotonic_us",
         "pcc_runtime_sleep_ns",
-        "pcc_runtime_log_enabled",
-        "pcc_runtime_log_event",
-        "pcc_runtime_log_event_code",
+        "pcc_diagnostics_runtime_log_enabled",
+        "pcc_diagnostics_runtime_log_event",
+        "pcc_diagnostics_runtime_log_event_code",
         "pcc_runtime_tripwire_fail",
     ):
         assert owners[symbol] == expected_owner
@@ -2246,7 +2246,7 @@ def test_runtime_log_is_owned_by_pcc_python(
 
 def test_pcc_python_runtime_log_json_text_and_channel_filtering(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = tmp_path / "runtime_log_pcc_python_probe.c"
     executable = tmp_path / "runtime_log_pcc_python_probe"
@@ -2255,15 +2255,15 @@ def test_pcc_python_runtime_log_json_text_and_channel_filtering(
 #include "py_runtime.h"
 #include <stdint.h>
 
-void pcc_runtime_log_event_code(
+void pcc_diagnostics_runtime_log_event_code(
     int32_t category, int32_t event, int64_t value0, int64_t value1,
     const void *pointer
 );
 
 int main(void) {
-    pcc_runtime_log_event_code(1, 2, INT64_MIN, 17, (void *)(uintptr_t)0x1234);
-    pcc_runtime_log_event_code(2, 3, 5, -9, 0);
-    pcc_runtime_log_event_code(6, 3, 99, 100, 0);
+    pcc_diagnostics_runtime_log_event_code(1, 2, INT64_MIN, 17, (void *)(uintptr_t)0x1234);
+    pcc_diagnostics_runtime_log_event_code(2, 3, 5, -9, 0);
+    pcc_diagnostics_runtime_log_event_code(6, 3, 99, 100, 0);
     return 0;
 }
 ''',
@@ -2273,9 +2273,9 @@ int main(void) {
         [
             "clang",
             "-std=c11",
-            f"-I{REPO / 'pcc' / 'py_runtime' / 'include'}",
+            f"-I{REPO / 'pcc' / 'runtime' / 'include'}",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-pthread",
             "-o",
             str(executable),
@@ -2334,15 +2334,15 @@ int main(void) {
 
 
 def test_c_api_exception_runtime_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyExc_* singletons and the PyErr_* error surface must be owned by
     the pcc-Python exception module, not by the C shim."""
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_capi_exc_runtime.o" in members
     assert "py_capi_compat.o" not in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_exc_runtime.o"}
     for symbol in (
         "PyExc_ValueError",
@@ -2409,14 +2409,14 @@ def test_c_api_exception_runtime_is_owned_by_pcc_python(
 
 
 def test_c_api_exception_singletons_are_distinct_data_symbols(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyExc_* pointer globals must be linker-visible data symbols whose
     values are distinct sentinel addresses.  A C-extension's
     ``extern PyObject *PyExc_ValueError;`` resolves to them, so the shim's
     pointer-equality chain in pcc_capi_exception_tag stays correct."""
     result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -2634,7 +2634,7 @@ int main(void) {
         [
             "clang",
             "-std=c11",
-            f"-I{REPO / 'pcc' / 'py_runtime' / 'include'}",
+            f"-I{REPO / 'pcc' / 'runtime' / 'include'}",
             str(source),
             str(archive),
             "-pthread",
@@ -2651,12 +2651,12 @@ int main(void) {
 
 def test_c_api_exception_surface_raises_and_catches_from_native(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """A C probe linked against the production pcc-Python archive must be able
     to raise via the PyErr_* ABI and match/catch it, proving the pcc-Python
     owner is behaviorally correct, not just symbol-correct."""
-    executable = _build_exception_probe(tmp_path, pcc_py_runtime_archive, "exc_probe")
+    executable = _build_exception_probe(tmp_path, pcc_runtime_archive, "exc_probe")
     run = subprocess.run(
         [str(executable)],
         capture_output=True,
@@ -2668,7 +2668,7 @@ def test_c_api_exception_surface_raises_and_catches_from_native(
 
 def test_c_api_exception_surface_format_text_is_exact(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """PyErr_Format / PyUnicode_FromFormat must reproduce the C shim's
     %-mini-language byte-for-byte (integers, pointers, floats, objects)."""
@@ -2746,9 +2746,9 @@ int main(void) {
         [
             "clang",
             "-std=c11",
-            f"-I{REPO / 'pcc' / 'py_runtime' / 'include'}",
+            f"-I{REPO / 'pcc' / 'runtime' / 'include'}",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-pthread",
             "-o",
             str(executable),
@@ -2768,14 +2768,14 @@ int main(void) {
 
 
 def test_c_api_dict_runtime_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyDict_* surface must be owned by the pcc-Python dict module."""
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_capi_dict_runtime.o" in members
     assert "py_capi_compat.o" not in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_dict_runtime.o"}
     for symbol in (
         "PyDict_New",
@@ -2809,7 +2809,7 @@ def test_c_api_dict_runtime_is_owned_by_pcc_python(
 
 def test_c_api_dict_surface_inserts_looks_up_and_iterates(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """A native probe must insert, look up (borrowed and owned), default,
     pop, delete, iterate, merge, copy, and clear through the pcc-Python
@@ -2930,9 +2930,9 @@ int main(void) {
         [
             "clang",
             "-std=c11",
-            f"-I{REPO / 'pcc' / 'py_runtime' / 'include'}",
+            f"-I{REPO / 'pcc' / 'runtime' / 'include'}",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-pthread",
             "-o",
             str(executable),
@@ -2952,15 +2952,15 @@ int main(void) {
 
 
 def test_c_api_object_runtime_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The simple PyObject_* basics must be owned by the pcc-Python object
     module, not by the C shim."""
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_capi_object_runtime.o" in members
     assert "py_capi_compat.o" not in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_object_runtime.o"}
     for symbol in (
         "PyObject_Type",
@@ -2993,7 +2993,7 @@ def test_c_api_object_runtime_is_owned_by_pcc_python(
 
 def test_c_api_object_basics_operate_on_native_objects(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """A native probe must exercise type, truth, str/repr, hash, size, item
     access, iteration, rich comparison, isinstance, weakref invalidation,
@@ -3111,9 +3111,9 @@ int main(void) {
         [
             "clang",
             "-std=c11",
-            f"-I{REPO / 'pcc' / 'py_runtime' / 'include'}",
+            f"-I{REPO / 'pcc' / 'runtime' / 'include'}",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-pthread",
             "-o",
             str(executable),
@@ -3133,15 +3133,15 @@ int main(void) {
 
 
 def test_c_api_type_tokens_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The 24 builtin Py*_Type recognition tokens must be pcc-Python data
     symbols in py_capi_type_runtime.o, not C shim globals."""
-    members = _archive_members(pcc_py_runtime_archive)
+    members = _archive_members(pcc_runtime_archive)
     assert "py_capi_type_runtime.o" in members
     assert "py_capi_compat.o" not in members
 
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_type_runtime.o"}
     for symbol in (
         "PyType_Type",
@@ -3172,10 +3172,10 @@ def test_c_api_type_tokens_are_owned_by_pcc_python(
 
 
 def test_c_api_type_bridge_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The pcc_capi_type family must be owned by py_capi_type_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_type_runtime.o"}
     for symbol in (
         "pcc_capi_type",
@@ -3197,7 +3197,7 @@ def test_c_api_type_bridge_is_owned_by_pcc_python(
 
 def test_c_api_type_tokens_are_distinct_and_ready(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """A native probe must read the pcc-Python token globals: distinct
     addresses, tp_name pointing at the right string, tp_flags carrying READY,
@@ -3265,9 +3265,9 @@ int main(void) {
         [
             "clang",
             "-std=c11",
-            f"-I{REPO / 'pcc' / 'py_runtime' / 'include'}",
+            f"-I{REPO / 'pcc' / 'runtime' / 'include'}",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-pthread",
             "-o",
             str(executable),
@@ -3287,10 +3287,10 @@ int main(void) {
 
 
 def test_c_api_complex_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """All scalar and two-f64 aggregate PyComplex_* symbols are pcc-Python."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_type_runtime.o"}
     for symbol in (
         "PyComplex_FromDoubles",
@@ -3305,11 +3305,11 @@ def test_c_api_complex_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_trivial_bridge_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """PyMutex/PyGILState/PyOS trivial bridge must be owned by
     py_capi_type_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_type_runtime.o"}
     for symbol in (
         "PyMutex_Lock",
@@ -3325,11 +3325,11 @@ def test_c_api_trivial_bridge_is_owned_by_pcc_python(
 
 
 def test_c_api_unicode_thin_wrappers_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The thin PyUnicode_* wrappers must be owned by py_capi_unicode_runtime.o.
     The decoding/search/format engines stay in the C shim for later slices."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_unicode_runtime.o"}
     for symbol in (
         "PyUnicode_FromString",
@@ -3364,10 +3364,10 @@ def test_c_api_unicode_thin_wrappers_are_owned_by_pcc_python(
 
 
 def test_c_api_capsule_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyCapsule_* surface must be owned by py_capi_capsule_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_capsule_runtime.o"}
     for symbol in (
         "PyCapsule_New",
@@ -3392,10 +3392,10 @@ def test_c_api_capsule_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_set_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PySet_* / PyAnySet_* surface must be owned by py_capi_set_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_set_runtime.o"}
     for symbol in (
         "PySet_New",
@@ -3412,10 +3412,10 @@ def test_c_api_set_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_misc_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The small misc C-API surface must be owned by py_capi_misc_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_misc_runtime.o"}
     for symbol in (
         "PyException_SetCause",
@@ -3430,10 +3430,10 @@ def test_c_api_misc_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_cfunction_accessors_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyCFunction_* accessors must be owned by py_capi_cfunction_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_cfunction_runtime.o"}
     for symbol in (
         "PyCFunction_GetFunction",
@@ -3444,12 +3444,12 @@ def test_c_api_cfunction_accessors_are_owned_by_pcc_python(
 
 
 def test_c_api_type_core_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyType core (Ready/Alloc/New/FromSpec/GetSlot/GetFlags/Modified)
     must be owned by py_capi_type_runtime.o.  The module-state pair stays in
     the C shim until the PyModule registry migrates."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_type_runtime.o"}
     for symbol in (
         "PyType_Ready",
@@ -3464,12 +3464,12 @@ def test_c_api_type_core_is_owned_by_pcc_python(
 
 
 def test_c_api_object_call_core_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The non-variadic PyObject_Call core must be owned by
     py_capi_object_call_runtime.o.  The variadic CallFunctionObjArgs /
     CallMethod* family stays in the C shim."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_object_call_runtime.o"}
     for symbol in (
         "PyObject_Call",
@@ -3481,11 +3481,11 @@ def test_c_api_object_call_core_is_owned_by_pcc_python(
 
 
 def test_c_api_method_bridge_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The C-extension method bridge (call entry, wrapper, list.sort bridge)
     must be owned by py_capi_method_bridge_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_method_bridge_runtime.o"}
     for symbol in (
         "pcc_capi_builtin_object_getattr",
@@ -3497,10 +3497,10 @@ def test_c_api_method_bridge_is_owned_by_pcc_python(
 
 
 def test_c_api_object_attr_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyObject attr surface must be owned by py_capi_object_attr_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_object_attr_runtime.o"}
     for symbol in (
         "PyObject_GetAttr",
@@ -3518,10 +3518,10 @@ def test_c_api_object_attr_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_number_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyNumber_* surface must be owned by py_capi_number_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_number_runtime.o"}
     for symbol in (
         "PyNumber_Check",
@@ -3551,10 +3551,10 @@ def test_c_api_number_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_sequence_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PySequence_* surface must be owned by py_capi_sequence_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_sequence_runtime.o"}
     for symbol in (
         "PySequence_Check",
@@ -3577,10 +3577,10 @@ def test_c_api_sequence_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_mapping_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyMapping_* surface must be owned by py_capi_mapping_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_mapping_runtime.o"}
     for symbol in (
         "PyMapping_Check",
@@ -3602,29 +3602,29 @@ def test_c_api_mapping_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_import_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyImport_* surface must be owned by py_capi_import_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_import_runtime.o"}
     for symbol in ("PyImport_ImportModule", "PyImport_Import"):
         assert owners[symbol] == expected_owner, symbol
 
 
 def test_c_api_slice_adjust_indices_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """PySlice_AdjustIndices must be owned by py_capi_sequence_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     assert owners["PySlice_AdjustIndices"] == {"py_capi_sequence_runtime.o"}
 
 
 def test_c_api_unicode_search_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyUnicode_Count/Find/FindChar/ReadChar surface must be owned by
     py_capi_unicode_search_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_unicode_search_runtime.o"}
     for symbol in (
         "PyUnicode_Count",
@@ -3636,21 +3636,21 @@ def test_c_api_unicode_search_is_owned_by_pcc_python(
 
 
 def test_c_api_unicode_new_kind_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """PyUnicode_New/KIND must be owned by py_capi_unicode_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_unicode_runtime.o"}
     for symbol in ("PyUnicode_New", "PyUnicode_KIND"):
         assert owners[symbol] == expected_owner, symbol
 
 
 def test_c_api_unicode_writer_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyUnicodeWriter_* surface must be owned by
     py_capi_unicode_writer_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_unicode_writer_runtime.o"}
     for symbol in (
         "PyUnicodeWriter_Create",
@@ -3665,11 +3665,11 @@ def test_c_api_unicode_writer_is_owned_by_pcc_python(
 
 
 def test_c_api_buffer_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyObject_CheckBuffer/GetBuffer + PyMemoryView_* surface must be
     owned by py_capi_buffer_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_buffer_runtime.o"}
     for symbol in (
         "PyObject_CheckBuffer",
@@ -3689,22 +3689,22 @@ def test_c_api_buffer_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_generic_alias_and_tuple_slice_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """Py_GenericAlias / PyTuple_GetSlice must be owned by
     py_capi_misc_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_misc_runtime.o"}
     for symbol in ("Py_GenericAlias", "PyTuple_GetSlice"):
         assert owners[symbol] == expected_owner, symbol
 
 
 def test_c_api_module_attr_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyModule_GetDict/Add* surface must be owned by
     py_capi_module_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_module_runtime.o"}
     for symbol in (
         "PyModule_GetDict",
@@ -3718,11 +3718,11 @@ def test_c_api_module_attr_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_cext_dispatch_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The C-extension slot dispatch helpers must be owned by
     py_capi_cext_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_cext_runtime.o"}
     for symbol in (
         "pcc_capi_cext_object_iter",
@@ -3745,23 +3745,23 @@ def test_c_api_cext_dispatch_is_owned_by_pcc_python(
 
 
 def test_c_api_sys_getobject_and_unicode_format_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """PySys_GetObject / PyUnicode_Format must be owned by
     py_capi_misc_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_misc_runtime.o"}
     for symbol in ("PySys_GetObject", "PyUnicode_Format"):
         assert owners[symbol] == expected_owner, symbol
 
 
 def test_c_api_module_state_registry_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The module-state registry + PyModule_Create2/GetState +
     PyType_GetModule(ByDef)/FromModuleAndSpec must be owned by
     py_capi_module_state_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_module_state_runtime.o"}
     for symbol in (
         "pcc_capi_find_module_state",
@@ -3776,11 +3776,11 @@ def test_c_api_module_state_registry_is_owned_by_pcc_python(
 
 
 def test_c_api_module_loader_and_misc_helpers_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """Module loader + dealloc/set_type/unicode_read/GET_BASE helpers must be
     owned by their pcc-Python modules."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     assert owners["pcc_capi_module_from_def"] == {"py_capi_module_state_runtime.o"}
     assert owners["pcc_capi_module_run_exec_slots"] == {"py_capi_module_state_runtime.o"}
     assert owners["pcc_capi_module_exec"] == {"py_capi_module_state_runtime.o"}
@@ -3793,11 +3793,11 @@ def test_c_api_module_loader_and_misc_helpers_are_owned_by_pcc_python(
 
 
 def test_c_api_private_helpers_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The _PyObject_New/NewVar/GC_New/_PyDict_GetItem_KnownHash helpers must
     be owned by py_capi_private_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_private_runtime.o"}
     for symbol in (
         "PyObject_New",
@@ -3809,11 +3809,11 @@ def test_c_api_private_helpers_are_owned_by_pcc_python(
 
 
 def test_c_api_slice_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """PySlice_New / PySlice_GetIndicesEx + the slice type callbacks must be
     owned by py_capi_slice_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_slice_runtime.o"}
     for symbol in (
         "PySlice_New",
@@ -3825,11 +3825,11 @@ def test_c_api_slice_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_seqiter_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """PySeqIter_New + seqiter type callbacks must be owned by
     py_capi_seqiter_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_seqiter_runtime.o"}
     for symbol in (
         "PySeqIter_New",
@@ -3842,11 +3842,11 @@ def test_c_api_seqiter_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_contextvar_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """PyContextVar_New/Get/Set must be owned by
     py_capi_contextvar_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_contextvar_runtime.o"}
     for symbol in (
         "PyContextVar_New",
@@ -3859,11 +3859,11 @@ def test_c_api_contextvar_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_call_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyObject_CallMethod/CallFunction family must be owned by
     py_capi_call_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_call_runtime.o"}
     for symbol in (
         "PyObject_CallMethodNoArgs",
@@ -3877,10 +3877,10 @@ def test_c_api_call_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_arg_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The PyArg_* surface must be owned by py_capi_arg_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_arg_runtime.o"}
     for symbol in (
         "PyArg_ParseTuple",
@@ -3892,30 +3892,30 @@ def test_c_api_arg_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_str_conv_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """PyFloat_FromString / PyLong_FromUnicodeObject must be owned by
     py_capi_str_conv_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_str_conv_runtime.o"}
     for symbol in ("PyFloat_FromString", "PyLong_FromUnicodeObject"):
         assert owners[symbol] == expected_owner, symbol
 
 
 def test_c_api_import_helpers_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """py_builtin_import must be owned by py_capi_import_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     assert owners["py_builtin_import"] == {"py_capi_import_runtime.o"}
 
 
 def test_c_api_generic_attr_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """PyObject_GenericGetAttr/SetAttr/GetDict must be owned by
     py_capi_cext_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_cext_runtime.o"}
     for symbol in (
         "PyObject_GenericGetAttr",
@@ -3926,38 +3926,38 @@ def test_c_api_generic_attr_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_member_slot_helpers_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """pcc_capi_member_get / pcc_capi_object_dict_slot must be owned by
     py_capi_cext_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_cext_runtime.o"}
     for symbol in ("pcc_capi_member_get", "pcc_capi_object_dict_slot"):
         assert owners[symbol] == expected_owner, symbol
 
 
 def test_c_api_hash_double_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """_Py_HashDouble must be owned by py_capi_cext_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     assert owners["Py_HashDouble"] == {"py_capi_cext_runtime.o"}
 
 
 def test_c_api_buildvalue_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """Py_BuildValue must be owned by py_capi_buildvalue_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     assert owners["Py_BuildValue"] == {"py_capi_buildvalue_runtime.o"}
 
 
 def test_c_api_type_descriptor_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The type-descriptor walk + call entries must be owned by
     py_capi_type_descriptor_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_type_descriptor_runtime.o"}
     for symbol in (
         "pcc_capi_type_object_getattr",
@@ -3969,10 +3969,10 @@ def test_c_api_type_descriptor_is_owned_by_pcc_python(
 
 
 def test_c_api_visit_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The GC object-slot visit surface must be owned by py_capi_visit_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_visit_runtime.o"}
     for symbol in (
         "pcc_capi_visit_slot",
@@ -3985,10 +3985,10 @@ def test_c_api_visit_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_errno_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """PyErr_SetFromErrno must be owned by py_capi_misc_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_misc_runtime.o"}
     for symbol in (
         "PyErr_SetFromErrno",
@@ -4006,16 +4006,16 @@ def test_c_api_errno_surface_is_owned_by_pcc_python(
     ):
         assert owners[symbol] == {"freestanding_errno.o"}, symbol
 
-    undefined = _undefined_symbol_users(pcc_py_runtime_archive)
+    undefined = _undefined_symbol_users(pcc_runtime_archive)
     assert owners.get("pcc_capi_errno_message", set()) == set()
     assert undefined.get("pcc_capi_errno_message", set()) == set()
 
 
 def test_c_api_print_surface_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """PyObject_Print must be owned by py_capi_misc_runtime.o."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected_owner = {"py_capi_misc_runtime.o"}
     assert owners["PyObject_Print"] == expected_owner
     assert owners["pcc_capi_file_write"] == expected_owner
@@ -4023,28 +4023,28 @@ def test_c_api_print_surface_is_owned_by_pcc_python(
 
 
 def test_c_api_getbuffer_is_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The pcc-Python owner must replace the transitional TLS helper."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
-    undefined = _undefined_symbol_users(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
+    undefined = _undefined_symbol_users(pcc_runtime_archive)
     assert owners["pcc_PyMemoryView_GET_BUFFER"] == {"py_capi_buffer_runtime.o"}
     assert owners.get("pcc_capi_memoryview_tls_buffer", set()) == set()
     assert undefined.get("pcc_capi_memoryview_tls_buffer", set()) == set()
 
 
 def test_c_api_compat_object_is_absent(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The C shim remains an oracle source, never a production member."""
-    assert "py_capi_compat.o" not in _archive_members(pcc_py_runtime_archive)
+    assert "py_capi_compat.o" not in _archive_members(pcc_runtime_archive)
 
 
 def test_c_api_recovered_drift_symbols_are_owned_by_pcc_python(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """C-API reachability additions must not silently regrow compat C."""
-    owners = _defined_symbol_owners(pcc_py_runtime_archive)
+    owners = _defined_symbol_owners(pcc_runtime_archive)
     expected = {
         "pcc_py_type_of": "py_capi_core_runtime.o",
         "PyEval_GetBuiltins": "py_capi_core_runtime.o",
@@ -4062,7 +4062,7 @@ def test_c_api_recovered_drift_symbols_are_owned_by_pcc_python(
     }
     for symbol, owner in expected.items():
         assert owners.get(symbol) == {owner}, symbol
-    undefined = _undefined_symbol_users(pcc_py_runtime_archive)
+    undefined = _undefined_symbol_users(pcc_runtime_archive)
     assert owners.get("pcc_capi_call_int_conversion_slot", set()) == set()
     assert undefined.get("pcc_capi_call_int_conversion_slot", set()) == set()
 
@@ -4084,7 +4084,7 @@ def test_capi_runtime_modules_have_no_unimported_unsafe_intrinsics() -> None:
     }
     bad: list[str] = []
     modules = sorted(
-        (REPO_ROOT / "pcc" / "py_runtime" / "py").glob("py_capi_*_runtime.py")
+        (REPO_ROOT / "pcc" / "runtime" / "py").glob("py_capi_*_runtime.py")
     )
     for module in modules:
         tree = ast.parse(module.read_text(encoding="utf-8"))
@@ -4130,7 +4130,7 @@ def test_capi_runtime_modules_import_every_extern_marker_they_use() -> None:
 
     bad: list[str] = []
     modules = sorted(
-        (REPO_ROOT / "pcc" / "py_runtime" / "py").glob("py_capi_*_runtime.py")
+        (REPO_ROOT / "pcc" / "runtime" / "py").glob("py_capi_*_runtime.py")
     )
     for module in modules:
         tree = ast.parse(module.read_text(encoding="utf-8"))
@@ -4152,7 +4152,7 @@ def test_capi_runtime_modules_import_every_extern_marker_they_use() -> None:
 
 
 def test_libpython_variant_has_no_capi_compat_shadow(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The variant retains pcc internals but never the removed C compat shim.
 
@@ -4160,7 +4160,7 @@ def test_libpython_variant_has_no_capi_compat_shadow(
     link boundary; deleting their archive members would also delete internal
     pcc object-model behavior.
     """
-    variant = pcc_py_runtime_archive.parent / "libpy_runtime_pcc_py_libpython.a"
+    variant = pcc_runtime_archive.parent / "libpy_runtime_pcc_py_libpython.a"
     if not variant.is_file():
         return  # variant not built in this test run
     members = _archive_members(variant)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def test_object_local_rebind_updates_codegen_type_for_augassign_self_backend(tmp_path):

@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python
-from pcc.py_frontend.pipeline_modes import PyPipelineError
+from pcc.frontends.python.pipeline import compile_python
+from pcc.frontends.python.pipeline_modes import PyPipelineError
 
 
 def _compile(tmp_path: Path, name: str, source: str, run: bool) -> str:

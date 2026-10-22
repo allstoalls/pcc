@@ -9,7 +9,7 @@ in pcc-Python requires avoiding most of the Python language and
 standard library, even though "pcc is written in Python" is the whole
 point.
 
-Concrete symptoms hit while trying to clean up `pcc/llvm_capi/ir.py`:
+Concrete symptoms hit while trying to clean up `pcc/ir/ir.py`:
 
 1. **`import struct` / `import math` / `import dataclasses` etc. trigger
    libpython linkage.** The frontend treats any non-whitelisted import
@@ -44,7 +44,7 @@ pcc treats imports in three buckets:
 
 | bucket | examples | behaviour |
 |---|---|---|
-| **scaffold** | `pcc.extern`, `pcc.unsafe`, `pcc.llvm_capi` | compile-time only, no runtime IR |
+| **scaffold** | `pcc.extern`, `pcc.unsafe`, `pcc.ir` | compile-time only, no runtime IR |
 | **compile-time-only whitelist** | `__future__`, `typing`, `click` | folded by AST, no runtime IR |
 | **everything else** | `dataclasses`, `re`, `struct`, `math`, third-party | routed through `py_cpy_import` → CPython |
 
@@ -167,7 +167,7 @@ work to get there is real but bounded, and it should ideally come
 ## 2026-04-28 update — what landed, what we learned
 
 The three concrete asks from the original draft (native builtin
-dispatch, pcc/stdlib/ port registry, recursive multi-file compile)
+dispatch, pcc/ir/support/ port registry, recursive multi-file compile)
 all shipped under Issue 11. A follow-on dispatch wave that same day
 took the stage1 closure ON-mode total from ~10941 (per-module sum)
 down to 9906 by adding native lowerings for `os.environ.get`,
@@ -185,8 +185,8 @@ The session shook out a tier model for new runtime helpers:
 
 | tier | location | when |
 |---|---|---|
-| **A** pure pcc-Python | `pcc/py_runtime/py/*.py` | helper is value/string math; no syscalls |
-| **B** C-only substrate | `pcc/py_runtime/src/py_os_substrate.c` | helper needs platform-specific struct layout (`struct stat`) or syscall headers (`unistd.h`) — pcc-Python can't express |
+| **A** pure pcc-Python | `pcc/runtime/py/*.py` | helper is value/string math; no syscalls |
+| **B** C-only substrate | `pcc/runtime/src/py_os_substrate.c` | helper needs platform-specific struct layout (`struct stat`) or syscall headers (`unistd.h`) — pcc-Python can't express |
 | **C** dual-write | `src/X.c` + `py/X.py` | both flavours useful; the pcc-Python port replaces the cc one in `libpy_runtime_pcc_py.a` |
 
 There's no "compiler picks tier automatically" — each new helper is
@@ -336,7 +336,7 @@ fallbacks dropped from `1039 → 505` by:
   assigned from `ir.IRBuilder(...)` as IR scaffold receivers;
 - replacing the remaining `dataclasses.is_dataclass/fields` reflection
   in `layer1.py` with direct dataclass metadata access;
-- treating `pcc.llvm_capi.compat` as a compile-time scaffold only in
+- treating `pcc.ir.compat` as a compile-time scaffold only in
   `--ir-scaffold=on`, while preserving OFF-mode runtime imports;
 - lowering value-position `zip(...)` and `next(<genexpr>, default)`
   natively;
@@ -407,7 +407,7 @@ POSIX-ish splitter for link-flag strings; statement-only
 program argv0 so `os.path.dirname(sys.executable)` can stay on the
 native `os.path` path. Result: ON multi `322 → 286`, bridge calls
 `10 → 9`, non-bridge calls `312 → 277`. The same wave also treats
-`pcc.llvm_capi.compat` as a scaffold import for `runtime_abi.py` in
+`pcc.ir.compat` as a scaffold import for `runtime_abi.py` in
 OFF mode, because that module only needs IR type constructors; OFF
 multi drops `18283 → 17135` instead of raising the ABI-table ratchet.
 

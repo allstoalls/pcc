@@ -1,0 +1,47 @@
+{
+  "artifacts": {
+    "README.md": {
+      "bytes": 8099,
+      "sha256": "dab25f8ec40a5bc7acb3fc6e0755815e741d00506a3c664d1db8f31fe8dc6e04"
+    },
+    "candidate.patch": {
+      "bytes": 20398,
+      "sha256": "2ca9b9e218146135939be5358720115ac044ef7b4f6ae582005406405278e982"
+    }
+  },
+  "base_pcc_tree": "930263bf204e578796c72dab5d4aa31fd7ab27ae",
+  "base_production_commit": "bf1bf82d8242a60a85a06322ceee97fab5346cc0",
+  "base_source_inventory_sha256": "7430a30766c11a59e7185758b725b289388ae131498ce6a8a568bdf10ff773ba",
+  "execution": "UNRUN",
+  "files": [
+    {
+      "base_bytes": 71082,
+      "base_sha256": "2c71d952927362c219c2539478fb477b7dfae51561076d27b7675b73f623d100",
+      "mode": "100644",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "post_bytes": 73423,
+      "post_sha256": "49403685d7beaf24b9db20a9539118fe2c5f7b56cda90bdf4960e878fa44dddb"
+    },
+    {
+      "base_bytes": null,
+      "base_sha256": null,
+      "mode": "100644",
+      "path": "tests/python/test_aarch64_allocator_slot_exclusion.py",
+      "post_bytes": 16171,
+      "post_sha256": "4bcf78fc949aa3a2e903e4cdf82c099ede4b678965f24115a5cca6a99b30d591"
+    }
+  ],
+  "native_closed_world": "UNRUN",
+  "performance_and_real_module_coverage": "UNRUN",
+  "schema": "pcc-unapplied-arm-allocator-slot-exclusion-v1",
+  "source_proof_sha256": {
+    "pcc/backend/self_backend_aarch64_darwin.py": "fe3c14c169ab9b1af2852c7a0753c2d956826dd27d827eb1a96649ec5a759233",
+    "pcc/backend/self_backend_aarch64_darwin_prologue.py": "3da82551b03fbbfe22933f95bda5c48780a324b816d06be68d6a6f23d693e98d",
+    "pcc/backend/self_backend_aarch64_darwin_regalloc.py": "2c71d952927362c219c2539478fb477b7dfae51561076d27b7675b73f623d100",
+    "pcc/backend/self_backend_kernel.py": "021d6add950632188eefa65195338f9ab7ec6aef0b396a71b5cc170a67fc822d",
+    "pcc/backend/self_backend_stackprep.py": "fae5e2c2384caf652da26aa7f6e1dfe0fc48a1011e80c1e981ddae060df714f9",
+    "pcc/backend/self_backend_value_arena.py": "d6e98642a2c653e34ba7bf7831601187d63a3502d1773ae401850503bec41caa"
+  },
+  "static_host_case_count": 44,
+  "status": "SOURCE_ONLY_REVIEW_PENDING_ALL_EXECUTION_UNRUN"
+}

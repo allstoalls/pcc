@@ -9,12 +9,12 @@ import sys
 
 
 REPO = Path(__file__).resolve().parents[2]
-MIRROR_SOURCE = REPO / "pcc" / "py_runtime" / "py" / "py_io_waitset.py"
+MIRROR_SOURCE = REPO / "pcc" / "runtime" / "py" / "py_io_waitset.py"
 PRODUCTION_SOURCE = (
-    REPO / "pcc" / "py_runtime" / "py" / "freestanding_io_waitset.py"
+    REPO / "pcc" / "runtime" / "py" / "freestanding_io_waitset.py"
 )
 UNSAFE_LOWERING_SOURCE = (
-    REPO / "pcc" / "py_frontend" / "codegen" / "unsafe_lowering.py"
+    REPO / "pcc" / "frontends" / "python" / "codegen" / "unsafe_lowering.py"
 )
 
 
@@ -118,7 +118,7 @@ def test_production_epoll_surface_owns_live_syscalls_and_generation() -> None:
 
 
 def test_compiler_owns_epoll_syscall_lowering() -> None:
-    from pcc.py_frontend.codegen.unsafe_lowering import UNSAFE_INTRINSICS
+    from pcc.frontends.python.codegen.unsafe_lowering import UNSAFE_INTRINSICS
 
     assert {
         "epoll_create1",
@@ -140,7 +140,7 @@ def test_compiler_owns_epoll_syscall_lowering() -> None:
 
 
 def test_production_archive_exports_backend_labels_and_live_epoll(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ) -> None:
     source = tmp_path / "gateway_waitset_backend_probe.c"
     executable = tmp_path / "gateway_waitset_backend_probe"
@@ -195,9 +195,9 @@ int main(void) {
     built = subprocess.run(
         [
             "clang",
-            f"-I{REPO / 'pcc' / 'py_runtime' / 'src'}",
+            f"-I{REPO / 'pcc' / 'runtime' / 'src'}",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(executable),
@@ -214,7 +214,7 @@ int main(void) {
 
 
 def test_live_waitset_retries_eintr_against_absolute_deadline(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ) -> None:
     source = tmp_path / "gateway_waitset_eintr_probe.c"
     executable = tmp_path / "gateway_waitset_eintr_probe"
@@ -294,9 +294,9 @@ int main(void) {
     built = subprocess.run(
         [
             "clang",
-            f"-I{REPO / 'pcc' / 'py_runtime' / 'src'}",
+            f"-I{REPO / 'pcc' / 'runtime' / 'src'}",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(executable),

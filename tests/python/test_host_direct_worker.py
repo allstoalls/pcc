@@ -1,7 +1,7 @@
 """The host direct worker must use the same instruction owner as pcc1."""
 
 from pcc.backend import self_backend_aarch64_darwin as emitter
-from pcc.py_frontend import pipeline, pipeline_frontend_workers as workers
+from pcc.frontends.python import pipeline, pipeline_frontend_workers as workers
 
 
 def test_host_worker_emits_final_native_instructions(tmp_path, monkeypatch):

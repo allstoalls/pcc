@@ -11,7 +11,7 @@ import zlib as host_zlib
 
 import pytest
 
-from pcc.py_stdlib._compression_stream import DecompressReader
+from pcc.stdlib._compression_stream import DecompressReader
 
 
 class _RecordingSource:

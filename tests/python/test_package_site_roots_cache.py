@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-from pcc import package_environment
-from pcc.py_frontend import pipeline_packages
+from pcc.package import environment as package_environment
+from pcc.frontends.python import pipeline_packages
 
 
 def test_site_roots_resolve_once_per_environment(monkeypatch, tmp_path):

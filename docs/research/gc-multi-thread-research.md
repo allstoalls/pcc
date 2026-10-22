@@ -108,11 +108,11 @@ infrastructure at all**.
 
 ```bash
 # pthread bindings
-grep "pthread_create\|pthread_join\|pthread_mutex" pcc/py_runtime + codegen + stdlib
+grep "pthread_create\|pthread_join\|pthread_mutex" pcc/runtime + codegen + stdlib
 # → 0 hits
 
 # atomic ops in pcc's own runtime
-grep "__atomic_\|atomic_fetch\|stdatomic" pcc/py_runtime
+grep "__atomic_\|atomic_fetch\|stdatomic" pcc/runtime
 # → 1 hit, only in py_libpython.c (CPython bridge)
 
 # GIL or equivalent
@@ -120,11 +120,11 @@ grep "PyGIL\|pcc_gil\|gil_take" pcc/
 # → 0 hits
 
 # threading module native dispatch
-grep '"threading"' pcc/py_frontend/codegen/layer1.py
+grep '"threading"' pcc/frontends/python/codegen/layer1.py
 # → 0 hits
 ```
 
-`pcc/py_runtime/src/py_obj.c:125` shows refcount is non-atomic:
+`pcc/runtime/src/py_obj.c:125` shows refcount is non-atomic:
 
 ```c
 void py_incref(PyObject *o) { ... h->refcount++; }
@@ -134,7 +134,7 @@ void py_decref(PyObject *o) { ... if (--h->refcount > 0) return; }
 Two threads running decref simultaneously on the same object → race
 → double-free or leaked refcount.
 
-`pcc/py_stdlib/concurrent.py:1` is explicit:
+`pcc/stdlib/concurrent.py:1` is explicit:
 
 > "sequential-fallback `concurrent.futures` skeleton ... For self-host
 > we degrade to sequential execution"
@@ -710,11 +710,11 @@ pcc runtime tree:
 
 | pcc path | role |
 |---|---|
-| `pcc/py_runtime/src/pcc_threads.c` | Shared single-thread/pthread substrate: stable thread id, atomic refcount helpers, mutex/cond wrappers, safepoint, STW gate. |
-| `pcc/py_runtime/src/py_obj.c::pcc_gc_safepoint` | Polls `pcc_thread_safepoint()` before advancing backend work. |
-| `pcc/py_runtime/src/py_obj_gc.c::py_gc_collect` | Backend #0 wraps the cycle-collector update/subtract/mark/dealloc phases in `pcc_stop_the_world()` / `pcc_resume_world()`. |
-| `pcc/py_runtime/src/py_gc_backend.c::pcc_gc_step` | Backend #3 polls `pcc_thread_safepoint()` at bounded young/remembered promotion boundaries. |
-| `pcc/py_runtime/py/py_obj.py`, `py_obj_gc.py`, `py_gc_backend.py` | pcc-Python runtime archive mirrors the same substrate calls so the no-libpython closure stays aligned with the C runtime. |
+| `pcc/runtime/src/pcc_threads.c` | Shared single-thread/pthread substrate: stable thread id, atomic refcount helpers, mutex/cond wrappers, safepoint, STW gate. |
+| `pcc/runtime/src/py_obj.c::pcc_gc_safepoint` | Polls `pcc_thread_safepoint()` before advancing backend work. |
+| `pcc/runtime/src/py_obj_gc.c::py_gc_collect` | Backend #0 wraps the cycle-collector update/subtract/mark/dealloc phases in `pcc_stop_the_world()` / `pcc_resume_world()`. |
+| `pcc/runtime/src/py_gc_backend.c::pcc_gc_step` | Backend #3 polls `pcc_thread_safepoint()` at bounded young/remembered promotion boundaries. |
+| `pcc/runtime/py/py_obj.py`, `py_obj_gc.py`, `py_gc_backend.py` | pcc-Python runtime archive mirrors the same substrate calls so the no-libpython closure stays aligned with the C runtime. |
 
 This is deliberately still below the Python `threading` API. It makes the
 single substrate visible to GC internals without adding a second runtime axis.
@@ -738,11 +738,11 @@ docs/refs_docs/gc-research/zgc/zRememberedSet.cpp — OpenJDK jdk-27+21 GenZGC r
 ## Appendix B — pcc current GC source paths
 
 ```
-pcc/py_runtime/src/py_obj_gc.c           — backend #0 cycle collector (484 lines)
-pcc/py_runtime/src/py_gc_index_table.c   — hash index (120 lines)
-pcc/py_runtime/src/py_gc_backend.c       — backends #1-#4 shared (682 lines)
-pcc/py_runtime/py/py_obj_gc.py           — pcc-Python port of #0 (609 lines)
-pcc/py_runtime/py/py_gc_backend.py       — pcc-Python port of #1-#4 (808 lines)
-pcc/py_runtime/include/py_runtime.h      — public ABI (pcc_gc_*)
-pcc/py_frontend/codegen/runtime_abi.py   — frontend ABI table for runtime helpers
+pcc/runtime/src/py_obj_gc.c           — backend #0 cycle collector (484 lines)
+pcc/runtime/src/py_gc_index_table.c   — hash index (120 lines)
+pcc/runtime/src/py_gc_backend.c       — backends #1-#4 shared (682 lines)
+pcc/runtime/py/py_obj_gc.py           — pcc-Python port of #0 (609 lines)
+pcc/runtime/py/py_gc_backend.py       — pcc-Python port of #1-#4 (808 lines)
+pcc/runtime/include/py_runtime.h      — public ABI (pcc_gc_*)
+pcc/frontends/python/codegen/runtime_abi.py   — frontend ABI table for runtime helpers
 ```

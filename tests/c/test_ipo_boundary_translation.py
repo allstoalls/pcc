@@ -1,7 +1,7 @@
-from pcc.ast import c_ast
-from pcc.parse.c_parser import CParser
-from pcc.passes import PassContext
-from pcc.passes.ipo_boundary import DeadArgElimAnalysisPass, ElimAvailExternPass
+from pcc.frontends.c.ast import c_ast
+from pcc.frontends.c.parse.c_parser import CParser
+from pcc.frontends.c.passes import PassContext
+from pcc.frontends.c.passes.ipo_boundary import DeadArgElimAnalysisPass, ElimAvailExternPass
 
 
 def _parse(code: str):

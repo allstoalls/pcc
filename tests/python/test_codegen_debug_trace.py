@@ -8,17 +8,17 @@ import pytest
 
 from pcc.diagnostics import DiagnosticSpan
 from pcc1_gate import find_current_pcc1, skip_or_fail_no_current_pcc1
-from pcc.parse.py_lift import parse_and_lift
-from pcc.py_frontend import type_infer
-from pcc.py_frontend.codegen import layer1
-from pcc.py_frontend.codegen.errors import CodegenDiagnosticError
+from pcc.frontends.python.py_lift import parse_and_lift
+from pcc.frontends.python import type_infer
+from pcc.frontends.python.codegen import layer1
+from pcc.frontends.python.codegen.errors import CodegenDiagnosticError
 
 
 REPO = Path(__file__).absolute().parents[2]
 _PCC1 = find_current_pcc1(REPO)
 
 _UNSUPPORTED_SOURCE = """\
-from pcc.llvm_capi.compat import ir
+from pcc.ir.compat import ir
 
 def f():
     x = ir.Argument(1, 2)

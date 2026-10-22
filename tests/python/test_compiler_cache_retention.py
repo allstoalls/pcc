@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 
-from pcc.py_frontend import compile_cache
+from pcc.frontends.python import compile_cache
 from pcc.tools import compiler_cache_retention as retention
 
 
@@ -562,14 +562,14 @@ def test_manual_status_and_dry_run_cli_report_policy_and_victims(tmp_path: Path)
 
 def test_pipeline_cache_paths_carry_reader_and_publisher_leases() -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    pipeline_source = (repo_root / "pcc/py_frontend/pipeline.py").read_text(
+    pipeline_source = (repo_root / "pcc/frontends/python/pipeline.py").read_text(
         encoding="utf-8"
     )
     compile_cache_source = (
-        repo_root / "pcc/py_frontend/compile_cache.py"
+        repo_root / "pcc/frontends/python/compile_cache.py"
     ).read_text(encoding="utf-8")
     self_backend_host_source = (
-        repo_root / "pcc/py_frontend/pipeline_self_backend_host.py"
+        repo_root / "pcc/frontends/python/pipeline_self_backend_host.py"
     ).read_text(encoding="utf-8")
     assert "'.pcc-lease.'" in self_backend_host_source
     assert "'.pcc-last-used'" in self_backend_host_source

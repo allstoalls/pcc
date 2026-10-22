@@ -11,7 +11,7 @@ from tests.runtime_build_cache import cached_threaded_pcc_python_runtime
 
 
 REPO = Path(__file__).absolute().parents[2]
-RUNTIME = REPO / "pcc" / "py_runtime"
+RUNTIME = REPO / "pcc" / "runtime"
 
 
 def _compile_and_run(
@@ -80,7 +80,7 @@ def test_class_lookup_uses_relocation_safe_linear_walk() -> None:
 
 def test_class_lookup_preserves_shadowing_and_delete_epoch(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = r'''
         #include "py_internal.h"
@@ -142,7 +142,7 @@ def test_class_lookup_preserves_shadowing_and_delete_epoch(
     for backend in range(5):
         backend_source = source.replace("CACHE_BACKEND", str(backend))
         for runtime_name, archive in (
-            ("pcc_py", pcc_py_runtime_archive),
+            ("pcc_py", pcc_runtime_archive),
         ):
             result = _compile_and_run(
                 tmp_path,
@@ -158,7 +158,7 @@ def test_class_lookup_preserves_shadowing_and_delete_epoch(
 
 
 def test_exposing_mutable_class_attrs_invalidates_field_cache_epoch(
-    tmp_path: Path, pcc_py_runtime_archive: Path,
+    tmp_path: Path, pcc_runtime_archive: Path,
 ) -> None:
     source = r'''
         #include "py_internal.h"
@@ -170,10 +170,14 @@ def test_exposing_mutable_class_attrs_invalidates_field_cache_epoch(
             if (pcc_gc_set_backend(CACHE_BACKEND) != 0) return 1;
             PyClassObject *cls = py_class_new("Mutable", NULL, 0, NULL, 0);
             if (cls == NULL) return 2;
-            if (py_class_attrs_dict(cls, 0) != NULL) return 3;
             int32_t before = __atomic_load_n(
                 &py_class_attr_cache_epoch, __ATOMIC_ACQUIRE
             );
+            /* Every class owns its __doc__ entry from creation; reading the
+               namespace without asking for the mutable dict exposes nothing. */
+            if (py_class_attrs_dict(cls, 0) == NULL) return 3;
+            if (__atomic_load_n(&py_class_attr_cache_epoch, __ATOMIC_ACQUIRE)
+                != before) return 8;
             PyObject *attrs = py_class_attrs_dict(cls, 1);
             if (attrs == NULL) return 4;
             int32_t exposed = __atomic_load_n(
@@ -188,7 +192,7 @@ def test_exposing_mutable_class_attrs_invalidates_field_cache_epoch(
     '''
     for backend in range(5):
         for runtime_name, archive in (
-            ("pcc_py", pcc_py_runtime_archive),
+            ("pcc_py", pcc_runtime_archive),
         ):
             result = _compile_and_run(
                 tmp_path,
@@ -202,7 +206,7 @@ def test_exposing_mutable_class_attrs_invalidates_field_cache_epoch(
 
 
 def test_instance_field_cache_reloads_values_after_class_dict_exposure(
-    tmp_path: Path, pcc_py_runtime_archive: Path,
+    tmp_path: Path, pcc_runtime_archive: Path,
 ) -> None:
     source = r'''
         #include "py_internal.h"
@@ -243,7 +247,7 @@ def test_instance_field_cache_reloads_values_after_class_dict_exposure(
     '''
     for backend in range(5):
         for runtime_name, archive in (
-            ("pcc_py", pcc_py_runtime_archive),
+            ("pcc_py", pcc_runtime_archive),
         ):
             result = _compile_and_run(
                 tmp_path,
@@ -257,7 +261,7 @@ def test_instance_field_cache_reloads_values_after_class_dict_exposure(
 
 
 def test_user_instance_getattr_keeps_field_and_class_attrs(
-    tmp_path: Path, pcc_py_runtime_archive: Path,
+    tmp_path: Path, pcc_runtime_archive: Path,
 ) -> None:
     source = r'''
         #include "py_internal.h"
@@ -292,7 +296,7 @@ def test_user_instance_getattr_keeps_field_and_class_attrs(
     '''
     for backend in range(5):
         for runtime_name, archive in (
-            ("pcc_py", pcc_py_runtime_archive),
+            ("pcc_py", pcc_runtime_archive),
         ):
             result = _compile_and_run(
                 tmp_path,
@@ -307,7 +311,7 @@ def test_user_instance_getattr_keeps_field_and_class_attrs(
 
 def test_class_lookup_reloads_relocated_method_and_class(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = r'''
         #include "py_internal.h"
@@ -418,7 +422,7 @@ def test_class_lookup_reloads_relocated_method_and_class(
     for backend in (3, 4):
         backend_source = source.replace("RELOC_BACKEND", str(backend))
         for runtime_name, archive in (
-            ("pcc_py", pcc_py_runtime_archive),
+            ("pcc_py", pcc_runtime_archive),
         ):
             result = _compile_and_run(
                 tmp_path,
@@ -522,7 +526,7 @@ def test_class_lookup_concurrent_reads_are_stable_for_immutable_classes(
 
 def test_instance_field_cache_concurrent_reads_keep_name_and_index_together(
     tmp_path: Path,
-    threaded_pcc_py_runtime_archive: Path,
+    threaded_pcc_runtime_archive: Path,
 ) -> None:
     """The external C driver exercises the self-emitted runtime's field ABI."""
     source = r'''
@@ -586,14 +590,14 @@ def test_instance_field_cache_concurrent_reads_keep_name_and_index_together(
     '''
     result = _compile_and_run(
         tmp_path, "instance_field_cache_threads", source,
-        threaded_pcc_py_runtime_archive,
+        threaded_pcc_runtime_archive,
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_instance_field_cache_does_not_retain_a_borrowed_name_buffer(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = r'''
         #include "py_internal.h"
@@ -622,6 +626,6 @@ def test_instance_field_cache_does_not_retain_a_borrowed_name_buffer(
     '''
     result = _compile_and_run(
         tmp_path, "instance_field_cache_borrowed_name", source,
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
     )
     assert result.returncode == 0, result.stdout + result.stderr

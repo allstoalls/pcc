@@ -26,26 +26,26 @@ In the design space, pcc gives three coexisting answers to "in what form should 
 
 ### 2.2.1 The Installed Entry Point and the click Wrapper
 
-The `pcc` command installed by `pip install python-cc` is wired through `[project.scripts]` in [pyproject.toml](../../pyproject.toml) to `pcc.cli_launcher:main`. [pcc/cli_launcher.py](../../pcc/cli_launcher.py) is 22 lines in total:
+The `pcc` command installed by `pip install python-cc` is wired through `[project.scripts]` in [pyproject.toml](../../pyproject.toml) to `pcc.driver.cli_launcher:main`. [pcc/driver/cli_launcher.py](../../pcc/driver/cli_launcher.py) is 22 lines in total:
 
 ```python
-# pcc/cli_launcher.py
+# pcc/driver/cli_launcher.py
 def main(argv=None) -> int:
     if argv is None:
         argv = sys.argv[1:]
 
-    from pcc.cli_core import cli_main
+    from pcc.driver.cli_core import cli_main
 
     return cli_main(list(argv))
 ```
 
-Its docstring states a position outright: "The public command intentionally stays on the full CPython-hosted CLI. The native bootstrap compiler is exposed separately as `pcc1`." The public command runs on the host CPython with the full CLI; the native bootstrap compiler is shipped separately as `pcc1` (the wheel build hook `hatch_build.py` self-compiles [pcc/__main__.py](../../pcc/__main__.py) to produce a native `pcc1` that travels with the wheel). The launcher does exactly one thing: forward to `cli_main` in [pcc/cli_core.py](../../pcc/cli_core.py).
+Its docstring states a position outright: "The public command intentionally stays on the full CPython-hosted CLI. The native bootstrap compiler is exposed separately as `pcc1`." The public command runs on the host CPython with the full CLI; the native bootstrap compiler is shipped separately as `pcc1` (the wheel build hook `hatch_build.py` self-compiles [pcc/__main__.py](../../pcc/__main__.py) to produce a native `pcc1` that travels with the wheel). The launcher does exactly one thing: forward to `cli_main` in [pcc/driver/cli_core.py](../../pcc/driver/cli_core.py).
 
 [pcc/pcc.py](../../pcc/pcc.py) is another thin shell: `_build_click_main()` performs a runtime `__import__("click")` and wraps `_click_entry` with click's decorators, one by one, into a command object with completion and help; when click is unavailable, it falls back to `_plain_main`, which is the same `cli_main`. The "decorators applied by hand inside a function" style is not a stylistic quirk — it makes click an optional dependency. Without it, the CLI works just the same.
 
 ### 2.2.2 The Hand-Written Argument Parser Is Written for the Bootstrap
 
-The real parsing logic lives in `parse_cli_args` in [pcc/cli_core.py](../../pcc/cli_core.py): a hand-written `while i < len(argv)` loop, two branches per flag (`--flag=value` and `--flag value`), returning one enormous tuple. No argparse, no click. The reason can be read off the details of the same file: the scoped environment-variable overrider `_temporary_env` is an explicit class rather than a `@contextmanager`, with a comment stating it is "to keep the self-host audit clean"; sequence copying uses a hand-written `_copy_seq` instead of the slicing idiom; strings are uniformly normalized with `(value or "") + ""`. These are the idioms of the bootstrap-compilable subset — `cli_core.py` belongs to the file set covered by the self-host audit ([scripts/audit_selfhost.py](../../scripts/audit_selfhost.py)) and is part of the target closure for pcc1 one day executing the C driver path natively, even though that step is not done today (the [README.md](../../README.md) status table lists it as future work).
+The real parsing logic lives in `parse_cli_args` in [pcc/driver/cli_core.py](../../pcc/driver/cli_core.py): a hand-written `while i < len(argv)` loop, two branches per flag (`--flag=value` and `--flag value`), returning one enormous tuple. No argparse, no click. The reason can be read off the details of the same file: the scoped environment-variable overrider `_temporary_env` is an explicit class rather than a `@contextmanager`, with a comment stating it is "to keep the self-host audit clean"; sequence copying uses a hand-written `_copy_seq` instead of the slicing idiom; strings are uniformly normalized with `(value or "") + ""`. These are the idioms of the bootstrap-compilable subset — `cli_core.py` belongs to the file set covered by the self-host audit ([scripts/audit_selfhost.py](../../scripts/audit_selfhost.py)) and is part of the target closure for pcc1 one day executing the C driver path natively, even though that step is not done today (the [README.md](../../README.md) status table lists it as future work).
 
 The dispatch order of `cli_main` is itself an architecture diagram: `-m MODULE` is intercepted first (the host module runs via `runpy`, with `pip`/`pip3` rewritten to `pcc.package.pip_shim`, Chapter 17); `-h/--help` comes next; then `parse_cli_args`; finally, routing by path suffix — `.py` enters the Python pipeline, everything else the C pipeline. For a `.py` input without `-o`, the compiled artifact is written into a temporary directory and run as a subprocess, with the exit code passed through. Contrast this with the in-process MCJIT execution that is the C single-file default (Section 2.3.4): the Python path has had exactly one execution semantics from day one — a real process running a real binary.
 
@@ -55,14 +55,14 @@ The dispatch order of `cli_main` is itself an architecture diagram: `-m MODULE` 
 
 ```python
 # pcc/__main__.py
-from pcc.cli_bootstrap import bootstrap_cli_sys_argv_exit
+from pcc.driver.cli_bootstrap import bootstrap_cli_sys_argv_exit
 
 
 if __name__ == "__main__":
     bootstrap_cli_sys_argv_exit()
 ```
 
-This is the entry to the bootstrap chain — the three stages of [scripts/bootstrap.sh](../../scripts/bootstrap.sh) compile [pcc/__main__.py](../../pcc/__main__.py). [pcc/cli_bootstrap.py](../../pcc/cli_bootstrap.py) (roughly seven thousand lines) is the CLI that pcc1/pcc2/pcc3 actually run: Python inputs are compiled by the binary itself; C and project inputs are, in the words of its own help text, "delegated to the full host pcc CLI" (the host entry can be overridden with `PCC_HOST_PCC`); and a `--pytest` subcommand lets pcc1 launch the repository's test suite (it delegates to `env -u LC_ALL uv run pytest` and sets `PCC1_BINARY` so that pcc1-specific test cases get the current binary).
+This is the entry to the bootstrap chain — the three stages of [scripts/bootstrap.sh](../../scripts/bootstrap.sh) compile [pcc/__main__.py](../../pcc/__main__.py). [pcc/driver/cli_bootstrap.py](../../pcc/driver/cli_bootstrap.py) (roughly seven thousand lines) is the CLI that pcc1/pcc2/pcc3 actually run: Python inputs are compiled by the binary itself; C and project inputs are, in the words of its own help text, "delegated to the full host pcc CLI" (the host entry can be overridden with `PCC_HOST_PCC`); and a `--pytest` subcommand lets pcc1 launch the repository's test suite (it delegates to `env -u LC_ALL uv run pytest` and sets `PCC1_BINARY` so that pcc1-specific test cases get the current binary).
 
 Why not make `cli_core` the bootstrap entry directly? Because the two have different dependency closures. `cli_core` must import `CEvaluator`, `project.py`, and the other C-path modules — a closure that cannot compile itself today; the closure of `cli_bootstrap` is deliberately narrowed to the Python pipeline plus the delegation logic. Multi-file bootstrap compilation is carried by a separate entry, [scripts/pcc_multi.py](../../scripts/pcc_multi.py) — it wraps `pipeline.compile_python_multi` and itself uses `pcc.extern` for its exit logic, written to the same "will be compiled by pcc" standard.
 
@@ -76,12 +76,12 @@ Three flags decide which mode space a Python compilation lands in, and every def
 | `--ir-scaffold` | `on` | `on`: closed-world IR-builder lowering (the main self-host path); unimplemented methods **error clearly instead of silently falling back** (the `_resolve_ir_scaffold_mode` docstring, verbatim); `off`: the compatibility escape hatch to the older lowering path; `auto` normalizes to `on`. |
 | `--backend` | `llvm` | One of `llvm`, `llvm_capi`, `self`; environment variable `PCC_BACKEND` (Section 2.5.1). |
 
-The C path's flag family is organized around project shape: `--separate-tus`, `--sources-from-make GOAL`, `--depends-on PATH[=GOAL]`, `--system-link`, `--jobs N` (when given explicitly it must be paired with multiple inputs or system-link, otherwise it is an error), `--cpp-arg`/`--link-arg`, `--prepare-cmd`/`--ensure-make-goal`, plus the emission family `--emit-llvm/--emit-asm/--emit-obj` and the cross-compilation flag `--target TRIPLE` (`--target` must be paired with an emission mode or `--system-link`). The diagnostics surface is shared by both pipelines: `--diagnostic-format text|json|sarif`, `--profile-json PATH`, and `--explain-fallback`, conveyed through environment variables to the `observed_compile` wrapper layer in `pcc.compile_observability`.
+The C path's flag family is organized around project shape: `--separate-tus`, `--sources-from-make GOAL`, `--depends-on PATH[=GOAL]`, `--system-link`, `--jobs N` (when given explicitly it must be paired with multiple inputs or system-link, otherwise it is an error), `--cpp-arg`/`--link-arg`, `--prepare-cmd`/`--ensure-make-goal`, plus the emission family `--emit-llvm/--emit-asm/--emit-obj` and the cross-compilation flag `--target TRIPLE` (`--target` must be paired with an emission mode or `--system-link`). The diagnostics surface is shared by both pipelines: `--diagnostic-format text|json|sarif`, `--profile-json PATH`, and `--explain-fallback`, conveyed through environment variables to the `observed_compile` wrapper layer in `pcc.diagnostics.compile_observability`.
 
 One detail deserves to be called out by name: on the C path, `--backend self` clamps the default `-O2` down to 0 (`cli_core._effective_self_backend_opt_level`) unless `PCC_SELF_BACKEND_VECTORIZE` is set:
 
 ```python
-# pcc/cli_core.py
+# pcc/driver/cli_core.py
 def _effective_self_backend_opt_level(backend, opt_level: int) -> int:
     backend_name = (backend or os.environ.get("PCC_BACKEND", "") or "").strip().lower()
     if (
@@ -101,21 +101,21 @@ The comment explains why: the self backend does not yet fully lower LLVM's vecto
 pcc hello.c | pcc proj/ [--separate-tus | --sources-from-make GOAL | --depends-on ...]
         |
         v
-pcc/cli_core.py        cli_main -> parse_cli_args -> execute_cli
+pcc/driver/cli_core.py        cli_main -> parse_cli_args -> execute_cli
         |
         v
-pcc/project.py         source collection (this chapter, 2.3.1; mechanics in Chapter 3)
+pcc/driver/project.py         source collection (this chapter, 2.3.1; mechanics in Chapter 3)
    merged:  collect_project()            -> one merged source, main file last
    multi :  collect_translation_units()  -> [TranslationUnit(name,path,source)...]
    flags :  collect_cpp_args()           -> -D/-I/... recovered from make dry runs
         |
         v
-pcc/evaluater/c_evaluator.py   once per TU (--jobs process-pool parallelism;
+pcc/frontends/c/evaluator/c_evaluator.py   once per TU (--jobs process-pool parallelism;
                                on-disk artifact cache)
    _preprocess_translation_unit_source   cc -E + fake libc | built-in preprocess
    make_c_parser().parse                 -> C AST
    PassPipeline.run_high_tier            AST analysis -> PassContext
-   LLVMCodeGenerator.generate_code       semantic lowering -> LLVM IR (Chapter 4)
+   CCodeGenerator.generate_code       semantic lowering -> LLVM IR (Chapter 4)
    postprocess_ir_text + run_low_tier    IR text post-processing
                                          (va_arg-only exemption, Chapter 12)
         |
@@ -131,7 +131,7 @@ pcc/evaluater/c_evaluator.py   once per TU (--jobs process-pool parallelism;
 
 ### 2.3.1 Source Collection and the Four Compile Modes (project.py)
 
-[pcc/project.py](../../pcc/project.py) turns "a path" into "the things to compile," with the output normalized to the immutable `TranslationUnit(name, path, source)`. There are four modes (the Compile Modes section of [AGENTS.md](../../AGENTS.md) is the authoritative table):
+[pcc/driver/project.py](../../pcc/driver/project.py) turns "a path" into "the things to compile," with the output normalized to the immutable `TranslationUnit(name, path, source)`. There are four modes (the Compile Modes section of [AGENTS.md](../../AGENTS.md) is the authoritative table):
 
 1. **Single file**: `pcc hello.c`; the whole file read in is one TU.
 2. **Directory merge (merged, the default for directory inputs)**: `_collect_directory()` collects `*.c` non-recursively, sorts them, and stitches them into one large source text with `// --- filename ---` comment lines, the file containing `main()` placed last. The `main` test, `_has_main()`, does a coarse regex filter first, then a real preprocessing pass to confirm, so a `main` excluded by `#if` is not misjudged.
@@ -151,7 +151,7 @@ So the logic of the default is this: the typical scenario for a directory input 
 
 ### 2.3.3 The Evaluator: A Five-Stage Per-TU Pipeline and Its Caches
 
-`CEvaluator` in [pcc/evaluater/c_evaluator.py](../../pcc/evaluater/c_evaluator.py) is the C path's conductor. Every TU passes through `_compile_translation_unit_artifact_job`: preprocessing (`_preprocess_translation_unit_source`, borrowing the system `cc -E` plus fake-libc shaping, or falling back to the built-in `preprocess`) → parsing (`make_c_parser().parse`) → HighTier AST analysis passes (filling a `PassContext`) → `LLVMCodeGenerator.generate_code` semantic lowering → `postprocess_ir_text` and the LowTier IR passes. The product is a serializable artifact dictionary: `ir_text`, `return_type`, `external_defs`, `func_return_types`, and pass reports. Serializability is not decoration — it simultaneously supports the disk cache and the `ProcessPoolExecutor` cross-process parallelism behind `--jobs`.
+`CEvaluator` in [pcc/frontends/c/evaluator/c_evaluator.py](../../pcc/frontends/c/evaluator/c_evaluator.py) is the C path's conductor. Every TU passes through `_compile_translation_unit_artifact_job`: preprocessing (`_preprocess_translation_unit_source`, borrowing the system `cc -E` plus fake-libc shaping, or falling back to the built-in `preprocess`) → parsing (`make_c_parser().parse`) → HighTier AST analysis passes (filling a `PassContext`) → `CCodeGenerator.generate_code` semantic lowering → `postprocess_ir_text` and the LowTier IR passes. The product is a serializable artifact dictionary: `ir_text`, `return_type`, `external_defs`, `func_return_types`, and pass reports. Serializability is not decoration — it simultaneously supports the disk cache and the `ProcessPoolExecutor` cross-process parallelism behind `--jobs`.
 
 The cache has three layers, every key mixed with `backend_signature` (the backend's identity, Section 2.5.1) and the optimization/pass signatures: the in-process `_jit_cache` (source-text hash straight to a function pointer); the native `.so` disk cache (`_build_native_cache`/`_load_native_cache`, reducing a cold start to a `ctypes.CDLL`); and the TU artifact disk cache (`_compile_cache_key`, which also folds in the compiler's own fingerprint `_compiler_cache_fingerprint()` against staleness). The layer-by-layer details are in Chapter 3; from this chapter remember only this: **the design of the cache keys is the design of the mode boundaries** — switching the backend, the pass selection, or the target triple must each invalidate naturally.
 
@@ -177,18 +177,18 @@ pcc app.py [-o out] [--emit-llvm] [--backend llvm|self]
            [--python-libpython off|auto|on] [--ir-scaffold on|off|auto]
         |
         v
-pcc/cli_core.py (host) / pcc/cli_bootstrap.py (pcc1, itself a compiled artifact)
+pcc/driver/cli_core.py (host) / pcc/driver/cli_bootstrap.py (pcc1, itself a compiled artifact)
    observed_compile(compile_python, ...)    diagnostic-format/profile/
                                             fallback-explanation wrapper
         |
         v
-pcc/py_frontend/pipeline.py :: compile_python
+pcc/frontends/python/pipeline.py :: compile_python
    closure      _collect_relative_module_closure (relative imports; same-package
    collection   absolute imports when the entry is __main__; recursive in off
                 mode) + recursive stdlib -> hands off to the multi-file path
    ABI check    _validate_package_site_no_libpython_abi (extension-ABI gate
                 for site packages)
-   parse        pcc.parse.py_parse + py_lift (bootstrap-safe; the CPython ast
+   parse        pcc.frontends.python.py_parse + py_lift (bootstrap-safe; the CPython ast
                 escape hatch has been removed)
    type infer   type_infer.infer_module (Chapter 5)
    codegen      codegen.layer1.L1CodeGen.generate (facade + mixins, Chapter 6)
@@ -221,11 +221,11 @@ pcc/py_frontend/pipeline.py :: compile_python
 
 ### 2.4.1 Entry and Closure Collection
 
-`compile_python(src_path, out_path, ...)` is the single-file entry, but "single file" is only the shape of the request, not the shape of the compilation. It first collects the module closure: `_collect_relative_module_closure` chases relative imports; when the entry module's name ends in `.__main__`, it also pulls in same-package absolute imports; under `--python-libpython=off` it recurses over same-package absolute imports. Then `_filter_ir_scaffold_closure` filters by scaffold mode, and `_validate_package_site_no_libpython_abi` runs extension-ABI checks on sources from site packages (rejecting CPython ABI artifacts mixed into a pcc-native closure, Chapter 17). When the source uses the native stdlib in strict mode, recursive stdlib expansion is forced on — pcc's own ports under [pcc/py_stdlib/](../../pcc/py_stdlib) take priority, with the host probed only when a module is not found there (2.4.5). A closure of more than one file hands off to `compile_python_multi`, which splits the closure by module and parallelizes code generation across worker processes (`_python_frontend_jobs` defaults to automatic parallelism, capped at 10 — the comment records the measurement: on the bootstrap closure, 8 to 10 workers dominate, and at 12 the gains start losing to process and IO contention). One reflexive detail: the worker executable is resolved by `_python_frontend_worker_executable`, and in a compiled pcc1 it is pcc1 itself — **the compiled compiler re-execs itself as its own code-generation worker**.
+`compile_python(src_path, out_path, ...)` is the single-file entry, but "single file" is only the shape of the request, not the shape of the compilation. It first collects the module closure: `_collect_relative_module_closure` chases relative imports; when the entry module's name ends in `.__main__`, it also pulls in same-package absolute imports; under `--python-libpython=off` it recurses over same-package absolute imports. Then `_filter_ir_scaffold_closure` filters by scaffold mode, and `_validate_package_site_no_libpython_abi` runs extension-ABI checks on sources from site packages (rejecting CPython ABI artifacts mixed into a pcc-native closure, Chapter 17). When the source uses the native stdlib in strict mode, recursive stdlib expansion is forced on — pcc's own ports under [pcc/stdlib/](../../pcc/stdlib) take priority, with the host probed only when a module is not found there (2.4.5). A closure of more than one file hands off to `compile_python_multi`, which splits the closure by module and parallelizes code generation across worker processes (`_python_frontend_jobs` defaults to automatic parallelism, capped at 10 — the comment records the measurement: on the bootstrap closure, 8 to 10 workers dominate, and at 12 the gains start losing to process and IO contention). One reflexive detail: the worker executable is resolved by `_python_frontend_worker_executable`, and in a compiled pcc1 it is pcc1 itself — **the compiled compiler re-execs itself as its own code-generation worker**.
 
 ### 2.4.2 The Three Frontend Tiers and the De-libpython-ed Parser
 
-The single-module trunk has three tiers: `pcc.parse.py_lift.parse_and_lift` (source text → pcc's own AST), `type_infer.infer_module` (type inference, Chapter 5), and `codegen.layer1.L1CodeGen.generate` (lowering to LLVM IR text; `layer1.py` has been split into a facade plus a family of mixins, Chapter 6). `pipeline.py` keeps a comment at the parse call site as a historical boundary stone: `pcc.parse.py_parse + py_lift` is the bootstrap-safe parse path, and the earlier escape hatch that borrowed CPython's `ast` module "kept a libpython import edge alive in the compiled pipeline" — it has been removed. The same judgment recurs throughout: any host dependency edge left behind in the compiled artifact is a hole in the bootstrap closure.
+The single-module trunk has three tiers: `pcc.frontends.python.py_lift.parse_and_lift` (source text → pcc's own AST), `type_infer.infer_module` (type inference, Chapter 5), and `codegen.layer1.L1CodeGen.generate` (lowering to LLVM IR text; `layer1.py` has been split into a facade plus a family of mixins, Chapter 6). `pipeline.py` keeps a comment at the parse call site as a historical boundary stone: `pcc.frontends.python.py_parse + py_lift` is the bootstrap-safe parse path, and the earlier escape hatch that borrowed CPython's `ast` module "kept a libpython import edge alive in the compiled pipeline" — it has been removed. The same judgment recurs throughout: any host dependency edge left behind in the compiled artifact is a hole in the bootstrap closure.
 
 ### 2.4.3 The Fallback Decision: Two Probes and a Three-State Finalizer
 
@@ -255,17 +255,17 @@ The authoritative full table is the Repository Map in [AGENTS.md](../../AGENTS.m
 
 | Path | Position in the pipelines |
 |---|---|
-| [pcc/cli_launcher.py](../../pcc/cli_launcher.py), [pcc/pcc.py](../../pcc/pcc.py), [pcc/cli_core.py](../../pcc/cli_core.py) | Host CLI: installed entry → click wrapper → hand-written parsing and dispatch |
-| [pcc/cli_bootstrap.py](../../pcc/cli_bootstrap.py), [pcc/__main__.py](../../pcc/__main__.py), [scripts/pcc_multi.py](../../scripts/pcc_multi.py) | Bootstrap CLI: the pcc1/pcc2/pcc3 entry and the multi-file compile entry |
+| [pcc/driver/cli_launcher.py](../../pcc/driver/cli_launcher.py), [pcc/pcc.py](../../pcc/pcc.py), [pcc/driver/cli_core.py](../../pcc/driver/cli_core.py) | Host CLI: installed entry → click wrapper → hand-written parsing and dispatch |
+| [pcc/driver/cli_bootstrap.py](../../pcc/driver/cli_bootstrap.py), [pcc/__main__.py](../../pcc/__main__.py), [scripts/pcc_multi.py](../../scripts/pcc_multi.py) | Bootstrap CLI: the pcc1/pcc2/pcc3 entry and the multi-file compile entry |
 | [pcc/api.py](../../pcc/api.py) | C-path library API (`build`/`module`) |
-| [pcc/project.py](../../pcc/project.py) | C source collection: directory / merged / make dry-run / dependent projects |
-| [pcc/evaluater/c_evaluator.py](../../pcc/evaluater/c_evaluator.py) | C evaluator: preprocess → parse → IR → optimize → four execution roots |
-| [pcc/parse/c_parser.py](../../pcc/parse/c_parser.py), [pcc/codegen/c_codegen.py](../../pcc/codegen/c_codegen.py) | C parsing (Chapter 3) and C semantic lowering (Chapter 4) |
-| [pcc/parse/py_parse.py](../../pcc/parse/py_parse.py), `py_lift.py`, [pcc/py_frontend/](../../pcc/py_frontend) | Python parsing/lifting, type inference, lowering (Chapters 5, 6) |
-| [pcc/py_frontend/pipeline.py](../../pcc/py_frontend/pipeline.py) | Python pipeline conductor: closure, fallback decision, linking, publication |
-| [pcc/py_runtime/](../../pcc/py_runtime) | Runtime: semantic/freestanding pcc-Python production owners + C oracles + five GCs (Chapters 7–11, 14) |
+| [pcc/driver/project.py](../../pcc/driver/project.py) | C source collection: directory / merged / make dry-run / dependent projects |
+| [pcc/frontends/c/evaluator/c_evaluator.py](../../pcc/frontends/c/evaluator/c_evaluator.py) | C evaluator: preprocess → parse → IR → optimize → four execution roots |
+| [pcc/frontends/c/parse/c_parser.py](../../pcc/frontends/c/parse/c_parser.py), [pcc/frontends/c/codegen/c_codegen.py](../../pcc/frontends/c/codegen/c_codegen.py) | C parsing (Chapter 3) and C semantic lowering (Chapter 4) |
+| [pcc/frontends/python/py_parse.py](../../pcc/frontends/python/py_parse.py), `py_lift.py`, [pcc/frontends/python/](../../pcc/frontends/python) | Python parsing/lifting, type inference, lowering (Chapters 5, 6) |
+| [pcc/frontends/python/pipeline.py](../../pcc/frontends/python/pipeline.py) | Python pipeline conductor: closure, fallback decision, linking, publication |
+| [pcc/runtime/](../../pcc/runtime) | Runtime: semantic/freestanding pcc-Python production owners + C oracles + five GCs (Chapters 7–11, 14) |
 | GUI framework | Declarative GUI kernel and product canary (Chapter 20); moved to [allstoalls/pcc-gui](https://github.com/allstoalls/pcc-gui) on 2026-09-06 |
-| [pcc/llvm_capi/](../../pcc/llvm_capi), [pcc/backend/](../../pcc/backend) | LLVM-C construction layer (Chapter 12) and the self backend (Chapter 13) |
+| [pcc/ir/](../../pcc/ir), [pcc/backend/](../../pcc/backend) | LLVM-C construction layer (Chapter 12) and the self backend (Chapter 13) |
 | [pcc/extern/](../../pcc/extern), [pcc/unsafe/](../../pcc/unsafe) | The two tools for writing low-level code in pcc-Python (Chapter 14) |
 | [utils/fake_libc_include/](../../utils/fake_libc_include) | Fake libc headers (Chapter 3) |
 | [tests/bootstrap_gate_baseline.json](../../tests/bootstrap_gate_baseline.json), [tests/fallback_baseline.json](../../tests/fallback_baseline.json) | Authoritative bootstrap and fallback baselines (Chapter 15) |
@@ -296,7 +296,7 @@ All three stories are about **boundaries**: the first draws the line between the
 
 **Root cause and the fix chain.** The self backend's link path originally let `cc` write the final output path directly. On macOS arm64, exec'ing a file whose contents are in place but whose loader/signature state has not yet settled produces exactly this shape. The fix was forced out step by step, each rung with a recorded failure: atomic rename alone (`mv -f`) was not enough; rename plus ad-hoc signing reduced the failure rate but still reproduced; the boundary that finally held was **forced system verification after signing** — the current sequence in `_finish_self_backend_executable`: `codesign --force -s -` on the temporary file, publication via `/bin/mv -f`, `codesign --verify` to force the loader's side to observe the final Mach-O, plus one more publication barrier.
 
-**Architectural reflexivity.** Midway, an `os.replace()`-based atomic publish was attempted — and rejected, because the strict bootstrap immediately reported a no-libpython fallback appearing in `pcc.py_frontend.pipeline`: `pipeline.py` must itself be compiled by pcc1, so the idioms available to it are constrained by the very gate it guards. The final implementation had to take the already-supported subprocess boundary (`/bin/mv`). The repair technique is selected by the architecture of the thing being repaired — a closed loop peculiar to self-hosting systems.
+**Architectural reflexivity.** Midway, an `os.replace()`-based atomic publish was attempted — and rejected, because the strict bootstrap immediately reported a no-libpython fallback appearing in `pcc.frontends.python.pipeline`: `pipeline.py` must itself be compiled by pcc1, so the idioms available to it are constrained by the very gate it guards. The final implementation had to take the already-supported subprocess boundary (`/bin/mv`). The repair technique is selected by the architecture of the thing being repaired — a closed loop peculiar to self-hosting systems.
 
 **The honest ending.** The investigation's 2026-05-15 update records that even with `--verify` in place, one more stage3 crash reproduced — and its crash report pointed at `py_decref`, not the loader. The publication-boundary fix remains useful, but the "stage3 crash class" has not been proven closed; the follow-up was handed to a separate investigation. Half the value of a case study is the fix; the other half is refusing to record "the symptom disappeared" as "the root cause is closed."
 
@@ -304,7 +304,7 @@ All three stories are about **boundaries**: the first draws the line between the
 
 (Source: [docs/investigations/python-pcc-main-static-export-cli-bootstrap.md](../../docs/investigations/python-pcc-main-static-export-cli-bootstrap.md), 2026-05-28, resolved.)
 
-[pcc/__main__.py](../../pcc/__main__.py) is two lines of code: import `bootstrap_cli_sys_argv_exit`, call it. Compiled standalone, however, it emitted 4 `py_cpy_*` calls — `ensure_init`, `import`, `getattr`, `call_noargs`: a complete "import the function through CPython, then call it" fallback chain. The root cause is banal in an instructive way: `pcc.cli_bootstrap` was on the **consumer whitelist** for static native modules, but had no corresponding entry in the **export table**, so the symbol could not bind; and `pcc.__main__` itself was registered in neither table. The fix was to add a function export for `bootstrap_cli_sys_argv_exit` to `layer1_support.py` and register `pcc.__main__`; the module's fallback count in the baseline went 4 → 0 and was locked there by [tests/fallback_baseline.json](../../tests/fallback_baseline.json). Two lessons. First, in a no-libpython architecture, **an entry script is not configuration; it is a compile target** — two lines of code must pass the closure audit like everything else. Second, the value of the fallback ratchet is precisely that it leaves "files that could not possibly have a problem" nowhere to hide — those 4 fallbacks, had they not been counted per module, would have hidden forever inside a binary that linked successfully.
+[pcc/__main__.py](../../pcc/__main__.py) is two lines of code: import `bootstrap_cli_sys_argv_exit`, call it. Compiled standalone, however, it emitted 4 `py_cpy_*` calls — `ensure_init`, `import`, `getattr`, `call_noargs`: a complete "import the function through CPython, then call it" fallback chain. The root cause is banal in an instructive way: `pcc.driver.cli_bootstrap` was on the **consumer whitelist** for static native modules, but had no corresponding entry in the **export table**, so the symbol could not bind; and `pcc.__main__` itself was registered in neither table. The fix was to add a function export for `bootstrap_cli_sys_argv_exit` to `layer1_support.py` and register `pcc.__main__`; the module's fallback count in the baseline went 4 → 0 and was locked there by [tests/fallback_baseline.json](../../tests/fallback_baseline.json). Two lessons. First, in a no-libpython architecture, **an entry script is not configuration; it is a compile target** — two lines of code must pass the closure audit like everything else. Second, the value of the fallback ratchet is precisely that it leaves "files that could not possibly have a problem" nowhere to hide — those 4 fallbacks, had they not been counted per module, would have hidden forever inside a binary that linked successfully.
 
 ## 2.7 Summary
 

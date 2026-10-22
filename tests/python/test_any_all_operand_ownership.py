@@ -23,7 +23,7 @@ def _run(source, tmp_path, compiler, runtime):
 
 @pytest.mark.parametrize("builtin", ["any", "all"])
 def test_any_all_release_temporary_and_preserve_borrowed_sources(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, monkeypatch, builtin,
+    tmp_path, pcc_runtime_archive, python_program_compiler, monkeypatch, builtin,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = '''import gc
@@ -53,14 +53,14 @@ def main():
 main()
 '''.replace("BUILTIN", builtin).replace("NONEMPTY", str(builtin == "any")).replace(
         "EMPTY", str(builtin == "all"))
-    for backend, output in _run(source, tmp_path, python_program_compiler, pcc_py_runtime_archive):
+    for backend, output in _run(source, tmp_path, python_program_compiler, pcc_runtime_archive):
         if backend == 0:
             assert int(output) < 16384, output
 
 
 @pytest.mark.parametrize("builtin", ["any", "all"])
 def test_any_all_release_sources_on_error_and_callback_rebinding(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, monkeypatch, builtin,
+    tmp_path, pcc_runtime_archive, python_program_compiler, monkeypatch, builtin,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = '''import gc
@@ -69,30 +69,39 @@ anchor = None
 class Bomb:
     def __bool__(self):
         raise ValueError("truth")
+class Items:
+    def __init__(self, mode):
+        self.mode = mode
+        self.done = False
+    def __iter__(self):
+        return self
+    def __next__(self):
+        if self.mode == 1:
+            raise ValueError("item")
+        if self.done:
+            raise StopIteration
+        self.done = True
+        if self.mode == 2:
+            return Bomb()
+        return True
 class Source:
     def __init__(self, mode: int):
         self.mode = mode
     def __del__(self):
         global destroyed
         destroyed += 1
-    def __len__(self):
+    def __iter__(self):
         global anchor
         if self.mode == 0:
-            raise ValueError("length")
+            raise ValueError("iter")
+        if self.mode == 4:
+            return 5
         if self.mode == 3:
             anchor = None
             gc.collect()
-        return 1
-    def __getitem__(self, index):
-        if self.mode == 1:
-            raise ValueError("item")
-        if self.mode == 2:
-            return Bomb()
-        return True
+        return Items(self.mode)
 def make(mode) -> object:
     return Source(mode)
-def mapping() -> object:
-    return {"missing": Source(0)}
 def main():
     global anchor
     caught = 0
@@ -103,7 +112,7 @@ def main():
             except ValueError:
                 caught += 1
         try:
-            BUILTIN(mapping())
+            BUILTIN(make(4))
         except TypeError:
             caught += 1
         anchor = make(3)
@@ -112,5 +121,5 @@ def main():
     print(caught, destroyed)
 main()
 '''.replace("BUILTIN", builtin)
-    for backend, output in _run(source, tmp_path, python_program_compiler, pcc_py_runtime_archive):
+    for backend, output in _run(source, tmp_path, python_program_compiler, pcc_runtime_archive):
         assert output == "128 160\n", (backend, output)

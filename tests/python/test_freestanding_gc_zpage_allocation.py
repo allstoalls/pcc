@@ -8,15 +8,15 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import (
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import (
     FREESTANDING_GC_CROSS_OBJECT_SIGNATURES,
     FREESTANDING_GC_RUNTIME_GLOBALS,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_zpage_allocation.py"
 MANAGED_SOURCE = RUNTIME_DIR / "py" / "py_gc_backend.py"
 MAKEFILE = RUNTIME_DIR / "Makefile"
@@ -274,10 +274,10 @@ def test_object_registration_prepares_zpage_tracking_before_graph_lock() -> None
 
 
 def test_production_archive_has_one_zpage_allocation_owner(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -367,7 +367,7 @@ def _link_zpage_allocation_probe(
 )
 def test_zpage_allocation_across_page_classes(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
     size: int,
     expected: str,
 ) -> None:
@@ -375,7 +375,7 @@ def test_zpage_allocation_across_page_classes(
     implementation = _link_zpage_allocation_probe(
         tmp_path,
         "zpage_alloc_pcc_python_" + str(size),
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
         size,
     )
     result = subprocess.run(
@@ -413,7 +413,7 @@ def _link_zpage_prepare_probe(
 
 def test_zpage_allocation_failure_does_not_publish_partial_page(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = r'''
         #include "py_runtime.h"
@@ -439,7 +439,7 @@ def test_zpage_allocation_failure_does_not_publish_partial_page(
         }
     '''
     executable = _link_zpage_prepare_probe(
-        tmp_path, "zpage_prepare_failure", pcc_py_runtime_archive, source
+        tmp_path, "zpage_prepare_failure", pcc_runtime_archive, source
     )
     result = subprocess.run(
         [str(executable)], capture_output=True, text=True, timeout=30
@@ -450,7 +450,7 @@ def test_zpage_allocation_failure_does_not_publish_partial_page(
 
 def test_zpage_tracking_fallback_admission_and_prepare_failure(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = r'''
         #include "py_runtime.h"
@@ -518,7 +518,7 @@ def test_zpage_tracking_fallback_admission_and_prepare_failure(
         }
     '''
     executable = _link_zpage_prepare_probe(
-        tmp_path, "zpage_track_fallback", pcc_py_runtime_archive, source
+        tmp_path, "zpage_track_fallback", pcc_runtime_archive, source
     )
     result = subprocess.run(
         [str(executable)], capture_output=True, text=True, timeout=30
@@ -529,7 +529,7 @@ def test_zpage_tracking_fallback_admission_and_prepare_failure(
 
 def test_zpage_first_page_race_publishes_one_page(
     tmp_path: Path,
-    threaded_pcc_py_runtime_archive: Path,
+    threaded_pcc_runtime_archive: Path,
 ) -> None:
     source = r'''
         #include "py_runtime.h"
@@ -599,7 +599,7 @@ def test_zpage_first_page_race_publishes_one_page(
         }
     '''
     executable = _link_zpage_prepare_probe(
-        tmp_path, "zpage_prepare_race", threaded_pcc_py_runtime_archive, source
+        tmp_path, "zpage_prepare_race", threaded_pcc_runtime_archive, source
     )
     result = subprocess.run(
         [str(executable)], capture_output=True, text=True, timeout=30

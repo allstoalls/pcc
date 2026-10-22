@@ -1,4 +1,4 @@
-"""Regenerate ``pcc/py_frontend/codegen/_l1_codegen_static_methods.py``.
+"""Regenerate ``pcc/frontends/python/codegen/_l1_codegen_static_methods.py``.
 
 This is a HOST-PYTHON-ONLY tool that uses ``inspect.signature`` to extract
 real call signatures from the live L1CodeGen class (with all mixins
@@ -67,8 +67,8 @@ _CHUNK_SIZE = 8
 
 
 def main() -> int:
-    from pcc.py_frontend.codegen.host_contract import L1_CODEGEN_HOST_METHODS
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.codegen.host_contract import L1_CODEGEN_HOST_METHODS
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
     method_entries: list[str] = []
     skipped: list[tuple[str, str]] = []
@@ -86,8 +86,7 @@ def main() -> int:
 
     out_path = (
         _REPO_ROOT
-        / "pcc"
-        / "py_frontend"
+        / "pcc" / "frontends" / "python"
         / "codegen"
         / "_l1_codegen_static_methods.py"
     )

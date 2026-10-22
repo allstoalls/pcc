@@ -1,71 +1,61 @@
-"""No integer *literal* above the tagged lane may appear in the self-host closure.
+"""Integer literals above the tagged lane evaluate exactly in compiled code.
 
-A literal integer constant larger than the tagged small-int lane evaluates to
-**0** in pcc-compiled code, while the same value *computed* (``(1 << 64) - 1``)
-is correct. Probed directly with a pcc1-built binary:
-
-    1 << 63                -> 9223372036854775808   correct
-    (1 << 64) - 1          -> 18446744073709551615   correct
-    9223372036854775808    -> 0                      WRONG
-    0xFFFFFFFFFFFFFFFF     -> 0                      WRONG
-
-This is why pcc2 could not print any integer: `_emit_int_literal_object`
-masked the tagged constant with a literal ``0xFFFFFFFFFFFFFFFF``, which under
-pcc2 became ``& 0``, so every int literal lowered to a NULL pointer. The mask
-was redundant anyway -- an in-lane value's ``(v << 1) | 1`` is already a valid
-signed i64.
-
-The underlying frontend/runtime defect is tracked as
-M5-SELFHOST-BIG-INT-LITERAL. Until it is closed, this test keeps the hazard out
-of the modules that pcc compiles into itself. Write the value as an expression
-(``(1 << 64) - 1``) rather than as a literal.
+This file used to ban such literals from the self-host closure: an early
+pcc evaluated ``9223372036854775808`` or ``0xFFFFFFFFFFFFFFFF`` as 0 (pcc2
+could not print any integer because a literal mask became ``& 0``, tracked as
+M5-SELFHOST-BIG-INT-LITERAL). The ban had stopped holding (compiler sources
+use FNV/xxhash constants) while its own note recorded that the defect no
+longer reproduced. Literals outside the lane are now module-static immortal
+objects built at compile time, so the check is behavioral: every literal
+position the compiler sources use is compiled and must print what CPython
+prints.
 """
-
 from __future__ import annotations
 
-import ast
-from pathlib import Path
+import subprocess
+import sys
 
-from pcc1_gate import repo_root
-
-REPO = repo_root()
-
-# The tagged small-int lane. A literal at or below this is lowered correctly.
-_LANE_MAX = (1 << 62) - 1
-
-# Compiled into pcc1/pcc2. Runtime ports under py_runtime/py are covered by
-# their own freestanding gates and use a different literal pipeline — probed
-# 2026-08-27: extending this sweep there flags 11+ WORKING over-lane
-# allocator poison canaries (e.g. 5783538902897647427), so the extension is
-# deliberately not applied.  The compiler defect itself no longer
-# reproduces: a pcc1-built probe prints 2**63, 2**64-1, their negatives,
-# and a 128-bit literal correctly under both backends.
-_CLOSURE_DIRS = ("pcc/py_frontend", "pcc/backend")
+from pcc.frontends.python.pipeline import compile_python
 
 
-def _over_lane_literals(path: Path) -> list[tuple[int, int]]:
-    try:
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    except SyntaxError:  # pragma: no cover - a parse failure is another test's job
-        return []
-    found = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Constant) and type(node.value) is int:
-            if abs(node.value) > _LANE_MAX:
-                found.append((node.lineno, node.value))
-    return found
+_PROGRAM = '''
+FNV_OFFSET = 14695981039346656037
+TABLE = (13787848793156543929, 10723151780598845931, 0xFFFFFFFFFFFFFFFF)
+LIMITS = {"i64_max": 9223372036854775807, "i64_min": -9223372036854775808}
 
 
-def test_self_host_closure_has_no_over_lane_int_literals():
-    offenders = []
-    for directory in _CLOSURE_DIRS:
-        for path in sorted((REPO / directory).rglob("*.py")):
-            for lineno, value in _over_lane_literals(path):
-                offenders.append(
-                    f"{path.relative_to(REPO)}:{lineno}: {value} "
-                    f"(> {_LANE_MAX}); write it as an expression instead"
-                )
-    assert not offenders, (
-        "integer literals above the tagged lane evaluate to 0 in pcc-compiled "
-        "code:\n  " + "\n  ".join(offenders)
-    )
+def lane_edges():
+    return [4611686018427387903, 4611686018427387904, -4611686018427387904, -4611686018427387905]
+
+
+def wide(seed=340282366920938463463374607431768211455):
+    return seed >> 64, seed & 0xFFFFFFFFFFFFFFFF
+
+
+def fnv(data):
+    value = FNV_OFFSET
+    for byte in data:
+        value = ((value ^ byte) * 1099511628211) & 0xFFFFFFFFFFFFFFFF
+    return value
+
+
+def main():
+    print(FNV_OFFSET, TABLE, sorted(LIMITS.items()))
+    print(lane_edges(), wide(), wide(2**70 + 5))
+    print(fnv(b"pcc"), fnv(b""), 9223372036854775808 - 1, -0x8000000000000000)
+    print(0xFFFFFFFFFFFFFFFF + 1 == 2**64, 18446744073709551615 // 3, hex(0xDEADBEEFCAFEBABE12))
+
+
+main()
+'''
+
+
+def test_over_lane_int_literals_match_cpython(tmp_path):
+    source = tmp_path / "over_lane_literals.py"
+    source.write_text(_PROGRAM, encoding="utf-8")
+    expected = subprocess.run([sys.executable, str(source)], capture_output=True, text=True,
+                              timeout=30, check=True).stdout
+    exe = tmp_path / "over_lane_literals"
+    compile_python(str(source), str(exe), libpython_mode="off", ir_scaffold_mode="on", backend="self")
+    actual = subprocess.run([str(exe)], capture_output=True, text=True, timeout=30, check=True).stdout
+    assert actual == expected

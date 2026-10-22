@@ -13,7 +13,7 @@ import textwrap
 
 
 def test_math_factorial_matches_cpython(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "mf.py"
     exe = tmp_path / "mf.out"

@@ -44,6 +44,7 @@ from .self_backend_ir import (
     text_key_names_equal,
 )
 from .self_backend_kernel import (
+    _scalar_window_is_complete,
     IndexedFunctionKernel,
     TYPE_KIND_ARRAY,
     TYPE_KIND_FP,
@@ -595,8 +596,21 @@ def _emit_phi_assignments_indexed(
         if not ready:
             victim = pending[0]
             victim_phi: CompilerInt4 = kernel.phi_record(phi_ids[victim])
-            victim_header: CompilerInt4 = kernel.type_header(victim_phi.second)
-            if victim_header.first == TYPE_KIND_FP:
+            victim_header_is_scalar = False
+            if type(kernel) is IndexedFunctionKernel:
+                victim_header_scalar_id = victim_phi.second
+                victim_header_is_scalar = _scalar_window_is_complete(
+                    kernel.type_scalars, victim_header_scalar_id, 12, 0
+                )
+                if victim_header_is_scalar:
+                    victim_header_scalar = kernel.type_scalars.get_unchecked(
+                        victim_header_scalar_id * 12 + 0
+                    )
+                else:
+                    victim_header: CompilerInt4 = kernel.type_header(victim_header_scalar_id)
+            else:
+                victim_header: CompilerInt4 = kernel.type_header(victim_phi.second)
+            if (victim_header_scalar if victim_header_is_scalar else victim_header.first) == TYPE_KIND_FP:
                 return _emit_phi_assignments_buffered(
                     func,
                     kernel,
@@ -731,10 +745,21 @@ def emit_phi_assignments(
             indexed_phi: CompilerInt4 = kernel.phi_record(
                 phi_fact.first + phi_index
             )
-            indexed_phi_type: CompilerInt4 = kernel.type_header(
-                indexed_phi.second
-            )
-            kind_id = indexed_phi_type.first
+            indexed_phi_type_is_scalar = False
+            if type(kernel) is IndexedFunctionKernel:
+                indexed_phi_type_scalar_id = indexed_phi.second
+                indexed_phi_type_is_scalar = _scalar_window_is_complete(
+                    kernel.type_scalars, indexed_phi_type_scalar_id, 12, 0
+                )
+                if indexed_phi_type_is_scalar:
+                    indexed_phi_type_scalar = kernel.type_scalars.get_unchecked(
+                        indexed_phi_type_scalar_id * 12 + 0
+                    )
+                else:
+                    indexed_phi_type: CompilerInt4 = kernel.type_header(indexed_phi_type_scalar_id)
+            else:
+                indexed_phi_type: CompilerInt4 = kernel.type_header(indexed_phi.second)
+            kind_id = (indexed_phi_type_scalar if indexed_phi_type_is_scalar else indexed_phi_type.first)
             if kind_id == TYPE_KIND_ARRAY or kind_id == TYPE_KIND_STRUCT:
                 all_scalar = False
                 break

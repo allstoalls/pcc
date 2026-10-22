@@ -9,8 +9,8 @@ from unittest import mock as host_mock
 
 import pytest
 
-from pcc.py_stdlib import unittest as port_unittest
-from pcc.py_stdlib.unittest import mock as port_mock
+from pcc.stdlib import unittest as port_unittest
+from pcc.stdlib.unittest import mock as port_mock
 
 
 def _failure_message(case, method_name, *args):
@@ -283,7 +283,7 @@ def test_patch_dict_matches_cpython_for_concrete_dictionaries():
 
 
 def test_patch_string_and_single_decorator_are_generic_and_fail_closed_when_stacked():
-    module_name = "pcc.py_stdlib.unittest.mock.FILTER_DIR"
+    module_name = "pcc.stdlib.unittest.mock.FILTER_DIR"
     assert port_mock.FILTER_DIR is True
     with port_mock.patch(module_name, False):
         assert port_mock.FILTER_DIR is False
@@ -311,20 +311,20 @@ def test_patch_string_and_single_decorator_are_generic_and_fail_closed_when_stac
 
 @pytest.mark.parametrize("module_name", ["unittest", "unittest.mock"])
 def test_unittest_family_is_selected_by_recursive_stdlib_registry(module_name):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     source = pipeline._locate_native_stdlib_module_source(module_name)
     assert source is not None
     if module_name == "unittest":
-        assert source.endswith("/pcc/py_stdlib/unittest/__init__.py")
+        assert source.endswith("/pcc/stdlib/unittest/__init__.py")
     else:
-        assert source.endswith("/pcc/py_stdlib/unittest/mock.py")
+        assert source.endswith("/pcc/stdlib/unittest/mock.py")
     assert pipeline._classify_python_import(module_name) == "native_stdlib"
     assert module_name not in pipeline._NATIVE_BUILTIN_IMPORTS
 
 
 def test_recursive_unittest_provider_admits_only_explicit_mock_sibling(tmp_path):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     package_only = tmp_path / "package_only.py"
     package_only.write_text("import unittest\n", encoding="utf-8")

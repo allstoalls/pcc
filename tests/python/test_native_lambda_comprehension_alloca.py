@@ -82,10 +82,14 @@ def test_lambda_comprehension_target_allocas_in_lambda(tmp_path) -> None:
 
     lls = sorted(dump_dir.glob("*.ll"))
     assert lls, "no IR dumped"
+    # The target slot is ``st.addr`` in the old comprehension path and
+    # ``st.for.obj.addr`` since comprehensions bind through the owned loop
+    # target helper; either way it must belong to the lambda function.
+    slot = re.compile(r"st\.(?:for\.obj\.)?addr")
     text = None
     for ll in lls:
         t = ll.read_text()
-        if "st.addr" in t:
+        if slot.search(t):
             text = t
             break
     assert text is not None, "comprehension target alloca not found in dump"
@@ -98,9 +102,9 @@ def test_lambda_comprehension_target_allocas_in_lambda(tmp_path) -> None:
             cur_fn = ln.split("@", 1)[1].split("(")[0]
         if cur_fn is None:
             continue
-        if re.search(r"%st\.addr[\w.]* = alloca", ln):
+        if re.search(r"%st\.(?:for\.obj\.)?addr[\w.]* = alloca", ln):
             alloca_fn = cur_fn
-        elif "st.addr" in ln:
+        elif slot.search(ln):
             use_fns.add(cur_fn)
 
     assert alloca_fn is not None, "st.addr alloca missing"

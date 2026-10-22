@@ -19,11 +19,11 @@ from tests.python.test_hoist_free_names_native_shape import (
 )
 
 
-_MODULE = "pcc.py_frontend.codegen.lambda_helpers_lowering"
+_MODULE = "pcc.frontends.python.codegen.lambda_helpers_lowering"
 
 
 def test_hoisted_closure_reads_self_fields_with_the_host_layout(tmp_path):
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         compile_contextual_per_module_fallback_counts,
     )
 
@@ -40,7 +40,7 @@ def test_hoisted_closure_reads_self_fields_with_the_host_layout(tmp_path):
         emit_ir_dir=str(ir_dir),
     )
     assert counts == {_MODULE: 0}
-    ir = Path(ir_dir / "pcc_py_frontend_codegen_lambda_helpers_lowering.ll").read_text(
+    ir = Path(ir_dir / "pcc_frontends_python_codegen_lambda_helpers_lowering.ll").read_text(
         encoding="utf-8"
     )
     fields = {}

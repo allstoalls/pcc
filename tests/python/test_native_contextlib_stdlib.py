@@ -4,7 +4,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from pcc.py_frontend.pipeline import compile_python_multi
+from pcc.frontends.python.pipeline import compile_python_multi
 
 _REPO_ROOT = Path(__file__).absolute().parents[2]
 
@@ -21,7 +21,7 @@ def test_nullcontext_import_and_enter_result_no_libpython(tmp_path):
         encoding="utf-8",
     )
     executable = tmp_path / "main_bin"
-    provider = _REPO_ROOT / "pcc" / "py_stdlib" / "contextlib.py"
+    provider = _REPO_ROOT / "pcc" / "stdlib" / "contextlib.py"
     compile_python_multi(
         [str(source), str(provider)],
         str(executable),

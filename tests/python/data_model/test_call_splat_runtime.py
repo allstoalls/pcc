@@ -5,7 +5,7 @@ import subprocess
 import textwrap
 
 
-def test_call_splat_posargs_and_kwargs_runtime(tmp_path, pcc_py_runtime_archive):
+def test_call_splat_posargs_and_kwargs_runtime(tmp_path, pcc_runtime_archive):
     src = tmp_path / "call_splat_probe.c"
     exe = tmp_path / "call_splat_probe"
     src.write_text(
@@ -48,9 +48,9 @@ def test_call_splat_posargs_and_kwargs_runtime(tmp_path, pcc_py_runtime_archive)
         [
             os.environ.get("CC", "cc"),
             "-I",
-            str(pcc_py_runtime_archive.parent / "include"),
+            str(pcc_runtime_archive.parent / "include"),
             str(src),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(exe),

@@ -1,0 +1,134 @@
+{
+  "candidate_patch_sha256": "c9aca5943d0c6b956b33edb07c3d27edf5b9f89d6ebe21885b567aa42666860d",
+  "candidate_status": "UNAPPLIED",
+  "evidence_sha256": {
+    "base_postseal": "2e15e6a878efdaefbae275df3cb9775fed2a099ee5af1fd6c54f4ea23392ef15",
+    "candidate_postseal": "a0763faeec20b71373fa81605a662b5d7dd21caf5c6c53f22a4257e7cb6f9fdb",
+    "collection": "573a093bd3d8c9da764e282d87e2b9aa3e1b5f005a2b7ee2784d39259b718b0e",
+    "junit": "d3efe7f6904ddd4fca36554cf286425df2ff91c90814ca14af50e8c52b5ea658",
+    "payload_result": "63325b954a9c581ccfdfd62a2d2ded32a712a64ce58542d0be4c3d8d911e9b31",
+    "qualification": "3a65e08bfbe400cc9a6a3d8ae53a7ffbb623f78012d5c148cbb9cec4f5bde1d5"
+  },
+  "executed": {
+    "by_selector": {
+      "tests/python/test_x86_64_assembler_lifetime.py::test_invalid_mixed_separators_preserve_exact_exception_and_diagnostic": 6,
+      "tests/python/test_x86_64_assembler_lifetime.py::test_mixed_separators_preserve_parsed_records_and_complete_object_bytes": 3,
+      "tests/python/test_x86_64_numeric_data_batching.py": 37
+    },
+    "counts": {
+      "collected": 46,
+      "errors": 0,
+      "failed": 0,
+      "passed": 46,
+      "skipped": 0,
+      "xfailed": 0,
+      "xpassed": 0
+    },
+    "covered": [
+      "Original scalar validation/counts and integer/float payload boundaries.",
+      "Fixed, small and disabled private batching bounds; immutable per-call payloads.",
+      "Ignored empty lines, section/symbol/alignment and instruction barriers.",
+      "Matching first exception type/message, including NOBITS versus later parse errors.",
+      "Complete owned ELF/COFF bytes for the focused fixtures, with stackmap and SEH sections."
+    ],
+    "deselected": [],
+    "junit_cases": 46,
+    "pytest_options": [
+      "-x",
+      "-n0",
+      "-vv",
+      "--tb=short",
+      "-o",
+      "addopts="
+    ],
+    "runs": 1,
+    "scope": "Host parser/layout/ELF/COFF object controls and exact errors; no frontend compilation, runtime build, FFI or emitted native execution"
+  },
+  "history": {
+    "prior_size_only_observation": "Closed at HOLD; this source candidate does not reopen that measurement.",
+    "v1_blank_line_issue": "Source-review finding only; V1 was never executed. V2 preserves the unchanged mixed-separator regression.",
+    "v1_preserved_commit": "331bf644e031b7cbdb26d15ead8eb46f041e2ce1"
+  },
+  "limits": [
+    "Focused host object-format checks do not establish native closed-world compilation or bytearray/closure lifetime under the owned runtime.",
+    "The retained historical large real-corpus comparison, performance measurement, emitted native execution, runtime rebuild, native compiler, pcc1, full Stage1 and full regression suite are UNRUN for this candidate.",
+    "No production activation or performance benefit is claimed. Sampled RSS is observational; the hard memory bound is address space."
+  ],
+  "packet_manifest_sha256": "80beb3da8ae30e96a4531356e0aa87c2d594d3a041a6c6d318f6e44332a71da7",
+  "preserved_candidate_commit": "6abedec4388663f7ffbb2f43eff92210cea0744b",
+  "qualification_date_utc": "2026-10-10",
+  "schema": "pcc.numeric_data_batching_host_public_qualification.v1",
+  "source": {
+    "base_full_source_relation": "Retained timing snapshot: complete pcc subtree equals published d2334624; full source retains older unrelated docs/bootstrap and native-test f391 bytes. Not a full current-master checkout.",
+    "base_pcc_tree": "ee02ba6bf0d79e9706c1791aa650093f5f91c338",
+    "base_production_commit": "d2334624197b5fc14aaca93bb916683fb1afcb79",
+    "base_source_manifest_sha256": "568c44d837939cde5ab4da2c2f0115ab30f978716bc423a40e07d9cf2bdc0185",
+    "candidate_pcc_tree": "930263bf204e578796c72dab5d4aa31fd7ab27ae",
+    "candidate_source_manifest_sha256": "7430a30766c11a59e7185758b725b289388ae131498ce6a8a568bdf10ff773ba",
+    "changed_files": [
+      {
+        "mode": "100644",
+        "path": "pcc/backend/x86_64_asm_driver.py",
+        "postimage_bytes": 34692,
+        "postimage_sha256": "a85b7b1fcfa7cb6fec61e08b1cb8a95096cb03b9ebe38778d2d0de1472fc88b4",
+        "preimage_bytes": 33123,
+        "preimage_sha256": "cc71a7b5b5c5db56d665fc83afe670b021c20f76403fb5a381a085cdf37cf84d"
+      },
+      {
+        "mode": "100644",
+        "path": "tests/python/test_x86_64_numeric_data_batching.py",
+        "postimage_bytes": 10897,
+        "postimage_sha256": "8c72053de26d96efac90e7f7713ea91c5f452eaa4d8c2c3fb8fcf253dfb0f3a5",
+        "preimage_bytes": null,
+        "preimage_sha256": null
+      }
+    ],
+    "copy": "Independent ordinary source, no overlays or shared regular-file inodes; five original internal symlinks retained.",
+    "files": 30028,
+    "logical_bytes": 390545293,
+    "retained_snapshot_codegen_checksum": "ce75a8770afcdad0679e4fb854f4bb6752fec786ae7558bf07fa46ec52152eb6",
+    "unchanged_neighbor": {
+      "path": "tests/python/test_x86_64_assembler_lifetime.py",
+      "sha256": "9caa0fff39516f573d4265679a02c63b110ac5b46df053993cd9bfc6a05af26c"
+    }
+  },
+  "source_preservation": {
+    "imported_source_closure": "PASS",
+    "in_guard_complete_before_after": "PASS",
+    "independent_complete_base_and_candidate_postseals": "PASS",
+    "original_shared_lock_released": true
+  },
+  "stages": {
+    "host": {
+      "bootstrap_sha256": "6d5c7dc6a120b619db1ee3a80b40e4779668d22ce69d96d78aaae10a398a9860",
+      "cleanup": "CLEAN; root reaped; ECHILD; no active handles",
+      "continuous_free_reserve_bytes": 4294967296,
+      "denied_audit_events": 0,
+      "elapsed_seconds": 4.508780806994764,
+      "guard_sha256": "a12294b96ee972bfefdf797f262d8ff182b333a80f36f29719234cae0cd22b35",
+      "guard_status": "COMPLETE",
+      "hard_address_space_bytes": 4294967296,
+      "hard_nproc": 0,
+      "max_output_growth_bytes": 536870912,
+      "outer_seconds": 300,
+      "returncode": 0,
+      "sampled_peak_root_rss_bytes": 81035264
+    },
+    "materialization": {
+      "bootstrap_sha256": "bd35e3b75f943c69a98f638556a2eea116d77558038ce448591d4e0f6af01659",
+      "cleanup": "CLEAN; root reaped; ECHILD; no active handles",
+      "continuous_free_reserve_bytes": 4294967296,
+      "denied_audit_events": 0,
+      "elapsed_seconds": 7.759698530004243,
+      "guard_sha256": "4651490eb4bbb54a6aa3f803d69862341c1dc699b41affed8fa3b6724afe49f2",
+      "guard_status": "COMPLETE",
+      "hard_address_space_bytes": 1073741824,
+      "hard_nproc": 0,
+      "max_output_growth_bytes": 536870912,
+      "outer_seconds": 60,
+      "returncode": 0,
+      "sampled_peak_root_rss_bytes": 66248704
+    }
+  },
+  "status": "PASS: 46 focused host cases"
+}

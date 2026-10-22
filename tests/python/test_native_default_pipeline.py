@@ -3,10 +3,10 @@ import ctypes
 from pathlib import Path
 import subprocess
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
-def test_default_pipeline_executes_without_external_codegen(tmp_path, monkeypatch, pcc_py_runtime_archive):
+def test_default_pipeline_executes_without_external_codegen(tmp_path, monkeypatch, pcc_runtime_archive):
     source = tmp_path / 'api_default.py'
     source.write_text('''from functools import lru_cache
 def increment(value):
@@ -36,7 +36,7 @@ main()
         scoped.delenv('PCC_PYTHON_LIBPYTHON', raising=False)
         scoped.setattr(subprocess, 'Popen', owned_process)
         scoped.setattr(ctypes, 'CDLL', owned_library)
-        compile_python(str(source), str(binary), runtime_archive=str(pcc_py_runtime_archive))
+        compile_python(str(source), str(binary), runtime_archive=str(pcc_runtime_archive))
     result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=15)
     assert result.returncode == 0, result.stderr
     assert result.stdout == '42 42 (1, 1, 2, 1)\n'

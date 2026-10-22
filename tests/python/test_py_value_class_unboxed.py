@@ -8,9 +8,9 @@ import textwrap
 
 
 def _generate_ir(source: str) -> str:
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen import layer1
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen import layer1
 
     ast_mod = parse_and_lift(source, "<valueclass-unboxed>", "value_mod")
     typed = type_infer.infer_module(ast_mod)
@@ -62,7 +62,7 @@ def test_eight_field_valueclass_keeps_aggregate_projection():
 
 
 def test_valueclass_hot_loop_zero_allocation_oracle_and_escape_semantics(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = textwrap.dedent("""
         from typing import Any
@@ -217,7 +217,7 @@ def test_valueclass_direct_function_arg_uses_payload_abi():
 
 
 def test_valueclass_wide_payload_uses_aggregate_abi_self_backend(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = textwrap.dedent("""
         import pcc
@@ -298,7 +298,7 @@ def test_valueclass_wide_payload_covers_scaffold_arities_six_and_seven():
 
 
 def test_valueclass_nested_payload_uses_payload_abi_in_direct_calls(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = textwrap.dedent("""
         import pcc
@@ -392,7 +392,7 @@ def test_valueclass_return_constructor_uses_payload_abi():
 
 
 def test_valueclass_return_payload_compiles_with_default_ir_passes(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "valueclass_return.py"
     exe = tmp_path / "valueclass_return"
@@ -480,7 +480,7 @@ def test_valueclass_payload_equality_uses_fieldwise_compare():
 
 
 def test_valueclass_nested_payload_equality_uses_recursive_fieldwise_compare(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = textwrap.dedent("""
         import pcc
@@ -548,7 +548,7 @@ def test_valueclass_nested_payload_equality_uses_recursive_fieldwise_compare(tmp
 
 
 def test_valueclass_payload_equality_compiles_with_default_ir_passes(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "valueclass_eq.py"
     exe = tmp_path / "valueclass_eq"
@@ -588,7 +588,7 @@ def test_valueclass_payload_equality_compiles_with_default_ir_passes(tmp_path):
 
 
 def test_valueclass_payload_boxes_at_dyn_function_boundary(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = textwrap.dedent("""
         import pcc
@@ -1831,7 +1831,7 @@ def test_valueclass_constructor_walrus_target_uses_payload():
 
 
 def test_valueclass_payload_unboxes_from_dyn_function_boundary(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = textwrap.dedent("""
         import pcc
@@ -1874,7 +1874,7 @@ def test_valueclass_payload_unboxes_from_dyn_function_boundary(tmp_path):
 
 
 def test_valueclass_payload_unbox_rejects_wrong_dyn_type(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = textwrap.dedent("""
         import pcc
@@ -1913,7 +1913,7 @@ def test_valueclass_payload_unbox_rejects_wrong_dyn_type(tmp_path):
 
 
 def test_valueclass_pointer_payload_crosses_dyn_boundary(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = textwrap.dedent("""
         import gc

@@ -44,7 +44,7 @@ int main(void) {
 def _compile_and_link_sources(native_compiler, tmp_path, gc, sources, archive, threads=False):
     from scripts.bootstrap_platform import dependency_receipt
     from scripts.platform_process_watchdog import run
-    from pcc.py_frontend.pipeline_targets import host_target_triple
+    from pcc.frontends.python.pipeline_targets import host_target_triple
 
     output = tmp_path / "combined.o"
     environment = os.environ.copy()

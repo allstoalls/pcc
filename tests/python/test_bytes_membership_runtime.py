@@ -4,10 +4,10 @@ from pathlib import Path
 import subprocess
 
 
-def test_bytes_and_bytearray_membership(tmp_path: Path, pcc_py_runtime_archive, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+def test_bytes_and_bytearray_membership(tmp_path: Path, pcc_runtime_archive, monkeypatch):
+    from pcc.frontends.python.pipeline import compile_python
 
-    archive = pcc_py_runtime_archive
+    archive = pcc_runtime_archive
     monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(archive))
     source = tmp_path / "membership.py"
     executable = tmp_path / "membership"

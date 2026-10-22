@@ -2,7 +2,7 @@
 """Benchmark an existing pcc1 bootstrap binary.
 
 This script measures the compiled compiler, not CPython-hosted ``pcc``.
-It expects a prebuilt ``pcc1`` binary from ``scripts/bootstrap.sh`` or a
+It expects a prebuilt ``pcc1`` binary from ``scripts/bootstrap.py`` or a
 manually produced strict bootstrap run.
 
 Examples:
@@ -89,7 +89,6 @@ def _default_pcc1_path() -> Path:
         REPO_ROOT / "build" / "bootstrap-strict-self" / "pcc1",
         REPO_ROOT / "build" / "bootstrap" / "pcc1",
         REPO_ROOT / "build" / "bootstrap-self" / "pcc1",
-        REPO_ROOT / "build" / "bootstrap-llvm" / "pcc1",
         REPO_ROOT / "pcc1",
     )
     for path in candidates:
@@ -435,7 +434,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--backend",
         default="self",
-        choices=("llvm", "llvm_capi", "self"),
+        choices=("self",),
     )
     parser.add_argument(
         "--python-libpython",

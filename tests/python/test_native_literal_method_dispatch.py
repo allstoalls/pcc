@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def _source() -> str:
@@ -45,7 +45,7 @@ def test_literal_self_method_dict_dispatch_preserves_stararg_semantics(tmp_path)
     compile_python(
         str(src),
         str(exe),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )
@@ -63,7 +63,7 @@ def test_literal_self_method_dict_dispatch_uses_direct_blocks(tmp_path):
     compile_python(
         str(src),
         str(ll),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
         emit_llvm_only=True,

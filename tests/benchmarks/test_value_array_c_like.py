@@ -2,17 +2,24 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import statistics
 import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PY_SOURCE = REPO_ROOT / "benchmarks/python/scenarios/value_array_c_like.py"
 C_SOURCE = REPO_ROOT / "benchmarks/c/value_array_c_like.c"
 RESULT = REPO_ROOT / "benchmarks/results/m3_value_array_c_like.json"
+CAPTURED_V1_IR = Path(os.environ.get(
+    "PCC_VALUE_ARRAY_V1_REFERENCE_IR",
+    str(REPO_ROOT / "benchmarks/results/m3_value_array_c_like.ll"),
+))
 
 
 def _sha256(path: Path) -> str:
@@ -23,9 +30,8 @@ def _manifest() -> dict:
     return json.loads(RESULT.read_text(encoding="utf-8"))
 
 
-def test_value_array_c_like_manifest_is_exactly_source_and_ir_bound(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
-
+def test_value_array_c_like_historical_manifest_retains_exact_source_and_ir_identities():
+    """Audit the Aug-2026 receipt without re-labeling a new compiler's output."""
     manifest = _manifest()
     identity = manifest["source_identity"]
     assert re.fullmatch(r"[0-9a-f]{40}", identity["repository_base_commit"])
@@ -34,19 +40,42 @@ def test_value_array_c_like_manifest_is_exactly_source_and_ir_bound(tmp_path):
     assert identity["python_sha256"] == _sha256(PY_SOURCE)
     assert identity["native_c_sha256"] == _sha256(C_SOURCE)
 
+    assert identity["frontend_ir_sha256"] == "442f422268a25699138a4ffdfc15eb1fdf1af83310e122a30deea93f6c91f5f2"
+    assert manifest["ir_shape"]["hot_ir_sha256"] == "cb01ab3ee5d6ebb96018b93dc38abd33f549632b2e1c20800000606e9a359aee"
+    assert manifest["compile_commands"]["llvm"][2] == "llvm"
+
+
+@pytest.mark.pcc_gate(unavailable=(
+    None if CAPTURED_V1_IR.is_file() else
+    "historical LLVM frontend IR is not archived; set PCC_VALUE_ARRAY_V1_REFERENCE_IR to the captured file"
+))
+def test_value_array_c_like_captured_reference_ir_matches_historical_receipt():
+    """Byte-check the original IR when present; never regenerate it with self."""
+    assert CAPTURED_V1_IR.is_file(), "captured reference IR is unavailable"
+    assert _manifest()["source_identity"]["frontend_ir_sha256"] == _sha256(CAPTURED_V1_IR)
+
+
+def test_value_array_c_like_owned_frontend_keeps_aggregate_and_slow_paths(tmp_path):
+    from pcc.frontends.python.pipeline import compile_python
+
     emitted = tmp_path / "value_array_c_like.ll"
     compile_python(
-        str(PY_SOURCE),
-        str(emitted),
-        emit_llvm_only=True,
-        libpython_mode="off",
-        ir_scaffold_mode="on",
-        backend="llvm",
+        str(PY_SOURCE), str(emitted), emit_llvm_only=True,
+        libpython_mode="off", ir_scaffold_mode="on", backend="self",
     )
-    assert identity["frontend_ir_sha256"] == _sha256(emitted)
+    text = emitted.read_text(encoding="utf-8")
+    signature = _manifest()["ir_shape"]["function_signature"]
+    name = signature.split("@", 1)[1].split("(", 1)[0]
+    header = next(line for line in text.splitlines() if line.startswith("define ") and "@" + name + "(" in line)
+    assert "{ { double, double }, { double, double } } %values" in header, header
+    hot = text.split(header, 1)[1].split("\n}", 1)[0]
+    for callee in ("py_list_new", "py_instance_new", "py_valuebox_new"):
+        assert "@" + callee + "(" not in hot, hot
+    assert "extractvalue { { double, double }, { double, double } }" in hot
+    assert "@py_int_add(" in text
 
 
-def test_value_array_c_like_manifest_proves_bounded_mode_labeled_claim():
+def test_value_array_c_like_historical_manifest_proves_bounded_mode_labeled_claim():
     manifest = _manifest()
     assert manifest["schema"] == "pcc.m3_c_like.value_array.v1"
     policy = manifest["claim"]["measured_policy"]
@@ -98,8 +127,8 @@ def test_value_array_c_like_manifest_keeps_ir_and_semantic_slow_paths_together()
     assert allocation["observations"]["0"] == allocation["observations"]["1000"]
 
 
-def test_value_array_c_like_source_matches_host_llvm_and_self(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+def test_value_array_c_like_source_matches_host_default_and_explicit_self(tmp_path):
+    from pcc.frontends.python.pipeline import compile_python
 
     host = subprocess.run(
         [sys.executable, str(PY_SOURCE)],
@@ -110,7 +139,7 @@ def test_value_array_c_like_source_matches_host_llvm_and_self(tmp_path):
         timeout=20,
     )
     outputs = [host.stdout]
-    for backend in ("llvm", "self"):
+    for backend in (None, "self"):
         executable = tmp_path / f"value_array_c_like_{backend}"
         compile_python(
             str(PY_SOURCE),

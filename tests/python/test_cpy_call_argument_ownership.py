@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.owned_ir_validation import verify_ir_text
+
 import re
 
 import pytest
@@ -16,7 +18,7 @@ def _normalize_call_types(ir_text: str) -> str:
 
 
 def _compile_to_ir(tmp_path, source: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "cpy_call_argument_ownership.py"
     out = tmp_path / "cpy_call_argument_ownership.ll"
@@ -154,7 +156,7 @@ def dynamic_dict(key: str, value: str) -> dict[str, str]:
 
 
 def test_freestanding_raw_pointer_call_args_do_not_emit_managed_pins(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "freestanding_raw_pointer_call.py"
     out = tmp_path / "freestanding_raw_pointer_call.ll"
@@ -187,7 +189,7 @@ def test_freestanding_raw_pointer_call_args_do_not_emit_managed_pins(tmp_path):
 
 
 def test_c_abi_library_raw_pointer_call_args_do_not_emit_managed_pins(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "c_abi_raw_pointer_call.py"
     out = tmp_path / "c_abi_raw_pointer_call.ll"
@@ -1512,7 +1514,6 @@ def test_cpython_boolexpr_transfers_selected_operand_to_owned_phi(
     tmp_path,
     operator,
 ):
-    from llvmlite import binding as llvm
 
     ir_text = _compile_to_ir(
         tmp_path,
@@ -1523,7 +1524,7 @@ def nested_bool_expr() -> object:
     return Context(Decimal(0) {operator} Decimal(1))
 """,
     )
-    llvm.parse_assembly(ir_text).verify()
+    verify_ir_text(ir_text)
     body = _function_body(ir_text, "nested_bool_expr")
     operands = list(
         re.finditer(
@@ -3030,7 +3031,6 @@ def failing_starred_operand() -> object:
 
 
 def test_cpython_lambda_keyword_uses_function_local_error_blocks(tmp_path):
-    from llvmlite import binding as llvm
 
     ir_text = _compile_to_ir(
         tmp_path,
@@ -3041,7 +3041,7 @@ def lambda_context_state() -> object:
     return Context(1, key=lambda value: Decimal(value))
 """,
     )
-    llvm.parse_assembly(ir_text).verify()
+    verify_ir_text(ir_text)
 
 
 def test_threaded_arglist_clears_and_unpins_temp_root_before_release(tmp_path):
@@ -3515,7 +3515,6 @@ def mixed_list_cleanup() -> object:
 
 
 def test_cpython_tuple_bridge_failure_cleans_remaining_refs_and_container(tmp_path):
-    from llvmlite import binding as llvm
 
     ir_text = _compile_to_ir(
         tmp_path,
@@ -3550,7 +3549,7 @@ def tuple_bridge_cleanup() -> object:
         f"call void @py_cpy_decref(ptr {later_source})" in block
         for block in cleanup_blocks
     ), body
-    llvm.parse_assembly(ir_text).verify()
+    verify_ir_text(ir_text)
 
 
 def test_mixed_list_bridge_failure_cleans_later_ref_pin_and_container(tmp_path):

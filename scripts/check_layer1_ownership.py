@@ -12,9 +12,9 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LAYER1 = ROOT / "pcc" / "py_frontend" / "codegen" / "layer1.py"
+LAYER1 = ROOT / "pcc" / "frontends" / "python" / "codegen" / "layer1.py"
 OWNERSHIP_DOC = ROOT / "docs" / "architecture" / "layer1-ownership.md"
-MIXIN_STACK = ROOT / "pcc" / "py_frontend" / "codegen" / "layer1_mixins.py"
+MIXIN_STACK = ROOT / "pcc" / "frontends" / "python" / "codegen" / "layer1_mixins.py"
 
 
 FORBIDDEN_SNIPPETS = (
@@ -60,7 +60,7 @@ def main() -> int:
     missing = [
         name
         for name in required_modules
-        if not (ROOT / "pcc" / "py_frontend" / "codegen" / name).exists()
+        if not (ROOT / "pcc" / "frontends" / "python" / "codegen" / name).exists()
     ]
     if missing:
         return fail("missing split lowering modules: " + ", ".join(missing))

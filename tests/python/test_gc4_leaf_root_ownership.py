@@ -44,13 +44,13 @@ int main(int argc, char **argv) {
 }
 '''
 
-@pytest.mark.parametrize("runtime_fixture", ["pcc_py_runtime_archive", "pcc_py_runtime_archive"])
+@pytest.mark.parametrize("runtime_fixture", ["pcc_runtime_archive", "pcc_runtime_archive"])
 def test_leaf_root_self_store_and_clear(tmp_path, request, runtime_fixture):
     archive = request.getfixturevalue(runtime_fixture)
     source = tmp_path / "leaf_root.c"
     source.write_text(PROGRAM)
     binary = tmp_path / "leaf_root"
-    include = Path(__file__).resolve().parents[2] / "pcc/py_runtime/include"
+    include = Path(__file__).resolve().parents[2] / "pcc/runtime/include"
     build = subprocess.run(["clang", "-I", str(include), str(source), str(archive),
                             "-pthread", "-o", str(binary)], capture_output=True,
                            text=True, timeout=30)

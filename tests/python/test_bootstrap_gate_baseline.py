@@ -1,17 +1,16 @@
 """Bootstrap-gate baseline verification (Issue 1 progress tracker).
 
 Lightweight: only inspects binaries that already exist in
-``build/bootstrap-{llvm,self}/``. Does NOT trigger a fresh bootstrap
+``build/bootstrap-self/``. Does NOT trigger a fresh bootstrap
 build (those take minutes and would slow every pytest run). If the
-binaries are absent, all tests are skipped — re-run
-``scripts/bootstrap.sh`` to regenerate them, then re-run pytest.
+binaries are absent, the captured-baseline cases are unavailable — re-run
+``scripts/bootstrap.py`` to regenerate them, then re-run pytest.
 
 What's checked:
 - Binary sizes haven't drifted dramatically from the captured baseline.
 - ``otool -L`` libpython linkage state matches baseline (currently
   ``false`` for every strict bootstrap binary).
-- pcc2 and pcc3 are byte-identical after Mach-O signature and LC_UUID
-  normalization (the README's three-stage self-host gate).
+- pcc2 and pcc3 have identical original bytes, including signature and UUID.
 
 The Issue 1 no-libpython baseline is intentionally one-way: any
 ``links_libpython`` transition back to ``true`` is a regression.
@@ -22,17 +21,13 @@ import json
 import os
 import platform
 
-from pcc.dependency_verdict import probe_platform_capability
-import shutil
+from pcc.diagnostics.dependency_verdict import probe_platform_capability
 import subprocess
+import struct
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
-
-from pcc.macho_normalize import normalize_macho_metadata
-
 
 _REPO_ROOT = Path(__file__).absolute().parents[2]
 _BASELINE_JSON = _REPO_ROOT / "tests" / "bootstrap_gate_baseline.json"
@@ -49,7 +44,7 @@ def _is_macos_arm64() -> bool:
     }
 
 
-pytestmark = pytest.mark.pcc_gate(
+_PLATFORM_GATE = pytest.mark.pcc_gate(
     unavailable=None
     if _is_macos_arm64()
     else "the authoritative bootstrap baseline is captured on macOS arm64"
@@ -79,25 +74,8 @@ def _links_libpython(path: Path) -> bool:
     return "libpython" in text or "Python.framework" in text
 
 
-def _strip_signature_copy(src: Path, dst: Path) -> None:
-    shutil.copy2(src, dst)
-    if sys.platform == "darwin" and shutil.which("codesign"):
-        subprocess.run(
-            ["codesign", "--remove-signature", str(dst)],
-            check=False,
-            capture_output=True,
-        )
-        normalize_macho_metadata(dst)
-
-
-def _byte_identical_after_normalize(a: Path, b: Path) -> bool:
-    with tempfile.TemporaryDirectory() as tmp:
-        a_norm = Path(tmp) / "a"
-        b_norm = Path(tmp) / "b"
-        _strip_signature_copy(a, a_norm)
-        _strip_signature_copy(b, b_norm)
-        with open(a_norm, "rb") as fa, open(b_norm, "rb") as fb:
-            return fa.read() == fb.read()
+def _byte_identical(a: Path, b: Path) -> bool:
+    return a.read_bytes() == b.read_bytes()
 
 
 def _missing_stage_bin_reason(backend: str) -> str | None:
@@ -105,7 +83,7 @@ def _missing_stage_bin_reason(backend: str) -> str | None:
         path = _stage_bin(backend, stage)
         if not path.exists():
             return (
-                f"{path} missing; run scripts/bootstrap.sh --backend "
+                f"{path} missing; run scripts/bootstrap.py --backend "
                 f"{backend} to populate"
             )
     return None
@@ -124,9 +102,10 @@ def _require_bins(backend: str) -> None:
             backend,
             marks=pytest.mark.pcc_gate(unavailable=_missing_stage_bin_reason(backend)),
         )
-        for backend in ("llvm", "self")
+        for backend in ("self",)
     ],
 )
+@_PLATFORM_GATE
 def test_bootstrap_libpython_state_matches_baseline(backend):
     """Each backend×stage binary's libpython linkage must match what
     the baseline records. When Path A flips a binary from true→false,
@@ -173,13 +152,18 @@ def test_bootstrap_libpython_state_matches_baseline(backend):
             backend,
             marks=pytest.mark.pcc_gate(unavailable=_missing_stage_bin_reason(backend)),
         )
-        for backend in ("llvm", "self")
+        for backend in ("self",)
     ],
 )
+@_PLATFORM_GATE
 def test_bootstrap_pcc2_pcc3_byte_identical(backend):
-    """The README's self-host gate: pcc2 and pcc3 must be byte
-    identical after Mach-O signature normalization. Path A must not
-    break this — if it does, determinism regression in codegen.
+    """Stage2/3 must agree in their original bytes.
+
+    This inspects the Aug-2026 baseline binaries in ``build/bootstrap-self``,
+    not a fresh build; the live gate in ``scripts/bootstrap.py`` requires raw
+    byte identity on every platform and format.  The ``llvm`` arm was retired
+    with the LLVM bootstrap route (``bootstrap.py`` accepts the owned ``self``
+    backend only); the recorded llvm baseline stays in the JSON as history.
     """
     platform_verdict = probe_platform_capability(
         "macos-arm64-bootstrap-baseline",
@@ -191,7 +175,32 @@ def test_bootstrap_pcc2_pcc3_byte_identical(backend):
     _require_bins(backend)
     pcc2 = _stage_bin(backend, 2)
     pcc3 = _stage_bin(backend, 3)
-    assert _byte_identical_after_normalize(pcc2, pcc3), (
-        f"{backend}: pcc2 and pcc3 differ after signature normalization; "
+    assert _byte_identical(pcc2, pcc3), (
+        f"{backend}: pcc2 and pcc3 differ in their original bytes; "
         f"self-host determinism gate failed"
     )
+
+
+def test_raw_byte_fixed_point_rejects_uuid_drift_without_external_tools(tmp_path, monkeypatch):
+    def unexpected_tool(*args, **kwargs):
+        raise AssertionError("raw byte comparison must not normalize or invoke tools")
+
+    monkeypatch.setattr(subprocess, "run", unexpected_tool)
+    header = struct.pack("<IiiIIIII", 0xFEEDFACF, 0x0100000C, 0, 2, 1, 24, 0, 0)
+    command = struct.pack("<II", 0x1B, 24)
+    first, second = tmp_path / "pcc2", tmp_path / "pcc3"
+    first.write_bytes(header + command + bytes(range(16)))
+    second.write_bytes(header + command + bytes(reversed(range(16))))
+    original = first.read_bytes(), second.read_bytes()
+    assert not _byte_identical(first, second)
+    assert (first.read_bytes(), second.read_bytes()) == original
+    second.write_bytes(first.read_bytes())
+    assert _byte_identical(first, second)
+
+
+def test_raw_byte_fixed_point_rejects_signature_payload_drift(tmp_path):
+    first, second = tmp_path / "pcc2", tmp_path / "pcc3"
+    payload = b"same emitted code and load commands\0"
+    first.write_bytes(payload + b"signature-one")
+    second.write_bytes(payload + b"signature-two")
+    assert not _byte_identical(first, second)

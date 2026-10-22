@@ -11,7 +11,7 @@ import pytest
 
 from pcc1_gate import find_current_pcc1, skip_or_fail_no_current_pcc1
 
-from pcc import cli_bootstrap
+from pcc.driver import cli_bootstrap
 
 REPO = Path(__file__).absolute().parents[2]
 
@@ -228,5 +228,5 @@ def test_current_pcc1_imports_generic_built_extension_without_host_helpers(tmp_p
 
 @pytest.mark.parametrize("forbidden", ["simplejson", "immutables", "pyahocorasick"])
 def test_source_build_dispatch_has_no_candidate_package_names(forbidden):
-    source = (REPO / "pcc" / "cli_bootstrap.py").read_text(encoding="utf-8").lower()
+    source = (REPO / "pcc" / "driver" / "cli_bootstrap.py").read_text(encoding="utf-8").lower()
     assert forbidden not in source

@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 
-import llvmlite.binding as llvm
 import pytest
 
-from pcc.ir_passes.parity import normalize_ir
-from pcc.passes.llvm_text_pipeline import find_opt_binary, run_pipeline
-from pcc.py_frontend import ir_pass_pipeline, pipeline, pipeline_pass_config
+from pcc.frontends.python import ir_pass_pipeline, pipeline, pipeline_pass_config
 
 
 def test_default_python_ir_pass_manifest_is_versioned_and_bounded():
@@ -450,24 +448,6 @@ def test_python_ir_pass_pipeline_off_is_noop(monkeypatch):
     assert out == _DEAD_ADD_IR
 
 
-def test_python_ir_pass_pipeline_default_runs_registered_passes(monkeypatch):
-    monkeypatch.delenv("PCC_PYTHON_IR_PASSES", raising=False)
-
-    out = pipeline._apply_python_ir_pass_pipeline(
-        _DEAD_ADD_IR,
-        module_name="probe",
-    )
-
-    # The default preset is the "fast" preset = ("mem2reg", "sroa").
-    # mem2reg promotes allocas to SSA; sroa breaks up aggregates.
-    # Neither eliminates dead arithmetic (``%dead = add i32 %v, 0``
-    # stays because it's still used in ``ret i32 %dead``).  But the
-    # ``alloca``/``store``/``load`` triple should be gone — that's the
-    # actual signal that the registered passes ran.  DCE is in the
-    # "quick" preset, not "default"/"fast".
-    assert "alloca" not in out
-    assert "store i32" not in out
-    assert "load i32" not in out
 
 
 def test_python_ir_pass_names_stay_list_for_bootstrap_joining():
@@ -531,15 +511,6 @@ def test_python_ir_pass_pipeline_failure_is_not_empty_success(monkeypatch):
         )
 
 
-def test_python_ir_pass_pipeline_runs_registered_ir_pass(monkeypatch):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "dce")
-
-    out = pipeline._apply_python_ir_pass_pipeline(
-        _DEAD_ADD_IR,
-        module_name="probe",
-    )
-
-    assert "%dead" not in out
 
 
 def test_python_ir_pass_pipeline_on_expands_to_fast_default(monkeypatch):
@@ -557,300 +528,30 @@ def test_python_ir_pass_pipeline_all_stays_explicit_all(monkeypatch):
     assert pipeline._resolve_python_ir_pass_names() == ["all"]
 
 
-def test_python_ir_pass_pipeline_all_preset_runs_registered_passes():
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _DEAD_ADD_IR,
-        pass_names=("all",),
-        module_name="probe",
-    )
-
-    assert "%dead" not in out
 
 
-def test_python_ir_pass_memory_transport_all_uses_llvm_default_o2(monkeypatch):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "memory")
-
-    names = ir_pass_pipeline._expand_pass_names(
-        ("all",),
-        len(_DEAD_ADD_IR),
-        transport="memory",
-    )
-
-    assert names == ("default<O2>",)
 
 
-def test_python_ir_pass_memory_transport_keeps_llvm_default_on_large_modules(
-    monkeypatch,
-):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "memory")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_LARGE_MODULE_BYTES", "1")
-
-    names = ir_pass_pipeline._expand_pass_names(
-        ("all",),
-        len(_DEAD_ADD_IR),
-        transport="memory",
-    )
-
-    assert names == ("default<O2>",)
 
 
-def test_python_ir_pass_memory_transport_matches_opt_default_o2(monkeypatch):
-    opt = find_opt_binary()
-    if opt is None:
-        pytest.fail("matching LLVM opt binary is not available")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "memory")
-
-    memory_out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _OPT_DEFAULT_PIPELINE_IR,
-        pass_names=("all",),
-        module_name="probe",
-    )
-    opt_out = run_pipeline(opt, "default<O2>", _OPT_DEFAULT_PIPELINE_IR)
-
-    assert normalize_ir(memory_out) == normalize_ir(opt_out)
 
 
-def test_python_ir_pass_memory_transport_canonicalizes_default_os(monkeypatch):
-    opt = find_opt_binary()
-    if opt is None:
-        pytest.fail("matching LLVM opt binary is not available")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "memory")
-
-    memory_out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _OPT_DEFAULT_PIPELINE_IR,
-        pass_names=("default<os>",),
-        module_name="probe",
-    )
-    opt_out = run_pipeline(opt, "default<Os>", _OPT_DEFAULT_PIPELINE_IR)
-
-    assert normalize_ir(memory_out) == normalize_ir(opt_out)
 
 
-def test_python_ir_pass_memory_transport_runs_default_fast(monkeypatch):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "memory")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_CACHE", "off")
-
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _OPT_DEFAULT_PIPELINE_IR,
-        pass_names=("default",),
-        module_name="probe",
-    )
-
-    assert "%p = alloca" not in out
-    llvm.parse_assembly(out).verify()
 
 
-def test_python_ir_pass_memory_transport_skips_parse_error(monkeypatch, capsys):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "memory")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_CACHE", "off")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TELEMETRY", "1")
-
-    invalid_ir = """
-define i64 @main() {
-entry:
-  %flag = icmp eq i64 1, 1
-  %bad = or ptr null, %flag
-  ret i64 0
-}
-"""
-
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        invalid_ir,
-        pass_names=("default",),
-        module_name="probe",
-    )
-
-    assert out == invalid_ir
-    records = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
-    assert any(
-        record.get("event") == "pass-batch"
-        and record.get("status") == "skip_parse_error"
-        for record in records
-    )
 
 
-def test_python_ir_pass_default_fast_auto_selects_memory_transport(
-    monkeypatch,
-    capsys,
-):
-    monkeypatch.delenv("PCC_PYTHON_IR_PASS_TRANSPORT", raising=False)
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_CACHE", "off")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TELEMETRY", "1")
-
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _OPT_DEFAULT_PIPELINE_IR,
-        pass_names=("default",),
-        module_name="probe",
-    )
-
-    assert "%p = alloca" not in out
-    records = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
-    assert records[0]["transport"] == "memory"
-    assert {
-        (record.get("pass"), record.get("status"), record.get("transport"))
-        for record in records
-        if record.get("event") == "pass"
-    } == {
-        ("mem2reg", "run", "memory"),
-        ("sroa", "run", "memory"),
-    }
-    llvm.parse_assembly(out).verify()
 
 
-def test_python_ir_pass_explicit_text_transport_overrides_default_fast(
-    monkeypatch,
-    capsys,
-):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "text")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TELEMETRY", "1")
-
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _OPT_DEFAULT_PIPELINE_IR,
-        pass_names=("default",),
-        module_name="probe",
-    )
-
-    # Default = "fast" preset = (mem2reg, sroa). Confirms the alloca
-    # was promoted; ``%dead = add %v, 0`` stays because DCE isn't in
-    # this preset (DCE is in "quick").
-    assert "%p = alloca" not in out
-    assert "store i32" not in out
-    records = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
-    assert records[0]["transport"] == "text"
 
 
-def test_python_ir_pass_memory_transport_strict_no_libpython_skips_cpy_refs(
-    monkeypatch,
-    capsys,
-):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "memory")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_STRICT_NO_LIBPYTHON", "1")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TELEMETRY", "1")
-
-    ir_text = """
-declare ptr @py_cpy_import(ptr)
-
-@.mod = internal constant [9 x i8] c"builtins\\00"
-
-define i32 @main() {
-entry:
-  %p = getelementptr inbounds [9 x i8], ptr @.mod, i32 0, i32 0
-  %m = call ptr @py_cpy_import(ptr %p)
-  ret i32 0
-}
-""".strip()
-
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        ir_text,
-        pass_names=("default",),
-        module_name="probe",
-    )
-
-    assert out == ir_text
-    records = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
-    statuses = {
-        (record.get("pass"), record.get("status"))
-        for record in records
-        if record.get("event") == "pass"
-    }
-    assert ("mem2reg", "skip_cpy_ref") in statuses
 
 
-def test_python_ir_pass_memory_transport_strict_no_libpython_allows_cpy_decls(
-    monkeypatch,
-):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "memory")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_STRICT_NO_LIBPYTHON", "1")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_CACHE", "off")
-    ir_text = _OPT_DEFAULT_PIPELINE_IR.replace(
-        "define i32 @main()",
-        "declare ptr @py_cpy_import(ptr)\n\n" "define i32 @main()",
-    )
-
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        ir_text,
-        pass_names=("default",),
-        module_name="probe",
-    )
-
-    assert "%p = alloca" not in out
-    llvm.parse_assembly(out).verify()
 
 
-def test_python_ir_pass_memory_transport_uses_content_cache(tmp_path, monkeypatch):
-    from pcc.llvm_capi import binding as llvm_capi_binding
-
-    cache_dir = tmp_path / "ir-pass-cache"
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "memory")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_CACHE_DIR", str(cache_dir))
-    calls = []
-    real_run_passes_on_ir = llvm_capi_binding.run_passes_on_ir
-
-    def counted_run_passes_on_ir(ir_text, passes, *args, **kwargs):
-        calls.append(passes)
-        return real_run_passes_on_ir(ir_text, passes, *args, **kwargs)
-
-    monkeypatch.setattr(
-        llvm_capi_binding,
-        "run_passes_on_ir",
-        counted_run_passes_on_ir,
-    )
-    first = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _OPT_DEFAULT_PIPELINE_IR,
-        pass_names=("all",),
-        module_name="probe",
-    )
-    assert calls == ["default<O2>"]
-
-    def fail_run_passes_on_ir(*_args, **_kwargs):
-        raise AssertionError("second identical memory pipeline should hit cache")
-
-    monkeypatch.setattr(
-        llvm_capi_binding,
-        "run_passes_on_ir",
-        fail_run_passes_on_ir,
-    )
-    second = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _OPT_DEFAULT_PIPELINE_IR,
-        pass_names=("all",),
-        module_name="probe",
-    )
-
-    assert second == first
 
 
-def test_python_ir_pass_memory_transport_cache_can_be_disabled(tmp_path, monkeypatch):
-    from pcc.llvm_capi import binding as llvm_capi_binding
-
-    cache_dir = tmp_path / "ir-pass-cache"
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "memory")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_CACHE_DIR", str(cache_dir))
-    ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _OPT_DEFAULT_PIPELINE_IR,
-        pass_names=("all",),
-        module_name="probe",
-    )
-
-    calls = []
-
-    def fake_run_passes_on_ir(ir_text, _passes, *_args, **_kwargs):
-        calls.append(True)
-        return ir_text
-
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_CACHE", "off")
-    monkeypatch.setattr(
-        llvm_capi_binding,
-        "run_passes_on_ir",
-        fake_run_passes_on_ir,
-    )
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _OPT_DEFAULT_PIPELINE_IR,
-        pass_names=("all",),
-        module_name="probe",
-    )
-
-    assert calls == [True]
-    assert out == _OPT_DEFAULT_PIPELINE_IR
 
 
 def test_python_ir_pass_memory_transport_rejects_bad_transport():
@@ -858,7 +559,7 @@ def test_python_ir_pass_memory_transport_rejects_bad_transport():
         ir_pass_pipeline.resolve_python_ir_pass_transport("socket")
 
 
-def test_python_ir_pass_pipeline_runs_loop_unroll():
+def test_python_ir_pass_pipeline_rejects_removed_external_loop_unroll():
     ir = """
 define i32 @main(i32 %n) {
 entry:
@@ -875,17 +576,11 @@ exit:
 }
 """
 
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        ir,
-        pass_names=("loop-unroll",),
-        module_name="probe",
-    )
-
-    assert "phi i32" not in out
-    assert "ret i32 3" in out
+    with pytest.raises(ir_pass_pipeline.PythonIRPassError, match="unsupported owned IR pass.*loop-unroll"):
+        ir_pass_pipeline.run_python_ir_pass_pipeline(ir, pass_names=("loop-unroll",), module_name="probe")
 
 
-def test_python_ir_pass_pipeline_runs_conservative_dse():
+def test_python_ir_pass_pipeline_rejects_external_dse_and_promotes_owned_slot():
     ir = """
 define i32 @main() {
 entry:
@@ -897,30 +592,40 @@ entry:
 }
 """
 
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        ir,
-        pass_names=("dse",),
-        module_name="probe",
-    )
-
-    assert "store i32 1, ptr %p" not in out
-    assert "store i32 2, ptr %p" in out
+    with pytest.raises(ir_pass_pipeline.PythonIRPassError, match="unsupported owned IR pass.*dse"):
+        ir_pass_pipeline.run_python_ir_pass_pipeline(ir, pass_names=("dse",), module_name="probe")
+    out = ir_pass_pipeline.run_python_ir_pass_pipeline(ir, pass_names=("mem2reg", "sroa"), module_name="probe")
+    assert "alloca" not in out and "store" not in out
+    assert "ret i32 2" in out
 
 
-def test_python_ir_pass_pipeline_sets_bootstrap_licm_budget(monkeypatch):
+def test_python_ir_pass_pipeline_keeps_owned_dce_without_external_licm_budget(monkeypatch):
     monkeypatch.delenv("PCC_LICM_LOOP_BUDGET", raising=False)
 
-    ir_pass_pipeline.run_python_ir_pass_pipeline(
+    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
         _DEAD_ADD_IR,
         pass_names=("dce",),
         module_name="probe",
     )
 
-    assert os.environ["PCC_LICM_LOOP_BUDGET"] == "8"
+    assert "PCC_LICM_LOOP_BUDGET" not in os.environ
+    assert "add i64" not in out
 
 
-def test_large_module_budget_skips_textual_pass(monkeypatch):
+
+
+def test_owned_cfg_pass_is_not_skipped_by_retired_external_size_limit(monkeypatch):
+    from pcc.frontends.python import compiled_owned_passes
+
     monkeypatch.setenv("PCC_PYTHON_IR_PASS_LARGE_MODULE_BYTES", "1")
+    original = compiled_owned_passes.simplify_cfg_text
+    calls = []
+
+    def observed(text):
+        calls.append(text)
+        return original(text)
+
+    monkeypatch.setattr(compiled_owned_passes, "simplify_cfg_text", observed)
 
     out = ir_pass_pipeline.run_python_ir_pass_pipeline(
         _GLOBAL_STRING_BRANCH_IR,
@@ -928,62 +633,10 @@ def test_large_module_budget_skips_textual_pass(monkeypatch):
         module_name="probe",
     )
 
-    assert "br i1 true" in out
-    assert "ret i32 0" in out
-    llvm.parse_assembly(out).verify()
+    assert calls == [_GLOBAL_STRING_BRANCH_IR]
+    assert "define" in out
 
 
-def test_all_skipped_large_module_does_not_parse_ir(monkeypatch):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_LARGE_MODULE_BYTES", "1")
-
-    def fail_parse(_text):
-        raise AssertionError("skipped-only pipeline should not parse IR")
-
-    monkeypatch.setattr(llvm, "parse_assembly", fail_parse)
-
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _GLOBAL_STRING_BRANCH_IR,
-        pass_names=("simplifycfg",),
-        module_name="probe",
-    )
-
-    assert out == _GLOBAL_STRING_BRANCH_IR
-
-
-def test_python_ir_pass_telemetry_reports_skips_and_runs(
-    monkeypatch,
-    capsys,
-):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TELEMETRY", "1")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_LARGE_MODULE_BYTES", "1")
-
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _GLOBAL_STRING_BRANCH_IR,
-        pass_names=("simplifycfg", "dce"),
-        module_name="probe",
-    )
-
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    records = [json.loads(line) for line in captured.err.splitlines()]
-    assert records[0]["event"] == "start"
-    assert records[0]["module"] == "probe"
-    assert any(
-        record.get("event") == "pass"
-        and record.get("pass") == "simplifycfg"
-        and record.get("status") == "skip_large"
-        for record in records
-    )
-    assert any(
-        record.get("event") == "pass"
-        and record.get("pass") == "dce"
-        and record.get("status") == "run"
-        and "elapsed_ms" in record
-        and record.get("ir_bytes_before", 0) > 0
-        for record in records
-    )
-    assert records[-1]["event"] == "end"
-    llvm.parse_assembly(out).verify()
 
 
 def test_python_ir_pass_telemetry_can_write_jsonl_file(
@@ -1015,207 +668,24 @@ def test_python_ir_pass_telemetry_can_write_jsonl_file(
     assert records[-1]["event"] == "end"
 
 
-def test_medium_module_budget_skips_costly_textual_passes(
-    monkeypatch,
-    capsys,
-):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TELEMETRY", "1")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_MEDIUM_MODULE_BYTES", "1")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_LARGE_MODULE_BYTES", "0")
-
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _GLOBAL_STRING_BRANCH_IR,
-        pass_names=("mldst-motion", "dce"),
-        module_name="probe",
-    )
-
-    records = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
-    assert any(
-        record.get("event") == "pass"
-        and record.get("pass") == "mldst-motion"
-        and record.get("status") == "skip_medium_cost"
-        for record in records
-    )
-    assert any(
-        record.get("event") == "pass"
-        and record.get("pass") == "dce"
-        and record.get("status") == "run"
-        for record in records
-    )
-    llvm.parse_assembly(out).verify()
 
 
-def test_large_module_fast_default_keeps_mem2reg_sroa(monkeypatch, capsys):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TELEMETRY", "1")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_LARGE_MODULE_BYTES", "1")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_HUGE_MODULE_BYTES", "0")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "text")
-
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _RUNTIME_CALL_IR,
-        pass_names=("default",),
-        module_name="probe",
-    )
-
-    records = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
-    statuses = {
-        (record.get("pass"), record.get("status"))
-        for record in records
-        if record.get("event") == "pass"
-    }
-    assert ("mem2reg", "run") in statuses
-    assert ("sroa", "run") in statuses
-    assert ("mem2reg", "skip_large") not in statuses
-    assert ("sroa", "skip_large") not in statuses
-    llvm.parse_assembly(out).verify()
 
 
-def test_huge_module_default_skips_fast_preset_without_parse(
-    monkeypatch,
-    capsys,
-):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TELEMETRY", "1")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_HUGE_MODULE_BYTES", "1")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "text")
-
-    def fail_parse(_text):
-        raise AssertionError("huge skipped-only pipeline should not parse IR")
-
-    monkeypatch.setattr(llvm, "parse_assembly", fail_parse)
-
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _RUNTIME_CALL_IR,
-        pass_names=("default",),
-        module_name="probe",
-    )
-
-    records = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
-    statuses = {
-        (record.get("pass"), record.get("status"))
-        for record in records
-        if record.get("event") == "pass"
-    }
-    assert ("mem2reg", "skip_huge") in statuses
-    assert ("mem2reg", "skip_huge") in statuses
-    assert ("sroa", "skip_huge") in statuses
-    assert out == _RUNTIME_CALL_IR
 
 
-def test_huge_module_default_memory_transport_skips_fast_preset_without_parse(
-    monkeypatch,
-    capsys,
-):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TELEMETRY", "1")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_HUGE_MODULE_BYTES", "1")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "memory")
-
-    from pcc.llvm_capi import binding as llvm_capi_binding
-
-    def fail_run_passes_on_ir(*_args, **_kwargs):
-        raise AssertionError("huge skipped-only memory pipeline should not run LLVM")
-
-    monkeypatch.setattr(llvm_capi_binding, "run_passes_on_ir", fail_run_passes_on_ir)
-
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _RUNTIME_CALL_IR,
-        pass_names=("default",),
-        module_name="probe",
-    )
-
-    records = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
-    statuses = {
-        (record.get("pass"), record.get("status"))
-        for record in records
-        if record.get("event") == "pass"
-    }
-    assert ("mem2reg", "skip_huge") in statuses
-    assert ("mem2reg", "skip_huge") in statuses
-    assert ("sroa", "skip_huge") in statuses
-    assert out == _RUNTIME_CALL_IR
 
 
-def test_large_module_all_preset_uses_self_host_safe_subset(monkeypatch):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_LARGE_MODULE_BYTES", "1")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_HUGE_MODULE_BYTES", "0")
-
-    out = ir_pass_pipeline.run_python_ir_pass_pipeline(
-        _GLOBAL_STRING_BRANCH_IR,
-        pass_names=("all",),
-        module_name="probe",
-    )
-
-    assert "br i1 true" in out
-    assert "ret i32 0" in out
-    llvm.parse_assembly(out).verify()
 
 
-@pytest.mark.parametrize("pass_name", ["loop-instsimplify", "loop-simplifycfg"])
-def test_function_local_loop_passes_keep_module_declarations(monkeypatch, pass_name):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASSES", pass_name)
-
-    out = pipeline._apply_python_ir_pass_pipeline(
-        _RUNTIME_CALL_IR,
-        module_name="probe",
-    )
-
-    assert "@py_int_from_i64" in out
-    llvm.parse_assembly(out).verify()
 
 
-def test_simplifycfg_local_cleanup_keeps_global_context(monkeypatch):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "simplifycfg")
-
-    out = pipeline._apply_python_ir_pass_pipeline(
-        _GLOBAL_STRING_BRANCH_IR,
-        module_name="probe",
-    )
-
-    assert "@.pystr.0" in out
-    assert "br i1 true" not in out
-    llvm.parse_assembly(out).verify()
 
 
-def test_simplifycfg_local_cleanup_declares_sibling_functions(monkeypatch):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "simplifycfg")
-
-    out = pipeline._apply_python_ir_pass_pipeline(
-        _SIBLING_CALL_BRANCH_IR,
-        module_name="probe",
-    )
-
-    assert "@helper" in out
-    assert "br i1 true" not in out
-    llvm.parse_assembly(out).verify()
 
 
-def test_simplifycfg_local_cleanup_strips_internal_from_declarations(monkeypatch):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "simplifycfg")
-
-    out = pipeline._apply_python_ir_pass_pipeline(
-        _INTERNAL_SIBLING_CALL_BRANCH_IR,
-        module_name="probe",
-    )
-
-    assert "declare internal ptr @helper" not in out
-    assert "@helper" in out
-    assert "br i1 true" not in out
-    llvm.parse_assembly(out).verify()
 
 
-def test_python_ir_pass_pipeline_many_runs_one_batch(monkeypatch):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "simplifycfg")
-
-    out = pipeline._apply_python_ir_pass_pipeline_many(
-        [
-            ("first", _GLOBAL_STRING_BRANCH_IR),
-            ("second", _SIBLING_CALL_BRANCH_IR),
-        ],
-    )
-
-    assert [name for name, _text in out] == ["first", "second"]
-    for _name, ir_text in out:
-        assert "br i1 true" not in ir_text
-        llvm.parse_assembly(ir_text).verify()
 
 
 def test_python_ir_pass_pipeline_timeout_is_bounded(monkeypatch):
@@ -1309,6 +779,7 @@ def test_compile_python_link_args_reach_only_the_final_native_link(
     tmp_path,
     monkeypatch,
 ):
+    monkeypatch.setattr(pipeline, "_explicit_runtime_archive", lambda archive, **_kwargs: archive)
     src = tmp_path / "main.py"
     src.write_text("print(1)\n", encoding="utf-8")
     runtime = tmp_path / "fake_runtime.a"
@@ -1327,7 +798,7 @@ def test_compile_python_link_args_reach_only_the_final_native_link(
     ):
         link_calls.append(tuple(kwargs.get("extra_link_args", ())))
 
-    monkeypatch.setattr(pipeline, "_link_native", fake_link_native)
+    monkeypatch.setattr(pipeline, "_link_with_self_backend_ir_texts", fake_link_native)
 
     pipeline.compile_python(
         str(src),
@@ -1350,6 +821,7 @@ def test_compile_python_package_link_args_reach_the_multi_file_link(
     tmp_path,
     monkeypatch,
 ):
+    monkeypatch.setattr(pipeline, "_explicit_runtime_archive", lambda archive, **_kwargs: archive)
     package = tmp_path / "pkg"
     package.mkdir()
     (package / "__init__.py").write_text("", encoding="utf-8")
@@ -1380,7 +852,7 @@ def test_compile_python_package_link_args_reach_the_multi_file_link(
     ):
         link_calls.append(tuple(kwargs.get("extra_link_args", ())))
 
-    monkeypatch.setattr(pipeline, "_link_native", fake_link_native)
+    monkeypatch.setattr(pipeline, "_link_with_self_backend_ir_texts", fake_link_native)
 
     pipeline.compile_python(
         str(entry),
@@ -1413,7 +885,10 @@ def test_string_literals_emit_immortal_globals_not_py_str_new(tmp_path):
 
     text = out.read_text(encoding="utf-8")
     assert "call ptr @py_str_new" not in text
-    assert text.count('c"same\\00"') == 1
+    from pcc.backend.self_backend_parse import decode_llvm_c_string
+
+    initializers = re.findall(r'c"(?:[^"\\]|\\[0-9A-Fa-f]{2})*"', text)
+    assert [decode_llvm_c_string(value) for value in initializers].count(b"same\0") == 1
     assert "i32 4, i32 1" in text
 
 
@@ -1476,8 +951,14 @@ def test_compile_python_multi_strict_no_libpython_fails_after_first_fallback_mod
 ):
     import pytest
 
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen import layer1
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.codegen import layer1
+
+    monkeypatch.setenv("PCC_PY_FRONTEND_JOBS", "1")
+    monkeypatch.setattr(
+        pipeline, "_compile_python_multi_codegen_parallel", lambda *_args, **_kwargs: None
+    )
 
     entry = tmp_path / "entry.py"
     helper = tmp_path / "helper.py"
@@ -1503,7 +984,11 @@ def test_compile_python_multi_strict_no_libpython_fails_after_first_fallback_mod
             raise AssertionError("later modules should not be generated")
 
     def fake_build_closed_world_context(src_paths, module_names, profile):
-        return list(module_names), {}, {}
+        with open(src_paths[0], encoding="utf-8") as source:
+            entry_ast = parse_and_lift(source.read(), src_paths[0], module_names[0])
+        with open(src_paths[1], encoding="utf-8") as source:
+            helper_ast = parse_and_lift(source.read(), src_paths[1], module_names[1])
+        return [entry_ast, helper_ast], {}, {}
 
     def fake_infer_module(ast_mod, **_kwargs):
         return ast_mod
@@ -1575,7 +1060,7 @@ def test_compile_python_multi_strict_no_libpython_fails_after_first_fallback_mod
 
 
 def test_compile_python_multi_reuses_export_pass_ast(tmp_path, monkeypatch):
-    from pcc.parse import py_lift
+    from pcc.frontends.python import py_lift
 
     entry = tmp_path / "entry.py"
     helper = tmp_path / "helper.py"
@@ -1639,7 +1124,7 @@ def test_parallel_frontend_codegen_uses_shared_export_context(tmp_path, monkeypa
                 # the coordinator fail on a missing module_<index>.json.
                 ast_dir = str(manifest.get("ast_dir", "") or "")
                 if ast_dir:
-                    from pcc.parse.py_lift import parse_and_lift
+                    from pcc.frontends.python.py_lift import parse_and_lift
 
                     for index in manifest["assigned_indices"]:
                         src_path = manifest["src_paths"][index]
@@ -1729,7 +1214,7 @@ def test_parallel_frontend_codegen_uses_shared_export_context(tmp_path, monkeypa
     monkeypatch.setattr(
         pipeline,
         "_ensure_runtime",
-        lambda verbose, *, needs_libpython=False: "/tmp/fake_runtime.a",
+        lambda verbose, *, needs_libpython=False, target_triple=None: "/tmp/fake_runtime.a",
     )
     monkeypatch.setattr(
         pipeline,
@@ -1786,7 +1271,7 @@ def test_self_backend_native_compile_defaults_to_bounded_python_ir_pass_manifest
     monkeypatch.setattr(
         pipeline,
         "_ensure_runtime",
-        lambda verbose, *, needs_libpython=False: "/tmp/fake_runtime.a",
+        lambda verbose, *, needs_libpython=False, target_triple=None: "/tmp/fake_runtime.a",
     )
     monkeypatch.setattr(
         pipeline,
@@ -1860,167 +1345,3 @@ def test_explicit_python_ir_pass_env_overrides_self_backend_default(monkeypatch)
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "dce")
 
     assert pipeline._resolve_python_ir_pass_names(default_raw="off") == ["dce"]
-
-
-def test_default_fast_parent_transport_policy_selects_memory(monkeypatch):
-    monkeypatch.delenv("PCC_PYTHON_IR_PASS_TRANSPORT", raising=False)
-
-    assert (
-        pipeline._default_python_ir_pass_transport(
-            pipeline._resolve_python_ir_pass_names("default"),
-            None,
-        )
-        == "memory"
-    )
-
-
-def test_self_backend_explicit_default_parent_transport_policy_selects_memory(
-    monkeypatch,
-):
-    monkeypatch.delenv("PCC_PYTHON_IR_PASS_TRANSPORT", raising=False)
-    monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "default")
-
-    assert (
-        pipeline._default_python_ir_pass_transport(
-            pipeline._resolve_python_ir_pass_names("default", default_raw="off"),
-            "off",
-        )
-        == "memory"
-    )
-
-
-def test_explicit_transport_overrides_parent_transport_policy(monkeypatch):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "memory")
-
-    assert (
-        pipeline._default_python_ir_pass_transport(
-            pipeline._resolve_python_ir_pass_names("default", default_raw="off"),
-            "off",
-        )
-        is None
-    )
-
-
-def test_memory_pass_shards_namespace_internal_symbols(monkeypatch):
-    ir_text = """
-target triple = "arm64-apple-darwin23.6.0"
-
-@shared = internal constant [4 x i8] c"one\\00"
-
-define internal ptr @helper() {
-entry:
-  ret ptr @shared
-}
-
-define ptr @entry() {
-entry:
-  %p = call ptr @helper()
-  ret ptr %p
-}
-""".strip()
-
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "memory")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_SPLIT_THRESHOLD_BYTES", "1")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_SPLIT_SHARD_BYTES", "80")
-
-    shards = pipeline._split_large_modules_for_python_ir_passes(
-        [("pkg.mod", ir_text)],
-        ["all"],
-    )
-
-    assert len(shards) >= 3
-    joined = "\n".join(text for _name, text in shards)
-    assert "@__pcp0_shared = constant [4 x i8]" in joined
-    assert "define ptr @__pcp0_helper()" in joined
-    assert "call ptr @__pcp0_helper()" in joined
-    assert "ret ptr @__pcp0_shared" in joined
-    assert "@shared = constant" not in joined
-    assert "declare internal" not in joined
-    assert "define internal" not in joined
-    for _name, text in shards:
-        llvm.parse_assembly(text).verify()
-
-
-def test_memory_pass_shards_keep_distinct_internal_symbols_per_module(monkeypatch):
-    ir_text = """
-target triple = "arm64-apple-darwin23.6.0"
-
-@shared = internal global i64 0
-
-define i64 @entry() {
-entry:
-  %v = load i64, ptr @shared
-  ret i64 %v
-}
-
-define void @touch() {
-entry:
-  store i64 1, ptr @shared
-  ret void
-}
-""".strip()
-
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "memory")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_SPLIT_THRESHOLD_BYTES", "1")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_SPLIT_SHARD_BYTES", "80")
-
-    shards = pipeline._split_large_modules_for_python_ir_passes(
-        [("pkg.a", ir_text), ("pkg.b", ir_text)],
-        ["all"],
-    )
-    joined = "\n".join(text for _name, text in shards)
-
-    assert "@__pcp0_shared = global i64 0" in joined
-    assert "@__pcp1_shared = global i64 0" in joined
-    assert "@shared = global i64 0" not in joined
-
-
-def test_memory_pass_shards_default_fast_pipeline(monkeypatch):
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "memory")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_SPLIT_THRESHOLD_BYTES", "1")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_SPLIT_SHARD_BYTES", "80")
-
-    shards = pipeline._split_large_modules_for_python_ir_passes(
-        [("pkg.mod", _SIBLING_CALL_BRANCH_IR)],
-        pipeline._resolve_python_ir_pass_names("default"),
-    )
-
-    assert [name for name, _text in shards] == [
-        "pkg.mod.__pass_shard_0",
-        "pkg.mod.__pass_shard_1",
-    ]
-    for _name, text in shards:
-        llvm.parse_assembly(text).verify()
-
-
-def test_batch_pass_skip_survives_large_module_sharding(monkeypatch, tmp_path):
-    telemetry_path = tmp_path / "passes.jsonl"
-    # The sharding+skip contract this test guards lives on the memory-transport
-    # subprocess route.  With default_raw="default" (the self-backend request
-    # path) the exact versioned tier now runs through the compiled in-process
-    # path (PERF-P3), which never shards -- by design, not as a regression.
-    # Selecting the same tier through the ENV on a non-self request
-    # (default_raw=None) keeps the compiled branch out, per its own comment
-    # ("do not silently replace the normal LLVM/host optimizer"), and module
-    # sharding is only allowed for exactly this tier, so this is the one
-    # remaining configuration that exercises shard naming with a skip-listed
-    # module inside the batch.
-    monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "default")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TRANSPORT", "memory")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_CACHE", "off")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_TELEMETRY_PATH", str(telemetry_path))
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_SPLIT_THRESHOLD_BYTES", "1")
-    monkeypatch.setenv("PCC_PYTHON_IR_PASS_SPLIT_SHARD_BYTES", "80")
-
-    out = pipeline._apply_python_ir_pass_pipeline_many(
-        [("pcc.py_frontend.codegen.class_gen", _SIBLING_CALL_BRANCH_IR)],
-        default_raw=None,
-    )
-
-    assert [name for name, _text in out] == [
-        "pcc.py_frontend.codegen.class_gen.__pass_shard_0",
-        "pcc.py_frontend.codegen.class_gen.__pass_shard_1",
-    ]
-    assert (
-        not telemetry_path.exists() or telemetry_path.read_text(encoding="utf-8") == ""
-    )

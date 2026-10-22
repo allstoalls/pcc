@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = (
     RUNTIME_DIR / "py" / "freestanding_gc_incremental_concurrent_scheduler.py"
 )
@@ -40,8 +40,17 @@ OWNED_SYMBOLS = {
     "pcc_gc_tracing_record_pause",
     "pcc_gc_tracing_step_cycle",
     "pcc_gc_trace_cext_complete_context",
+    # GC4's automatic step lives here as well.
+    "pcc_gc_backend4_maybe_auto_step",
 }
 RAW_FUNCTION_IMPORTS = {
+    "pcc_gc_is_cms_worker",
+    # pcc_gc_backend4_maybe_auto_step: refused inside no-park or graph-lock
+    # scopes, then a GC4 step.
+    "pcc_gc_step",
+    "pcc_py_gc_minor_graph_lock_depth",
+    "pcc_thread_no_park_depth",
+    "pcc_gc_set_mark_color",
     "pcc_capi_is_cext_type_tag",
     "pcc_capi_visit_extension_module_state_roots",
     "pcc_gc_begin_mark_cycle",
@@ -70,6 +79,18 @@ RAW_FUNCTION_IMPORTS = {
     "py_incref",
 }
 RAW_GLOBAL_IMPORTS = {
+    # pcc_gc_backend4_maybe_auto_step's admission and reseed ownership.
+    "pcc_gc_backend4_auto_step_pending",
+    "pcc_gc_backend4_relocation_reset_owner",
+    "pcc_gc_backend4_remap_active",
+    "pcc_gc_backend4_reseed_commit_owner",
+    "pcc_gc_backend4_reseed_page_count_owner",
+    "pcc_gc_explicit_collect_active",
+    # Mutator assists pause while gc.disable() or threshold0 == 0 holds, and
+    # one that completes the mark has the next gate sweep it.
+    "py_gc_enabled",
+    "py_gc_threshold0",
+    "pcc_gc_tracing_finish_commits",
     "pcc_gc_backend_selected",
     "pcc_gc_config_initialized",
     "pcc_gc_cms_mutator_assists",
@@ -81,7 +102,6 @@ RAW_GLOBAL_IMPORTS = {
     "pcc_gc_debt_bytes",
     "pcc_gc_debt_threshold_override",
     "pcc_gc_in_auto_step",
-    "pcc_gc_live_bytes",
     "pcc_gc_mark_active",
     "pcc_gc_metric_alloc",
     "pcc_gc_metric_max_pause_us",
@@ -103,6 +123,8 @@ RAW_GLOBAL_IMPORTS = {
     "pcc_gc_trace_extension_roots_epoch",
     "pcc_gc_trace_extension_roots_pending",
     "pcc_gc_tracing_cycle_epoch",
+    # The pacing threshold applies the pause to the heap marked.
+    "pcc_gc_tracing_marked_bytes",
     "pcc_gc_tracing_finish_claim_backend",
     "pcc_gc_tracing_finish_claim_epoch",
 }
@@ -266,15 +288,19 @@ def test_incremental_concurrent_scheduler_preserves_bounded_policy_order() -> No
         step.index("pcc_gc_tracing_record_pause(")
     )
 
+    # GC1 and GC2 hand allocation debt to the collector thread (d58306406):
+    # an allocating mutator no longer runs GC1's automatic step itself. GC4
+    # records the debt atomically and flags its automatic step.
     note_alloc = _export_body(strict, "pcc_gc_note_alloc")
     assert note_alloc.index('global_addr("pcc_gc_metric_alloc")') < note_alloc.index(
-        "if backend == 1:"
-    )
-    assert note_alloc.index('global_addr("pcc_gc_debt_bytes")') < note_alloc.index(
-        "pcc_gc_incremental_maybe_auto_step()"
+        "if backend == 1 or backend == 2:"
     )
     assert note_alloc.index("pcc_gc_maybe_start_cms_worker()") < note_alloc.index(
         "pcc_gc_cms_note_alloc(bytes)"
+    )
+    assert "pcc_gc_incremental_maybe_auto_step()" not in note_alloc
+    assert note_alloc.index('global_addr("pcc_gc_debt_bytes")') < note_alloc.index(
+        'global_addr("pcc_gc_backend4_auto_step_pending")'
     )
 
     dispatch = DISPATCHER_SOURCE.read_text(encoding="utf-8")
@@ -340,10 +366,10 @@ def test_tracing_finisher_claim_stops_only_after_graph_unlock() -> None:
 
 
 def test_production_archive_has_one_incremental_concurrent_scheduler_owner(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,

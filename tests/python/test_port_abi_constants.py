@@ -3,7 +3,7 @@
 The pcc-Python ports read object fields through byte offsets. Hand-written
 literals mean a C-side layout change reaches the port only if a human notices
 — the drift class that produced the py_gc_track double-registration incident
-shape. `pcc/py_runtime/py/py_abi_constants.py` is generated from the headers
+shape. `pcc/runtime/py/py_abi_constants.py` is generated from the headers
 by `scripts/gen_port_abi_constants.py`; this test fails if it goes stale, and
 cross-checks it against the independently hand-maintained layout contract
 (ARCH-P2-PORT-ABI-AUTOGEN).
@@ -34,9 +34,9 @@ def _repo_root() -> Path:
 
 REPO = _repo_root()
 GENERATOR = REPO / "scripts" / "gen_port_abi_constants.py"
-GENERATED = REPO / "pcc" / "py_runtime" / "py" / "py_abi_constants.py"
+GENERATED = REPO / "pcc" / "runtime" / "py" / "py_abi_constants.py"
 GENERATED_EXPORTS = (
-    REPO / "pcc" / "py_frontend" / "codegen" / "port_abi_exports.py"
+    REPO / "pcc" / "frontends" / "python" / "codegen" / "port_abi_exports.py"
 )
 
 PUBLIC_TYPE_TAGS: dict[str, int] = {
@@ -73,12 +73,15 @@ PUBLIC_TYPE_TAGS: dict[str, int] = {
     "PY_TYPE_VIRTUAL_THREAD": 30,
     "PY_TYPE_VTHREAD_CHANNEL": 31,
     "PY_TYPE_CPY_HANDLE": 32,
+    "PY_TYPE_ELLIPSIS": 33,
+    "PY_TYPE_NOTIMPLEMENTED": 34,
     "PY_TYPE_USER": 100,
     "PY_TYPE_PROPERTY": 101,
     "PY_TYPE_CLASSMETHOD": 102,
     "PY_TYPE_STATICMETHOD": 103,
     "PY_TYPE_USER_CLASS_START": 104,
     "PY_TYPE_VALUEBOX": 200,
+    "PY_TYPE_CEXT_TAG_BASE": 65536,
 }
 
 PUBLIC_TYPE_TAG_VALUES = set(PUBLIC_TYPE_TAGS.values())
@@ -250,9 +253,9 @@ def test_runtime_library_codegen_inlines_generated_abi_constant_imports(tmp_path
     from sibling modules.  Otherwise every function using a layout constant is
     silently replaced by a strict no-libpython stub.
     """
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
-    source = REPO / "pcc" / "py_runtime" / "py" / "py_dict.py"
+    source = REPO / "pcc" / "runtime" / "py" / "py_dict.py"
     llvm_ir = tmp_path / "py_dict.ll"
     pipeline.compile_python(
         str(source),
@@ -269,15 +272,24 @@ def test_runtime_library_codegen_inlines_generated_abi_constant_imports(tmp_path
         if " call " in line and "@py_cpy_" in line
     ]
     assert cpy_calls == []
-    assert "define ptr @py_dict_new()" in ir_text
+    # LLVM's omitted linkage and explicit external linkage name the same
+    # exported zero-argument function ABI. Keep internal/private definitions
+    # and a changed return type or parameter list outside this contract.
+    definitions = [line for line in ir_text.splitlines()
+                   if line.startswith("define ") and "@py_dict_new(" in line]
+    assert len(definitions) == 1, definitions
+    assert re.fullmatch(
+        r"define (?:external )?ptr @py_dict_new\(\)(?: [^{\n]*)? \{",
+        definitions[0],
+    ), definitions[0]
     assert "name.dynamic.PYDICTOBJECT_ITEM_COUNT_OFFSET" not in ir_text
 
 
 def test_imported_abi_tag_can_initialize_unsafe_native_global(tmp_path):
     """A generated constant stays usable where LLVM needs a constant expr."""
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
-    source = REPO / "pcc" / "py_runtime" / "py" / "py_substrate.py"
+    source = REPO / "pcc" / "runtime" / "py" / "py_substrate.py"
     llvm_ir = tmp_path / "imported_abi_global.ll"
     pipeline.compile_python(
         str(source),
@@ -292,13 +304,12 @@ def test_imported_abi_tag_can_initialize_unsafe_native_global(tmp_path):
 
 def test_generated_type_tag_preserves_allocator_i32_abi(tmp_path):
     """A boxed static tag must be narrowed to pcc_gc_alloc's real ABI."""
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
     from pcc.tools.ir_to_obj import emit_object
 
     source = (
         REPO
-        / "pcc"
-        / "py_runtime"
+        / "pcc" / "runtime"
         / "py"
         / "py_capi_buffer_runtime.py"
     )
@@ -311,8 +322,22 @@ def test_generated_type_tag_preserves_allocator_i32_abi(tmp_path):
         python_library=True,
     )
     ir_text = llvm_ir.read_text(encoding="utf-8")
-    assert "declare ptr @pcc_gc_alloc(i64, i32, i32)" in ir_text
-    assert "call ptr @pcc_gc_alloc(i64" in ir_text
+    declarations = [line for line in ir_text.splitlines()
+                    if line.startswith("declare ") and "@pcc_gc_alloc(" in line]
+    assert len(declarations) == 1, declarations
+    assert re.fullmatch(
+        r"declare (?:external )?ptr @pcc_gc_alloc\(i64, i32, i32\)",
+        declarations[0],
+    ), declarations[0]
+    calls = [line for line in ir_text.splitlines()
+             if " call " in line and "@pcc_gc_alloc(" in line]
+    assert calls
+    for call in calls:
+        assert re.search(
+            r"\bcall ptr(?: \(i64, i32, i32\))? @pcc_gc_alloc\("
+            r"i64 [^,\n]+, i32 [^,\n]+, i32 [^)\n]+\)",
+            call,
+        ), call
     assert emit_object(ir_text)
 
 
@@ -338,7 +363,7 @@ def test_generated_values_agree_with_the_hand_written_layout_contract():
         EXPECTED_OFFSETS,
         EXPECTED_SIZES,
     )
-    import pcc.py_runtime.py.py_abi_constants as abi
+    import pcc.runtime.py.py_abi_constants as abi
 
     required_generated_structs = {
         "PyClassObject",
@@ -370,7 +395,7 @@ def test_generated_values_agree_with_the_hand_written_layout_contract():
 
 
 def test_type_tags_and_flags_are_present_and_distinct():
-    import pcc.py_runtime.py.py_abi_constants as abi
+    import pcc.runtime.py.py_abi_constants as abi
 
     tags = {
         name: value
@@ -402,8 +427,8 @@ def test_type_tag_inventory_is_discovered_from_every_runtime_header():
         re.compile(r"^\s*#define\s+(PY_TYPE_[A-Z0-9_]+)\b", re.MULTILINE),
     )
     for path in (
-        REPO / "pcc" / "py_runtime" / "include" / "py_runtime.h",
-        REPO / "pcc" / "py_runtime" / "src" / "py_internal.h",
+        REPO / "pcc" / "runtime" / "include" / "py_runtime.h",
+        REPO / "pcc" / "runtime" / "src" / "py_internal.h",
     ):
         header = path.read_text(encoding="utf-8")
         for pattern in patterns:
@@ -412,7 +437,7 @@ def test_type_tag_inventory_is_discovered_from_every_runtime_header():
 
 
 def test_ambiguous_size_field_uses_semantic_generated_name():
-    import pcc.py_runtime.py.py_abi_constants as abi
+    import pcc.runtime.py.py_abi_constants as abi
 
     assert abi.PYDICTOBJECT_ITEM_COUNT_OFFSET == 16
     assert abi.PYDICTOBJECT_SIZE == 56
@@ -467,10 +492,13 @@ class _RawPublicTagVisitor(ast.NodeVisitor):
 
     @staticmethod
     def _tag_name(node: ast.AST) -> bool:
-        return isinstance(node, ast.Name) and (
+        # ``exception_*`` names hold builtin exception tags (OSError is 14),
+        # a separate numeric domain like PRIVATE_TAG_DOMAINS.
+        return isinstance(node, ast.Name) and not node.id.startswith("exception_") and (
             node.id == "tag"
             or node.id == "type_tag"
             or node.id.endswith("_tag")
+            or node.id.startswith("tag_")
         )
 
     @classmethod
@@ -493,6 +521,18 @@ class _RawPublicTagVisitor(ast.NodeVisitor):
             for left, right in zip(operands, operands[1:]):
                 self._check_pair(left, right)
                 self._check_pair(right, left)
+        self.generic_visit(node)
+
+    def visit_BinOp(self, node: ast.BinOp) -> None:
+        if isinstance(node.op, (ast.Add, ast.Sub)) and not self._private_tag_domain():
+            for tag_side, value_side in ((node.left, node.right), (node.right, node.left)):
+                if (
+                    self._tag_expression(tag_side)
+                    and isinstance(value_side, ast.Constant)
+                    and type(value_side.value) is int
+                    and value_side.value == PUBLIC_TYPE_TAGS["PY_TYPE_CEXT_TAG_BASE"]
+                ):
+                    self._record(value_side, value_side.value)
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
@@ -544,9 +584,37 @@ class _RawPublicTagVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+@pytest.mark.parametrize(
+    ("filename", "function", "expression", "expected"),
+    [
+        ("freestanding_time_format.py", "strftime", "load_i32(tm, TM_HOUR_OFFSET) < 12", []),
+        ("freestanding_time_format.py", "strftime", "load_i32(obj, 8) < 12", [12]),
+        ("freestanding_time_format.py", "other", "load_i32(tm, 8) < 12", [12]),
+        ("other.py", "strftime", "load_i32(tm, 8) < 12", [12]),
+        ("freestanding_time_format.py", "strftime",
+         "load_i32(tm, PYOBJECTHEADER_TYPE_TAG_OFFSET) == 12", [12]),
+        ("freestanding_time_format.py", "strftime", "tag == 12", [12]),
+        ("py_obj.py", "decref", "tag_dbg >= 0x10000", [65536]),
+        ("py_capi_visit_runtime.py", "visit", "tag - 0x10000", [65536]),
+        ("py_obj.py", "alloc", "flags & 65536", []),
+        ("py_capi_cext_runtime.py", "decode_i16", "value - 65536", []),
+        ("py_obj.py", "alloc", "tag + 1", []),
+        ("py_exc_objects.py", "ctor", "exception_tag == 14", []),
+        ("py_exc_objects.py", "ctor", "type_tag == 14", [14]),
+    ],
+)
+def test_raw_tag_scanner_preserves_numeric_domains(filename, function, expression, expected):
+    source = f"def {function}(tm, obj, tag, tag_dbg, flags, value):\n    return {expression}\n"
+    visitor = _RawPublicTagVisitor(Path(filename), source)
+    visitor.visit(ast.parse(source))
+    assert visitor.violations == [
+        f"{filename}:2: raw public type tag {value}" for value in expected
+    ]
+
+
 def test_public_type_tags_are_never_reintroduced_as_raw_literals():
     violations: list[str] = []
-    for path in sorted((REPO / "pcc" / "py_runtime" / "py").glob("*.py")):
+    for path in sorted((REPO / "pcc" / "runtime" / "py").glob("*.py")):
         source = path.read_text(encoding="utf-8")
         visitor = _RawPublicTagVisitor(path, source)
         visitor.visit(ast.parse(source, filename=str(path)))
@@ -562,7 +630,7 @@ def test_generated_type_tags_are_not_used_as_offsets_or_private_enum_values():
     PY_TYPE_* name is behaviorally wrong even when the integer happens to be
     equal today.
     """
-    port_root = REPO / "pcc" / "py_runtime" / "py"
+    port_root = REPO / "pcc" / "runtime" / "py"
     violations: list[str] = []
     for path in sorted(port_root.glob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -603,7 +671,7 @@ def test_generated_type_tags_are_not_used_as_offsets_or_private_enum_values():
 
 
 def test_py_class_does_not_mix_named_instance_tag_with_literal_11():
-    source = (REPO / "pcc" / "py_runtime" / "py" / "py_class.py").read_text(
+    source = (REPO / "pcc" / "runtime" / "py" / "py_class.py").read_text(
         encoding="utf-8"
     )
     tree = ast.parse(source)
@@ -630,7 +698,7 @@ def test_py_class_does_not_mix_named_instance_tag_with_literal_11():
 
 
 def test_freestanding_type_aliases_project_the_complete_generated_inventory():
-    from pcc.py_runtime.freestanding_abi_spec import ABI_SPEC
+    from pcc.runtime.freestanding_abi_spec import ABI_SPEC
 
     projected = {
         "object.type." + name[len("PY_TYPE_"):].lower(): value
@@ -641,8 +709,8 @@ def test_freestanding_type_aliases_project_the_complete_generated_inventory():
 
 def test_compiler_type_tag_aliases_cover_generated_inventory():
     """Frontend tag names are aliases over the generated C-header values."""
-    from pcc.py_frontend.codegen import freestanding_abi_constants as compiler_abi
-    import pcc.py_runtime.py.py_abi_constants as runtime_abi
+    from pcc.frontends.python.codegen import freestanding_abi_constants as compiler_abi
+    import pcc.runtime.py.py_abi_constants as runtime_abi
 
     generated = {
         name: value
@@ -658,12 +726,11 @@ def test_compiler_type_tag_aliases_cover_generated_inventory():
 
 def test_generated_compiler_type_tag_aliases_are_static_integer_constants():
     """Self-hosted module initialization must not load tag aliases from a dict."""
-    from pcc.py_runtime.freestanding_abi_spec import ABI_SPEC
+    from pcc.runtime.freestanding_abi_spec import ABI_SPEC
 
     path = (
         REPO
-        / "pcc"
-        / "py_frontend"
+        / "pcc" / "frontends" / "python"
         / "codegen"
         / "freestanding_abi_constants.py"
     )
@@ -687,11 +754,11 @@ def test_generated_compiler_type_tag_aliases_are_static_integer_constants():
 
 
 def test_frontend_type_tag_dispatch_tables_match_generated_aliases():
-    from pcc.py_frontend.codegen import freestanding_abi_constants as abi
-    from pcc.py_frontend.codegen.compare_membership_lowering import (
+    from pcc.frontends.python.codegen import freestanding_abi_constants as abi
+    from pcc.frontends.python.codegen.compare_membership_lowering import (
         _BUILTIN_TYPE_TAGS as compare_tags,
     )
-    from pcc.py_frontend.codegen.isinstance_lowering import (
+    from pcc.frontends.python.codegen.isinstance_lowering import (
         _BUILTIN_TYPE_TAGS as isinstance_tags,
     )
 
@@ -712,7 +779,24 @@ def test_frontend_type_tag_dispatch_tables_match_generated_aliases():
         "NoneType": abi.PY_TYPE_NONE,
         **expected,
         "FunctionType": abi.PY_TYPE_FUNC,
+        "type": abi.PY_TYPE_CLASS,
+        # isinstance(x, complex/memoryview) is answered natively (056e61852).
+        "complex": abi.PY_TYPE_COMPLEX,
+        "memoryview": abi.PY_TYPE_MEMORYVIEW,
     }
+
+
+def test_static_float_literal_header_uses_generated_type_tag():
+    from pcc.frontends.python.codegen import marshal
+    from pcc.ir.compat import ir
+    from pcc.runtime.py import py_abi_constants as abi
+
+    module = ir.Module(name="float_tag_abi")
+    literal = marshal._float_literal_object(module, 0.5)
+    tag = literal.initializer.value[1]
+    assert tag.type == ir.IntType(32)
+    assert tag.value == abi.PY_TYPE_FLOAT
+    assert marshal._float_literal_object(module, 0.5) is literal
 
 
 def _runtime_symbol_name(node: ast.AST) -> str | None:
@@ -747,7 +831,7 @@ def _raw_ir_integer_constant(node: ast.AST) -> int | None:
 
 def test_frontend_type_tag_dispatch_does_not_copy_numeric_abi():
     """Runtime tag dispatch must consume generated aliases, not copied ints."""
-    codegen_root = REPO / "pcc" / "py_frontend" / "codegen"
+    codegen_root = REPO / "pcc" / "frontends" / "python" / "codegen"
     violations: list[str] = []
     for path in sorted(codegen_root.glob("*.py")):
         if path.name == "freestanding_abi_constants.py":
@@ -843,8 +927,8 @@ def test_frontend_type_tag_dispatch_does_not_copy_numeric_abi():
 
 
 def test_freestanding_layout_aliases_project_generated_class_records():
-    from pcc.py_runtime.freestanding_abi_spec import ABI_SPEC
-    import pcc.py_runtime.py.py_abi_constants as abi
+    from pcc.runtime.freestanding_abi_spec import ABI_SPEC
+    import pcc.runtime.py.py_abi_constants as abi
 
     expected = {
         "object.pointer.size": abi.C_POINTER_SIZE,
@@ -871,8 +955,7 @@ def test_freestanding_layout_aliases_project_generated_class_records():
 def test_freestanding_descriptor_slot_visitors_use_generated_layouts():
     source = (
         REPO
-        / "pcc"
-        / "py_runtime"
+        / "pcc" / "runtime"
         / "py"
         / "freestanding_gc_object_slots.py"
     ).read_text(encoding="utf-8")
@@ -888,7 +971,7 @@ def test_freestanding_descriptor_slot_visitors_use_generated_layouts():
 
 def test_runtime_comments_do_not_copy_public_numeric_type_tags():
     violations: list[str] = []
-    port_root = REPO / "pcc" / "py_runtime" / "py"
+    port_root = REPO / "pcc" / "runtime" / "py"
     for path in sorted(port_root.glob("*.py")):
         if path == GENERATED:
             continue
@@ -901,7 +984,7 @@ def test_runtime_comments_do_not_copy_public_numeric_type_tags():
 def test_core_runtime_docstrings_do_not_copy_generated_layouts():
     violations: list[str] = []
     for filename in ("py_obj.py", "py_obj_ops_dispatch.py", "py_dict.py"):
-        path = REPO / "pcc" / "py_runtime" / "py" / filename
+        path = REPO / "pcc" / "runtime" / "py" / filename
         doc = ast.get_docstring(ast.parse(path.read_text(encoding="utf-8"))) or ""
         if re.search(r"\boffset\s+\d+\s+\w+", doc):
             violations.append(f"{filename}: copied numeric struct layout")
@@ -914,13 +997,23 @@ def test_core_runtime_docstrings_do_not_copy_generated_layouts():
 )
 def test_core_port_readers_consume_generated_abi_constants(filename, constants):
     """A generated file alone is insufficient if owners still use literals."""
-    path = REPO / "pcc" / "py_runtime" / "py" / filename
+    path = REPO / "pcc" / "runtime" / "py" / filename
     text = path.read_text(encoding="utf-8")
-    assert "from pcc.py_runtime.py.py_abi_constants import (" in text
+    tree = ast.parse(text)
+    imported = {
+        alias.asname or alias.name: alias.name
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom)
+        and node.module == "pcc.runtime.py.py_abi_constants"
+        for alias in node.names
+    }
+    loaded = {
+        node.id for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
+    }
     for name in constants:
-        # One occurrence can be a decorative import.  Requiring at least one
-        # use makes the migration executable and keeps future refactors honest.
-        assert text.count(name) >= 2, f"{filename} imports but does not use {name}"
+        assert imported.get(name) == name, f"{filename} does not import {name}"
+        assert name in loaded, f"{filename} imports but does not use {name}"
 
 
 def test_core_object_owners_do_not_reintroduce_raw_header_offsets():
@@ -941,7 +1034,7 @@ def test_core_object_owners_do_not_reintroduce_raw_header_offsets():
     )
     violations: list[str] = []
     for filename in owners:
-        text = (REPO / "pcc" / "py_runtime" / "py" / filename).read_text(
+        text = (REPO / "pcc" / "runtime" / "py" / filename).read_text(
             encoding="utf-8"
         )
         for needle in forbidden:

@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def _compile_and_run(tmp_path: Path, source: str) -> subprocess.CompletedProcess[str]:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"

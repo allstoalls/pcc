@@ -2,11 +2,11 @@ from pathlib import Path
 import inspect
 import subprocess
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 def test_variadic_decorator_scan_uses_bootstrap_safe_explicit_loop():
-    from pcc.py_frontend.codegen.user_function_decl_lowering import (
+    from pcc.frontends.python.codegen.user_function_decl_lowering import (
         UserFunctionDeclLoweringMixin,
     )
 

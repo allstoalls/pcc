@@ -26,7 +26,7 @@ _BUILD.mkdir(parents=True, exist_ok=True)
 
 
 def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -44,7 +44,7 @@ def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
 # Should produce many py_cpy_* calls in OFF mode and far fewer in ON.
 _LAYER1_SHAPED = textwrap.dedent(
     """
-    from pcc.llvm_capi.compat import ir
+    from pcc.ir.compat import ir
 
     class FakeCodegen:
         def __init__(self):
@@ -99,12 +99,12 @@ def test_user_class_builder_field_does_not_emit_scaffold_externs():
         _LAYER1_SHAPED, "shape_externs", mode="on",
     )
     expected_externs = (
-        "@user_pcc_llvm_capi_ir_IRBuilder_add",
-        "@user_pcc_llvm_capi_ir_IRBuilder_mul",
-        "@user_pcc_llvm_capi_ir_IRBuilder_store",
-        "@user_pcc_llvm_capi_ir_IRBuilder_icmp_signed",
-        "@user_pcc_llvm_capi_ir_IRBuilder_cbranch",
-        "@user_pcc_llvm_capi_ir_IRBuilder_call1",
+        "@user_pcc_ir_ir_IRBuilder_add",
+        "@user_pcc_ir_ir_IRBuilder_mul",
+        "@user_pcc_ir_ir_IRBuilder_store",
+        "@user_pcc_ir_ir_IRBuilder_icmp_signed",
+        "@user_pcc_ir_ir_IRBuilder_cbranch",
+        "@user_pcc_ir_ir_IRBuilder_call1",
     )
     for sym in expected_externs:
         assert sym not in ir_on, (

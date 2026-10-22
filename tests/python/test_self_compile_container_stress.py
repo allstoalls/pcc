@@ -23,7 +23,7 @@ import pytest
 
 
 def _run_self_compile(src_text: str, tmp_path: Path, name: str = "stress") -> subprocess.CompletedProcess:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
     src = tmp_path / f"{name}.py"
     exe = tmp_path / f"{name}.out"
     src.write_text(src_text, encoding="utf-8")

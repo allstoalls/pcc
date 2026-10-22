@@ -7,11 +7,11 @@ import sys
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 @pytest.mark.parametrize("annotation", [": str", ""], ids=["typed", "dynamic"])
-def test_tailmatch_windows(tmp_path, pcc_py_runtime_archive, annotation):
+def test_tailmatch_windows(tmp_path, pcc_runtime_archive, annotation):
     source = tmp_path / "tailmatch.py"
     source.write_text('''
 import gc
@@ -55,7 +55,7 @@ main()
     assert expected.returncode == 0, expected.stderr
     output = tmp_path / "tailmatch"
     compile_python(str(source), str(output), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(output)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)))
@@ -63,7 +63,7 @@ main()
         assert result.stdout == expected.stdout, f"GC{backend}: {result.stdout}"
 
 
-def test_tailmatch_argument_lifetime(tmp_path, pcc_py_runtime_archive):
+def test_tailmatch_argument_lifetime(tmp_path, pcc_runtime_archive):
     source = tmp_path / "tailmatch_ownership.py"
     source.write_text('''
 import gc
@@ -94,7 +94,7 @@ main()
 ''', encoding="utf-8")
     output = tmp_path / "tailmatch_ownership"
     compile_python(str(source), str(output), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(output)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)))
@@ -105,25 +105,25 @@ main()
             assert int(lines[1]) < 65536, result.stdout
 
 
-def test_native_preprocessor_comment_scanning(tmp_path, pcc_py_runtime_archive):
-    from pcc.preprocessor import _source_lines
-    from pcc.py_frontend.pipeline import compile_python_multi
+def test_native_preprocessor_comment_scanning(tmp_path, pcc_runtime_archive):
+    from pcc.frontends.c.preprocessor import _source_lines
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     text = 'int/**/value = 1; // trailing\nchar *s = "/* literal */";\n'
     source = tmp_path / "preprocessor_scan.py"
     source.write_text(
-        "from pcc.preprocessor import _source_lines\n"
+        "from pcc.frontends.c.preprocessor import _source_lines\n"
         "def main():\n    print(_source_lines(" + repr(text) + "))\nmain()\n",
         encoding="utf-8",
     )
     output = tmp_path / "preprocessor_scan"
-    provider = Path(__file__).resolve().parents[2] / "pcc/preprocessor.py"
+    provider = Path(__file__).resolve().parents[2] / "pcc/frontends/c/preprocessor.py"
     compile_python_multi(
         [str(provider), str(source)], str(output),
-        module_names=["pcc.preprocessor", "preprocessor_scan"],
+        module_names=["pcc.frontends.c.preprocessor", "preprocessor_scan"],
         entry_module="preprocessor_scan", recursive_stdlib=True,
         backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         result = subprocess.run([str(output)], capture_output=True, text=True, timeout=20,

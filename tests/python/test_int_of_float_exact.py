@@ -82,7 +82,7 @@ def _build(tmp_path, name, text, compiler, archive):
 
 
 def test_boxed_int_of_float_matches_cpython(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     source = tmp_path / "boxed_ref.py"
     source.write_text(_BOXED, encoding="utf-8")
@@ -92,7 +92,7 @@ def test_boxed_int_of_float_matches_cpython(
     assert expected.returncode == 0, expected.stderr
     binary = _build(
         tmp_path, "boxed_int_float", _BOXED, python_program_compiler,
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
     )
     for backend in range(5):
         ran = subprocess.run(
@@ -104,11 +104,11 @@ def test_boxed_int_of_float_matches_cpython(
 
 
 def test_raw_lane_int_of_float_raises_instead_of_garbage(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     binary = _build(
         tmp_path, "raw_int_float", _RAW, python_program_compiler,
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
     )
     ran = subprocess.run([str(binary)], capture_output=True, text=True, timeout=60)
     assert ran.returncode == 0, ran.stderr

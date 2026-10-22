@@ -10,11 +10,11 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PORT_SOURCE = (
-    ROOT / "pcc" / "py_runtime" / "py" / "freestanding_metal_runtime.py"
+    ROOT / "pcc" / "runtime" / "py" / "freestanding_metal_runtime.py"
 )
-RUNTIME_HEADER = ROOT / "pcc" / "py_runtime" / "include" / "py_runtime.h"
-RUNTIME_MAKEFILE = ROOT / "pcc" / "py_runtime" / "Makefile"
-RUNTIME_INCLUDE = ROOT / "pcc" / "py_runtime" / "include"
+RUNTIME_HEADER = ROOT / "pcc" / "runtime" / "include" / "py_runtime.h"
+RUNTIME_MAKEFILE = ROOT / "pcc" / "runtime" / "Makefile"
+RUNTIME_INCLUDE = ROOT / "pcc" / "runtime" / "include"
 
 
 _CC_REASON = None if shutil.which("cc") else "cc is required for the Metal runtime C FFI shim test"
@@ -189,7 +189,7 @@ def test_metal_runtime_python_archive_route_is_declared() -> None:
 
 def test_metal_runtime_python_port_emits_through_self_backend(tmp_path: Path) -> None:
     from pcc.backend.self_backend_dispatch import emit_self_asm
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     llvm_ir = tmp_path / "freestanding_metal_runtime.ll"
     assembly = tmp_path / "freestanding_metal_runtime.s"
@@ -227,7 +227,7 @@ def test_metal_runtime_python_port_emits_through_self_backend(tmp_path: Path) ->
 
 
 def test_metal_runtime_calls_prebuilt_bridge_without_python(
-    tmp_path: Path, pcc_py_runtime_archive: Path,
+    tmp_path: Path, pcc_runtime_archive: Path,
 ) -> None:
     bridge, driver_extra = _build_fake_bridge(tmp_path)
 
@@ -279,7 +279,7 @@ def test_metal_runtime_calls_prebuilt_bridge_without_python(
             "-I",
             str(RUNTIME_INCLUDE),
             str(driver_source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(driver),
@@ -299,7 +299,7 @@ def test_metal_runtime_calls_prebuilt_bridge_without_python(
 
 
 def test_metal_runtime_calls_prebuilt_metallib_bridge_without_python(
-    tmp_path: Path, pcc_py_runtime_archive: Path,
+    tmp_path: Path, pcc_runtime_archive: Path,
 ) -> None:
     bridge, driver_extra = _build_fake_bridge(tmp_path)
 
@@ -349,7 +349,7 @@ def test_metal_runtime_calls_prebuilt_metallib_bridge_without_python(
             "-I",
             str(RUNTIME_INCLUDE),
             str(driver_source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(driver),
@@ -369,7 +369,7 @@ def test_metal_runtime_calls_prebuilt_metallib_bridge_without_python(
 
 
 def test_metal_runtime_calls_prebuilt_buffer_runtime(
-    tmp_path: Path, pcc_py_runtime_archive: Path,
+    tmp_path: Path, pcc_runtime_archive: Path,
 ) -> None:
     bridge, driver_extra = _build_fake_bridge(tmp_path)
 
@@ -422,7 +422,7 @@ def test_metal_runtime_calls_prebuilt_buffer_runtime(
             "-I",
             str(RUNTIME_INCLUDE),
             str(driver_source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(driver),
@@ -442,7 +442,7 @@ def test_metal_runtime_calls_prebuilt_buffer_runtime(
 
 
 def test_no_libpython_pcc_program_calls_metal_runtime_c_shim(tmp_path: Path) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     bridge, _driver_extra = _build_fake_bridge(tmp_path)
     source_literal = "kernel void k(){}"

@@ -1,9 +1,9 @@
 """Phase 5 tests: SSA-backed loop-phi classification."""
 
-from pcc.parse.c_parser import CParser
-from pcc.passes import PassContext
-from pcc.passes.ssa_loop_phi import SSALoopPhiPass
-from pcc.ssa import LoopPhiKind
+from pcc.frontends.c.parse.c_parser import CParser
+from pcc.frontends.c.passes import PassContext
+from pcc.frontends.c.passes.ssa_loop_phi import SSALoopPhiPass
+from pcc.frontends.c.ssa import LoopPhiKind
 
 
 _PARSER = CParser(lex_optimize=True, yacc_debug=False, yacc_optimize=True)

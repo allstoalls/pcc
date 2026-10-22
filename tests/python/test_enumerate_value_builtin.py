@@ -49,7 +49,7 @@ _EXPECTED = [
 
 
 def test_enumerate_value_forms_match_cpython(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "enum_value_prog.py"
     src.write_text(_PROGRAM, encoding="utf-8")
@@ -69,7 +69,7 @@ def test_enumerate_value_forms_match_cpython(tmp_path):
 
 
 def test_enumerate_value_custom_iterator_reenters_gc4(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "enum_value_gc4.py"
     src.write_text(

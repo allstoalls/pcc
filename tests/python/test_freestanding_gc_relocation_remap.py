@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_relocation_remap.py"
 STRICT_FORWARDING_RETIREMENT = (
     RUNTIME_DIR / "py" / "freestanding_gc_forwarding_retirement.py"
@@ -149,10 +149,10 @@ def test_relocation_remap_uses_shared_slot_contract_and_one_epoch_flags() -> Non
 
 
 def test_production_archive_has_one_relocation_remap_owner(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,

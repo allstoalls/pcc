@@ -4,8 +4,8 @@ import pytest
 
 
 def _infer(source: str):
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
 
     ast_mod = parse_and_lift(source, "<value-array>", "value_array_mod")
     return type_infer.infer_module(ast_mod)
@@ -44,7 +44,7 @@ def test_value_array_host_oracle_constructs_indexes_and_fails_closed():
 
 
 def test_value_array_annotation_constructor_and_index_infer_one_shared_type():
-    from pcc.py_frontend.py_ast import FuncDef, Return, ValueArrayType
+    from pcc.frontends.python.py_ast import FuncDef, Return, ValueArrayType
 
     typed = _infer(
         _point_prefix()
@@ -77,7 +77,7 @@ def test_value_array_annotation_constructor_and_index_infer_one_shared_type():
     ],
 )
 def test_value_array_annotation_rejects_invalid_shape(surface: str, message: str):
-    from pcc.py_frontend.types import PyFrontendError
+    from pcc.frontends.python.types import PyFrontendError
 
     source = (
         _point_prefix()
@@ -88,7 +88,7 @@ def test_value_array_annotation_rejects_invalid_shape(surface: str, message: str
 
 
 def test_value_array_rejects_ordinary_class_element():
-    from pcc.py_frontend.types import PyFrontendError
+    from pcc.frontends.python.types import PyFrontendError
 
     source = (
         "import pcc\n\n"
@@ -112,7 +112,7 @@ def test_value_array_constructor_rejects_count_and_element_mismatch(
     arguments: str,
     message: str,
 ):
-    from pcc.py_frontend.types import PyFrontendError
+    from pcc.frontends.python.types import PyFrontendError
 
     source = _point_prefix() + f"values = pcc.array[Point, 2]({arguments})\n"
     with pytest.raises(PyFrontendError, match=message):

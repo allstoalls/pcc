@@ -6,7 +6,7 @@ packet and records the command-encoder plan a real Metal executor must follow.
 
 import pytest
 
-from pcc.gpu_metal import MetalCompileError, MetalToolchainUnavailable
+from pcc.backend.metal import MetalCompileError, MetalToolchainUnavailable
 from pcc.kernel_ir.hmm_fence import (
     HmmFenceError,
     PccBufferHandle,

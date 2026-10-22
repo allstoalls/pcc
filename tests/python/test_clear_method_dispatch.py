@@ -57,7 +57,7 @@ main()
 
 
 def test_clear_dispatches_to_the_receiver_under_every_backend(
-    tmp_path, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, python_program_compiler, pcc_runtime_archive,
 ):
     source = tmp_path / "clear_dispatch.py"
     source.write_text(PROGRAM, encoding="utf-8")
@@ -68,7 +68,7 @@ def test_clear_dispatches_to_the_receiver_under_every_backend(
     binary = tmp_path / "clear_dispatch"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         result = subprocess.run(

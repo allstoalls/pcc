@@ -43,7 +43,7 @@ main()
 
 
 def test_parents_and_resolve_match_cpython(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "pathlib_parents.py"
     exe = tmp_path / "pathlib_parents.out"
@@ -73,7 +73,7 @@ def test_parents_and_resolve_match_cpython(tmp_path):
 
 def test_relative_resolve_is_absolute_against_cwd(tmp_path):
     """``resolve`` on a relative path joins the working directory."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "pathlib_relative.py"
     exe = tmp_path / "pathlib_relative.out"
@@ -117,9 +117,9 @@ def test_package_inspect_module_init_needs_no_libpython():
     """The module whose module-scope ``resolve().parents[2]`` forced it."""
     import re as host_re
 
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
     path = Path(__file__).resolve().parents[2] / "pcc/package/inspect.py"
     typed = type_infer.infer_module(
@@ -151,7 +151,7 @@ def test_resolve_does_not_follow_symlinks(tmp_path):
     ``Path.resolve`` is ``absolute()`` + ``normpath``; there is no native
     ``realpath``.  CPython returns the link target.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     target = tmp_path / "real"
     target.mkdir()

@@ -3,12 +3,12 @@ import platform
 import subprocess
 import sys
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLATFORM_SOURCE = (
-    REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_platform_process.py"
+    REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_platform_process.py"
 )
 
 
@@ -194,7 +194,7 @@ def test_linux_platform_process_uses_raw_wait4_and_kill_syscalls(
     tmp_path, monkeypatch
 ):
     from pcc.backend.self_backend_dispatch import emit_self_asm
-    from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+    from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
     monkeypatch.setattr(
         UnsafeIntrinsicMixin, "_target_sys_platform_text", lambda self: "linux"
@@ -230,7 +230,7 @@ def test_linux_platform_process_uses_raw_wait4_and_kill_syscalls(
 
 
 def test_runtime_archive_plan_selects_platform_process_object():
-    runtime_dir = REPO_ROOT / "pcc" / "py_runtime"
+    runtime_dir = REPO_ROOT / "pcc" / "runtime"
     plan = subprocess.run(
         ["make", "-B", "-n", "libpy_runtime_pcc_py.a"],
         cwd=runtime_dir,
@@ -248,7 +248,7 @@ def test_runtime_archive_plan_selects_platform_process_object():
 
 
 def test_runtime_archive_builds_timeout_owner_from_pcc_python():
-    runtime_dir = REPO_ROOT / "pcc" / "py_runtime"
+    runtime_dir = REPO_ROOT / "pcc" / "runtime"
     plan = subprocess.run(
         ["make", "-B", "-n", "libpy_runtime_pcc_py.a"],
         cwd=runtime_dir,
@@ -262,10 +262,10 @@ def test_runtime_archive_builds_timeout_owner_from_pcc_python():
 
 
 def test_runtime_archive_process_symbols_are_owned_by_python_port(
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
 ):
     symbols = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -283,7 +283,7 @@ def test_runtime_archive_process_symbols_are_owned_by_python_port(
     assert ":freestanding_platform_process.o:" in owners[0], owners
 
     undefined = subprocess.run(
-        ["nm", "-A", "-u", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-u", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -349,7 +349,7 @@ def test_runtime_archive_process_symbols_are_owned_by_python_port(
 
 
 def test_default_runtime_sys_exit_uses_platform_process_owner(
-    tmp_path, pcc_py_runtime_archive
+    tmp_path, pcc_runtime_archive
 ):
     source = tmp_path / "owned_exit.py"
     executable = tmp_path / "owned_exit"
@@ -360,7 +360,7 @@ def test_default_runtime_sys_exit_uses_platform_process_owner(
         backend="self",
         ir_scaffold_mode="on",
         libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     run = subprocess.run(
         [str(executable)], capture_output=True, text=True, timeout=30

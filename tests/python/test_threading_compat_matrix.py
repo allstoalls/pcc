@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
-from pcc.threading_compat import SCENARIOS, by_name, scenario_names
+from pcc.support.threading_compat import SCENARIOS, by_name, scenario_names
 
 
 def _run_host(source: str):

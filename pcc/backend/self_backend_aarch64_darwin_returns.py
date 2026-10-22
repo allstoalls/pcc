@@ -21,8 +21,14 @@ from .self_backend_aarch64_darwin_terminators import emit_epilogue
 from .self_backend_ir import ParsedFunction, TypeDesc
 from .self_backend_module_symbols import PreparedModuleSymbols
 from .self_backend_parse import is_aggregate_literal_value
-from .self_backend_kernel import IndexedFunctionKernel, get_indexed_function_kernel
-from .self_backend_kernel import TYPE_KIND_FP, TYPE_KIND_INT, TYPE_KIND_PTR
+from .self_backend_kernel import (
+    IndexedFunctionKernel,
+    TYPE_KIND_FP,
+    TYPE_KIND_INT,
+    TYPE_KIND_PTR,
+    _scalar_window_is_complete,
+    get_indexed_function_kernel,
+)
 from .self_backend_value_arena import CompilerInt4
 
 
@@ -97,7 +103,20 @@ def emit_return_terminator_indexed(
     module_symbols: PreparedModuleSymbols,
 ) -> list[str]:
     value = kernel.terminator_value(value_ref)
-    header: CompilerInt4 = kernel.type_header(type_id)
+    header_is_scalar = False
+    if type(kernel) is IndexedFunctionKernel:
+        header_scalar_id = type_id
+        header_is_scalar = _scalar_window_is_complete(
+            kernel.type_scalars, header_scalar_id, 12, 0
+        )
+        if header_is_scalar:
+            header_scalar = kernel.type_scalars.get_unchecked(
+                header_scalar_id * 12 + 0
+            )
+        else:
+            header: CompilerInt4 = kernel.type_header(header_scalar_id)
+    else:
+        header: CompilerInt4 = kernel.type_header(type_id)
     if aggregate_returned_indirect_indexed(kernel, type_id):
         return emit_return_terminator(
             func,
@@ -106,7 +125,7 @@ def emit_return_terminator_indexed(
             module_symbols=module_symbols,
             value_id=value_ref,
         )
-    if header.first in (TYPE_KIND_INT, TYPE_KIND_FP, TYPE_KIND_PTR):
+    if (header_scalar if header_is_scalar else header.first) in (TYPE_KIND_INT, TYPE_KIND_FP, TYPE_KIND_PTR):
         lines = materialize_scalar_value_indexed(
             func,
             kernel,

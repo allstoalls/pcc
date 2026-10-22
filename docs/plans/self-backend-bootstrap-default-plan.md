@@ -25,7 +25,7 @@ Current three-stage bootstrap status before this plan:
   code-signature metadata.
 - The bootstrap entrypoint still uses the Python frontend's LLVM IR path and
   then links `.ll` files through `clang`.
-- `pcc/cli_bootstrap.py` currently accepts `--backend` only for compatibility
+- `pcc/driver/cli_bootstrap.py` currently accepts `--backend` only for compatibility
   and does not thread that selection into native emission.
 - The C-mode self backend has `--backend=self` coverage, `--emit-asm`,
   system-assembler-backed `--emit-obj`, and system-link runtime gates, but it
@@ -35,7 +35,7 @@ Implementation status as of 2026-04-27:
 
 - `compile_python()` and `compile_python_multi()` accept a native-emission
   backend selection.
-- `pcc/cli_bootstrap.py`, `pcc/cli_core.py`, and `scripts/pcc_multi.py` thread
+- `pcc/driver/cli_bootstrap.py`, `pcc/driver/cli_core.py`, and `scripts/pcc_multi.py` thread
   `--backend` into Python native emission.
 - `PCC_BACKEND=self` and `--backend=self` explicitly route Python `.ll` through
   the self backend; self failures are surfaced and do not fall back to LLVM.
@@ -91,7 +91,7 @@ Tasks:
 
 - Add a native-emission backend parameter to `compile_python()` and
   `compile_python_multi()`.
-- Thread `--backend` from `pcc/cli_bootstrap.py` instead of ignoring it.
+- Thread `--backend` from `pcc/driver/cli_bootstrap.py` instead of ignoring it.
 - Accept `PCC_BACKEND=self` for bootstrap only as an explicit opt-in, not as a
   default flip.
 - Split the current fixed `_link_with_clang()` path into:
@@ -247,7 +247,7 @@ Bootstrap-default acceptance:
 ## Immediate Task Queue
 
 1. Add `backend` plumbing to `compile_python()` and `compile_python_multi()`.
-2. Stop ignoring `--backend` in `pcc/cli_bootstrap.py`; validate it through the
+2. Stop ignoring `--backend` in `pcc/driver/cli_bootstrap.py`; validate it through the
    existing backend resolver.
 3. Add a self native-emission branch that consumes Python frontend IR text and
    calls the self backend emitter.

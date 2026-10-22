@@ -48,7 +48,7 @@ if __name__ == "__main__":
 
 
 def test_rooted_call_loop_survives_5m_iterations(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "rooted_hot_loop.py"
     src.write_text(HOT_LOOP_SRC)

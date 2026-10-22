@@ -3,8 +3,8 @@ import sys
 
 import pytest
 
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.project import collect_translation_units, translation_unit_include_dirs
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.driver.project import collect_translation_units, translation_unit_include_dirs
 from tests.parallel_jobs import translation_unit_jobs
 
 PROJECT_DIR = os.path.dirname(
@@ -108,7 +108,7 @@ def test_zlib_runtime_with_self_backend_system_link_depends_on(
     zlib_compiled_units_self,
     monkeypatch,
 ):
-    import pcc.evaluater.c_evaluator as c_evaluator
+    import pcc.frontends.c.evaluator.c_evaluator as c_evaluator
 
     compiled_units, base_dir = zlib_compiled_units_self
     emitter_calls = []

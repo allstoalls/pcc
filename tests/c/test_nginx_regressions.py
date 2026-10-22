@@ -1,4 +1,4 @@
-from pcc.evaluater.c_evaluator import CEvaluator
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
 
 
 def test_static_bitfield_pointer_initializer_compiles_and_runs():

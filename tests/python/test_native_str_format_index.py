@@ -15,17 +15,17 @@ from pathlib import Path
 
 
 def test_structured_spec_helper_exports_typed_auto_index():
-    from pcc.py_frontend.export_meta import decode_type
-    from pcc.py_frontend.pipeline import build_closed_world_context
-    from pcc.py_frontend.py_ast import IntType, TupleType
+    from pcc.frontends.python.export_meta import decode_type
+    from pcc.frontends.python.pipeline import build_closed_world_context
+    from pcc.frontends.python.py_ast import IntType, TupleType
 
-    source = Path.cwd() / "pcc" / "py_frontend" / "codegen" / "format_lowering.py"
+    source = Path.cwd() / "pcc" / "frontends" / "python" / "codegen" / "format_lowering.py"
     _modules, exports, _derived = build_closed_world_context(
         [str(source)],
-        ["pcc.py_frontend.codegen.format_lowering"],
+        ["pcc.frontends.python.codegen.format_lowering"],
         merge_exports=False,
     )
-    methods = exports["pcc.py_frontend.codegen.format_lowering"]["FormatLoweringMixin"][
+    methods = exports["pcc.frontends.python.codegen.format_lowering"]["FormatLoweringMixin"][
         "methods"
     ]
     helper = next(
@@ -41,7 +41,7 @@ def test_structured_spec_helper_exports_typed_auto_index():
 
 
 def _compile(monkeypatch, src: Path, exe: Path) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     compile_python(
         str(src),

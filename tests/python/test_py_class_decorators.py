@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def test_set_module_style_class_decorator_is_metadata_noop(tmp_path):
@@ -29,7 +29,7 @@ def test_set_module_style_class_decorator_is_metadata_noop(tmp_path):
     compile_python(
         str(src),
         str(exe),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )

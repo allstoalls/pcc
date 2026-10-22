@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from process_timeout import run_process_tree_timeout
+
 from pcc1_gate import (
     find_current_pcc1,
     require_current_pcc1_enabled,
@@ -19,7 +21,7 @@ from pcc1_gate import (
 
 from pcc.package.install import install_package
 from pcc.package.metadata import current_platform_tag
-from pcc.py_frontend.pipeline import (
+from pcc.frontends.python.pipeline import (
     PyPipelineError,
     _collect_relative_module_closure,
     compile_python,
@@ -349,6 +351,10 @@ def _write_vllm_extension_tree(root: Path) -> Path:
 
 
 def _write_tilelang_extension_tree(root: Path) -> Path:
+    # The Requires-Dist lines are metadata for diagnostics. pcc1's pip also
+    # resolves names against <cwd>/projects, where the repository vendors
+    # numpy, so installs of this tree run from tmp_path: from the repo root
+    # they would build numpy from source first.
     root.mkdir()
     pkg = root / "tilelang"
     pkg.mkdir()
@@ -827,7 +833,7 @@ def test_pcc1_pip_install_wheel_participates_in_import_site(tmp_path):
     env["PCC_HOST_PYTHON"] = "/usr/bin/false"
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
-    subprocess.run(
+    run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -845,6 +851,7 @@ def test_pcc1_pip_install_wheel_participates_in_import_site(tmp_path):
         capture_output=True,
         timeout=180,
         env=env,
+        evidence=tmp_path / "install-process",
     )
     assert (site / "demo_pkg" / "__init__.py").exists()
     assert (site / "demo_pkg" / "core.py").exists()
@@ -894,7 +901,7 @@ def test_pcc1_pip_install_numpy_name_from_find_links_command_shape(tmp_path):
     env["PCC_HOST_PYTHON"] = "/usr/bin/false"
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
-    proc = subprocess.run(
+    proc = run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -915,6 +922,7 @@ def test_pcc1_pip_install_numpy_name_from_find_links_command_shape(tmp_path):
         capture_output=True,
         timeout=180,
         env=env,
+        evidence=tmp_path / "install-process",
     )
     plan = json.loads(proc.stdout)
     assert plan["ok"] is True
@@ -940,7 +948,7 @@ def test_pcc1_pip_install_mlx_name_from_find_links_command_shape(tmp_path):
     env["PCC_HOST_PYTHON"] = "/usr/bin/false"
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
-    proc = subprocess.run(
+    proc = run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -961,6 +969,7 @@ def test_pcc1_pip_install_mlx_name_from_find_links_command_shape(tmp_path):
         capture_output=True,
         timeout=180,
         env=env,
+        evidence=tmp_path / "install-process",
     )
     plan = json.loads(proc.stdout)
     assert plan["ok"] is True
@@ -986,7 +995,7 @@ def test_pcc1_pip_install_vllm_name_from_find_links_command_shape(tmp_path):
     env["PCC_HOST_PYTHON"] = "/usr/bin/false"
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
-    proc = subprocess.run(
+    proc = run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -1007,6 +1016,7 @@ def test_pcc1_pip_install_vllm_name_from_find_links_command_shape(tmp_path):
         capture_output=True,
         timeout=180,
         env=env,
+        evidence=tmp_path / "install-process",
     )
     plan = json.loads(proc.stdout)
     assert plan["ok"] is True
@@ -1034,7 +1044,7 @@ def test_pcc1_pip_install_tilelang_name_from_find_links_command_shape(tmp_path):
     env["PCC_HOST_PYTHON"] = "/usr/bin/false"
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
-    proc = subprocess.run(
+    proc = run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -1055,6 +1065,7 @@ def test_pcc1_pip_install_tilelang_name_from_find_links_command_shape(tmp_path):
         capture_output=True,
         timeout=180,
         env=env,
+        evidence=tmp_path / "install-process",
     )
     plan = json.loads(proc.stdout)
     assert plan["ok"] is True
@@ -1082,7 +1093,7 @@ def test_pcc1_pip_install_vllm_metal_name_from_find_links_command_shape(tmp_path
     env["PCC_HOST_PYTHON"] = "/usr/bin/false"
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
-    proc = subprocess.run(
+    proc = run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -1103,6 +1114,7 @@ def test_pcc1_pip_install_vllm_metal_name_from_find_links_command_shape(tmp_path
         capture_output=True,
         timeout=180,
         env=env,
+        evidence=tmp_path / "install-process",
     )
     plan = json.loads(proc.stdout)
     assert plan["ok"] is True
@@ -1129,7 +1141,7 @@ def test_pcc1_pip_install_mlx_namespace_extension_tree_direct(tmp_path):
     env["PCC_HOST_PYTHON"] = "/usr/bin/false"
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
-    proc = subprocess.run(
+    proc = run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -1149,6 +1161,7 @@ def test_pcc1_pip_install_mlx_namespace_extension_tree_direct(tmp_path):
         capture_output=True,
         timeout=180,
         env=env,
+        evidence=tmp_path / "install-process",
     )
     plan = json.loads(proc.stdout)
     assert plan["ok"] is True
@@ -1175,7 +1188,7 @@ def test_pcc1_pip_install_vllm_extension_tree_direct(tmp_path):
     env["PCC_HOST_PYTHON"] = "/usr/bin/false"
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
-    proc = subprocess.run(
+    proc = run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -1195,6 +1208,7 @@ def test_pcc1_pip_install_vllm_extension_tree_direct(tmp_path):
         capture_output=True,
         timeout=180,
         env=env,
+        evidence=tmp_path / "install-process",
     )
     plan = json.loads(proc.stdout)
     assert plan["ok"] is True
@@ -1221,7 +1235,7 @@ def test_pcc1_pip_install_tilelang_extension_tree_direct(tmp_path):
     env["PCC_HOST_PYTHON"] = "/usr/bin/false"
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
-    proc = subprocess.run(
+    proc = run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -1241,6 +1255,8 @@ def test_pcc1_pip_install_tilelang_extension_tree_direct(tmp_path):
         capture_output=True,
         timeout=180,
         env=env,
+        cwd=tmp_path,
+        evidence=tmp_path / "install-process",
     )
     plan = json.loads(proc.stdout)
     assert plan["ok"] is True
@@ -1267,7 +1283,7 @@ def test_pcc1_pip_install_vllm_metal_extension_tree_direct(tmp_path):
     env["PCC_HOST_PYTHON"] = "/usr/bin/false"
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
-    proc = subprocess.run(
+    proc = run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -1287,6 +1303,7 @@ def test_pcc1_pip_install_vllm_metal_extension_tree_direct(tmp_path):
         capture_output=True,
         timeout=180,
         env=env,
+        evidence=tmp_path / "install-process",
     )
     plan = json.loads(proc.stdout)
     assert plan["ok"] is True
@@ -1316,7 +1333,7 @@ def test_pcc1_mlx_namespace_extension_import_rejected_by_no_libpython_boundary(
     env["PCC_HOST_PYTHON"] = "/usr/bin/false"
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
-    subprocess.run(
+    run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -1336,6 +1353,7 @@ def test_pcc1_mlx_namespace_extension_import_rejected_by_no_libpython_boundary(
         capture_output=True,
         timeout=180,
         env=env,
+        evidence=tmp_path / "install-process",
     )
 
     main = tmp_path / "main.py"
@@ -1387,7 +1405,7 @@ def test_pcc1_vllm_extension_import_rejected_by_no_libpython_boundary(
     env["PCC_HOST_PYTHON"] = "/usr/bin/false"
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
-    subprocess.run(
+    run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -1407,6 +1425,7 @@ def test_pcc1_vllm_extension_import_rejected_by_no_libpython_boundary(
         capture_output=True,
         timeout=180,
         env=env,
+        evidence=tmp_path / "install-process",
     )
 
     main = tmp_path / "main.py"
@@ -1458,7 +1477,7 @@ def test_pcc1_tilelang_extension_import_rejected_by_no_libpython_boundary(
     env["PCC_HOST_PYTHON"] = "/usr/bin/false"
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
-    subprocess.run(
+    run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -1478,6 +1497,8 @@ def test_pcc1_tilelang_extension_import_rejected_by_no_libpython_boundary(
         capture_output=True,
         timeout=180,
         env=env,
+        cwd=tmp_path,
+        evidence=tmp_path / "install-process",
     )
 
     main = tmp_path / "main.py"
@@ -1529,7 +1550,7 @@ def test_pcc1_vllm_metal_extension_import_rejected_by_no_libpython_boundary(
     env["PCC_HOST_PYTHON"] = "/usr/bin/false"
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
-    subprocess.run(
+    run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -1549,6 +1570,7 @@ def test_pcc1_vllm_metal_extension_import_rejected_by_no_libpython_boundary(
         capture_output=True,
         timeout=180,
         env=env,
+        evidence=tmp_path / "install-process",
     )
 
     main = tmp_path / "main.py"
@@ -1603,7 +1625,7 @@ def test_pcc1_pip_install_real_numpy_artifact_opt_in(tmp_path):
     env["PCC_HOST_PYTHON"] = "/usr/bin/false"
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
-    proc = subprocess.run(
+    proc = run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -1626,6 +1648,7 @@ def test_pcc1_pip_install_real_numpy_artifact_opt_in(tmp_path):
         capture_output=True,
         timeout=300,
         env=env,
+        evidence=tmp_path / "install-process",
     )
     plan = json.loads(proc.stdout)
     assert plan["ok"] is True
@@ -1722,7 +1745,7 @@ def test_pcc1_real_numpy_first_import_boundary_opt_in(tmp_path):
     env["PCC_HOST_PYTHON"] = "/usr/bin/false"
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
-    install_proc = subprocess.run(
+    install_proc = run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -1745,6 +1768,7 @@ def test_pcc1_real_numpy_first_import_boundary_opt_in(tmp_path):
         capture_output=True,
         timeout=300,
         env=env,
+        evidence=tmp_path / "install-process",
     )
     install_plan = json.loads(install_proc.stdout)
     assert install_plan["ok"] is True
@@ -1952,7 +1976,7 @@ def test_pcc1_pip_install_chain_no_host_ext_abi_smoke(tmp_path):
     env["PCC_PYTHON_IR_PASSES"] = "off"
     env["PCC_PLATFORM_TAG"] = current_platform_tag()
 
-    proc = subprocess.run(
+    proc = run_process_tree_timeout(
         [
             str(pcc1),
             "-m",
@@ -1970,6 +1994,7 @@ def test_pcc1_pip_install_chain_no_host_ext_abi_smoke(tmp_path):
         capture_output=True,
         timeout=180,
         env=env,
+        evidence=tmp_path / "install-process",
     )
     install_plan = json.loads(proc.stdout)
     assert install_plan["ok"] is True

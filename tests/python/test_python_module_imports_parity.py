@@ -13,7 +13,7 @@ Reference contract (from CPython):
 
 pcc gates on the recursive native stdlib closure: ``import math``,
 ``import json``, ``from os import path``, etc. resolve to
-``pcc/py_stdlib/<name>.py`` first, host CPython's stdlib only as a
+``pcc/stdlib/<name>.py`` first, host CPython's stdlib only as a
 last resort, and never to libpython-fallback under ``mode="off"``.
 """
 from __future__ import annotations
@@ -26,7 +26,7 @@ import pytest
 
 
 def _compile(monkeypatch, src: Path, exe: Path) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     compile_python(
         str(src), str(exe),

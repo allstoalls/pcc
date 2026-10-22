@@ -53,7 +53,7 @@ plain()
 
 
 def test_traceback_chain_and_exception_attribute_error_match_cpython(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"

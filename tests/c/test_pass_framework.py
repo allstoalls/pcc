@@ -2,25 +2,24 @@
 
 import unittest
 
-import llvmlite.binding as llvm
 
-from pcc.ast import c_ast
-from pcc.passes import (
+from pcc.frontends.c.ast import c_ast
+from pcc.frontends.c.passes import (
     PassContext,
     PassPipeline,
     default_pass_groups,
     disable_pass_group,
     validate_default_pass_groups,
 )
-from pcc.passes.base import ASTPass
-from pcc.passes.context import AllocStrategy, VarInfo
-from pcc.passes.escape_analysis import EscapeAnalysisPass
-from pcc.passes.alloc_decision import AllocDecisionPass
-from pcc.passes.clang_compat import TailCallPass
-from pcc.passes.canonicalize import CanonicalizerPass
-from pcc.passes.nsw_inference import NSWInferencePass
-from pcc.passes.propagation import CopyPropagationPass
-from pcc.parse.c_parser import CParser
+from pcc.frontends.c.passes.base import ASTPass
+from pcc.frontends.c.passes.context import AllocStrategy, VarInfo
+from pcc.frontends.c.passes.escape_analysis import EscapeAnalysisPass
+from pcc.frontends.c.passes.alloc_decision import AllocDecisionPass
+from pcc.frontends.c.passes.clang_compat import TailCallPass
+from pcc.frontends.c.passes.canonicalize import CanonicalizerPass
+from pcc.frontends.c.passes.nsw_inference import NSWInferencePass
+from pcc.frontends.c.passes.propagation import CopyPropagationPass
+from pcc.frontends.c.parse.c_parser import CParser
 
 
 def _analyze(code):
@@ -206,7 +205,7 @@ class TestPassPipeline(unittest.TestCase):
         assert "escape-analysis" in desc
         assert "alloc-decision" in desc
         assert "nsw-inference" in desc
-        assert "llvm-o2-pipeline" in desc
+        assert "llvm-o2-pipeline" not in desc
 
     def test_disabled_pipeline_is_noop(self):
         ctx = PassContext()
@@ -270,33 +269,7 @@ class TestPassPipeline(unittest.TestCase):
         assert restored.pass_metrics["canonicalize"].runs == 1
         assert restored.pass_metrics["canonicalize"].total_time_ms == 1.25
 
-    def test_backend_llvm_pipeline_records_backend_metric(self):
-        llvm.initialize_native_target()
-        llvm.initialize_native_asmprinter()
-        target = llvm.Target.from_default_triple()
-        target_machine = target.create_target_machine()
-        llvmmod = llvm.parse_assembly("define i32 @main() { ret i32 0 }")
-        ctx = PassContext()
 
-        PassPipeline.run_backend_tier(llvmmod, target_machine, ctx, 2)
-
-        metric = ctx.pass_metrics["llvm-o2-pipeline"]
-        assert metric.tier == "backend"
-        assert metric.runs == 1
-        assert metric.total_time_ms >= 0
-
-    def test_backend_llvm_pipeline_ignores_frontend_master_switch(self):
-        llvm.initialize_native_target()
-        llvm.initialize_native_asmprinter()
-        target = llvm.Target.from_default_triple()
-        target_machine = target.create_target_machine()
-        llvmmod = llvm.parse_assembly("define i32 @main() { ret i32 0 }")
-        ctx = PassContext()
-        ctx.enabled = False
-
-        PassPipeline.run_backend_tier(llvmmod, target_machine, ctx, 2)
-
-        assert ctx.pass_metrics["llvm-o2-pipeline"].runs == 1
 
     def test_copy_propagation_skips_reassigned_function_pointer(self):
         ast = CParser().parse("""
@@ -532,12 +505,12 @@ class TestIntegrationWithCodegen(unittest.TestCase):
     """Ensure the pass framework doesn't break actual compilation."""
 
     def test_basic_eval(self):
-        from pcc.evaluater.c_evaluator import CEvaluator
+        from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
         e = CEvaluator()
         assert e.evaluate("int main() { return 42; }") == 42
 
     def test_loop_eval(self):
-        from pcc.evaluater.c_evaluator import CEvaluator
+        from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
         e = CEvaluator()
         r = e.evaluate("""
             int main() {
@@ -549,7 +522,7 @@ class TestIntegrationWithCodegen(unittest.TestCase):
         assert r == 55
 
     def test_pointer_eval(self):
-        from pcc.evaluater.c_evaluator import CEvaluator
+        from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
         e = CEvaluator()
         r = e.evaluate("""
             int main() {
@@ -562,7 +535,7 @@ class TestIntegrationWithCodegen(unittest.TestCase):
         assert r == 100
 
     def test_recursive_eval(self):
-        from pcc.evaluater.c_evaluator import CEvaluator
+        from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
         e = CEvaluator()
         r = e.evaluate("""
             int fib(int n) {
@@ -574,7 +547,7 @@ class TestIntegrationWithCodegen(unittest.TestCase):
         assert r == 55
 
     def test_goto_label_eval_survives_default_pipeline(self):
-        from pcc.evaluater.c_evaluator import CEvaluator
+        from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
         e = CEvaluator()
         r = e.evaluate("""
             int main() {
@@ -592,7 +565,7 @@ class TestIntegrationWithCodegen(unittest.TestCase):
         assert r == 0
 
     def test_sizeof_integer_promotion_survives_default_pipeline(self):
-        from pcc.evaluater.c_evaluator import CEvaluator
+        from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
         e = CEvaluator()
         r = e.evaluate(
             "int main() { return sizeof(((short)1) + 0); }",
@@ -602,7 +575,7 @@ class TestIntegrationWithCodegen(unittest.TestCase):
         assert r == 4
 
     def test_function_pointer_store_survives_default_pipeline(self):
-        from pcc.evaluater.c_evaluator import CEvaluator
+        from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
         e = CEvaluator()
         r = e.evaluate(
             """
@@ -618,7 +591,7 @@ class TestIntegrationWithCodegen(unittest.TestCase):
         assert r == 5
 
     def test_function_pointer_parameter_survives_default_pipeline(self):
-        from pcc.evaluater.c_evaluator import CEvaluator
+        from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
         e = CEvaluator()
         r = e.evaluate(
             """
@@ -632,7 +605,7 @@ class TestIntegrationWithCodegen(unittest.TestCase):
         assert r == 6
 
     def test_unsigned_ssa_promoted_locals_preserve_compare_semantics(self):
-        from pcc.evaluater.c_evaluator import CEvaluator
+        from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
         e = CEvaluator()
         r = e.evaluate(
             """

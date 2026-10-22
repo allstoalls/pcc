@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from pcc.ir_diff import IrSummary, diff_ir
+from pcc.diagnostics.ir_diff import IrSummary, diff_ir
 
 
 def test_ir_summary_counts_functions_and_calls():

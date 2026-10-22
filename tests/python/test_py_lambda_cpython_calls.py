@@ -25,10 +25,10 @@ class PyLambdaCpythonCallTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.td, True)
 
     def test_none_bridge_guard_accepts_nominal_none_type(self):
-        from pcc.py_frontend.codegen.cpy_bridge_lowering import (
+        from pcc.frontends.python.codegen.cpy_bridge_lowering import (
             _is_none_type_for_cpython_bridge,
         )
-        from pcc.py_frontend.py_ast import NoneType as FrontendNoneType
+        from pcc.frontends.python.py_ast import NoneType as FrontendNoneType
 
         class NoneType:
             name = "None"
@@ -44,13 +44,13 @@ class PyLambdaCpythonCallTests(unittest.TestCase):
         return dst
 
     def test_lambda_returning_cpython_object_stays_tagged(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "lambda_cpy.py",
             """
-            import pcc.py_frontend.type_infer as type_infer
-            import pcc.parse.py_lift as py_lift
+            import pcc.frontends.python.type_infer as type_infer
+            import pcc.frontends.python.py_lift as py_lift
 
             src = "def f(x: int) -> int:\\n    return x + 1\\n"
             mod = py_lift.parse_and_lift(src, "lambda_cpy.py", "repro")
@@ -71,7 +71,7 @@ class PyLambdaCpythonCallTests(unittest.TestCase):
         self.assertEqual(run.stdout, "repro\n")
 
     def test_cpython_string_method_chain_stays_tagged(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "cpy_str_chain.py",
@@ -103,7 +103,7 @@ class PyLambdaCpythonCallTests(unittest.TestCase):
         self.assertEqual(run.stdout, "alpha\nbeta\n")
 
     def test_cpython_with_exit_gets_none_triple(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "cpy_with_exit.py",
@@ -132,7 +132,7 @@ class PyLambdaCpythonCallTests(unittest.TestCase):
         self.assertEqual(run.stderr, "")
 
     def test_none_argument_marshaled_to_cpython_call(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "cpy_none_arg.py",
@@ -154,7 +154,7 @@ class PyLambdaCpythonCallTests(unittest.TestCase):
         self.assertNotIn("cannot marshal NoneType", ir_text)
 
     def test_slice_inside_tuple_key_lowers_to_cpython_slice_object(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "cpy_tuple_slice_key.py",
@@ -184,7 +184,7 @@ class PyLambdaCpythonCallTests(unittest.TestCase):
         self.assertNotIn("does not handle expression Slice", ir_text)
 
     def test_top_level_cpython_system_exit_zero_is_clean(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "cpy_sys_exit_zero.py",
@@ -214,7 +214,7 @@ class PyLambdaCpythonCallTests(unittest.TestCase):
         self.assertNotIn("SystemError", run.stderr)
 
     def test_top_level_cpython_system_exit_code_propagates(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "cpy_sys_exit_code.py",
@@ -243,7 +243,7 @@ class PyLambdaCpythonCallTests(unittest.TestCase):
         self.assertEqual(run.stderr, "")
 
     def test_imported_sys_exit_alias_is_native(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "cpy_sys_exit_alias.py",

@@ -81,6 +81,8 @@ run()
 '''.lstrip()
 
 
+# native fragment canary requires an explicit immutable PCC_RUNTIME_ARCHIVE
+@pytest.mark.pcc_gate(env="PCC_RUNTIME_ARCHIVE")
 def test_host_built_native_fragments_execute_reload_helpers(tmp_path):
     from pcc.backend.arm64_encode import assemble_text
     from pcc.backend.self_backend_aarch64_darwin_regs import emit_add_offset
@@ -89,11 +91,9 @@ def test_host_built_native_fragments_execute_reload_helpers(tmp_path):
         store_reg_to_slot_parts,
     )
     from pcc.backend.self_backend_ir import TypeDesc
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     archive_name = os.environ.get("PCC_RUNTIME_ARCHIVE")
-    if not archive_name:
-        pytest.skip("native fragment canary requires an explicit immutable PCC_RUNTIME_ARCHIVE")
     archive = Path(archive_name).resolve()
     assert archive.is_file()
     archive_hash = hashlib.sha256(archive.read_bytes()).hexdigest()

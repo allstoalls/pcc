@@ -1,7 +1,7 @@
-"""Issue 11.C.2: ``pcc/stdlib/struct.py`` parity tests.
+"""Issue 11.C.2: ``pcc/ir/support/struct.py`` parity tests.
 
 The port must produce byte-identical results to CPython's ``struct``
-for the formats actually used by ``pcc/llvm_capi/ir.py``:
+for the formats actually used by ``pcc/ir/ir.py``:
 
   - ``>d`` (8-byte big-endian double)
   - ``>f`` (4-byte big-endian single)
@@ -26,7 +26,7 @@ from pcc1_gate import find_current_pcc1, skip_or_fail_no_current_pcc1
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-FLOAT_BITS_SOURCE = REPO_ROOT / "pcc" / "stdlib" / "_float_bits.py"
+FLOAT_BITS_SOURCE = REPO_ROOT / "pcc" / "ir" / "support" / "_float_bits.py"
 
 
 @pytest.fixture(scope="module")
@@ -34,8 +34,8 @@ def pcc_struct():
     """Import the pcc-stdlib port directly (not via the recursive
     walker; that's tested elsewhere)."""
     import importlib
-    import pcc.stdlib  # ensures the package is on sys.path
-    return importlib.import_module("pcc.stdlib.struct")
+    import pcc.ir.support  # ensures the package is on sys.path
+    return importlib.import_module("pcc.ir.support.struct")
 
 
 @pytest.fixture(scope="module")
@@ -43,7 +43,7 @@ def native_struct():
     """Ordinary ``import struct`` provider used by compiled pcc modules."""
     import importlib
 
-    return importlib.import_module("pcc.py_stdlib.struct")
+    return importlib.import_module("pcc.stdlib.struct")
 
 
 def test_module_functions_reuse_format_plan(native_struct, monkeypatch):
@@ -75,9 +75,9 @@ def test_format_plan_cache_is_bounded_and_clearable(native_struct):
 
 
 def test_native_format_cache_keeps_results_and_bounded_live_memory(
-    tmp_path, pcc_py_runtime_archive,
+    tmp_path, pcc_runtime_archive,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "struct_cache_probe.py"
     source.write_text('''
@@ -106,7 +106,7 @@ main()
     output = tmp_path / "struct_cache_probe"
     compile_python(
         str(source), str(output), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         result = subprocess.run(
@@ -228,8 +228,8 @@ def test_unpack_from_does_not_copy_an_entire_mutable_buffer(native_struct):
     assert peak < 65536, peak
 
 
-def test_compiled_mutable_unpack_preserves_bytes_fields(tmp_path, pcc_py_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+def test_compiled_mutable_unpack_preserves_bytes_fields(tmp_path, pcc_runtime_archive):
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "mutable_struct.py"
     source.write_text('''
@@ -247,7 +247,7 @@ main()
 ''', encoding="utf-8")
     output = tmp_path / "mutable_struct"
     compile_python(str(source), str(output), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         result = subprocess.run([str(output)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(gc)))
@@ -504,7 +504,7 @@ main()
 @pytest.mark.integration
 def test_host_pcc_and_current_pcc1_unpack_from_matches_cpython_without_libpython(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ):
     """The compiled provider's in-place payload reads must equal CPython.
 
@@ -533,7 +533,7 @@ def test_host_pcc_and_current_pcc1_unpack_from_matches_cpython_without_libpython
     assert expected.count("\n") == 74
     env = os.environ.copy()
     env.pop("LC_ALL", None)
-    env["PCC_RUNTIME_ARCHIVE"] = str(pcc_py_runtime_archive)
+    env["PCC_RUNTIME_ARCHIVE"] = str(pcc_runtime_archive)
     for label, compiler in (
         ("host-pcc", ["uv", "run", "pcc"]),
         ("current-pcc1", [str(pcc1)]),
@@ -572,7 +572,7 @@ def test_host_pcc_and_current_pcc1_unpack_from_matches_cpython_without_libpython
 @pytest.mark.integration
 def test_host_pcc_and_current_pcc1_pack_subnormals_without_libpython(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ):
     pcc1 = find_current_pcc1(REPO_ROOT)
     if pcc1 is None:
@@ -613,7 +613,7 @@ def test_host_pcc_and_current_pcc1_pack_subnormals_without_libpython(
     ).stdout
     env = os.environ.copy()
     env.pop("LC_ALL", None)
-    env["PCC_RUNTIME_ARCHIVE"] = str(pcc_py_runtime_archive)
+    env["PCC_RUNTIME_ARCHIVE"] = str(pcc_runtime_archive)
     for label, compiler in (
         ("host-pcc", ["uv", "run", "pcc"]),
         ("current-pcc1", [str(pcc1)]),

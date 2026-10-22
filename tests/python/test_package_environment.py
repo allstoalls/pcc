@@ -7,12 +7,13 @@ import subprocess
 
 import pytest
 
-from pcc import cli_bootstrap, cli_core
+from pcc.driver import cli_bootstrap
+from pcc.driver import cli_core
 from pcc.package.acquire import target_python_version
 from pcc.package.install import install_package
 from pcc.package.pip_shim import pip_dry_run_plan
 from pcc.package.uv_lock_sync import _marker_environment
-from pcc.package_environment import (
+from pcc.package.environment import (
     apply_locked_environment_resource_defaults,
     default_package_cache,
     default_package_site,
@@ -92,12 +93,12 @@ def test_locked_environment_preserves_explicit_compiler_resource_overrides(
 def test_locked_resource_default_helper_is_callable_in_strict_self_mode(
     tmp_path, monkeypatch
 ):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     source = tmp_path / "locked_resource_defaults.py"
     source.write_text(
         "import os\n"
-        "from pcc.package_environment import "
+        "from pcc.package.environment import "
         "apply_locked_environment_resource_defaults\n"
         "apply_locked_environment_resource_defaults()\n"
         "print(os.environ.get('PCC_PY_FRONTEND_JOBS', '<unset>'))\n"
@@ -107,9 +108,9 @@ def test_locked_resource_default_helper_is_callable_in_strict_self_mode(
     output = tmp_path / "locked_resource_defaults"
 
     compile_python_multi(
-        [str(source), "pcc/package_environment.py"],
+        [str(source), "pcc/package/environment.py"],
         str(output),
-        module_names=["locked_resource_defaults", "pcc.package_environment"],
+        module_names=["locked_resource_defaults", "pcc.package.environment"],
         entry_module="locked_resource_defaults",
         backend="self",
         libpython_mode="off",
@@ -374,7 +375,7 @@ def test_bootstrap_compile_activates_locked_resource_defaults_before_frontend(
 def test_host_cli_restores_locked_resource_defaults_after_compile(
     tmp_path, monkeypatch
 ):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     env = _base_env(tmp_path)
     env["VIRTUAL_ENV"] = str(tmp_path / ".venv")
@@ -479,8 +480,8 @@ def test_obsolete_divergent_default_sites_are_absent():
     root = Path.cwd()
     sources = [
         root / "pcc" / "package" / "install.py",
-        root / "pcc" / "cli_bootstrap.py",
-        root / "pcc" / "py_frontend" / "pipeline.py",
+        root / "pcc" / "driver" / "cli_bootstrap.py",
+        root / "pcc" / "frontends" / "python" / "pipeline.py",
     ]
     text = "\n".join(path.read_text(encoding="utf-8") for path in sources)
     assert "/tmp/pcc-site-packages" not in text

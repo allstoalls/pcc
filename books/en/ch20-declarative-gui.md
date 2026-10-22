@@ -49,7 +49,7 @@ This ownership split answers the critical question: who may mutate the committed
 The v2 routing surface returns a complete leaf-to-root path and does no kernel-side bubbling:
 
 ```python
-# pcc/py_runtime/py/pcc_gui_kit.py
+# pcc/runtime/py/pcc_gui_kit.py
 def pcc_kit_hit_path_v1(root: int, x: int, y: int, path_out, capacity: int) -> int:
     """Write the complete leaf-to-root path; never return a partial path."""
     hit = pcc_kit_hit(root, x, y)
@@ -68,14 +68,14 @@ Insufficient capacity yields the negative required length rather than a partial 
 
 ## 20.3 The Frozen ABI: Bound Records Before Syntax Convenience
 
-[gui_declarative_contract_v1.json](../../pcc/py_runtime/gui_declarative_contract_v1.json) is the machine-readable ABI authority. It freezes capacities, byte order, alignment, record fields, owners, lifetimes, error codes, lane aging, effect phases, command completion, and application transitions. `PccGuiRenderContextV1` is an 80-byte caller-owned record, `PccGuiDescriptorV1` is 72 bytes, and child identity is `(parent_component_id, key, node_kind)`. A same-key child with a different node kind is replaced, never incorrectly reused.
+[gui_declarative_contract_v1.json](../../pcc/runtime/gui_declarative_contract_v1.json) is the machine-readable ABI authority. It freezes capacities, byte order, alignment, record fields, owners, lifetimes, error codes, lane aging, effect phases, command completion, and application transitions. `PccGuiRenderContextV1` is an 80-byte caller-owned record, `PccGuiDescriptorV1` is 72 bytes, and child identity is `(parent_component_id, key, node_kind)`. A same-key child with a different node kind is replaced, never incorrectly reused.
 
 There are two reasons to freeze raw records before allowing arbitrary Python objects through callbacks. First, bootstrap and the self backend need one fixed ABI. Second, GC ownership remains auditable. A v1 state slot admits only `i64` and an opaque handle with explicit retain/release. `managed_ref` has a reserved kind in the contract, but cannot enter production records until it joins root registration, write barriers, tracing, and relocation updates and passes GC0 through GC4. Hiding a semantic object in `i64` would evade the collector and is explicitly forbidden.
 
 After a component callback fills a descriptor arena, `pcc_gui_component_render_commit()` validates the ABI, capacities, keys, node owners, and resource budget before staging new nodes. The entire sibling order is then committed through the kernel. Its entry checks demonstrate the fail-closed policy:
 
 ```python
-# pcc/py_runtime/py/pcc_gui_components.py
+# pcc/runtime/py/pcc_gui_components.py
 def pcc_gui_component_render_commit(
     component_id: int,
     descriptor_arena,
@@ -102,7 +102,7 @@ Each component update records a global enqueue sequence, lane, slot, SET or redu
 Lane selection also ages work. Background waiting 32 epochs, default waiting 8, and animation waiting 2 can override ordinary priority so low lanes do not starve:
 
 ```python
-# pcc/py_runtime/py/pcc_gui_scheduler.py
+# pcc/runtime/py/pcc_gui_scheduler.py
 def _select_lane(record) -> int:
     if _lane_pending(record, LANE_BACKGROUND) != 0 and load_i32(record, 76) >= 32:
         return LANE_BACKGROUND
@@ -148,7 +148,7 @@ Effect phases are before-mutation snapshot, mutation-time layout cleanup, struct
 A cache hit does not parse again; it only updates the usage epoch and hit counter:
 
 ```python
-# pcc/py_runtime/py/pcc_gui_style.py
+# pcc/runtime/py/pcc_gui_style.py
     key_hash = _candidate_hash(class_bytes, length)
     index = _cache_find(class_bytes, length, key_hash)
     if index >= 0 and _cache_entry_current(index) != 0:
@@ -178,7 +178,7 @@ Managed state v1 likewise admits only scalar values and opaque handles. A future
 `pcc_gui_app_lifecycle.py` accepts `Ready`, `Resumed`, `MainEventsCleared`, native `WindowEvent`, Darwin `Opened` and `Reopen`, cancellable `ExitRequested`, and exactly-once `Exit`. A native adapter first copies the payload into the bounded owner queue. `MainEventsCleared` is the point at which UI work drains before layout and rendering. Accepted exit shuts down scheduler work, command resolvers and state, components/listeners/effects, passive effects, and the native window handle, then delivers `Exit`.
 
 ```python
-# pcc/py_runtime/py/pcc_gui_app_lifecycle.py
+# pcc/runtime/py/pcc_gui_app_lifecycle.py
     state = _base("pcc_gui_app_lifecycle_state_value")
     if state == APP_UNINITIALIZED:
         return ERR_OWNERSHIP
@@ -219,7 +219,7 @@ This book update did not run GUI compilation or hardware gates. It therefore doe
 
 ### 20.8.1 Three Kernels and the Wrong Kind of “Working” Host (August 2026)
 
-The first GUI state had three owners: `pcc/py_runtime/py/pcc_gui_kit.py`, `projects/mac_diff_app/pcc_gui_kit.py`, and a smaller kernel inlined into `app.py`. The build used `app.py`, while the accepted split-line-table and changed-row coalescing behavior lived in `kit_window.py`. Existing tests covered an older control ABI and pre-loop statistics rather than direct kernel render/event behavior. Each copy could support a demonstration; none simultaneously owned production build selection, accepted product semantics, and direct kernel evidence.
+The first GUI state had three owners: `pcc/runtime/py/pcc_gui_kit.py`, `projects/mac_diff_app/pcc_gui_kit.py`, and a smaller kernel inlined into `app.py`. The build used `app.py`, while the accepted split-line-table and changed-row coalescing behavior lived in `kit_window.py`. Existing tests covered an older control ABI and pre-loop statistics rather than direct kernel render/event behavior. Each copy could support a demonstration; none simultaneously owned production build selection, accepted product semantics, and direct kernel evidence.
 
 The defect was not cosmetic duplication. Evidence had no stable subject: a test might exercise a shadow while the application linked another owner. Later source makes `pcc_gui_kit.py` canonical, adds generation ids, reclamation, structural mutation, and complete hit paths, and has the declarative application use runtime modules through externs. The resulting invariant is that the UI tree, listener registry, theme table, and command table each have exactly one production owner. Project-local shadows may survive only as temporary oracles.
 
@@ -237,8 +237,8 @@ The source and canary exist, but the structured `GUI-P2-*` acceptance tasks rema
 
 ## Exercises
 
-1. Read `pcc_kit_destroy_subtree()`, `pcc_kit_replace_children()`, and `_valid()` in [pcc_gui_kit.py](../../pcc/py_runtime/py/pcc_gui_kit.py). Show how generation ids prevent an event for a destroyed node from reaching a reused slot.
+1. Read `pcc_kit_destroy_subtree()`, `pcc_kit_replace_children()`, and `_valid()` in [pcc_gui_kit.py](../../pcc/runtime/py/pcc_gui_kit.py). Show how generation ids prevent an event for a destroyed node from reaching a reused slot.
 2. Apply the contract's update rules to “low-lane SET(5), then high-lane reduce(+1)” and “low-lane reduce(+1), then high-lane SET(5).” Explain why the base queue must retain processed updates after the first skipped one.
 3. Compare `pcc_kit_route_event_v2()` with legacy `pcc_kit_route_event()`. Design a regression proving that one click cannot bubble once in the kernel and again in the component registry.
-4. Read [pcc_gui_style.py](../../pcc/py_runtime/py/pcc_gui_style.py) and derive the candidates, modifiers, operations, and generation dependencies for `bg-accent/50 -x-3/[dense]`. Explain why warm application should neither parse nor allocate.
+4. Read [pcc_gui_style.py](../../pcc/runtime/py/pcc_gui_style.py) and derive the candidates, modifiers, operations, and generation dependencies for `bg-accent/50 -x-3/[dense]`. Explain why warm application should neither parse nor allocate.
 5. Design a mode-labeled evidence matrix for `mac_diff_app`: host-pcc headless, current-pcc1 self/no-libpython across GC0–GC4, Darwin render/present reachability, and pixel correctness. Mark which cell cannot be inferred from bridge acknowledgement alone.

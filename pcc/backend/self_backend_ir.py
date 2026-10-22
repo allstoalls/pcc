@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 
 from . import BackendUnavailable
 from .self_backend_call_flags import classify_call_flags
+from .self_backend_debug import DebugMetadata
 from .self_backend_value_arena import CompilerInt4, CompilerIntArena
 
 
@@ -122,6 +123,21 @@ def _text_key_index(mapping) -> tuple[dict[int, str], dict[int, list[str]]]:
         index += 1
     entry[1] = index
     return by_id, by_bucket
+
+
+def retire_module_text_key_cache() -> None:
+    """Drop consumed module lookup owners after every object consumer ends."""
+    _TEXT_KEY_INDEX_CACHE.clear()
+
+
+def clear_text_key_mapping(mapping) -> None:
+    """Retire one consumed mapping together with its equality lookup index."""
+    cache_key = id(mapping)
+    if cache_key in _TEXT_KEY_INDEX_CACHE:
+        entry = _TEXT_KEY_INDEX_CACHE[cache_key]
+        if entry[0] is mapping:
+            del _TEXT_KEY_INDEX_CACHE[cache_key]
+    mapping.clear()
 
 
 def _text_key_mapping_value_without_hash(mapping, existing_key):
@@ -353,6 +369,12 @@ def parsed_function_has_alloca_slot(func, key: str) -> bool:
     return _parsed_function_alloca_slot_raw(func, key) is not None
 
 
+def _wide_int_size(width: int) -> int:
+    """Bytes for an integer wider than 64 bits: whole 16-byte units, like
+    clang's ``__int128`` (size 16, alignment 16 on arm64 and x86-64)."""
+    return ((width + 127) // 128) * 16
+
+
 def _align_to(value: int, alignment: int) -> int:
     if value == 0:
         return 0
@@ -394,6 +416,17 @@ class TypeDesc:
         return self.kind == "struct"
 
     @property
+    def contains_storage_only_float(self) -> bool:
+        """An extended value needs lowering; pointers merely address storage."""
+        if self.is_fp:
+            return self.width == 80
+        if self.is_array:
+            return self.elem is not None and self.elem.contains_storage_only_float
+        if self.is_struct:
+            return any(member.contains_storage_only_float for member in self.fields)
+        return False
+
+    @property
     def bits(self) -> int:
         if self.is_ptr:
             return 64
@@ -406,7 +439,12 @@ class TypeDesc:
         if self.is_void:
             return 0
         if self.is_fp:
+            # x86_fp80 is admitted only with the x86_64 Linux storage ABI.
+            if self.width == 80:
+                return 16
             return 4 if self.width <= 32 else 8
+        if self.is_int and self.width > 64:
+            return _wide_int_size(self.width)
         if self.is_ptr or self.width > 32:
             return 8
         if self.is_array:
@@ -435,7 +473,11 @@ class TypeDesc:
         if self.is_array or self.is_struct:
             return self.slot_size
         if self.is_fp:
+            if self.width == 80:
+                return 16
             return 4 if self.width <= 32 else 8
+        if self.is_int and self.width > 64:
+            return _wide_int_size(self.width)
         if self.is_ptr or self.width > 32:
             return 8
         return 4
@@ -455,7 +497,11 @@ class TypeDesc:
                     result = member.align
             return result
         if self.is_fp:
+            if self.width == 80:
+                return 16
             return 4 if self.width <= 32 else 8
+        if self.is_int and self.width > 64:
+            return 16
         if self.is_ptr or self.width > 32:
             return 8
         if self.width <= 8:
@@ -471,7 +517,11 @@ class TypeDesc:
         if self.is_array or self.is_struct:
             return self.align
         if self.is_fp:
+            if self.width == 80:
+                return 16
             return 4 if self.width <= 32 else 8
+        if self.is_int and self.width > 64:
+            return 16
         if self.is_ptr or self.width > 32:
             return 8
         return 4
@@ -485,6 +535,8 @@ class TypeDesc:
         if self.is_int:
             return f"i{self.width}"
         if self.is_fp:
+            if self.width == 80:
+                return "x86_fp80"
             return "float" if self.width <= 32 else "double"
         if self.is_array:
             elem: TypeDesc = self.elem
@@ -1111,7 +1163,9 @@ class CompactParsedInstrArena:
             return self._call_projector.diagnostic_alloca_data(raw)
         if kind_id in (
             PARSED_INSTRUCTION_KIND_LOAD,
+            PARSED_INSTRUCTION_KIND_LOAD_ATOMIC,
             PARSED_INSTRUCTION_KIND_STORE,
+            PARSED_INSTRUCTION_KIND_STORE_ATOMIC,
             PARSED_INSTRUCTION_KIND_CAST,
             PARSED_INSTRUCTION_KIND_ICMP,
             PARSED_INSTRUCTION_KIND_BINOP,
@@ -1255,6 +1309,20 @@ class AllocaInfo:
     allocated_type: TypeDesc
 
 
+@dataclass
+class TypeParseContext:
+    """One module's lazy named layouts and dependent canonicalization caches."""
+
+    target_triple: str = ""
+    named_type_bodies: dict[str, str] = field(default_factory=dict)
+    call_signature_cache: dict[str, tuple[int, bool]] = field(default_factory=dict)
+    named_types: dict[str, TypeDesc] = field(default_factory=dict)
+    type_cache: dict[str, TypeDesc] = field(default_factory=dict)
+    pointer_type_cache: dict[int, tuple[TypeDesc, TypeDesc]] = field(default_factory=dict)
+    # Original module metadata and dense per-function source coordinates.
+    debug_info: DebugMetadata | None = None
+
+
 @dataclass(frozen=True)
 class GlobalDef:
     name: str
@@ -1273,6 +1341,7 @@ class GlobalDef:
     alignment: int = 0
     ir_prefix: str = ""
     trailing_attributes: tuple[str, ...] = ()
+    type_context: TypeParseContext | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -1280,6 +1349,7 @@ class ParsedModule:
     triple: str
     globals_: tuple[GlobalDef, ...]
     functions: tuple["ParsedFunction", ...]
+    type_context: TypeParseContext | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass
@@ -1356,6 +1426,10 @@ class ParsedFunction:
     # stack memory, every value in a register.  Its prologue pushes nothing
     # and every return is a bare ``ret``.
     aarch64_frameless: bool = False
+    type_context: TypeParseContext | None = field(default=None, repr=False, compare=False)
+    # The function moves the stack pointer at run time (a counted alloca, see
+    # self_backend_dynamic_alloca); every epilogue first restores SP from x29.
+    aarch64_dynamic_stack: bool = False
 
 
 def parsed_module_instruction_arena_profile(module: ParsedModule) -> dict[str, int]:

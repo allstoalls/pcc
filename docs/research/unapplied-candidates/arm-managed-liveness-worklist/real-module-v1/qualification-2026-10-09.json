@@ -1,0 +1,198 @@
+{
+  "application_status": "UNAPPLIED",
+  "codegen_checksums": {
+    "baseline": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+    "candidate": "71a7d53a6e959bd2e6664fc7544e62967ac4517372f49b535c245434a0381216"
+  },
+  "comparison_sha256": "7555892906fbdf1ce8e974bb684e35d78cc0f218e139cd7ddfc5b3b0a6bf2562",
+  "date_utc": "2026-10-09",
+  "decision": "HOLD_NO_MATERIAL_ROW_WORK_REDUCTION",
+  "equivalence": {
+    "call_states": {
+      "bytes": 13353250,
+      "name": "call-states.jsonl",
+      "sha256": "211f173de037ff428e042315dd365ace16eeeb566f1dfa5662c2baaac359c992"
+    },
+    "complete_call_state_stream_bytes": "PASS",
+    "complete_normalized_object_stackmap_contract": "PASS",
+    "decoded_contract": {
+      "bytes": 267507281,
+      "sha256": "d096a5e794c6156394d7bb650ef9119bb5f7bab864fa48f9c3d4ab3ece6582c3"
+    },
+    "object": {
+      "bytes": 18577664,
+      "name": "module.pco",
+      "sha256": "2a684530426482465ec2a808f6621093ac4cc357d84fc440db33eed105392154"
+    },
+    "packed_object_bytes": "PASS",
+    "prepared_cfg_origins_protocol_state": "PASS",
+    "stackmap_functions": 231,
+    "transport_counts": {
+      "direct_instruction_count": 1102193,
+      "native_fragment_record_count": 147132,
+      "structured_call_count": 103509,
+      "structured_instruction_count": 1106173,
+      "structured_move_count": 388451,
+      "structured_unscaled_count": 152037
+    }
+  },
+  "guards": {
+    "cleanup": "CLEAN; root reaped; ECHILD; shared lock released",
+    "continuous_free_reserve_bytes": 4294967296,
+    "denied_audit_events": 0,
+    "external_final_source_seals": "PASS",
+    "full_source_inventories_before_after": "PASS",
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "imported_source_roots": "PASS",
+    "maximum_net_filesystem_growth_bytes": 1073741824,
+    "per_process_timeout_seconds": 300,
+    "rss_note": "RSS is sampled process observation, not a hard RSS cap; address space is the hard memory boundary."
+  },
+  "input": {
+    "blocks": 48161,
+    "fallback_records": 0,
+    "fresh_indexed_module": {
+      "bytes": 58153998,
+      "name": "input.pidx",
+      "sha256": "d5f8711ac0e6fdf09d9836938aedf590314527e947c1d8cf59b9258de97ee14d"
+    },
+    "functions": 231,
+    "instructions": 219614,
+    "sha256": "21eacf1370cec218ea7ff97092ee47a96752505067caad2699f20239c74f2b58",
+    "source": "pcc/frontends/c/ast/c_ast.py",
+    "supported_records": 273629
+  },
+  "limits": [
+    "Row-work proxy excludes queue/index construction, allocations, PHI seeding, final backwards scan and other code generation; it is not CPU cost.",
+    "Observed durations include the counters and resource overhead and are not speedup measurements.",
+    "Full single-source c_ast library context, not the complete multi-module Stage1 context.",
+    "Mac-target host cross-compilation, not Mac-device execution.",
+    "The fixed 25% mechanism threshold failed; no timing rounds or larger-module substitutions were run.",
+    "No runtime build, native/FFI execution, compiled-native compiler qualification, pcc1 or full Stage1 was performed."
+  ],
+  "mechanism": {
+    "analysis": {
+      "baseline_K_histogram": {
+        "1": 108,
+        "4": 1
+      },
+      "baseline_positive_word_functions": 109,
+      "baseline_weighted_word_units": 16010084,
+      "dominant_functions": [
+        {
+          "B": 20507,
+          "E": 29934,
+          "T": 3370,
+          "W": 113,
+          "baseline_K": 1,
+          "dense_successor_visits": 29934,
+          "name": "_pcc_py_module_top_pcc_frontends_c_ast_c_ast",
+          "row_visits": 20507,
+          "weighted_word_units": 8017124
+        },
+        {
+          "B": 20435,
+          "E": 29826,
+          "T": 3359,
+          "W": 112,
+          "baseline_K": 1,
+          "dense_successor_visits": 29826,
+          "name": "_pcc_py_module_init_pcc_frontends_c_ast_c_ast",
+          "row_visits": 20435,
+          "weighted_word_units": 7917952
+        },
+        {
+          "B": 974,
+          "E": 1374,
+          "T": 111,
+          "W": 4,
+          "baseline_K": 4,
+          "dense_successor_visits": 5496,
+          "name": "user_pcc_frontends_c_ast_c_ast_Node_show",
+          "row_visits": 3896,
+          "weighted_word_units": 53152
+        }
+      ],
+      "interpretation": "The top and init functions already converge in one sweep. The counted weighted dense-row proxy is dominated by their large one-sweep domains; this is not a CPU-time attribution.",
+      "mandatory_first_sweep_weighted_word_units": 15970220,
+      "repeat_removal_upper_bound_percent": 0.2489930721162987,
+      "top_two_share_of_baseline_dense_row_proxy_percent": 99.53149527510287,
+      "zero_word_functions": 122
+    },
+    "baseline": {
+      "B": 48161,
+      "E": 69622,
+      "T": 7566,
+      "changed_rows": 135,
+      "dense_successor_visits": 73645,
+      "nonempty_live_calls": 1110,
+      "nonprotocol_calls": 85689,
+      "positive_word_row_visits": 50889,
+      "protocol_calls": 17820,
+      "row_visits": 51083,
+      "weighted_word_units": 16010084
+    },
+    "candidate": {
+      "B": 48161,
+      "E": 69622,
+      "T": 7566,
+      "changed_rows": 135,
+      "dense_successor_visits": 69617,
+      "nonempty_live_calls": 1110,
+      "nonprotocol_calls": 85689,
+      "positive_word_row_visits": 48017,
+      "protocol_calls": 17820,
+      "row_visits": 48211,
+      "weighted_word_units": 15970996
+    },
+    "fixed_minimum_reduction_percent": 25,
+    "material_threshold_passed": false,
+    "positive_word_successor_visits_nonincreasing": true,
+    "row_visits_nonincreasing": true,
+    "weighted_word_reduction_percent": 0.24414612690352167
+  },
+  "packet_manifest_sha256": "303f0d4a169a7303d826bb6a6a5aab54edfef6dff3522e3c73414e4d6288ccf4",
+  "packet_preserved_commit": "4f14261691e637cde2b5a501a536220776ea6142",
+  "prior_host_evidence": {
+    "passed": 51,
+    "qualification_sha256": "dc5283621a614d04c8d34b5f3c66808f36d8418fc44c7584d12198103ff6566d",
+    "scope": "CPython-hosted helper and ownership controls; old V1 failure remains separately preserved"
+  },
+  "production_base_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "qualification_sha256": "ee16084467a85a237a1fe1075f0dcaaeff36cf2845ef346115c42eafd0edff0e",
+  "resource_observations": {
+    "baseline": {
+      "guard_elapsed_seconds": 56.00604190100057,
+      "guard_sha256": "db3f2e48992a4fd3924435a9fc404067d9add00b9e38c5babac89dae31879dbb",
+      "observer_weighted_transport_ns": 30761648363,
+      "result_sha256": "5e1398dac364315a7a65fab215646101e3faaaa1480bc2d4d81b26d112f08b20",
+      "whole_process_peak_sampled_rss_bytes": 537100288
+    },
+    "candidate": {
+      "guard_elapsed_seconds": 53.702195758000016,
+      "guard_sha256": "8d79e981ddeb8876e2b432f9b0d29ad1b245e77d807a176d69caf1438c785677",
+      "observer_weighted_transport_ns": 29079748353,
+      "result_sha256": "c86203206bdd9fbf298713642f3064e6809f266f81444af9ce96659c8dee383c",
+      "whole_process_peak_sampled_rss_bytes": 511516672
+    },
+    "prepare": {
+      "guard_elapsed_seconds": 16.575327619000745,
+      "guard_sha256": "9443e216891045cf62fe5aa83999b2d3fa1a3e3bd91c3f20f2a45a60af9094e8",
+      "result_sha256": "1f89d36ba3f10ee42de1ca1fcb10ddeeb1ef47852039c15baf770fcbb2d9f62f",
+      "whole_process_peak_sampled_rss_bytes": 384499712
+    }
+  },
+  "schema": "pcc.arm-managed-liveness-real-module-public-qualification.v1",
+  "solver_sha256": {
+    "baseline": "bfc3630f958d6c63a1c4f0677b2d55082dfb4d90960978df84cf2c83a72eaa64",
+    "candidate": "f1882fa4c29ad15c8843d30a9bf4d4bebf5b52307d0dc4daa155157b8d8289fe"
+  },
+  "source_inventories": {
+    "baseline": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+    "candidate": "6e6b6d034804c0ebeb4c48fbfc11df2614043ea5150c816cd8b7d014f2fe9d2b"
+  },
+  "source_relation": "Complete baseline pcc subtree matches02b9; retained full snapshot contains older unrelated tests/docs/bootstrap. Candidate changes only one production file plus the new host test.",
+  "status": "OUTPUT_AND_STATE_EQUALITY_PASS_MECHANISM_HOLD",
+  "target": "arm64-apple-darwin23.6.0"
+}

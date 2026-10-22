@@ -32,7 +32,7 @@ run(int(sys.argv[1]))
 
 @pytest.mark.pcc_gate(env="PCC_RUNTIME_ARCHIVE")
 def test_native_tuple_from_list_preserves_contents(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     archive_name = os.environ.get("PCC_RUNTIME_ARCHIVE")
     if not archive_name:

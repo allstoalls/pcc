@@ -5,7 +5,7 @@
 **P6C Strategy C progress:**
 
 - ✅ P6C.1 extern "C" FFI (`pcc/extern/`)
-- ✅ P6C.2 LLVM C API declared (`pcc/llvm_capi/`) — not yet wired to default codegen
+- ✅ P6C.2 LLVM C API declared (`pcc/ir/`) — not yet wired to default codegen
 - ✅ **P6C.3 native Python parser + lift** — default path
 - ⏳ P6C.4 stdlib stubs — ongoing (8 new stubs landed)
 - ✅ **P6C.5 de-PLY parser — default path today**
@@ -272,7 +272,7 @@ xx.py
   │
   ▼
 ┌─────────────────────────────┐
-│ pcc.py_frontend.parser      │  stdlib ast today; native parser in self-host path
+│ pcc.frontends.python.parser      │  stdlib ast today; native parser in self-host path
 └─────────────────────────────┘
   │
   ▼
@@ -367,12 +367,12 @@ and Python.
 
 | Priority | Shared capability | Why it comes early | Likely repo anchors |
 |---|---|---|---|
-| 1 | Artifact/emission pipeline | Both frontends eventually need the same object/asm/IR/link/cache story | `pcc/pcc.py`, `pcc/api.py`, `pcc/evaluater/c_evaluator.py`, `pcc/py_frontend/pipeline.py` |
-| 2 | ABI/layout/call service | C already contains hard-won ABI/layout knowledge; Python extern/runtime/object lowering should reuse that discipline | `pcc/codegen/c_codegen.py`, `pcc/extern/`, `pcc/py_frontend/codegen/runtime_abi.py` |
-| 3 | CFG/basic-block/SSA plumbing | Loops, branches, exceptions, and optimization quality all depend on this layer | `pcc/passes/`, `pcc/ssa/`, `pcc/codegen/`, `pcc/py_frontend/codegen/` |
-| 4 | Runtime/intrinsic registry | Python runtime ops, C builtins, extern calls, and bridge helpers need one discoverable mechanism | `pcc/extern/`, `pcc/py_runtime/`, `pcc/passes/` |
-| 5 | Exception/cleanup edge model | C cleanup rules and Python exceptions both need structured control-flow edges, not scattered ad hoc lowering | `pcc/codegen/c_codegen.py`, Python codegen layers, backend pass plumbing |
-| 6 | Bridge-boundary accounting | Native vs fallback vs extern crossings must be visible and measurable if the project is going to shrink fallback over time | `pcc/py_frontend/pipeline.py`, `pcc/py_runtime/`, benchmark/test harnesses |
+| 1 | Artifact/emission pipeline | Both frontends eventually need the same object/asm/IR/link/cache story | `pcc/pcc.py`, `pcc/api.py`, `pcc/frontends/c/evaluator/c_evaluator.py`, `pcc/frontends/python/pipeline.py` |
+| 2 | ABI/layout/call service | C already contains hard-won ABI/layout knowledge; Python extern/runtime/object lowering should reuse that discipline | `pcc/frontends/c/codegen/c_codegen.py`, `pcc/extern/`, `pcc/frontends/python/codegen/runtime_abi.py` |
+| 3 | CFG/basic-block/SSA plumbing | Loops, branches, exceptions, and optimization quality all depend on this layer | `pcc/frontends/c/passes/`, `pcc/frontends/c/ssa/`, `pcc/frontends/c/codegen/`, `pcc/frontends/python/codegen/` |
+| 4 | Runtime/intrinsic registry | Python runtime ops, C builtins, extern calls, and bridge helpers need one discoverable mechanism | `pcc/extern/`, `pcc/runtime/`, `pcc/frontends/c/passes/` |
+| 5 | Exception/cleanup edge model | C cleanup rules and Python exceptions both need structured control-flow edges, not scattered ad hoc lowering | `pcc/frontends/c/codegen/c_codegen.py`, Python codegen layers, backend pass plumbing |
+| 6 | Bridge-boundary accounting | Native vs fallback vs extern crossings must be visible and measurable if the project is going to shrink fallback over time | `pcc/frontends/python/pipeline.py`, `pcc/runtime/`, benchmark/test harnesses |
 
 ### Extraction rules
 
@@ -467,12 +467,12 @@ modules instead of being discussed only as an abstract architecture.
 
 | Area | Current anchor paths | Direction |
 |---|---|---|
-| artifact/emission pipeline | `pcc/pcc.py`, `pcc/api.py`, `pcc/evaluater/c_evaluator.py`, `pcc/py_frontend/pipeline.py` | converge on one artifact and execution pipeline across frontends |
-| ABI/layout/call discipline | `pcc/codegen/c_codegen.py`, `pcc/extern/`, `pcc/py_frontend/codegen/runtime_abi.py` | extract reusable call/layout services instead of duplicating low-level lowering |
-| CFG/SSA/pass plumbing | `pcc/passes/`, `pcc/ssa/`, `pcc/codegen/`, `pcc/py_frontend/codegen/` | make structured control flow and optimization hooks look less frontend-specific |
-| runtime/intrinsic registration | `pcc/extern/`, `pcc/py_runtime/`, pass registration code | centralize builtin/runtime/bridge helper discovery |
-| exception/cleanup edges | `pcc/codegen/c_codegen.py`, Python codegen layers, backend lowering | align native exception semantics with shared control-flow machinery |
-| self-host bring-up | `pcc/parse/`, `pcc/llvm_capi/`, `pcc/py_stdlib/`, `scripts/audit_selfhost.py` | ensure self-host pressure extracts shared infrastructure rather than creating a second backend stack |
+| artifact/emission pipeline | `pcc/pcc.py`, `pcc/api.py`, `pcc/frontends/c/evaluator/c_evaluator.py`, `pcc/frontends/python/pipeline.py` | converge on one artifact and execution pipeline across frontends |
+| ABI/layout/call discipline | `pcc/frontends/c/codegen/c_codegen.py`, `pcc/extern/`, `pcc/frontends/python/codegen/runtime_abi.py` | extract reusable call/layout services instead of duplicating low-level lowering |
+| CFG/SSA/pass plumbing | `pcc/frontends/c/passes/`, `pcc/frontends/c/ssa/`, `pcc/frontends/c/codegen/`, `pcc/frontends/python/codegen/` | make structured control flow and optimization hooks look less frontend-specific |
+| runtime/intrinsic registration | `pcc/extern/`, `pcc/runtime/`, pass registration code | centralize builtin/runtime/bridge helper discovery |
+| exception/cleanup edges | `pcc/frontends/c/codegen/c_codegen.py`, Python codegen layers, backend lowering | align native exception semantics with shared control-flow machinery |
+| self-host bring-up | `pcc/frontends/c/parse/`, `pcc/ir/`, `pcc/stdlib/`, `scripts/audit_selfhost.py` | ensure self-host pressure extracts shared infrastructure rather than creating a second backend stack |
 
 This table should evolve as real extractions happen, but keeping it in the plan
 makes architectural intent easier to audit against the codebase.
@@ -533,9 +533,9 @@ that the plan should keep them visible and review them at each major phase.
 
 ### Deliverables
 
-1. `pcc/parse/py_parser.py` — parse .py via stdlib `ast`, lift to
+1. `pcc/frontends/python/py_parser.py` — parse .py via stdlib `ast`, lift to
    pcc internal AST nodes.
-2. `pcc/py_frontend/type_infer.py` — annotation-driven type checking.
+2. `pcc/frontends/python/type_infer.py` — annotation-driven type checking.
 3. `pcc/py_codegen/layer1.py` — emit LLVM IR for L1.
 4. `py_runtime/py_print.c` + `py_list.c` (int-element only).
 5. `pcc/pcc.py` CLI — detect `.py` input, run Python pipeline.
@@ -845,26 +845,26 @@ from 1002+ at P6C.0 and 54 at the start of the current work round).
 
 | Category | Count | File | Status |
 |---|---|---|---|
-| `dynamic-attr` (FFI lookup) | 2 | `pcc/api.py`, `pcc/evaluater/c_evaluator.py` | Genuinely dynamic: `getattr(cdll, user_symbol_name)` |
-| `dynamic-attr` (PLY rule register) | 1 | `pcc/parse/plyparser.py` | PLY framework contract — P6C.5 task is to retire PLY |
+| `dynamic-attr` (FFI lookup) | 2 | `pcc/api.py`, `pcc/frontends/c/evaluator/c_evaluator.py` | Genuinely dynamic: `getattr(cdll, user_symbol_name)` |
+| `dynamic-attr` (PLY rule register) | 1 | `pcc/frontends/c/parse/plyparser.py` | PLY framework contract — P6C.5 task is to retire PLY |
 | `vararg` (extern `__call__` trap) | 1 | `pcc/extern/__init__.py` | Runtime trap that never executes (extern calls are compile-time-lowered) |
 
 Recent work in this round:
-- 27 generator findings eliminated — rewrote `pcc/parse/py_lex.py`,
-  `pcc/passes/llvm_explicit.py`, `pcc/passes/whole_program.py`, `pcc/
-  ir_passes/parity.py`, `pcc/py_frontend/codegen/class_gen.py` to
+- 27 generator findings eliminated — rewrote `pcc/frontends/python/py_lex.py`,
+  `pcc/frontends/c/passes/llvm_explicit.py`, `pcc/frontends/c/passes/whole_program.py`, `pcc/
+  ir_passes/parity.py`, `pcc/frontends/python/codegen/class_gen.py` to
   return lists instead of yielding, and converted `@contextmanager`
-  helpers in `pcc/parse/c_parser.py`, `pcc/pcc.py`, `pcc/codegen/
+  helpers in `pcc/frontends/c/parse/c_parser.py`, `pcc/pcc.py`, `pcc/frontends/c/codegen/
   c_codegen.py` to explicit `__enter__`/`__exit__` classes.
 - 13 dynamic-attr findings eliminated — explicit dispatch tables in
-  `pcc/passes/ast_utils.py`, `pcc/generator/c_generator.py`, `pcc/
-  passes/base.py`, `pcc/ast/c_ast.py`, `pcc/codegen/c_codegen.py`,
-  `pcc/py_frontend/pipeline.py`, `pcc/py_frontend/codegen/layer1.py`,
-  `pcc/parse/py_lift.py`.
+  `pcc/frontends/c/passes/ast_utils.py`, `pcc/frontends/c/generator/c_generator.py`, `pcc/
+  passes/base.py`, `pcc/frontends/c/ast/c_ast.py`, `pcc/frontends/c/codegen/c_codegen.py`,
+  `pcc/frontends/python/pipeline.py`, `pcc/frontends/python/codegen/layer1.py`,
+  `pcc/frontends/python/py_lift.py`.
 - 9 unstubbed-import findings eliminated — `ctypes`, `fcntl`,
-  `multiprocessing`, `concurrent` stubs in `pcc/py_stdlib/`, and
+  `multiprocessing`, `concurrent` stubs in `pcc/stdlib/`, and
   `click` whitelisted (P6C.5 will retire it).
-- 1 banned-builtin eliminated — `pcc/preprocessor.py` swapped
+- 1 banned-builtin eliminated — `pcc/frontends/c/preprocessor.py` swapped
   `eval()` for a narrow integer-only expression evaluator
   (`_eval_cpp_expr`, ~100 LoC).
 
@@ -899,32 +899,32 @@ Lets compiled Python call arbitrary C libraries directly.
 | 2 | `malloc(16)` / `free(p)` via extern | valgrind clean |
 | 3 | Pass a typed dataclass by pointer to a C function | C sees correct struct layout (matches C's struct alignment) |
 
-#### 6C.2 — LLVM C API binding (`pcc/llvm_capi/`) (3 weeks)
+#### 6C.2 — LLVM C API binding (`pcc/ir/`) (3 weeks)
 
 Replacement for llvmlite, 100% typed Python declarations of the
 LLVM-C headers pcc uses.
 
 **Deliverables:**
 
-- `pcc/llvm_capi/core.py` — `LLVMContextRef`, `LLVMModuleRef`,
+- `pcc/ir/core.py` — `LLVMContextRef`, `LLVMModuleRef`,
   `LLVMValueRef`, `LLVMTypeRef`, `LLVMBuilderRef` as opaque `c_ptr`
   wrappers.
-- `pcc/llvm_capi/binding.py` — `parse_assembly`, `verify`,
+- `pcc/ir/binding.py` — `parse_assembly`, `verify`,
   `create_mcjit_compiler`, `get_function` — matches the 40-odd
   llvmlite.binding API calls pcc actually uses.
-- `pcc/llvm_capi/ir.py` — mutable IR builder (`Module`, `Function`,
+- `pcc/ir/ir.py` — mutable IR builder (`Module`, `Function`,
   `BasicBlock`, `IRBuilder`) matching the llvmlite.ir surface area
   pcc uses.
-- Adapter: pcc's existing `pcc.codegen.c_codegen` / `pcc.ir_passes.*`
-  modules switch imports from `llvmlite` to `pcc.llvm_capi` behind a
+- Adapter: pcc's existing `pcc.frontends.c.codegen.c_codegen` / `pcc.ir_passes.*`
+  modules switch imports from `llvmlite` to `pcc.ir` behind a
   feature flag; both code paths coexist during development.
 
 **Acceptance 6C.2:**
 
 | # | Test | Pass |
 |---|---|---|
-| 1 | Round-trip: build an IR module with `pcc.llvm_capi.ir`, emit text, reparse | Output text matches the same IR built via llvmlite |
-| 2 | All 80 upstream passes from master-plan still pass tests with pcc switched to `pcc.llvm_capi` | Same pass/fail counts |
+| 1 | Round-trip: build an IR module with `pcc.ir.ir`, emit text, reparse | Output text matches the same IR built via llvmlite |
+| 2 | All 80 upstream passes from master-plan still pass tests with pcc switched to `pcc.ir` | Same pass/fail counts |
 | 3 | `ldd` on a pcc exe built with llvm_capi | Shows libLLVM-20.so but no libpython |
 
 #### 6C.3 — native Python parser (3 weeks)
@@ -933,10 +933,10 @@ Replace `import ast` with a Python parser written in typed pcc Python.
 
 **Deliverables:**
 
-- `pcc/parse/py_lex.py` — Python tokenizer covering the subset pcc
+- `pcc/frontends/python/py_lex.py` — Python tokenizer covering the subset pcc
   uses (CPython's full tokenizer is 2000+ LoC; our target subset is
   ~800 LoC).
-- `pcc/parse/py_parse.py` — PEG-style parser producing pcc's internal
+- `pcc/frontends/python/py_parse.py` — PEG-style parser producing pcc's internal
   AST nodes. Grammar covers: def/class/if/elif/else/while/for/try/except/
   finally/return/yield/with/import/from/assign/augassign/del/pass/
   break/continue/global/nonlocal/lambda/comprehension/decorator/
@@ -954,17 +954,17 @@ Replace `import ast` with a Python parser written in typed pcc Python.
 
 **Status (2026-04-20):**
 
-- ✅ `pcc/parse/py_lex.py` (333 LoC) — covers indentation, string
+- ✅ `pcc/frontends/python/py_lex.py` (333 LoC) — covers indentation, string
   prefixes (b/f/r/u + combos), triple-quoted, hex/octal/bin literals,
   imaginary-literal suffix, all multi-char operators, continuation.
-- ✅ `pcc/parse/py_parse.py` (1000+ LoC) — full grammar: classes,
+- ✅ `pcc/frontends/python/py_parse.py` (1000+ LoC) — full grammar: classes,
   funcs with `*args`/`**kwargs`/`/`/default, control flow, try/except/
   finally/else, with, raise-from, import, from-import, del, global/
   nonlocal, assert, lambda, comprehensions (list/set/dict/gen),
   star-unpacking in calls and iterables, walrus (`:=`), ternary, f-string
   bodies (as opaque), slicing with start/stop/step, tuple-target in
   for/assign, decorator chains, PEP 604 `A | B` unions.
-- ✅ `pcc/parse/py_lift.py` — bridges the `_*` parser nodes to
+- ✅ `pcc/frontends/python/py_lift.py` — bridges the `_*` parser nodes to
   `py_ast.Module`; captures type annotations + defaults.
 - ✅ `PCC_NATIVE_PARSER=1` env var routes the pipeline through the
   native parser instead of CPython's `ast`.
@@ -1006,7 +1006,7 @@ compilable version OR an extern "C" binding.
 
 | # | Test | Pass |
 |---|---|---|
-| 1 | `pcc/py_stdlib/` combined LoC | ≤ 4500 LoC |
+| 1 | `pcc/stdlib/` combined LoC | ≤ 4500 LoC |
 | 2 | Each module has `test_<name>_parity.py` that compares outputs against CPython's stdlib on 20+ cases | All parity tests green |
 | 3 | pcc.py imports zero CPython stdlib modules (checked by import-graph scan) | Pass |
 
@@ -1049,7 +1049,7 @@ The three-stage bootstrap and verification.
 - The compiled bootstrap binary's `--help` path now exits cleanly with
   empty stderr; the earlier embedded-CPython shutdown noise is gone.
 - The default `python -m pcc` / `uv run pcc` entry path now routes
-  through the internal `pcc.cli_core` parser rather than importing the
+  through the internal `pcc.driver.cli_core` parser rather than importing the
   `click`-decorated CPython CLI path.
 - `click` is no longer a runtime package dependency for `python-cc`;
   it remains only on the dev/test compatibility surface around
@@ -1076,7 +1076,7 @@ The three-stage bootstrap and verification.
   - truthiness / equality on CPython-origin strings
   - stable `sys.exit(expr)` / imported `exit(...)` lowering
 - Once those generic semantics are solid, retire the corresponding
-  CLI-specific workarounds in `pcc.cli_core` / `pcc.__main__`.
+  CLI-specific workarounds in `pcc.driver.cli_core` / `pcc.__main__`.
 
 **Deliverables:**
 

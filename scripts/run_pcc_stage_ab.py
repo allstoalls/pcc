@@ -191,7 +191,7 @@ def _stage2_environment_overrides(
         "PCC_BOOTSTRAP_PY_FRONTEND_JOBS": "auto",
         # The stage1 receipt records the HOST build's frontend width (which
         # may legitimately be wide, e.g. 10); replaying it verbatim into a
-        # compiled stage trips bootstrap.sh's fail-closed worker-budget guard.
+        # compiled stage trips bootstrap.py's fail-closed worker-budget guard.
         # The compiled stage derives its own width from the auto policy.
         "PCC_BOOTSTRAP_STAGE1_PY_FRONTEND_JOBS": "auto",
         "PCC_PY_FRONTEND_JOBS": "auto",
@@ -495,8 +495,8 @@ def _run_stage2(
         )
     )
     command = [
-        "/bin/bash",
-        str(source_root / "scripts" / "bootstrap.sh"),
+        sys.executable,
+        str(source_root / "scripts" / "bootstrap.py"),
         "--out-dir",
         str(output),
         "--backend",

@@ -1,0 +1,58 @@
+{
+  "artifacts": {
+    "README.md": {
+      "bytes": 3772,
+      "mode": "100644",
+      "sha256": "d75a0942c5fd9aa56d94cf4bd8144f504ba2dd14490b65341c159e6a99651492"
+    },
+    "production.patch": {
+      "bytes": 25965,
+      "mode": "100644",
+      "sha256": "26b902d228d02bc4aa5227dc60197b8ff3fa2b0159b25938a196cee2cd1cb9c6"
+    },
+    "tests.patch": {
+      "bytes": 17137,
+      "mode": "100644",
+      "sha256": "81a1a1957ac50de5c799e45de16b74bd9f37a42dbde1785158a4ed3b89da4930"
+    }
+  },
+  "changed_files": {
+    "pcc/frontends/python/codegen/class_gen.py": {
+      "mode": "100644",
+      "postimage_bytes": 366892,
+      "postimage_sha256": "48393d5aab839b083fc3d7a59e78e0c63b0fd430e12fd85378ccf70b96dacfcc",
+      "preimage_bytes": 343221,
+      "preimage_sha256": "d4ec2c4ccc6a9123ed502108fbaf32cdc1dd1a979169ba4628506cb902f4b53e"
+    },
+    "pcc/frontends/python/codegen/generation_lowering.py": {
+      "mode": "100644",
+      "postimage_bytes": 50542,
+      "postimage_sha256": "30d38936b4f4dbc1259de9993557c7ccfeca491f3f0546820382185858d56c5b",
+      "preimage_bytes": 50484,
+      "preimage_sha256": "0982b9b0209b8785552b75cd552c3e18837ff39f92c289cf53df373eaa140904"
+    },
+    "tests/python/test_class_init_outlining.py": {
+      "mode": "100644",
+      "postimage_bytes": 16695,
+      "postimage_sha256": "60e2b813a84d10a2bf78c89ee72ecb2b86b6e9264e2372d676228b199d07f04b",
+      "preimage_bytes": null,
+      "preimage_sha256": null
+    }
+  },
+  "execution": {
+    "collection": "UNRUN",
+    "compiler": "UNRUN",
+    "focused_host": "UNRUN",
+    "mechanism": "UNRUN",
+    "native": "UNRUN",
+    "performance": "UNRUN"
+  },
+  "intended_host_nodes": 26,
+  "known_blocker": "original no-op decorators may be stripped before init-only eligibility, violating first-version exclusion",
+  "production_base_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "production_pcc_git_tree": "d234174fbac80575ea822f6100f65fe914dd4498",
+  "review": "independent source review pending; known finding preserved",
+  "schema": 1,
+  "source_container_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "status": "UNAPPLIED_RECOVERY_SNAPSHOT_REVIEW_PENDING_KNOWN_SCOPE_BLOCKER"
+}

@@ -3,12 +3,12 @@ import platform
 import subprocess
 import sys
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLATFORM_SOURCE = (
-    REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_platform_time.py"
+    REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_platform_time.py"
 )
 
 
@@ -118,7 +118,7 @@ def test_platform_time_object_has_only_named_darwin_boundary(tmp_path):
 
 def test_linux_platform_time_uses_raw_syscalls(tmp_path, monkeypatch):
     from pcc.backend.self_backend_dispatch import emit_self_asm
-    from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+    from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
     monkeypatch.setattr(
         UnsafeIntrinsicMixin, "_target_sys_platform_text", lambda self: "linux"
@@ -140,7 +140,7 @@ def test_linux_platform_time_uses_raw_syscalls(tmp_path, monkeypatch):
 
 
 def test_runtime_archive_plan_selects_platform_time_object():
-    runtime_dir = REPO_ROOT / "pcc" / "py_runtime"
+    runtime_dir = REPO_ROOT / "pcc" / "runtime"
     plan = subprocess.run(
         ["make", "-B", "-n", "libpy_runtime_pcc_py.a"],
         cwd=runtime_dir,
@@ -158,10 +158,10 @@ def test_runtime_archive_plan_selects_platform_time_object():
 
 
 def test_runtime_archive_c_helpers_consume_platform_time(
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
 ):
     undefined = subprocess.run(
-        ["nm", "-A", "-u", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-u", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,

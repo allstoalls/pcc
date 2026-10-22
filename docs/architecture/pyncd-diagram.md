@@ -20,10 +20,10 @@ over a block in the HTML for source ownership and boundary notes. The
 is the visual reference: dark canvas, thin wires, nested stages and inspectable
 blocks.
 
-The public default `self` backend is in `pcc/cli_contract.py`. Current
-implementation paths are in `pcc/cli_core.py`, `pcc/cli_bootstrap.py`,
-`pcc/py_frontend/pipeline.py`, `pcc/evaluater/c_evaluator.py`, `pcc/backend/`
-and `pcc/py_runtime/`. The [project intent](../project-intent.md) and
+The public default `self` backend is in `pcc/driver/cli_contract.py`. Current
+implementation paths are in `pcc/driver/cli_core.py`, `pcc/driver/cli_bootstrap.py`,
+`pcc/frontends/python/pipeline.py`, `pcc/frontends/c/evaluator/c_evaluator.py`, `pcc/backend/`
+and `pcc/runtime/`. The [project intent](../project-intent.md) and
 [compiler contract](../compiler-contract.md) state the destination; they do not
 establish which migration gaps are closed in today's tree. Explicit LLVM
 routes, optional libpython compatibility and the bounded Metal kernel path

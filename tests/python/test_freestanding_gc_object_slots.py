@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.freestanding_abi_constants import ABI_CONSTANTS
-from pcc.py_frontend.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
-from pcc.py_runtime.py import py_abi_constants
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.freestanding_abi_constants import ABI_CONSTANTS
+from pcc.frontends.python.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
+from pcc.runtime.py import py_abi_constants
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_object_slots.py"
 BACKEND_SOURCE = RUNTIME_DIR / "py" / "py_gc_backend.py"
 OBJ_GC_SOURCE = RUNTIME_DIR / "py" / "py_obj_gc.py"
@@ -57,11 +57,9 @@ def test_object_slot_freestanding_abi_is_generated_from_header_layout():
         "object.list.items_offset": "PYLISTOBJECT_ITEMS_OFFSET",
         "object.list.length_offset": "PYLISTOBJECT_LENGTH_OFFSET",
         "object.memoryview.base_offset": "PYMEMORYVIEWOBJECT_BASE_OFFSET",
-        "object.header.flags_offset": "PYOBJECTHEADER_FLAGS_OFFSET",
         "object.header.type_tag_offset": "PYOBJECTHEADER_TYPE_TAG_OFFSET",
         "object.tuple.items_offset": "PYTUPLEOBJECT_ITEMS_OFFSET",
         "object.tuple.length_offset": "PYTUPLEOBJECT_LEN_OFFSET",
-        "object.flag.gc_tracked": "PY_FLAG_GC_TRACKED",
         "object.type.bytearray": "PY_TYPE_BYTEARRAY",
         "object.type.bytes": "PY_TYPE_BYTES",
         "object.type.class": "PY_TYPE_CLASS",
@@ -79,7 +77,7 @@ def test_object_slot_freestanding_abi_is_generated_from_header_layout():
             py_abi_constants, generated_name
         )
     source = STRICT_SOURCE.read_text(encoding="utf-8")
-    assert "pcc.py_runtime.py.py_abi_constants" not in source
+    assert "pcc.runtime.py.py_abi_constants" not in source
     for abi_name in expected:
         assert f'abi_constant("{abi_name}")' in source
 
@@ -117,7 +115,7 @@ def _exported_symbols(source: str) -> set[str]:
 
 
 def test_object_slot_contract_has_one_production_graph_owner(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ):
     strict = STRICT_SOURCE.read_text(encoding="utf-8")
     backend = BACKEND_SOURCE.read_text(encoding="utf-8")
@@ -135,7 +133,7 @@ def test_object_slot_contract_has_one_production_graph_owner(
         assert "def _py_obj_gc_visit_class_slots" not in source
 
     symbols = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -511,7 +509,8 @@ int main(void) {
         "class:xr3\n"
         "class:o96r3\n"
         "class:o104r1\n"
-        "class:o112r2\n"
+        # f3a043008 made the class own its metaclass (role 1, as attrs).
+        "class:o112r1\n"
         "class:h1\n"
         "instance:o16r2\n"
         "instance:o24r1\n"

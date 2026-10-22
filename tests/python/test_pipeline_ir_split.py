@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend import pipeline_ir_split
+from pcc.frontends.python import pipeline
+from pcc.frontends.python import pipeline_ir_split
 
 
 _MODULE = """@state = private global i64 0

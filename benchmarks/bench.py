@@ -1401,13 +1401,6 @@ def run_binary(bin_path, runs, timeout=300):
     }
 
 
-def create_native_target_machine(llvm):
-    target = llvm.Target.from_default_triple()
-    cpu = llvm.get_host_cpu_name()
-    features = llvm.get_host_cpu_features().flatten()
-    return target.create_target_machine(cpu=cpu, features=features)
-
-
 def build_clang(src_path, opt_level, workdir):
     cc = host_cc()
     bin_path = Path(workdir) / f"{src_path.stem}.clang.O{opt_level}.out"
@@ -1459,19 +1452,13 @@ def build_pcc(
     use_passes,
     disabled_passes=None,
 ):
-    import llvmlite.binding as llvm
-    from pcc.evaluater.c_evaluator import (
-        _apply_llvm_optimizations,
+    from pcc.frontends.c.evaluator.c_evaluator import (
         _compile_preprocessed_translation_unit_artifact,
         _preprocess_translation_unit_source,
     )
-    from pcc.passes import PassContext, PassPipeline
+    from pcc.frontends.c.passes import PassContext, PassPipeline
 
-    cc = host_cc()
     label = sanitize_variant_label(variant_label)
-    obj_path = Path(workdir) / (
-        f"{src_path.stem}.pcc.{label}.O{opt_level}.o"
-    )
     bin_path = Path(workdir) / (
         f"{src_path.stem}.pcc.{label}.O{opt_level}.out"
     )
@@ -1493,22 +1480,10 @@ def build_pcc(
         pass_pipeline=pipeline,
         pass_ctx=ctx,
     )
-    llvmmod = llvm.parse_assembly(artifact["ir_text"])
-    target_machine = create_native_target_machine(llvm)
-    _apply_llvm_optimizations(
-        llvmmod, target_machine, opt_level, pass_ctx=ctx
-    )
-    obj_path.write_bytes(target_machine.emit_object(llvmmod))
-    link = subprocess.run(
-        [cc, str(obj_path), "-o", str(bin_path), "-lm"],
-        capture_output=True,
-        text=True,
-        timeout=300,
-        env=clean_env(),
-    )
+    from pcc.frontends.c.evaluator.c_evaluator import CEvaluator, _artifact_to_compiled_unit
+    evaluator = CEvaluator(backend="self")
+    evaluator.emit_executable([_artifact_to_compiled_unit(artifact)], str(bin_path), optimize=opt_level)
     compile_time = time.perf_counter() - t0
-    if link.returncode != 0:
-        raise RuntimeError(link.stderr or link.stdout or "pcc link failed")
     return bin_path, compile_time, ctx.pass_report()
 
 
@@ -1663,7 +1638,7 @@ def _opt_level_label(opt_level: int) -> str:
     """Render the effective opt-level label for reports.
 
     `opt_level=0` in pcc runs LLVM's O1 pipeline as a floor (see
-    `pcc/passes/base.py:187`). Calling that column "O0" overstates
+    `pcc/frontends/c/passes/base.py:187`). Calling that column "O0" overstates
     how bare the backend is. Use "O0+O1floor" so readers know the
     backend ran SROA/mem2reg/InstCombine/inlining.
     """
@@ -2004,12 +1979,9 @@ def parse_args():
 
 
 def main():
-    import llvmlite.binding as llvm
-    from pcc.passes import default_pass_groups, unique_default_pass_names
+    from pcc.frontends.c.passes import default_pass_groups, unique_default_pass_names
 
     args = parse_args()
-    llvm.initialize_native_target()
-    llvm.initialize_native_asmprinter()
 
     names = benchmark_names(args.benches)
     opt_levels = args.opt_levels or [1, 2, 3]

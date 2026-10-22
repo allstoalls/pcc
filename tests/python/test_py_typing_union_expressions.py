@@ -5,7 +5,7 @@ import textwrap
 
 
 def test_pep604_type_union_expression_compiles_self_backend(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "typing_union_expr.py"
     src.write_text(textwrap.dedent(

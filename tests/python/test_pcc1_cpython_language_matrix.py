@@ -202,7 +202,7 @@ def compiled_language_case(
     request,
     tmp_path_factory,
     current_pcc1: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> tuple[LanguageCase, Path, bytes]:
     case: LanguageCase = request.param
     directory = tmp_path_factory.mktemp("pcc1-language-" + case.name)
@@ -218,7 +218,7 @@ def compiled_language_case(
         assert oracle.stdout == case.expected_stdout
 
     env = os.environ.copy()
-    env["PCC_RUNTIME_ARCHIVE"] = str(pcc_py_runtime_archive)
+    env["PCC_RUNTIME_ARCHIVE"] = str(pcc_runtime_archive)
     result = subprocess.run(
         [
             str(current_pcc1),

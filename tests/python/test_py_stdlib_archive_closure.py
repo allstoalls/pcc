@@ -20,10 +20,10 @@ import zipfile as host_zipfile
 
 import pytest
 
-from pcc.py_stdlib import binascii as port_binascii
-from pcc.py_stdlib import tarfile as port_tarfile
-from pcc.py_stdlib import zipfile as port_zipfile
-from pcc.py_stdlib import zlib as port_zlib
+from pcc.stdlib import binascii as port_binascii
+from pcc.stdlib import tarfile as port_tarfile
+from pcc.stdlib import zipfile as port_zipfile
+from pcc.stdlib import zlib as port_zlib
 
 
 @pytest.fixture
@@ -219,11 +219,11 @@ def test_archive_unsafe_and_unowned_boundaries_fail_closed(tmp_path):
     "module_name", ["tarfile", "zipfile", "gzip", "bz2", "lzma", "zlib"]
 )
 def test_archive_ports_are_selected_by_recursive_stdlib_registry(module_name):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     source = pipeline._locate_native_stdlib_module_source(module_name)
     assert source is not None
-    assert source.endswith("/pcc/py_stdlib/" + module_name + ".py")
+    assert source.endswith("/pcc/stdlib/" + module_name + ".py")
     assert module_name not in pipeline._NATIVE_BUILTIN_IMPORTS
 
 

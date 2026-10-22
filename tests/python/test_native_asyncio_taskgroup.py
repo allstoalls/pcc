@@ -9,7 +9,7 @@ import pytest
 
 @pytest.fixture
 def model(monkeypatch):
-    module = importlib.import_module("pcc.py_stdlib.asyncio")
+    module = importlib.import_module("pcc.stdlib.asyncio")
     monkeypatch.setattr(module, "_LOOP_BOX", [None])
     monkeypatch.setattr(module, "_RUNNING_LOOP_BOX", [None])
     monkeypatch.setattr(module, "_TASKS", [])

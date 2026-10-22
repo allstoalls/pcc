@@ -89,7 +89,7 @@ main()
 
 
 def test_dyn_starred_and_keyword_calls_keep_parameters_dynamic(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     source = tmp_path / "self_method_overrides.py"
     source.write_text(PROGRAM, encoding="utf-8")
@@ -103,7 +103,7 @@ def test_dyn_starred_and_keyword_calls_keep_parameters_dynamic(
     output = tmp_path / "self_method_overrides"
     python_program_compiler(
         str(source), str(output), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         ran = subprocess.run(

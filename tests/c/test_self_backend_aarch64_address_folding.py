@@ -1,5 +1,7 @@
 """Fold proven single-use byte GEPs into AArch64 memory operands."""
 
+import sys
+import platform
 import pytest
 import re
 
@@ -65,6 +67,8 @@ def test_volatile_access_and_pointer_stored_as_value_are_not_folded():
     assert "str x10, [x9, #8]" not in emit_aarch64_darwin_asm(source, optimize=False)
 
 
+# AArch64 Darwin execution
+@pytest.mark.pcc_gate(probe=lambda: not (sys.platform != "darwin" or platform.machine() != "arm64"))
 @pytest.mark.parametrize("optimize", [False, True])
 def test_folded_indexed_stores_and_loads_execute_with_guards(tmp_path, optimize):
     import platform
@@ -76,8 +80,6 @@ def test_folded_indexed_stores_and_loads_execute_with_guards(tmp_path, optimize)
     from pcc.backend.self_backend_aarch64_darwin import emit_aarch64_darwin_indexed_transport
     from pcc.backend.self_backend_parse import parse_self_backend_module
 
-    if sys.platform != "darwin" or platform.machine() != "arm64":
-        pytest.skip("AArch64 Darwin execution")
     source = '''
 target triple = "arm64-apple-darwin23.6.0"
 @buffer = global [32 x i8] zeroinitializer, align 16

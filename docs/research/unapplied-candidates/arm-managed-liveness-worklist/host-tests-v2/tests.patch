@@ -1,0 +1,118 @@
+diff --git a/tests/python/test_native_liveness_worklist.py b/tests/python/test_native_liveness_worklist.py
+--- a/tests/python/test_native_liveness_worklist.py
++++ b/tests/python/test_native_liveness_worklist.py
+@@ -36,8 +36,43 @@
+     return rows
+ 
+ 
+-def _set_oracle(source, names):
++def _reachable_blocks(kernel):
++    reachable = set()
++    pending = [0]
++    while pending:
++        block_id = pending.pop()
++        if block_id in reachable:
++            continue
++        assert 0 <= block_id < len(kernel.block_names)
++        reachable.add(block_id)
++        pending.extend(kernel.cfg_successor_id(block_id, index)
++                       for index in range(kernel.cfg_successor_count(block_id)))
++    return reachable
++
++
++def _parse_function(source, *, detached=()):
+     function = parse_self_backend_module(source).functions[0]
++    if not detached:
++        return function
++    kernel = get_indexed_function_kernel(function)
++    # The parser removes unreachable blocks before publishing this kernel.
++    # First parse a valid reachable tail, then detach its entry edge without
++    # changing the terminator kind or its condition-use metadata.
++    all_blocks = set(range(len(kernel.block_names)))
++    assert _reachable_blocks(kernel) == all_blocks
++    assert kernel.cfg_successor_count(0) == 2
++    target = kernel.cfg_successor_id(0, 0)
++    tail = kernel.cfg_successor_id(0, 1)
++    assert tail == kernel.block_names.index(detached[0]) and target != tail
++    kernel.terminator_scalars.set_unchecked(4, target)
++    assert kernel.cfg_successor_id(0, 1) == target
++    detached_ids = {kernel.block_names.index(name) for name in detached}
++    assert _reachable_blocks(kernel) == all_blocks - detached_ids
++    return function
++
++
++def _set_oracle(source, names, *, detached=()):
++    function = _parse_function(source, detached=detached)
+     kernel = get_indexed_function_kernel(function)
+     states = None
+     try:
+@@ -144,15 +179,18 @@
+ 
+ def _chain_source(length, reverse, cold):
+     entry_target = length - 1 if reverse else 0
+-    blocks = [f"entry:\n  call void @tick()\n  br label %b{entry_target}"]
++    entry_branch = (f"br i1 %again, label %b{entry_target}, label %cold0" if cold
++                    else f"br label %b{entry_target}")
++    blocks = [f"entry:\n  call void @tick()\n  {entry_branch}"]
+     for index in range(length):
+         last = index == (0 if reverse else length - 1)
+         end = "ret ptr %p" if last else f"br label %b{index - 1 if reverse else index + 1}"
+         blocks.append(f"b{index}:\n  call void @tick()\n  {end}")
+     for index in range(cold):
+-        blocks.append(f"cold{index}:\n  call void @tick()\n  ret ptr null")
++        end = f"br label %cold{index + 1}" if index + 1 < cold else "ret ptr null"
++        blocks.append(f"cold{index}:\n  call void @tick()\n  {end}")
+     return ('target triple = "arm64-apple-darwin23.6.0"\n'
+-            'declare void @tick()\ndefine ptr @probe(ptr %p) {\n'
++            'declare void @tick()\ndefine ptr @probe(ptr %p, i1 %again) {\n'
+             + '\n'.join(blocks) + '\n}\n')
+ 
+ 
+@@ -164,10 +202,13 @@
+     monkeypatch, length, reverse, cold, ambiguous,
+ ):
+     source = _chain_source(length, reverse, cold)
+-    expected = _set_oracle(source, ("p",))
+-    function = parse_self_backend_module(source).functions[0]
++    detached = tuple(f"cold{index}" for index in range(cold))
++    expected = _set_oracle(source, ("p",), detached=detached)
++    function = _parse_function(source, detached=detached)
+     kernel = get_indexed_function_kernel(function)
+     block_count = len(kernel.block_names)
++    assert block_count == 1 + length + cold
++    assert kernel.block_names == ["entry", *(f"b{index}" for index in range(length)), *detached]
+     edge_count = sum(kernel.cfg_successor_count(block) for block in range(block_count))
+     actual, visits, links, owners = _native_run(function, ("p",), monkeypatch, ambiguous=ambiguous)
+     assert actual == expected
+@@ -197,9 +238,11 @@
+ 
+ def test_zero_tracked_domain_keeps_validation_without_worklist_storage(monkeypatch):
+     source = _chain_source(7, True, 3)
+-    expected = _set_oracle(source, ())
+-    function = parse_self_backend_module(source).functions[0]
++    detached = ("cold0", "cold1", "cold2")
++    expected = _set_oracle(source, (), detached=detached)
++    function = _parse_function(source, detached=detached)
+     block_count = len(get_indexed_function_kernel(function).block_names)
++    assert block_count == 11
+     actual, visits, links, owners = _native_run(function, (), monkeypatch)
+     assert actual == expected
+     assert visits == [None] * block_count
+@@ -213,7 +256,7 @@
+ define ptr @probe(ptr %p, i1 %again) {
+ entry:
+   call void @tick()
+-  br label %exit
++  br i1 %again, label %exit, label %unreachable_bad
+ exit:
+   ret ptr %p
+ unreachable_bad:
+@@ -221,7 +264,7 @@
+   br i1 %again, label %exit, label %entry
+ }
+ '''
+-    function = parse_self_backend_module(source).functions[0]
++    function = _parse_function(source, detached=("unreachable_bad",))
+     kernel = get_indexed_function_kernel(function)
+     assert kernel.block_names == ["entry", "exit", "unreachable_bad"]
+     # Competing errors: highest block wins, then its first successor.

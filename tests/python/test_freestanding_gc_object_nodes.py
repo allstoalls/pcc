@@ -7,15 +7,15 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import (
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import (
     FREESTANDING_GC_CROSS_OBJECT_SIGNATURES,
     FREESTANDING_GC_RUNTIME_GLOBALS,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_object_nodes.py"
 MANAGED_SOURCE = RUNTIME_DIR / "py" / "py_gc_backend.py"
 MAKEFILE = RUNTIME_DIR / "Makefile"
@@ -59,6 +59,7 @@ OWNED_SYMBOLS = {
     "pcc_gc_trace_cursor_store",
 }
 RAW_FUNCTION_IMPORTS = {
+    "pcc_platform_abort",
     "free",
     "malloc",
     "pcc_gc_object_index_find",
@@ -287,10 +288,10 @@ def test_object_nodes_preserve_pool_list_and_young_invariants() -> None:
 
 
 def test_production_archive_has_one_object_node_owner(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,

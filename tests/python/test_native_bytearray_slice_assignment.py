@@ -78,7 +78,7 @@ main()
 
 
 def _build_and_run(tmp_path: Path, name: str, source: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / (name + ".py")
     exe = tmp_path / (name + ".out")
@@ -132,9 +132,9 @@ def test_bytearray_slice_store_can_grow(tmp_path):
 
 def test_elf_x86_64_lowers_under_strict_no_libpython():
     """The closure module the missing lowering blocked, compiled the pcc1 way."""
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
     path = Path(__file__).resolve().parents[2] / "pcc/backend/elf_x86_64.py"
     typed = type_infer.infer_module(

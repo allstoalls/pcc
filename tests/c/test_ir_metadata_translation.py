@@ -1,14 +1,14 @@
-from pcc.passes import PassContext, PassPipeline
-from pcc.passes.context import AllocStrategy
-from pcc.passes.ir_metadata import (
+from pcc.frontends.c.passes import PassContext, PassPipeline
+from pcc.frontends.c.passes.context import AllocStrategy
+from pcc.frontends.c.passes.ir_metadata import (
     AlignPass,
     FuncAttrPass,
     LoopMetadataPass,
     NoaliasPass,
     RangeMetadataPass,
 )
-from pcc.passes.propagation import SROAPass
-from pcc.parse.c_parser import CParser
+from pcc.frontends.c.passes.propagation import SROAPass
+from pcc.frontends.c.parse.c_parser import CParser
 
 
 def test_align_pass_adds_natural_alignment_to_plain_load_and_store():

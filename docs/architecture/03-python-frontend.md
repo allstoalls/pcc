@@ -25,7 +25,7 @@ Top-level entry: `pipeline.py:7075` `compile_python(src_path, out_path, …, lib
 
 | # | Stage | Where |
 |---|---|---|
-| 1 | parse + lift → pcc AST | `parse_and_lift()` `py_lift.py:1265`; native parser `pcc/parse/py_parse.py`; AST model `py_frontend/py_ast.py` |
+| 1 | parse + lift → pcc AST | `parse_and_lift()` `py_lift.py:1265`; native parser `pcc/frontends/python/py_parse.py`; AST model `py_frontend/py_ast.py` |
 | 2 | AST-level libpython gate | `pipeline.py:6805` `_module_needs_libpython()` |
 | 3 | type inference | `type_infer.py:3562` `infer_module()` |
 | 4 | codegen → IR | `codegen/layer1.py:39` `L1CodeGen`, `.generate()` → `layer1_entrypoints.py:31` → `generation_lowering.py` |
@@ -90,7 +90,7 @@ The semantic type of `self` inside every mixin is `L1CodeGen` (they are *context
 
 ### `runtime_abi.py` — the bridge to the runtime
 
-Generated IR calls into the runtime by name. `runtime_abi.py` (`:945` lines) holds `RUNTIME_SIGNATURES` (return type, params, vararg) for every runtime symbol and declares them as external IR functions via `declare_runtime()` (`:848`) / `declare_runtime_global()` (`:923`). These prototypes mirror `pcc/py_runtime/include/py_runtime.h` — see [04-runtime-and-gc.md](04-runtime-and-gc.md).
+Generated IR calls into the runtime by name. `runtime_abi.py` (`:945` lines) holds `RUNTIME_SIGNATURES` (return type, params, vararg) for every runtime symbol and declares them as external IR functions via `declare_runtime()` (`:848`) / `declare_runtime_global()` (`:923`). These prototypes mirror `pcc/runtime/include/py_runtime.h` — see [04-runtime-and-gc.md](04-runtime-and-gc.md).
 
 ## Type model (`py_ast.py` / `type_infer.py`)
 
@@ -110,12 +110,12 @@ Generated IR calls into the runtime by name. `runtime_abi.py` (`:945` lines) hol
 
 | Path | Role |
 |---|---|
-| `pcc/parse/py_parse.py`, `pcc/parse/py_lift.py` | native Python parser + lift to pcc AST |
-| `pcc/py_frontend/py_ast.py` | frozen-dataclass AST + type classes |
-| `pcc/py_frontend/type_infer.py` | `infer_module()` type inference |
-| `pcc/py_frontend/pipeline.py` | `compile_python()` orchestration, mode gates, link |
-| `pcc/py_frontend/codegen/layer1.py` | `L1CodeGen` façade |
-| `pcc/py_frontend/codegen/*_lowering.py` | ~78 lowering mixins |
-| `pcc/py_frontend/codegen/native_*.py` | native stdlib-surface lowering |
-| `pcc/py_frontend/codegen/runtime_abi.py` | runtime symbol prototypes (mirrors `py_runtime.h`) |
+| `pcc/frontends/python/py_parse.py`, `pcc/frontends/python/py_lift.py` | native Python parser + lift to pcc AST |
+| `pcc/frontends/python/py_ast.py` | frozen-dataclass AST + type classes |
+| `pcc/frontends/python/type_infer.py` | `infer_module()` type inference |
+| `pcc/frontends/python/pipeline.py` | `compile_python()` orchestration, mode gates, link |
+| `pcc/frontends/python/codegen/layer1.py` | `L1CodeGen` façade |
+| `pcc/frontends/python/codegen/*_lowering.py` | ~78 lowering mixins |
+| `pcc/frontends/python/codegen/native_*.py` | native stdlib-surface lowering |
+| `pcc/frontends/python/codegen/runtime_abi.py` | runtime symbol prototypes (mirrors `py_runtime.h`) |
 | `scripts/check_layer1_ownership.py` | façade ownership gate |

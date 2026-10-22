@@ -5,8 +5,8 @@ import json
 
 def test_roadmap_deepwire_installed_on_package_import():
     import pcc
-    from pcc.py_frontend import pipeline
-    from pcc import cli_core
+    from pcc.frontends.python import pipeline
+    from pcc.driver import cli_core
 
     assert hasattr(pcc, "__dir__")
     assert getattr(pipeline.compile_python, "_pcc_profiled", False)
@@ -14,7 +14,7 @@ def test_roadmap_deepwire_installed_on_package_import():
 
 
 def test_cli_core_filters_observability_options_without_rejecting():
-    from pcc import cli_core
+    from pcc.driver import cli_core
 
     parsed, status, err = cli_core.parse_cli_args([
         "--diagnostic-format=json",
@@ -31,7 +31,7 @@ def test_cli_core_filters_observability_options_without_rejecting():
 
 
 def test_profile_recorder_phase_shape(tmp_path):
-    from pcc.profile_events import ProfileRecorder, write_profile_json
+    from pcc.diagnostics.profile_events import ProfileRecorder, write_profile_json
 
     profile = tmp_path / "profile.json"
     recorder = ProfileRecorder()

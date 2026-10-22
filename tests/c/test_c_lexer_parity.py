@@ -1,8 +1,8 @@
 """Parity test for the native C lexer against PLY (P6C.5 α2).
 
 For each snippet in ``tests/c_parse_oracle/corpus.py``, tokenize with
-both the legacy PLY-based ``pcc.lex.c_lexer.CLexer`` and the new
-``pcc.parse.c_lex.CLexer``. Token streams must be identical in type
+both the legacy PLY-based ``pcc.frontends.c.lex.c_lexer.CLexer`` and the new
+``pcc.frontends.c.parse.c_lex.CLexer``. Token streams must be identical in type
 sequence (plus approximate line numbers).
 
 This is the α2 gate. Complements the AST-level diff at
@@ -19,8 +19,8 @@ import pytest
 REPO = Path(__file__).absolute().parents[2]
 sys.path.insert(0, str(REPO))
 
-from pcc.lex.c_lexer import CLexer as PLYCLexer  # noqa: E402
-from pcc.parse.c_lex import CLexer as NativeCLexer  # noqa: E402
+from pcc.frontends.c.lex.c_lexer import CLexer as PLYCLexer  # noqa: E402
+from pcc.frontends.c.parse.c_lex import CLexer as NativeCLexer  # noqa: E402
 from tests.c_parse_oracle.corpus import CORPUS  # noqa: E402
 
 

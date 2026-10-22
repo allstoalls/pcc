@@ -168,7 +168,7 @@ def test_owned_acquisition_respects_target_python_metadata(tmp_path):
 def test_default_and_overridden_targets_select_requires_python_artifacts(
     tmp_path, monkeypatch, configured, expected_version, expected_target
 ):
-    from pcc import cli_bootstrap
+    from pcc.driver import cli_bootstrap
     from pcc.package.acquire import requires_python_allows
 
     monkeypatch.delenv("PCC_PACKAGE_TARGET_PYTHON", raising=False)
@@ -568,7 +568,7 @@ def test_self_backend_transport_and_sha256_kernel_primitives(tmp_path):
             [
                 sys.executable,
                 "-m",
-                "pcc.pcc",
+                "pcc.driver.cli_launcher",
                 "--backend",
                 "self",
                 "--python-libpython=off",

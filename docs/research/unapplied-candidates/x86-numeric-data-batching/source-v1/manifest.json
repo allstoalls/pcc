@@ -1,0 +1,26 @@
+{
+  "base_commit": "d2334624197b5fc14aaca93bb916683fb1afcb79",
+  "base_pcc_tree": "ee02ba6bf0d79e9706c1791aa650093f5f91c338",
+  "base_source_inventory_sha256": "568c44d837939cde5ab4da2c2f0115ab30f978716bc423a40e07d9cf2bdc0185",
+  "changed_files": [
+    {
+      "mode": "100644",
+      "path": "pcc/backend/x86_64_asm_driver.py",
+      "postimage_bytes": 34683,
+      "postimage_sha256": "96bd852adf28cbc92d72e9d8bceb5d6a29bbe3fe90fc18de92e1c85ebbb28938",
+      "preimage_bytes": 33123,
+      "preimage_sha256": "cc71a7b5b5c5db56d665fc83afe670b021c20f76403fb5a381a085cdf37cf84d"
+    }
+  ],
+  "executed": false,
+  "production_patch_sha256": "818104e048921c691f8dd4d67a51349393d6defaeaee4379a352916d89cc0eb6",
+  "public_files": [
+    "README.md",
+    "manifest.json",
+    "production.patch"
+  ],
+  "readme_sha256": "0926265671e8b317971e77cd12c02c2b69357ed243ef14bccef049af7efa3434",
+  "schema": "pcc.x86-numeric-data-batching-source.v1",
+  "status": "UNAPPLIED_REVIEW_PENDING_ALL_EXECUTION_UNRUN",
+  "tests": "NOT_YET_PREPARED"
+}

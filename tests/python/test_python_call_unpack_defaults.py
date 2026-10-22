@@ -9,9 +9,9 @@ import pytest
 from pcc1_gate import repo_root
 
 from pcc1_gate import find_current_pcc1, skip_or_fail_no_current_pcc1
-from pcc.py_frontend.codegen.call_arg_lowering import CallArgLoweringMixin
-from pcc.py_frontend.codegen.call_resolution_lowering import CallResolutionLoweringMixin
-from pcc.py_frontend.py_ast import (
+from pcc.frontends.python.codegen.call_arg_lowering import CallArgLoweringMixin
+from pcc.frontends.python.codegen.call_resolution_lowering import CallResolutionLoweringMixin
+from pcc.frontends.python.py_ast import (
     Arg,
     Call,
     DictExpr,
@@ -166,9 +166,12 @@ def test_multiple_starstar_kwargs_merge_for_missing_formals():
     assert resolved[0] is first
     assert isinstance(resolved[1], Subscript)
     assert isinstance(resolved[2], Subscript)
-    assert isinstance(resolved[1].obj, DictExpr)
-    assert resolved[1].obj is resolved[2].obj
-    assert [pair[1] for pair in resolved[1].obj.pairs] == [left, right]
+    # Several ** operands merge once, left to right, through the
+    # duplicate-checking merge: a key in both is CPython's TypeError.
+    merged = resolved[1].obj
+    assert merged is resolved[2].obj
+    assert isinstance(merged, Call) and merged.func.ident == "__pcc_kwargs_merge__"
+    assert list(merged.args) == [left, right]
 
 
 def test_parser_style_starstar_kwargs_merge_for_missing_formals():
@@ -192,12 +195,15 @@ def test_parser_style_starstar_kwargs_merge_for_missing_formals():
     assert resolved[0] is first
     assert isinstance(resolved[1], Subscript)
     assert isinstance(resolved[2], Subscript)
-    assert isinstance(resolved[1].obj, DictExpr)
-    assert resolved[1].obj is resolved[2].obj
-    assert [pair[1] for pair in resolved[1].obj.pairs] == [left, right]
+    # Several ** operands merge once, left to right, through the
+    # duplicate-checking merge: a key in both is CPython's TypeError.
+    merged = resolved[1].obj
+    assert merged is resolved[2].obj
+    assert isinstance(merged, Call) and merged.func.ident == "__pcc_kwargs_merge__"
+    assert list(merged.args) == [left, right]
 
 
-def test_multiple_legacy_starstar_kwargs_require_duplicate_safe_bridge():
+def test_multiple_legacy_starstar_kwargs_use_duplicate_checking_merge():
     resolver = _Resolver()
     span = None
     first = Name(span=span, ty=DynType(name="dyn"), ident="first")
@@ -218,10 +224,13 @@ def test_multiple_legacy_starstar_kwargs_require_duplicate_safe_bridge():
         kwargs=(),
     )
 
-    # A plain dict merge would overwrite duplicate keys. The legacy CPython
-    # bridge rejects this shape until it can preserve call-time TypeError.
-    with pytest.raises(NotImplementedError, match="duplicate-key semantics"):
-        resolver._split_starstar_kwargs_unpack((first, left_unpack, right_unpack))
+    # A plain dict merge would overwrite duplicate keys; the operands go
+    # through the duplicate-checking merge, which raises CPython's call-time
+    # TypeError for a key in both.
+    positional, merged = resolver._split_starstar_kwargs_unpack((first, left_unpack, right_unpack))
+    assert positional == (first,)
+    assert isinstance(merged, Call) and merged.func.ident == "__pcc_kwargs_merge__"
+    assert list(merged.args) == [left, right]
 
 
 def test_pcc1_starred_unknown_positional_uses_required_args(tmp_path):

@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import pytest
 
-from pcc.py_frontend import pipeline_self_link
+from pcc.frontends.python import pipeline_self_link
 
 
 def test_default_and_explicit_self_link_modes_are_fail_closed():
     assert pipeline_self_link.default_self_link_mode("darwin", "arm64") == "pcc"
     assert pipeline_self_link.default_self_link_mode("darwin", "aarch64") == "pcc"
-    assert pipeline_self_link.default_self_link_mode("darwin", "x86_64") == "cc"
-    assert pipeline_self_link.default_self_link_mode("linux", None) == "cc"
+    assert pipeline_self_link.default_self_link_mode("linux", "x86_64") == "pcc"
+    assert pipeline_self_link.default_self_link_mode("linux", "aarch64") == "pcc"
+    assert pipeline_self_link.default_self_link_mode("win32", "AMD64") == "pcc"
+    with pytest.raises(pipeline_self_link.SelfLinkContractError, match="does not support host target"):
+        pipeline_self_link.default_self_link_mode("darwin", "x86_64")
+    with pytest.raises(pipeline_self_link.SelfLinkContractError, match="cannot identify"):
+        pipeline_self_link.default_self_link_mode("linux", None)
     with pytest.raises(
         pipeline_self_link.SelfLinkContractError,
         match="cannot identify",
@@ -31,6 +36,17 @@ def test_default_and_explicit_self_link_modes_are_fail_closed():
         pipeline_self_link.normalize_self_link_mode(
             "system", default_mode="cc"
         )
+
+
+def test_default_mode_cannot_be_an_implicit_cc_oracle():
+    with pytest.raises(pipeline_self_link.SelfLinkContractError, match="production default must be 'pcc'"):
+        pipeline_self_link.normalize_self_link_mode("", default_mode="cc")
+
+
+def test_explicit_cc_oracle_requires_host_cpython():
+    assert pipeline_self_link.normalize_self_link_mode("cc", default_mode="pcc") == "cc"
+    with pytest.raises(pipeline_self_link.SelfLinkContractError, match="native pcc1 requires the pcc-owned linker"):
+        pipeline_self_link.normalize_self_link_mode("cc", default_mode="pcc", implementation="pcc")
 
 
 @pytest.mark.parametrize(

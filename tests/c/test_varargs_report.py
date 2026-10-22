@@ -1,6 +1,6 @@
 import json
 
-from pcc.varargs_report import VarargsRewrite, VarargsRewriteReport
+from pcc.frontends.c.varargs_report import VarargsRewrite, VarargsRewriteReport
 
 
 def test_varargs_report_json():

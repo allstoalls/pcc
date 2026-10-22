@@ -1,0 +1,308 @@
+--- a/pcc/frontends/python/codegen/class_gen.py
++++ b/pcc/frontends/python/codegen/class_gen.py
+@@ -5631,6 +5631,11 @@
+                     capture_root, owns_capture = self._emit_dataclass_factory_capture(value_expr)
+                     class_body_lifetimes.append(("factory", capture_root, owns_capture))
+                     continue
++                if event_kind == "attr" and attr_name == "__doc__" and not fresh_builtin_class:
++                    # The body already supplied documentation in the
++                    # metaclass namespace. __new__ may replace/delete it or
++                    # return a different class; preserve that actual result.
++                    continue
+                 if event_kind in ("method", "property_setter", "property_deleter"):
+                     if event_kind == "method":
+                         method_root = self._emit_class_method_publication(
+@@ -6050,10 +6055,16 @@
+         explicit existing routes. A declaration global is only a binding
+         identity on this ordinary path; it never owns a cached value.
+         """
+-        if info.valueclass or _classgen_has_dynamic_field_layout(self, info):
++        if info.valueclass:
+             return False
+         if getattr(self.parent, "_runtime_port_module", False) or getattr(self.parent, "_freestanding_module", False):
+             return False
++        if attr_name == "__doc__":
++            # Documentation belongs to the returned class namespace, even
++            # when a metaclass changed the source literal during creation.
++            return True
++        if _classgen_has_dynamic_field_layout(self, info):
++            return False
+         if info.expanded_cd is not None and self._class_metaclass_expr(info.expanded_cd) is not None:
+             return False
+         if attr_name in info.enum_members or attr_name in info.enum_string_members:
+--- a/pcc/runtime/py/py_obj_ops_dispatch.py
++++ b/pcc/runtime/py/py_obj_ops_dispatch.py
+@@ -3572,7 +3572,11 @@
+     nkwargs: int = 0
+     if ptr_is_null(kwargs) == 0 and ptr_eq(kwargs, global_load_ptr("py_None")) == 0:
+         nkwargs = py_dict_len(kwargs)
+-    if tag != PY_TYPE_PROPERTY:
++    if tag == PY_TYPE_FLOAT:
++        if nkwargs != 0 or nargs > 1:
++            py_raise_owned(py_exc_new(3, cstr("float() takes at most one positional argument")))
++            return -1
++    elif tag != PY_TYPE_PROPERTY:
+         if nkwargs != 0:
+             py_raise_owned(py_exc_new(3, cstr("descriptor constructor takes no keyword arguments")))
+             return -1
+@@ -3620,7 +3624,17 @@
+         if matched != nkwargs:
+             py_raise_owned(py_exc_new(3, cstr("unsupported property keyword argument")))
+             return -1
+-    if tag == PY_TYPE_STATICMETHOD:
++    if tag == PY_TYPE_FLOAT:
++        # Reuse this constructor's argument/result leases: a lease on args
++        # alone cannot keep its element's address stable across __float__.
++        number: float = 0.0
++        if nargs == 1:
++            number = py_float_value_of(load_ptr(slots, _DESCRIPTOR_FGET * C_POINTER_SIZE))
++            if py_err_occurred() != 0:
++                return -1
++        store_ptr(slots, _DESCRIPTOR_RESULT * C_POINTER_SIZE,
++                  py_float_from_f64(number))
++    elif tag == PY_TYPE_STATICMETHOD:
+         store_ptr(slots, _DESCRIPTOR_RESULT * C_POINTER_SIZE,
+                   py_staticmethod_new(load_ptr(slots, _DESCRIPTOR_FGET * C_POINTER_SIZE)))
+     elif tag == PY_TYPE_CLASSMETHOD:
+@@ -3641,8 +3655,8 @@
+ 
+ 
+ def _descriptor_type_call(args, kwargs, tag: int):
+-    # The first-class type path shares the ordinary factories. Every input,
+-    # accessor and result keeps a counted lease across their allocation polls.
++    # Descriptor and float constructors share this owning call frame. Every
++    # argument and result keeps a counted lease across callbacks and cleanup.
+     borrowed = stack_alloc(_DESCRIPTOR_INPUT_COUNT * C_POINTER_SIZE)
+     store_ptr(borrowed, _DESCRIPTOR_ARGS * C_POINTER_SIZE, args)
+     store_ptr(borrowed, _DESCRIPTOR_KWARGS * C_POINTER_SIZE, kwargs)
+@@ -3851,6 +3865,8 @@
+                     )
+                 )
+                 return null()
++            if ptr_eq(callable, global_load_ptr("pcc_type_cls_float")) != 0:
++                return _descriptor_type_call(args, kwargs, PY_TYPE_FLOAT)
+             arg = null()
+             if nargs == 1:
+                 arg = py_tuple_get(args, 0)
+@@ -3867,11 +3883,6 @@
+                     # One owner for int(x): exact floats, __int__/__index__
+                     # and CPython's TypeError (floats used to be rejected).
+                     out = py_obj_as_int_object(arg, 10)
+-            elif ptr_eq(callable, global_load_ptr("pcc_type_cls_float")) != 0:
+-                value: float = 0.0
+-                if ptr_is_null(arg) == 0:
+-                    value = py_float_value_of(arg)
+-                out = py_float_from_f64(value)
+             elif ptr_eq(callable, global_load_ptr("pcc_type_cls_str")) != 0:
+                 if ptr_is_null(arg) != 0:
+                     out = py_str_new(cstr(""), 0)
+--- a/tests/python/test_native_class_docstrings.py
++++ b/tests/python/test_native_class_docstrings.py
+@@ -37,12 +37,33 @@
+         return {}
+     def __new__(mcls, name, bases, namespace):
+         events.append((name, "__doc__" in namespace, namespace.get("__doc__")))
++        if name == "PreparedChanged":
++            namespace["__doc__"] = "changed by metaclass"
++        if name == "PreparedRemoved":
++            del namespace["__doc__"]
+         return type.__new__(mcls, name, bases, namespace)
+ class Prepared(metaclass=Meta):
+     """prepared documentation"""
+     captured = __doc__
+ class PreparedChild(Prepared):
+     pass
++class PreparedChanged(metaclass=Meta):
++    """source before replacement"""
++    captured = __doc__
++class PreparedRemoved(metaclass=Meta):
++    """source before deletion"""
++class PlainMeta(type):
++    def __new__(mcls, name, bases, namespace):
++        namespace["__doc__"] = "changed without prepare"
++        return type.__new__(mcls, name, bases, namespace)
++class PlainChanged(metaclass=PlainMeta):
++    """original plain meta documentation"""
++class NoPrepareMeta(type):
++    def __new__(mcls, name, bases, namespace):
++        return type.__new__(mcls, name, bases, namespace)
++class MethodDocumentation(metaclass=NoPrepareMeta):
++    def __doc__(self):
++        return "callable documentation"
+ def local_class():
+     class Local:
+         """local documentation"""
+@@ -65,7 +86,17 @@
+     assert Prepared.__doc__ == "prepared documentation"
+     assert Prepared.captured == "prepared documentation"
+     assert PreparedChild.__doc__ is None
+-    assert events == [("Prepared", True, "prepared documentation"), ("PreparedChild", False, None)]
++    assert PreparedChanged.__doc__ == "changed by metaclass"
++    assert PreparedChanged.__dict__["__doc__"] == "changed by metaclass"
++    assert PreparedChanged.captured == "source before replacement"
++    assert PreparedRemoved.__doc__ is None
++    assert PreparedRemoved.__dict__["__doc__"] is None
++    assert PlainChanged.__doc__ == "changed without prepare"
++    assert callable(MethodDocumentation.__dict__["__doc__"])
++    assert MethodDocumentation().__doc__() == "callable documentation"
++    assert events == [("Prepared", True, "prepared documentation"), ("PreparedChild", False, None), ("PreparedChanged", True, "source before replacement"), ("PreparedRemoved", True, "source before deletion")]
++    PreparedChanged.__doc__ = "updated prepared documentation"
++    assert PreparedChanged.__doc__ == "updated prepared documentation"
+     dynamic = type("Dynamic", (Documented,), {})
+     assert dynamic.__doc__ is None
+     assert dynamic.__dict__["__doc__"] is None
+--- /dev/null
++++ b/tests/python/test_native_float_callback_movement.py
+@@ -0,0 +1,152 @@
++"""Require actual GC4 movement during canonical float callback/reentry paths."""
++from __future__ import annotations
++
++import hashlib
++import json
++import os
++
++import pytest
++
++from tests.python.owned_regression_support import explicit_owned_runtime
++from tests.python.process_timeout import run_process_group_timeout
++
++
++PROGRAM = '''import gc
++from pcc.extern import extern, c_int64
++backend = extern("pcc_gc_backend", (), c_int64)
++metric = extern("pcc_gc_telemetry", (c_int64,), c_int64)
++select_moving = extern("pcc_gc_select_relocation_set", (c_int64,), c_int64)
++step = extern("pcc_gc_step", (c_int64,), c_int64)
++ballast = []
++evidence = []
++events = []
++converter = float
++
++def move_live_objects(phase):
++    for index in range(96):
++        ballast.append([phase + str(index), index])
++    before = metric(15)
++    selected = select_moving(4096)
++    processed = step(4096)
++    moved = metric(15) - before
++    evidence.append((phase, selected, processed, moved))
++
++class Nested:
++    def __float__(self):
++        events.append("nested")
++        return 7.25
++
++class Number:
++    def __float__(self):
++        events.append("callback-enter")
++        move_live_objects("callback")
++        assert converter(Nested()) == 7.25
++        events.append("callback-exit")
++        return 3.5
++
++class InvalidReturn:
++    def __del__(self):
++        # The named dispatcher releases its receiver lease before dropping
++        # this invalid return. The canonical float caller must still own an
++        # independent element lease while cleanup reenters user code/GC.
++        events.append("cleanup-enter")
++        move_live_objects("cleanup")
++        assert converter(Nested()) == 7.25
++        events.append("cleanup-exit")
++
++class BadNumber:
++    def __float__(self):
++        return InvalidReturn()
++    def __del__(self):
++        events.append("receiver-finalized")
++
++def main():
++    assert backend() == 4
++    gc.disable()
++    assert converter(Number()) == 3.5
++    caught = False
++    try:
++        converter(BadNumber())
++    except TypeError:
++        caught = True
++    assert caught
++    gc.collect()
++    for row in evidence:
++        print(row[0], row[1], row[2], row[3])
++    assert events == ["callback-enter", "nested", "callback-exit", "cleanup-enter", "nested", "cleanup-exit", "receiver-finalized"]
++    assert len(evidence) == 2
++    for row in evidence:
++        # A callback, selected set, or successful collector call is not a
++        # movement witness. Require production relocation-forward progress
++        # independently in both the successful callback and error cleanup.
++        assert row[1] > 0
++        assert row[3] > 0
++    gc.enable()
++    print("FLOAT_CALLBACK_MOVEMENT_OK")
++main()
++'''
++
++
++@pytest.mark.integration
++@pytest.mark.parametrize("python_program_compiler", ("pcc0", "pcc1"), indirect=True)
++def test_canonical_float_callback_movement_gc4(
++    python_program_compiler, request, explicit_owned_runtime, tmp_path, capfd,
++):
++    # This is an instrumented native correctness witness, not a CPython
++    # differential program or a claim that the protected receiver must move.
++    source = tmp_path / "float_callback_movement.py"
++    binary = tmp_path / "float_callback_movement.out"
++    source.write_text(PROGRAM, encoding="utf-8")
++    mode = request.node.callspec.params["python_program_compiler"]
++    if python_program_compiler.__module__ == "tests.pcc1_route":
++        mode = "pcc1-routed"
++    receipt = {
++        "status": "RUNNING", "compiler_mode": mode,
++        "backend": "self", "libpython": "off", "gc_backend": 4,
++        "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
++        "runtime_archive": str(explicit_owned_runtime),
++        "runtime_sha256": hashlib.sha256(explicit_owned_runtime.read_bytes()).hexdigest(),
++    }
++    receipt_path = tmp_path / "float-callback-movement.json"
++    receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
++    try:
++        python_program_compiler(
++            str(source), str(binary), backend="self", libpython_mode="off",
++            ir_scaffold_mode="on", runtime_archive=str(explicit_owned_runtime),
++        )
++    except Exception as error:
++        receipt.update(status="COMPILE_FAILED", error=type(error).__name__ + ": " + str(error))
++        receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
++        raise
++    finally:
++        captured = capfd.readouterr()
++        (tmp_path / "compiler.stdout").write_text(captured.out)
++        (tmp_path / "compiler.stderr").write_text(captured.err)
++    assert binary.is_file()
++    receipt["binary_sha256"] = hashlib.sha256(binary.read_bytes()).hexdigest()
++    environment = dict(
++        os.environ, PCC_GC_BACKEND="4", PCC_GC_MINOR_ALLOC_MAX="4096",
++        PCC_GC_REFCOUNT_PROVENANCE_PROBE="2", PATH="",
++        PCC_HOST_PYTHON="/nonexistent/host-python", PCC_HOST_PCC="/nonexistent/host-pcc",
++        PCC_TEST_NO_NATIVE_PROVISIONING="1", PCC_NO_AUTO_PCC1="1",
++    )
++    environment.pop("LC_ALL", None)
++    result = run_process_group_timeout([str(binary)], env=environment, timeout=20)
++    (tmp_path / "gc4.stdout").write_text(result.stdout)
++    (tmp_path / "gc4.stderr").write_text(result.stderr)
++    receipt.update(returncode=result.returncode, stdout=result.stdout, stderr=result.stderr)
++    lines = result.stdout.splitlines()
++    success = result.returncode == 0 and result.stderr == "" and len(lines) == 3
++    if success:
++        success = lines[-1] == "FLOAT_CALLBACK_MOVEMENT_OK"
++    if success:
++        for phase, line in zip(("callback", "cleanup"), lines[:2]):
++            fields = line.split()
++            success = (len(fields) == 4 and fields[0] == phase
++                       and all(field.lstrip("-").isdigit() for field in fields[1:])
++                       and int(fields[1]) > 0 and int(fields[3]) > 0)
++            if not success:
++                break
++    receipt["status"] = "PASS" if success else "NATIVE_EXECUTION_FAILED"
++    receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
++    assert success, receipt

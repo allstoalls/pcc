@@ -24,7 +24,7 @@ GUARD = '''import importlib.abc
 import sys
 class BlockLLVM(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname == "llvmlite" or fullname.startswith("llvmlite.") or fullname == "pcc.llvm_capi.binding":
+        if fullname == "llvmlite" or fullname.startswith("llvmlite.") or fullname == "pcc.ir.binding":
             raise ImportError("LLVM dependency blocked: " + fullname)
 sys.meta_path.insert(0, BlockLLVM())
 '''
@@ -95,7 +95,7 @@ def main():
 
     persist()
     for name in names:
-        source = root / "pcc" / "py_runtime" / "py" / (name + ".py")
+        source = root / "pcc" / "runtime" / "py" / (name + ".py")
         source_hash = digest(source)
         ir = output / (name + ".ll")
         asm = output / (name + ".s")

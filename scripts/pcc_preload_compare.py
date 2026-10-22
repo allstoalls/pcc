@@ -86,14 +86,14 @@ def run(baseline_source: Path, exports_wire: Path, output: Path) -> dict:
         raise PreloadCompareError(f"refusing existing output: {output}")
     paths = {
         "baseline_source": Path(baseline_source).resolve(),
-        "candidate_source": REPO_ROOT / "pcc/py_frontend/type_infer.py",
+        "candidate_source": REPO_ROOT / "pcc/frontends/python/type_infer.py",
         "exports_wire": Path(exports_wire).resolve(),
     }
     hashes = {role: _sha256(path) for role, path in paths.items()}
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.pipeline_exports import _read_native_exports_wire
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.pipeline_exports import _read_native_exports_wire
 
     baseline = extract_baseline(
         paths["baseline_source"].read_text(encoding="utf-8"),

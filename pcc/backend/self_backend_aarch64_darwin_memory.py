@@ -8,8 +8,11 @@ from .self_backend_aarch64_darwin_mem import (
     emitted_branch_line,
     emitted_compare_register_line,
     emitted_cset_line,
+    emitted_fixed_instruction_line,
     emitted_memory_instruction_line,
     emitted_move_register_line,
+    mem_load_op,
+    mem_store_op,
 )
 from .self_backend_aarch64_darwin_materialize import (
     copy_large_aggregate_value_to_slot,
@@ -48,6 +51,7 @@ from .self_backend_aarch64_darwin_symbols import sanitize_label
 from .self_backend_ir import (
     PARSED_INSTRUCTION_KIND_ALLOCA,
     PARSED_INSTRUCTION_KIND_ATOMICRMW,
+    PARSED_INSTRUCTION_KIND_CALL,
     PARSED_INSTRUCTION_KIND_CMPXCHG,
     PARSED_INSTRUCTION_KIND_FENCE,
     PARSED_INSTRUCTION_KIND_GEP,
@@ -71,6 +75,7 @@ from .self_backend_module_symbols import PreparedModuleSymbols
 from .self_backend_parse import const_int_from_value, is_aggregate_literal_value
 from .self_backend_value_arena import CompilerInt2, CompilerInt4
 from .self_backend_kernel import (
+    _scalar_window_is_complete,
     TYPE_KIND_FP,
     TYPE_KIND_INT,
     TYPE_KIND_PTR,
@@ -82,13 +87,25 @@ def _atomic_width_check(
     func: ParsedFunction,
     kind: str,
     value_type: TypeDesc,
-    allowed: tuple = ("i32", "i64"),
+    allowed: tuple = ("i8", "i16", "i32", "i64"),
+    *,
+    allow_pointer: bool = False,
 ) -> None:
+    if allow_pointer and value_type.is_ptr:
+        return
     if value_type.describe() not in allowed:
         raise BackendUnavailable(
             f"self backend {kind} supports only {'/'.join(allowed)} operands in "
             f"{func.name!r}: {value_type.describe()}"
         )
+
+
+def _atomic_size_suffix(value_type: TypeDesc) -> str:
+    if value_type.width == 8:
+        return "b"
+    if value_type.width == 16:
+        return "h"
+    return ""
 
 
 _ATOMIC_RMW_COMPUTE = {
@@ -226,7 +243,7 @@ def _indexed_scalar_slot_access(
 def emit_memory_instruction_by_id(
     func: ParsedFunction,
     kind_id: int,
-    data: tuple,
+    data: int | tuple,
     module_symbols: PreparedModuleSymbols,
     *,
     indexed_kernel: IndexedFunctionKernel | None = None,
@@ -240,12 +257,12 @@ def emit_memory_instruction_by_id(
     if kind_id == _PARSED_INSTRUCTION_KIND_IDS["syscall6"]:
         from .self_backend_target_match import is_aarch64_linux_triple
         if not is_aarch64_linux_triple(module_symbols.target_triple):
-            raise BackendUnavailable("raw AArch64 syscalls require Linux")
+            raise BackendUnavailable("raw AArch64 syscall6 requires Linux")
         dest, values = data
         lines = []
         for value, index in zip(values, (8, 0, 1, 2, 3, 4, 5)):
             lines.extend(materialize_value(func, value, TypeDesc("int", 64), index, module_symbols))
-        lines.append("  svc #0")
+        lines.append(emitted_fixed_instruction_line("svc #0"))
         if parsed_function_has_value_slot(func, dest):
             lines.extend(store_value_regs_to_value_slot(func, dest, 0))
         return lines
@@ -254,6 +271,11 @@ def emit_memory_instruction_by_id(
         and indexed_dest_id >= 0
         and indexed_kernel.value_slot_id(indexed_dest_id) >= 0
     )
+    # Preserve the slot lookup above, including malformed-input failures.
+    # Calls are owned by compute lowering; do not walk memory-only cases.
+    if kind_id == PARSED_INSTRUCTION_KIND_CALL:
+        return None
+
     if kind_id == PARSED_INSTRUCTION_KIND_ALLOCA:
         return []
 
@@ -287,11 +309,22 @@ def emit_memory_instruction_by_id(
                 )
                 storage_matches = alloca_type_id == value_type_id
                 if alloca_type_id >= 0 and not storage_matches:
-                    alloca_type_header: CompilerInt4 = (
-                        indexed_kernel.type_header(alloca_type_id)
-                    )
+                    alloca_type_header_is_scalar = False
+                    if type(indexed_kernel) is IndexedFunctionKernel:
+                        alloca_type_header_scalar_id = alloca_type_id
+                        alloca_type_header_is_scalar = _scalar_window_is_complete(
+                            indexed_kernel.type_scalars, alloca_type_header_scalar_id, 12, 0
+                        )
+                        if alloca_type_header_is_scalar:
+                            alloca_type_header_scalar = indexed_kernel.type_scalars.get_unchecked(
+                                alloca_type_header_scalar_id * 12 + 0
+                            )
+                        else:
+                            alloca_type_header: CompilerInt4 = indexed_kernel.type_header(alloca_type_header_scalar_id)
+                    else:
+                        alloca_type_header: CompilerInt4 = indexed_kernel.type_header(alloca_type_id)
                     storage_matches = (
-                        alloca_type_header.first == TYPE_KIND_PTR
+                        (alloca_type_header_scalar if alloca_type_header_is_scalar else alloca_type_header.first) == TYPE_KIND_PTR
                         and value_type_header.first == TYPE_KIND_PTR
                     )
                 if storage_matches:
@@ -445,12 +478,29 @@ def emit_memory_instruction_by_id(
         return lines
 
     if kind_id == PARSED_INSTRUCTION_KIND_LOAD_ATOMIC:
-        dest, value_type, _ptr_type, ptr_name, ordering = data
+        if indexed_kernel is not None and isinstance(data, int):
+            record: CompilerInt4 = indexed_kernel.instruction_record(data)
+            atomic: CompilerInt4 = indexed_kernel.instruction_record(data + 1)
+            value_type = indexed_kernel.type_desc(record.first)
+            ordering = indexed_kernel.call_texts[atomic.first]
+            dest = indexed_kernel.value_name(indexed_dest_id)
+            ptr_name = indexed_kernel.value_name(record.third) if record.third >= 0 else indexed_kernel.call_texts[-record.third - 1]
+        else:
+            dest, value_type, _ptr_type, ptr_name, ordering = data[:5]
         if not (indexed_dest_has_slot if indexed_kernel is not None else parsed_function_has_value_slot(func, dest)):
             return []
         _atomic_width_check(func, "load_atomic", value_type)
-        lines = materialize_pointer(func, ptr_name, 9, module_symbols)
-        load_op = "ldar" if ordering in ("acquire", "seq_cst") else "ldr"
+        if indexed_kernel is not None and isinstance(data, int):
+            lines = materialize_scalar_value_indexed(
+                func, indexed_kernel, ptr_name, record.second, 9, module_symbols,
+                value_id=record.third,
+            )
+        else:
+            lines = materialize_pointer(func, ptr_name, 9, module_symbols)
+        load_op = (
+            "ldar" + _atomic_size_suffix(value_type)
+            if ordering in ("acquire", "seq_cst") else mem_load_op(value_type)
+        )
         lines.append(
             emitted_memory_instruction_line(
                 load_op,
@@ -462,18 +512,32 @@ def emit_memory_instruction_by_id(
         return lines
 
     if kind_id == PARSED_INSTRUCTION_KIND_STORE_ATOMIC:
-        value_type, value, _ptr_type, ptr_name, ordering = data
-        _atomic_width_check(
-            func,
-            "store_atomic",
-            value_type,
-            allowed=("i8", "i32", "i64"),
+        if indexed_kernel is not None and isinstance(data, int):
+            record: CompilerInt4 = indexed_kernel.instruction_record(data)
+            atomic: CompilerInt4 = indexed_kernel.instruction_record(data + 1)
+            value_type = indexed_kernel.type_desc(record.first)
+            ordering = indexed_kernel.call_texts[atomic.first]
+            ptr_name = indexed_kernel.value_name(record.fourth) if record.fourth >= 0 else indexed_kernel.call_texts[-record.fourth - 1]
+            value = indexed_kernel.value_name(record.second) if record.second >= 0 else indexed_kernel.call_texts[-record.second - 1]
+        else:
+            value_type, value, _ptr_type, ptr_name, ordering = data[:5]
+        _atomic_width_check(func, "store_atomic", value_type)
+        if indexed_kernel is not None and isinstance(data, int):
+            lines = materialize_scalar_value_indexed(
+                func, indexed_kernel, ptr_name, record.third, 9, module_symbols,
+                value_id=record.fourth,
+            )
+            lines.extend(materialize_scalar_value_indexed(
+                func, indexed_kernel, value, record.first, 10, module_symbols,
+                value_id=record.second,
+            ))
+        else:
+            lines = materialize_pointer(func, ptr_name, 9, module_symbols)
+            lines.extend(materialize_value(func, value, value_type, 10, module_symbols))
+        store_op = (
+            "stlr" + _atomic_size_suffix(value_type)
+            if ordering in ("release", "seq_cst") else mem_store_op(value_type)
         )
-        lines = materialize_pointer(func, ptr_name, 9, module_symbols)
-        lines.extend(materialize_value(func, value, value_type, 10, module_symbols))
-        store_op = "stlr" if ordering in ("release", "seq_cst") else "str"
-        if value_type.describe() == "i8":
-            store_op += "b"
         lines.append(
             emitted_memory_instruction_line(
                 store_op,
@@ -485,17 +549,7 @@ def emit_memory_instruction_by_id(
 
     if kind_id == PARSED_INSTRUCTION_KIND_ATOMICRMW:
         dest, op, _ptr_type, ptr_name, value_type, value, _ordering = data
-        if value_type.describe() == "i8" and op != "xchg":
-            raise BackendUnavailable(
-                f"self backend atomicrmw i8 supports only xchg (byte flags) in "
-                f"{func.name!r}: {op}"
-            )
-        _atomic_width_check(
-            func,
-            "atomicrmw",
-            value_type,
-            allowed=("i8", "i32", "i64"),
-        )
+        _atomic_width_check(func, "atomicrmw", value_type, allow_pointer=op == "xchg")
         # ldaxr/stlxr is acquire+release on every iteration — always at least
         # as strong as the requested ordering, and it is what LLVM itself
         # emits for atomicrmw at -O0 on AArch64 without LSE.
@@ -504,7 +558,7 @@ def emit_memory_instruction_by_id(
         r_val = reg_name(value_type, 10)
         r_old = reg_name(value_type, 11)
         r_new = reg_name(value_type, 12)
-        ex_suffix = "b" if value_type.describe() == "i8" else ""
+        ex_suffix = _atomic_size_suffix(value_type)
         label = "Lat_" + sanitize_label(func.name) + "_" + sanitize_label(dest)
         lines.append(f"{label}:")
         lines.append(f"  ldaxr{ex_suffix} {r_old}, [x9]")
@@ -537,12 +591,13 @@ def emit_memory_instruction_by_id(
         r_exp = reg_name(value_type, 10)
         r_des = reg_name(value_type, 11)
         r_old = reg_name(value_type, 12)
+        ex_suffix = _atomic_size_suffix(value_type)
         base = "Lat_" + sanitize_label(func.name) + "_" + sanitize_label(dest)
         lines.append(f"{base}_retry:")
-        lines.append(f"  ldaxr {r_old}, [x9]")
+        lines.append(f"  ldaxr{ex_suffix} {r_old}, [x9]")
         lines.append(emitted_compare_register_line(r_old, r_exp))
         lines.append(emitted_branch_line("b.ne", base + "_fail"))
-        lines.append(f"  stlxr w13, {r_des}, [x9]")
+        lines.append(f"  stlxr{ex_suffix} w13, {r_des}, [x9]")
         lines.append(emitted_branch_line("cbnz", base + "_retry", "w13"))
         lines.append(emitted_branch_line("b", base + "_done"))
         lines.append(f"{base}_fail:")
@@ -551,7 +606,7 @@ def emit_memory_instruction_by_id(
         lines.append(emitted_cset_line("w14", "eq"))
         if (indexed_dest_has_slot if indexed_kernel is not None else parsed_function_has_value_slot(func, dest)):
             lines.extend(emit_value_slot_base_address(func, dest, "x15"))
-            lines.append(emitted_memory_instruction_line("str", r_old, "x15"))
+            lines.append(emitted_memory_instruction_line(mem_store_op(value_type), r_old, "x15"))
             _flag_type, flag_offset = aggregate_member_info(pair_type, (1,))
             lines.append(
                 emitted_memory_instruction_line(
@@ -598,11 +653,22 @@ def emit_memory_instruction_by_id(
                 )
                 storage_matches = alloca_type_id == value_type_id
                 if alloca_type_id >= 0 and not storage_matches:
-                    alloca_type_header: CompilerInt4 = (
-                        indexed_kernel.type_header(alloca_type_id)
-                    )
+                    alloca_type_header_is_scalar = False
+                    if type(indexed_kernel) is IndexedFunctionKernel:
+                        alloca_type_header_scalar_id = alloca_type_id
+                        alloca_type_header_is_scalar = _scalar_window_is_complete(
+                            indexed_kernel.type_scalars, alloca_type_header_scalar_id, 12, 0
+                        )
+                        if alloca_type_header_is_scalar:
+                            alloca_type_header_scalar = indexed_kernel.type_scalars.get_unchecked(
+                                alloca_type_header_scalar_id * 12 + 0
+                            )
+                        else:
+                            alloca_type_header: CompilerInt4 = indexed_kernel.type_header(alloca_type_header_scalar_id)
+                    else:
+                        alloca_type_header: CompilerInt4 = indexed_kernel.type_header(alloca_type_id)
                     storage_matches = (
-                        alloca_type_header.first == TYPE_KIND_PTR
+                        (alloca_type_header_scalar if alloca_type_header_is_scalar else alloca_type_header.first) == TYPE_KIND_PTR
                         and value_type_header.first == TYPE_KIND_PTR
                     )
                 if storage_matches:

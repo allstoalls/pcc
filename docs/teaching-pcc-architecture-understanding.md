@@ -18,8 +18,8 @@ architecture-learning checklist.
 ### 1. North Star And System Shape
 
 - [ ] Point to the ordinary CLI entry in `pcc/pcc.py` and explain how it calls
-      `pcc/cli_core.py`.
-- [ ] Point to the bootstrap CLI entry in `pcc/cli_bootstrap.py` and explain
+      `pcc/driver/cli_core.py`.
+- [ ] Point to the bootstrap CLI entry in `pcc/driver/cli_bootstrap.py` and explain
       why it is separate from the ordinary CLI.
 - [ ] Explain pcc's north star in implementation terms: which code paths are
       allowed to use host CPython, which paths are strict no-libpython, and
@@ -50,15 +50,15 @@ architecture-learning checklist.
       dynamic Python features in its pcc1-native paths.
 - [ ] Explain where `--pytest` is handled in `cli_bootstrap.py`.
 - [ ] Explain why `pcc/api.py` is C-oriented and goes through `CEvaluator`,
-      while Python compilation goes through `pcc/py_frontend/pipeline.py`.
+      while Python compilation goes through `pcc/frontends/python/pipeline.py`.
 
 ### 3. C Frontend
 
 - [ ] Explain the C frontend pipeline: CLI/API -> project collection ->
       preprocess/parse -> C semantic lowering -> LLVM/object/executable.
 - [ ] Explain why the C frontend is the mature path.
-- [ ] Explain the role of `pcc/project.py`, `pcc/parse`, `pcc/codegen`, and
-      `pcc/evaluater/c_evaluator.py`.
+- [ ] Explain the role of `pcc/driver/project.py`, `pcc/frontends/c/parse`, `pcc/frontends/c/codegen`, and
+      `pcc/frontends/c/evaluator/c_evaluator.py`.
 - [ ] Explain common bug classes such as signedness metadata, translation-unit
       collection, struct/union layout, and fake-libc declarations.
 
@@ -69,8 +69,8 @@ architecture-learning checklist.
 - [ ] Explain why it is experimental and strict by default.
 - [ ] Explain why unsupported Python constructs should fail loudly in strict
       no-libpython mode.
-- [ ] Explain the role of `pcc/py_frontend/pipeline.py`,
-      `pcc/py_frontend/codegen/*_lowering.py`, and `pcc/parse/py_*`.
+- [ ] Explain the role of `pcc/frontends/python/pipeline.py`,
+      `pcc/frontends/python/codegen/*_lowering.py`, and `pcc/frontends/c/parse/py_*`.
 
 ### 5. Runtime And GC
 
@@ -87,7 +87,7 @@ architecture-learning checklist.
 - [ ] Explain why pcc2/pcc3 identity matters.
 - [ ] Explain why no-libpython self-backend evidence is stronger than host
       CPython evidence.
-- [ ] Explain how `pcc/cli_bootstrap.py`, `scripts/bootstrap.sh`, and
+- [ ] Explain how `pcc/driver/cli_bootstrap.py`, `scripts/bootstrap.py`, and
       `tests/python/test_pcc_bootstrap_full.py` relate.
 
 ### 7. Value Model And Ecosystem
@@ -129,12 +129,12 @@ For a normal `.py` input, the implementation path is:
 
 ```text
 pcc/pcc.py
-  -> pcc/cli_core.py:execute_cli(...)
+  -> pcc/driver/cli_core.py:execute_cli(...)
   -> _execute_python_path(...)
-  -> pcc/py_frontend/pipeline.py:compile_python(...)
-  -> pcc.parse.py_lift.parse_and_lift(...)
-  -> pcc.py_frontend.type_infer.infer_module(...)
-  -> pcc.py_frontend.codegen.layer1.L1CodeGen.generate(...)
+  -> pcc/frontends/python/pipeline.py:compile_python(...)
+  -> pcc.frontends.python.py_lift.parse_and_lift(...)
+  -> pcc.frontends.python.type_infer.infer_module(...)
+  -> pcc.frontends.python.codegen.layer1.L1CodeGen.generate(...)
   -> Python IR pass pipeline
   -> runtime archive selection
   -> LLVM/clang link path or in-repo self backend link path
@@ -150,13 +150,13 @@ Implementation path:
 
 ```text
 compile_python(...)
-  -> pcc.parse.py_lift.parse_and_lift(src, filename, module_name)
-  -> pcc.parse.py_parse.parse(src, filename)
+  -> pcc.frontends.python.py_lift.parse_and_lift(src, filename, module_name)
+  -> pcc.frontends.python.py_parse.parse(src, filename)
   -> Parser.parse_module(...)
   -> parser-private nodes such as _Module, _FuncDef, _Assign, _Call, _Name
   -> lift_module(...)
   -> _Lifter.lift_stmt(...) / _Lifter.lift_expr(...)
-  -> pcc.py_frontend.py_ast.Module / FuncDef / Assign / Call / Name / ...
+  -> pcc.frontends.python.py_ast.Module / FuncDef / Assign / Call / Name / ...
 ```
 
 Important detail: freshly lifted expressions start with `DynType`; the

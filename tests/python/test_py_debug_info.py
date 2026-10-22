@@ -86,7 +86,8 @@ def test_locations_survive_the_ir_pass_pipeline(tmp_path):
     assert text.count("!dbg") > 0
 
 
-@pytest.mark.skipif(shutil.which("clang") is None, reason="clang not installed")
+# clang not installed
+@pytest.mark.pcc_gate(probe=lambda: not (shutil.which("clang") is None))
 def test_llvm_accepts_the_metadata_and_emits_dwarf(tmp_path):
     """LLVM drops the whole compile unit on invalid metadata, with a warning.
 

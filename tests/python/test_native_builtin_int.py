@@ -6,7 +6,7 @@ import textwrap
 
 
 def test_dyn_int_add_result_marshal_does_not_emit_noop_sext(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     ll = tmp_path / "prog.ll"
@@ -54,7 +54,7 @@ def test_dyn_int_add_result_marshal_does_not_emit_noop_sext(tmp_path):
 
 
 def test_dyn_int_builtin_handles_tagged_int_without_str_path(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -93,7 +93,7 @@ def test_dyn_int_builtin_handles_tagged_int_without_str_path(tmp_path):
 
 
 def test_cpython_dyn_int_builtin_uses_cpython_number_protocol(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"

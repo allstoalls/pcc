@@ -1,11 +1,10 @@
-"""Contract for ``pcc.native_ir.mem2reg``: the owned, llvmlite-free mem2reg.
+"""Contract for ``pcc.ir.optimization.mem2reg``: the owned, llvmlite-free mem2reg.
 
-pcc has three mem2reg implementations and only one of them can ship.
-``pcc/ir_passes/mem2reg.py`` reads the function through ``llvmlite.binding``,
-so a self-hosted ``pcc1`` can never run it.  The textual subset in
-``pcc/py_frontend/compiled_default_passes.py`` needs no dominance information
+pcc's retired external mem2reg reference is preserved in
+``experiments/llvm_reference``. The textual subset in
+``pcc/frontends/python/compiled_default_passes.py`` needs no dominance information
 and therefore cannot promote anything that requires a phi node.
-``pcc/native_ir/mem2reg.py`` is the full algorithm -- dominance frontiers,
+``pcc/ir/optimization/mem2reg.py`` is the full algorithm -- dominance frontiers,
 phi placement, dominator-tree renaming -- over pcc's own IR model.
 
 These tests pin what the frontend actually gets.  Because the self backend is
@@ -13,8 +12,8 @@ the default, this is the pass every self compile and every runtime archive
 member goes through, so a regression here silently un-optimizes the runtime
 that the whole bootstrap executes.
 
-llvmlite appears only as an oracle: it verifies our output and supplies the
-reference counts.  The pass under test never imports it.
+The owned parser/verifier checks the output. Promotion counts and native
+execution check the branch and loop shapes independently.
 """
 
 from __future__ import annotations
@@ -23,13 +22,13 @@ import subprocess
 import textwrap
 from pathlib import Path
 
-import llvmlite.binding as llvm
 import pytest
+from tests.owned_ir_validation import verify_ir_text
 
-from pcc.native_ir import mem2reg as owned
-from pcc.native_ir.ir_mutator import MutableModule
-from pcc.py_frontend.compiled_owned_passes import run_owned_passes
-from pcc.py_frontend.pipeline import compile_python
+from pcc.ir.optimization import mem2reg as owned
+from pcc.ir.optimization.ir_mutator import MutableModule
+from pcc.frontends.python.compiled_owned_passes import run_owned_passes
+from pcc.frontends.python.pipeline import compile_python
 
 
 def _counts(text: str) -> tuple[int, int, int]:
@@ -41,8 +40,7 @@ def _counts(text: str) -> tuple[int, int, int]:
 
 
 def _verify(text: str) -> None:
-    module = llvm.parse_assembly(text)
-    module.verify()
+    verify_ir_text(text)
 
 
 def _run(source: str) -> tuple[str, bool]:
@@ -401,14 +399,11 @@ def test_a_variadic_signature_survives_the_owned_round_trip() -> None:
 
 
 @pytest.mark.parametrize("source", [_DIAMOND, _LOOP, _VARIADIC])
-def test_the_owned_pass_matches_llvms_own_mem2reg(source: str) -> None:
-    """LLVM is the oracle, not the owner: same slots promoted, same counts."""
+def test_the_owned_pass_promotes_every_non_escaping_scalar_slot(source: str) -> None:
     text = textwrap.dedent(source).lstrip()
     ours, _changed = owned.mem2reg_text(text)
-    from pcc.llvm_capi import binding as capi
-
-    theirs = capi.run_passes_on_ir(text, "function(mem2reg)")
-    assert _counts(ours) == _counts(theirs), (ours, theirs)
+    _verify(ours)
+    assert _counts(ours) == (0, 0, 0), ours
 
 
 def test_the_owned_dispatcher_uses_the_owned_kernel() -> None:

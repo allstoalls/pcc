@@ -39,7 +39,7 @@ def __getattr__(name: str):
 
         return array_core_report
     if name == "extension_abi_plan":
-        from pcc.capi_surface import extension_abi_plan
+        from pcc.frontends.c.capi_surface import extension_abi_plan
 
         return extension_abi_plan
     if name == "pip_dry_run_plan":

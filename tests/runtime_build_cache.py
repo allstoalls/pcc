@@ -20,16 +20,19 @@ import sys
 import tempfile
 from typing import Callable, ParamSpec, TypeVar
 
+from pcc.backend.precise_stackmap import precise_stackmap_tables_enabled
 from pcc.backend.self_backend_cache_identity import (
     self_backend_emitter_source_identity,
 )
-from pcc.py_frontend.pipeline_runtime_archive import target_id, write_target_stamp
+from pcc.frontends.python.pipeline_runtime_archive import target_id, write_target_stamp
 from pcc.tools.runtime_archive_provenance import (
     ProvenanceError,
     capi_inventory_path_for_archive,
+    codegen_checksum,
     manifest_path_for_archive,
     verify_runtime_archive_manifest,
 )
+from tests.native_provisioning import require_native_provisioning_allowed
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -55,7 +58,7 @@ _PCC_PY_ARCHIVE_ENV_KEYS = (
 )
 
 _REPO_ROOT = Path(__file__).absolute().parents[1]
-_RUNTIME_DIR = _REPO_ROOT / "pcc" / "py_runtime"
+_RUNTIME_DIR = _REPO_ROOT / "pcc" / "runtime"
 _PCC_RUNTIME_CACHE_MARKER_SCHEMA = "pcc.runtime-build-cache.v4"
 
 
@@ -249,6 +252,7 @@ def cache_runtime_build(
         )
         if key in cache:
             return cache[key]
+        require_native_provisioning_allowed()
         artifact = builder(tmp_path, *args, **kwargs)
         cache[key] = artifact
         return artifact
@@ -280,11 +284,11 @@ def _pcc_runtime_source_key(
     roots = (
         _RUNTIME_DIR,
         _REPO_ROOT / "pcc" / "backend",
-        _REPO_ROOT / "pcc" / "codegen",
-        _REPO_ROOT / "pcc" / "evaluater",
-        _REPO_ROOT / "pcc" / "llvm_capi",
-        _REPO_ROOT / "pcc" / "parse",
-        _REPO_ROOT / "pcc" / "py_frontend",
+        _REPO_ROOT / "pcc" / "frontends" / "c" / "codegen",
+        _REPO_ROOT / "pcc" / "frontends" / "c" / "evaluator",
+        _REPO_ROOT / "pcc" / "ir",
+        _REPO_ROOT / "pcc" / "frontends" / "c" / "parse",
+        _REPO_ROOT / "pcc" / "frontends" / "python",
         _REPO_ROOT / "pcc" / "tools",
     )
     selected_runtime = _selected_runtime_source(runtime_source)
@@ -324,6 +328,14 @@ def _pcc_runtime_cache_key(
         else _pcc_runtime_source_key(pcc_bin, runtime_source=runtime_source)
     )
     digest.update(source_key.encode("ascii"))
+    # Use the same compiler identity as runtime provenance admission. The
+    # partial source key alone omits provider/driver changes and can select an
+    # archive that the explicit-runtime fixture correctly rejects as stale.
+    digest.update(b"\0codegen\0")
+    digest.update(codegen_checksum().encode("ascii"))
+    # A table-enabled runtime emits different objects from the same compiler.
+    if precise_stackmap_tables_enabled():
+        digest.update(b"\0precise-stackmap-tables\0")
     return digest.hexdigest()[:24] + "-" + variant
 
 
@@ -344,7 +356,10 @@ def _cached_pcc_python_runtime(
 ) -> Path:
     selected_runtime = _selected_runtime_source(runtime_source)
     pcc_bin = _REPO_ROOT / ".venv" / "bin" / "pcc"
-    variant = "threaded-pcc-py" if threaded else "pcc-py"
+    # Every runtime is threaded: both public helpers share one build.
+    if not threaded:
+        raise ValueError("the single-thread runtime was removed")
+    variant = "pcc-py"
     key = _pcc_runtime_cache_key(pcc_bin, variant=variant, runtime_source=runtime_source)
     selected_cache = os.environ.get("PCC_TEST_RUNTIME_CACHE_ROOT", "")
     cache_root = (
@@ -375,6 +390,7 @@ def _cached_pcc_python_runtime(
                 key=key,
             ):
                 return runtime
+            require_native_provisioning_allowed()
             if runtime.exists():
                 shutil.rmtree(runtime)
             staging_root = Path(tempfile.mkdtemp(prefix=key + ".", dir=str(cache_root)))
@@ -406,7 +422,7 @@ def _cached_pcc_python_runtime(
                 f"PYTHON={sys.executable}",
                 f"PCC_REPO_ROOT={_REPO_ROOT}",
             ]
-            command.append(f"PCC_WITH_THREADS={1 if threaded else 0}")
+            command.append("PCC_WITH_THREADS=1")
             command.append("libpy_runtime_pcc_py.a")
             result = subprocess.run(
                 command,
@@ -449,9 +465,13 @@ def _cached_pcc_python_runtime(
 
 
 def cached_pcc_python_runtime(*, runtime_source: Path | None = None) -> Path:
-    """Build selected runtime sources with the current compiler into a private cache."""
+    """Build/reuse runtime sources with the compiler's effective thread mode."""
 
-    return _cached_pcc_python_runtime(threaded=False, runtime_source=runtime_source)
+    from pcc.frontends.python.owned_runtime_build import runtime_build_config
+
+    return _cached_pcc_python_runtime(
+        threaded=runtime_build_config()["threads"], runtime_source=runtime_source,
+    )
 
 
 def cached_threaded_pcc_python_runtime(*, runtime_source: Path | None = None) -> Path:

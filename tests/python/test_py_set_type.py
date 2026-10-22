@@ -4,9 +4,9 @@ import subprocess
 
 
 def test_set_bindings_infer_first_class_set_type() -> None:
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.py_ast import SetType
-    from pcc.py_frontend.type_infer import infer_module
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.py_ast import SetType
+    from pcc.frontends.python.type_infer import infer_module
 
     module = infer_module(
         parse_and_lift(
@@ -20,9 +20,9 @@ def test_set_bindings_infer_first_class_set_type() -> None:
 
 
 def test_set_annotations_preserve_mutability_and_element_shape() -> None:
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.py_ast import IntType, SetType, StrType, TupleType
-    from pcc.py_frontend.type_infer import infer_module
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.py_ast import IntType, SetType, StrType, TupleType
+    from pcc.frontends.python.type_infer import infer_module
 
     lifted = parse_and_lift(
         "mutable: set[int] = set([1])\n"
@@ -49,7 +49,7 @@ def test_set_annotations_preserve_mutability_and_element_shape() -> None:
 
 
 def test_cross_module_set_export_keeps_native_operator_lowering(tmp_path) -> None:
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     entry = tmp_path / "entry.py"
     provider = tmp_path / "provider.py"
@@ -82,7 +82,7 @@ def test_cross_module_set_export_keeps_native_operator_lowering(tmp_path) -> Non
 
 
 def test_generator_expression_iterates_first_class_set_type(tmp_path) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "set_generator.py"
     executable = tmp_path / "set_generator"
@@ -116,7 +116,7 @@ def test_generator_expression_iterates_first_class_set_type(tmp_path) -> None:
 
 
 def test_list_and_singleton_unpack_accept_first_class_set_type(tmp_path) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "set_consumers.py"
     executable = tmp_path / "set_consumers"
@@ -148,7 +148,7 @@ def test_list_and_singleton_unpack_accept_first_class_set_type(tmp_path) -> None
 
 
 def test_set_unpack_rejects_wrong_arity(tmp_path) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "set_unpack_arity.py"
     executable = tmp_path / "set_unpack_arity"
@@ -182,7 +182,7 @@ def test_set_unpack_rejects_wrong_arity(tmp_path) -> None:
 
 
 def test_dict_keys_view_union_with_set_is_set_operation(tmp_path) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "dict_keys_set_union.py"
     executable = tmp_path / "dict_keys_set_union"
@@ -213,7 +213,7 @@ def test_dict_keys_view_union_with_set_is_set_operation(tmp_path) -> None:
 
 
 def test_set_augassign_accepts_dynamic_set_and_preserves_identity(tmp_path) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "set_augassign_dynamic.py"
     executable = tmp_path / "set_augassign_dynamic"
@@ -257,8 +257,7 @@ def test_set_projection_has_no_syntax_side_table_workaround() -> None:
 
     source = (
         Path.cwd()
-        / "pcc"
-        / "py_frontend"
+        / "pcc" / "frontends" / "python"
         / "type_infer.py"
     ).read_text(encoding="utf-8")
 

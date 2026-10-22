@@ -11,7 +11,7 @@ import pytest
 
 from pcc import guarded_i64_dot, guarded_loop_counter, i64_buffer
 
-from pcc.py_frontend.guarded_loop_plan import (
+from pcc.frontends.python.guarded_loop_plan import (
     FAST_OPERATIONS,
     GUARD_ORDER,
     SCALAR_OPERATIONS,
@@ -52,7 +52,7 @@ def _candidate(**updates):
     return DotLoopCandidate.create(**values)
 
 
-def _cost(target="llvm", **updates):
+def _cost(target="self-aarch64-darwin", **updates):
     values = {
         "target": target,
         "vector_lanes": 2,
@@ -63,6 +63,14 @@ def _cost(target="llvm", **updates):
     }
     values.update(updates)
     return TargetCost.create(**values)
+
+
+def test_removed_llvm_loop_target_and_owner_are_rejected():
+    with pytest.raises(ValueError, match="unsupported loop-plan target"):
+        _cost("llvm")
+    plan = build_dot_loop_plan(_candidate(), _cost())
+    with pytest.raises(ValueError, match="unsupported guarded-loop owner"):
+        owner_lowering_contract("llvm", plan)
 
 
 def _observation(candidate, **updates):
@@ -160,13 +168,12 @@ def test_unproved_legality_or_profitability_rejects_without_fast_ops(
     assert reason in plan.rejection_reasons
     assert plan.guards == ()
     assert plan.fast_operations == ()
-    assert owner_lowering_contract("llvm", plan) == SCALAR_OPERATIONS
+    assert owner_lowering_contract("self-aarch64-darwin", plan) == SCALAR_OPERATIONS
 
 
-def test_llvm_and_both_self_targets_consume_identical_owner_neutral_order():
+def test_both_self_targets_consume_identical_owner_neutral_order():
     candidate = _candidate()
     plans = [
-        build_dot_loop_plan(candidate, _cost("llvm")),
         build_dot_loop_plan(candidate, _cost("self-aarch64-darwin")),
         build_dot_loop_plan(candidate, _cost("self-x86_64-linux")),
     ]
@@ -174,7 +181,7 @@ def test_llvm_and_both_self_targets_consume_identical_owner_neutral_order():
         owner_lowering_contract(plan.target_cost.target, plan) for plan in plans
     ]
 
-    assert lowered[0] == lowered[1] == lowered[2]
+    assert lowered[0] == lowered[1]
     assert lowered[0][: len(GUARD_ORDER)] == tuple(
         "guard." + kind for kind in GUARD_ORDER
     )
@@ -240,9 +247,9 @@ def _production_source() -> str:
 
 
 def _production_ir(source: str | None = None) -> str:
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen import layer1
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen import layer1
 
     text = source if source is not None else _production_source()
     ast_module = parse_and_lift(text, "<guarded-loop>", "guarded_loop_mod")
@@ -321,7 +328,7 @@ def test_production_lowering_emits_exact_owner_neutral_guard_fast_slow_shape():
 
 def test_production_guarded_loop_ir_is_accepted_by_both_self_target_owners():
     from pcc.backend.self_backend_dispatch import emit_self_asm
-    from pcc.py_frontend.pipeline_targets import ir_text_with_target_triple
+    from pcc.frontends.python.pipeline_targets import ir_text_with_target_triple
 
     ir_text = _production_ir()
     darwin_ir = ir_text_with_target_triple(ir_text, "arm64-apple-darwin")
@@ -334,12 +341,13 @@ def test_production_guarded_loop_ir_is_accepted_by_both_self_target_owners():
     assert "imul" in linux
 
 
-@pytest.mark.parametrize("backend", ("llvm", "self"))
+@pytest.mark.parametrize("backend", [pytest.param(None, id="default-self"), pytest.param("self", id="explicit-self")])
 def test_production_guard_hit_alias_and_overflow_match_host(tmp_path, backend):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
-    source = tmp_path / ("guarded_loop_" + backend + ".py")
-    executable = tmp_path / ("guarded_loop_" + backend)
+    label = backend or "default"
+    source = tmp_path / ("guarded_loop_" + label + ".py")
+    executable = tmp_path / ("guarded_loop_" + label)
     source.write_text(_production_source(), encoding="utf-8")
     compile_python(
         str(source),
@@ -374,9 +382,9 @@ def test_production_guard_hit_alias_and_overflow_match_host(tmp_path, backend):
     ),
 )
 def test_production_typed_buffer_discovery_rejects_unproved_shapes(source):
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.types import PyFrontendError
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.types import PyFrontendError
 
     ast_module = parse_and_lift(source, "<guarded-loop-bad>", "guarded_bad")
     with pytest.raises(PyFrontendError):
@@ -384,13 +392,13 @@ def test_production_typed_buffer_discovery_rejects_unproved_shapes(source):
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("backend", ("llvm", "self"))
+@pytest.mark.parametrize("backend", [pytest.param(None, id="default-self"), pytest.param("self", id="explicit-self")])
 def test_guarded_loop_pinned_multisample_speed_and_miss_budget(tmp_path, backend):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     repository = Path(__file__).resolve().parents[2]
     source = repository / "benchmarks" / "python" / "guarded_i64_dot.py"
-    executable = tmp_path / ("guarded_i64_dot_" + backend)
+    executable = tmp_path / ("guarded_i64_dot_" + (backend or "default"))
     compile_python(
         str(source),
         str(executable),

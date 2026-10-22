@@ -1,6 +1,6 @@
 """Layout contract between the C runtime structs and the pcc-Python ports.
 
-The pcc-Python runtime ports under ``pcc/py_runtime/py/`` read C objects
+The pcc-Python runtime ports under ``pcc/runtime/py/`` read C objects
 through raw byte offsets (``ptr_add``/``load_i64`` — 140+ sites, e.g. the
 layout table in ``py_obj_ops_compare.py``'s docstring). Nothing ties those
 hand-written offsets to the C structs in ``py_internal.h``/``py_runtime.h``,
@@ -8,7 +8,7 @@ so a C-side field insertion silently corrupts every port reader.
 
 This test compiles a C probe with the real headers and asserts
 ``offsetof``/``sizeof`` for every struct the ports mirror. If it fails, DO
-NOT just update the numbers here: every ``pcc/py_runtime/py/`` reader of the
+NOT just update the numbers here: every ``pcc/runtime/py/`` reader of the
 changed struct is now wrong too — fix them together.
 """
 from __future__ import annotations
@@ -20,15 +20,22 @@ import textwrap
 import pytest
 
 from pcc1_gate import repo_root
+from pcc.runtime.py.py_abi_constants import (
+    PYCLASSMETHOD_FUNC_OFFSET,
+    PYCLASSMETHOD_NAME_HASH_OFFSET,
+    PYCLASSMETHOD_NAME_LENGTH_OFFSET,
+    PYCLASSMETHOD_NAME_OFFSET,
+    PYCLASSMETHOD_SIZE,
+)
 
 REPO = repo_root()
-RUNTIME_DIR = REPO / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO / "pcc" / "runtime"
 
 _CC = shutil.which("cc")
 _CC_MISSING = None if _CC else "system cc is required to probe C struct layouts"
 
 # The port-side contract: (struct, field) -> byte offset, and struct -> size.
-# Sources: pcc/py_runtime/py/py_obj_ops_compare.py docstring layout table,
+# Sources: pcc/runtime/py/py_obj_ops_compare.py docstring layout table,
 # AGENTS.md "PyClassObject layout", and the header comments in py_internal.h.
 EXPECTED_OFFSETS = {
     ("PyObjectHeader", "refcount"): 0,
@@ -76,8 +83,12 @@ EXPECTED_OFFSETS = {
     ("PyClassObject", "del_method"): 96,
     ("PyClassObject", "attrs"): 104,
     ("PyClassObject", "metaclass"): 112,
-    ("PyClassMethod", "name"): 0,
-    ("PyClassMethod", "func"): 8,
+    # py_class.py uses these shared constants for method-table traversal and
+    # insertion, including the hash/length metadata added to each record.
+    ("PyClassMethod", "name"): PYCLASSMETHOD_NAME_OFFSET,
+    ("PyClassMethod", "func"): PYCLASSMETHOD_FUNC_OFFSET,
+    ("PyClassMethod", "name_hash"): PYCLASSMETHOD_NAME_HASH_OFFSET,
+    ("PyClassMethod", "name_length"): PYCLASSMETHOD_NAME_LENGTH_OFFSET,
     ("PyInstanceObject", "cls"): 16,
     ("PyInstanceObject", "fields"): 24,
     ("PyPropertyObject", "fget"): 16,
@@ -90,7 +101,7 @@ EXPECTED_SIZES = {
     "PyObjectHeader": 16,
     "DictEntry": 24,
     "PyClassObject": 120,
-    "PyClassMethod": 16,
+    "PyClassMethod": PYCLASSMETHOD_SIZE,
     "PyInstanceObject": 24,
     "PyPropertyObject": 40,
     "PyClassMethodObject": 24,
@@ -163,7 +174,7 @@ def test_c_struct_layouts_match_pcc_python_port_contract(tmp_path):
             mismatches.append(f"sizeof({struct}) = {got}, ports assume {expected}")
     assert not mismatches, (
         "C runtime struct layout drifted from the pcc-Python port contract.\n"
-        "Every pcc/py_runtime/py/ reader of these structs uses hand-written\n"
+        "Every pcc/runtime/py/ reader of these structs uses hand-written\n"
         "byte offsets and is now silently wrong — fix the ports (and this\n"
         "table) together, never this table alone:\n  "
         + "\n  ".join(mismatches)

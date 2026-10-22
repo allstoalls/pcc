@@ -1,0 +1,113 @@
+{
+  "backend_optimization": false,
+  "c_frontend": "ordinary CEvaluator, one translation unit, default jobs=1, internal preprocessor, normal C frontend passes",
+  "c_ir_sha256": "d6d704c025f068bf2e6b039dd4a023f788e9900b2c3be7a8ffdb5bd45c7f3bcb",
+  "codegen_checksum": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+  "collection_calls": [
+    {
+      "abi": "i64(i32)",
+      "callee": "pcc_gc_collect",
+      "owner": "main",
+      "reason_ir": "negtmp.178"
+    },
+    {
+      "abi": "i64(i32)",
+      "callee": "pcc_gc_collect",
+      "owner": "main",
+      "reason_ir": "negtmp.336"
+    }
+  ],
+  "compile_result_sha256": "828a82efdae2307a9285b044519b49470040df84e4165982382c3f2a4c451be5",
+  "compiler_source_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "compiler_source_relation": "Unchanged old full compiler inventory and imports; external test postimage separately bound below",
+  "emitter": "owned self backend and ELF linker",
+  "executable_bytes": 25676384,
+  "executable_sha256": "e5d2bb22f948e48ab91ddc4eb5e32ad1bb09b36cfcd2e7a20db7b25bfd97e3fa",
+  "full_source_before_after": "PASS",
+  "generated_probes": [
+    {
+      "ir_bytes": 62023,
+      "ir_sha256": "e482c135acd2824dd9caf83a93774c21a9e27da967d18593fe7c62e62585bc01",
+      "owned_verification": "PASS",
+      "reporter": null,
+      "status_sites": 2,
+      "symbol": "baseline_probe"
+    },
+    {
+      "ir_bytes": 61981,
+      "ir_sha256": "7276380482f6217ea0e30e524f97613b645cd73944d5425884f999de25d4d5df",
+      "owned_verification": "PASS",
+      "reporter": "pcc_slot_call_status_report.3",
+      "status_sites": 2,
+      "symbol": "candidate_probe"
+    }
+  ],
+  "guard": {
+    "cleanup": "CLEAN",
+    "continuous_minimum_free_bytes": 4294967296,
+    "denied_audit_events": 0,
+    "echild": true,
+    "elapsed_seconds": 9.04598401399926,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "outer_timeout_seconds": 300.0,
+    "peak_sampled_root_rss_bytes": 126382080,
+    "pinned_ctypes_initialization_events": 3,
+    "returncode": 0,
+    "root_reaped": true,
+    "status": "COMPLETE"
+  },
+  "harness_sha256": "932863cbaee473488ef775e833b4256b384b24d5797236162d444d16f327033c",
+  "native_execution": "UNRUN for this corrected ELF",
+  "no_direct_raw_collection_calls": "PASS",
+  "owner_edge_successor_patch_sha256": "43e74045c8305a16caa0c88f4404476f3ce752a5cd8039250534b274212fd4ac",
+  "packet_manifest_sha256": "1f088792d2be243b2ea382316410937a7791e7b9b79f0ba9972edb2d0bd7fcee",
+  "preservation_commit": "cd623ea70dba28bb5732a51218997d93bd5d5343",
+  "preserved_predecessor": {
+    "gc0": "C assertions, exit and output succeeded; strict actual-collector observation FAIL with zero collect events",
+    "gc1": "UNRUN",
+    "qualification_sha256": "5d050a32eef1d2ea2ed47e8783d86829830502285c70338d91347de80e4f8182"
+  },
+  "production_base_commit": "818187ba7dfff54df589b93bc10594f87786fe22",
+  "qualification_sha256": "300c910626989fca921b9907335d84b6a81215f5275a68b96a583d1b8d7f7b76",
+  "reporting_ir_relation": "Both generated probe IR hashes are identical to the preceding raw-collector fixture",
+  "runtime_archive_sidecars_postseal": "PASS",
+  "runtime_config": {
+    "members": 191,
+    "refcount": "atomic",
+    "threads": true
+  },
+  "runtime_selections": [
+    {
+      "archive_sha256": "a6645f903e03f6766ecc7466b76f2993318582d287a393831aa5522158421915",
+      "same_sealed_runtime": true
+    }
+  ],
+  "runtime_sha256": "a6645f903e03f6766ecc7466b76f2993318582d287a393831aa5522158421915",
+  "schema": "pcc.cold_slot_dispatch_c_compile_public_qualification.v1",
+  "scope": "Compile-only, ordinary CEvaluator with both reporting probes and explicit two-call external test-only dispatch successor; no native execution in this receipt",
+  "source_patch_sha256": "4dd5955455944d3b905fd7f5998ac874fd0b815c22d45af13092f9c582259136",
+  "status": "PASS",
+  "target": "x86_64-unknown-linux-gnu",
+  "test_only_successor": {
+    "compiler_inventory_relation": "unchanged old full compiler source inventory; external test-only postimage is separately bound, not substituted into it",
+    "patch_sha256": "1cee8adeb4bb544330b6aa2e30b2d585396519914cf75fad40c61156354004a3",
+    "path": "tests/python/test_slot_call_status_reporting_native.py",
+    "postimage_sha256": "8348c58193351f4d025e3824d596d0a7c38500ca0ce8abf188e3d8382029ab90",
+    "preimage_sha256": "f3915510ed44ed2c5e5f8a73f88b22c004ec11a439bd1c5705b3f6ece420fe65",
+    "public_collection_reason": -1,
+    "replacements": 2
+  },
+  "unrun": [
+    "GC0 native successor",
+    "GC1 native successor",
+    "GC2",
+    "GC3",
+    "GC4",
+    "pcc1",
+    "macOS",
+    "full async/gateway",
+    "full Stage1",
+    "broad native regressions"
+  ]
+}

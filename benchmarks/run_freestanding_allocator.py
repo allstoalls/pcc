@@ -25,7 +25,7 @@ from typing import Any, Iterable
 REPO_ROOT = Path(__file__).absolute().parents[1]
 HARNESS_SOURCE = REPO_ROOT / "benchmarks" / "c" / "freestanding_allocator_churn.c"
 ALLOCATOR_SOURCE = (
-    REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_allocator.py"
+    REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_allocator.py"
 )
 SCHEMA_VERSION = 1
 DEFAULT_ROUNDS = 200_000
@@ -117,7 +117,7 @@ def _run_checked(
 
 def _build_artifacts(cache_root: Path, *, timeout: int) -> tuple[Path, Path, str]:
     from pcc.backend.self_backend_dispatch import emit_self_asm
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     digest = source_digest()
     build_root = cache_root / digest[:20]

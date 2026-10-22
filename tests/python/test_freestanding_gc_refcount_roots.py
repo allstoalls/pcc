@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import (
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import (
     FREESTANDING_GC_RUNTIME_GLOBALS,
     RUNTIME_SIGNATURES,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_refcount_roots.py"
 MANAGED_SOURCE = RUNTIME_DIR / "py" / "py_gc_backend.py"
 MARK_CYCLE_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_common_mark_cycle.py"
@@ -150,10 +150,10 @@ int main(void) {
 
 
 def test_archive_owns_refcount_scan_and_executes_external_root_semantics(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ):
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -185,7 +185,7 @@ def test_archive_owns_refcount_scan_and_executes_external_root_semantics(
             f"-I{RUNTIME_DIR / 'include'}",
             f"-I{RUNTIME_DIR / 'src'}",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-pthread",
             "-o",
             str(executable),

@@ -7,15 +7,15 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import (
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import (
     FREESTANDING_GC_CROSS_OBJECT_SIGNATURES,
     FREESTANDING_GC_RUNTIME_GLOBALS,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = (
     RUNTIME_DIR / "py" / "freestanding_gc_generational_oldification.py"
 )
@@ -28,6 +28,7 @@ OWNED_SYMBOLS = {
     "pcc_gc_generational_oldify_supported_tag",
 }
 RAW_FUNCTION_IMPORTS = {
+    "pcc_gc_object_is_address_pinned",
     "free",
     "malloc",
     "memmove",
@@ -217,10 +218,10 @@ def test_generational_cpy_handle_oldification_moves_one_foreign_owner() -> None:
 
 
 def test_production_archive_has_one_generational_oldification_owner(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,

@@ -1,0 +1,206 @@
+{
+  "driver_sha256": "638cf97ca423d737dd1f9cef5d912c029eb9a4ac6183029eb37edd34eb6f2806",
+  "evidence_sha256": {
+    "bootstrap_result": "6d5c7dc6a120b619db1ee3a80b40e4779668d22ce69d96d78aaae10a398a9860",
+    "current_independent_source_after": "0d990a6e7f274158d2ffa9557b869fd77bce5b5ec91ab2992ae2e027d73754a0",
+    "guard_result": "b98daebbc8e00180b12c51711a5c718bd91cfafe67f4bfc7b03da379b309e7c2",
+    "historical_independent_source_after": "4dc3fff61ff6cd3dadc0fce6029f7054299c7682f52742ad94ae5cccbb959ead",
+    "payload_result": "3282c85dd4a92245b230aba90680bab9471af410cb2fa698dd8e2b9e28b06864",
+    "qualification": "382bd20f5b3c8ba5d6f3f82db1c0602e81b645c0c89ec600c38e1763efb8f63f",
+    "wrapper_result": "117c264c8e532f450f6f77c09c4d9276f178f45144fb9d24fb5949c1269db02e"
+  },
+  "execution": {
+    "calls_to_public_encode_assembly_object": 1,
+    "coarse_calls": {
+      "coff_assembly_inclusive_ns": 1,
+      "coff_serialization_ns": 1,
+      "layout_ns": 1,
+      "parse_ns": 1,
+      "seh_text_rewrite_ns": 1,
+      "shared_assembler_inclusive_ns": 1,
+      "unwind_metadata_ns": 1
+    },
+    "counts": {
+      "final_instruction_calls": 1216251,
+      "layout_cache_admitted_shape": 37705,
+      "layout_no_relocation_control_flow": 0,
+      "layout_other_non_admitted_mnemonic": 274,
+      "layout_relocation_bearing": 74460,
+      "layout_size_cache_misses": 112439,
+      "unexpected_phase_calls": 0
+    },
+    "disjoint_durations_ns": {
+      "coff_adaptation_and_other_ns": 216275157,
+      "coff_serialization_ns": 68005406,
+      "entry_other_ns": 14397985,
+      "layout_ns": 2412865261,
+      "parse_ns": 4539359892,
+      "seh_text_rewrite_ns": 502971291,
+      "shared_payload_symbols_relocations_and_teardown_ns": 5043625984,
+      "unwind_metadata_ns": 5885245
+    },
+    "durations_ns": {
+      "coff_adaptation_and_other_ns": 216275157,
+      "coff_assembly_inclusive_ns": 12720982830,
+      "coff_serialization_ns": 68005406,
+      "complete_object_entry_ns": 12803386221,
+      "entry_other_ns": 14397985,
+      "layout_ns": 2412865261,
+      "parse_ns": 4539359892,
+      "seh_text_rewrite_ns": 502971291,
+      "shared_assembler_inclusive_ns": 11995851137,
+      "shared_payload_symbols_relocations_and_teardown_ns": 5043625984,
+      "unwind_metadata_ns": 5885245
+    },
+    "observers_restored": true,
+    "predeclared_thresholds": {
+      "minimum_layout_share_percent": 25,
+      "minimum_opportunity_per_final_instruction_percent": 10
+    },
+    "screen": {
+      "automatic_implementation_or_more_runs": false,
+      "counts_are_not_time_weights": true,
+      "coverage_threshold_met": false,
+      "decision": "HOLD_INSUFFICIENT_LAYOUT_OR_MISS_COVERAGE",
+      "layout_share_percent": 18.845524296083795,
+      "layout_threshold_met": false,
+      "observer_overhead_not_subtracted": true,
+      "selected_opportunity_per_final_instruction_percent": 6.122091574847626,
+      "selected_opportunity_share_of_size_misses_percent": 66.22257401791194,
+      "size_misses_per_final_instruction_percent": 9.244720045451144
+    },
+    "timing_limitations": [
+      "These elapsed times include observer overhead. No overhead correction or speedup claim is made.",
+      "Shared assembler residual includes payload emission, symbols, relocations, validation and teardown; it is not pure final instruction encoding.",
+      "Buckets count layout size-cache misses, not machine-byte-cache misses or CPU cost.",
+      "No current frontend frequency, whole-Stage1 timing or representative workload claim is made."
+    ]
+  },
+  "input": {
+    "assembly": {
+      "bytes": 76565862,
+      "sha256": "8ad079c23208ef05f5385e975d45421ac5c50f882a14b68d942cf9134567f919"
+    },
+    "historical_cfg": {
+      "blocks": 48161,
+      "functions": 231,
+      "instructions": 219614
+    },
+    "no_input_regeneration": true,
+    "reference_object": {
+      "bytes": 12228800,
+      "name": "module.obj",
+      "sha256": "4d910a121adc58f3f57f9d5041abcb406ff9ad3c6a5748581c6671d6cdcfcb6a"
+    },
+    "reference_qualification_sha256": "4864338559a67bcd79b003832fbbad6983bf35160ded8741253c58f5d9f1ab9b",
+    "reference_result_sha256": "6afb6237c6075a64b54c7076e53cfb1fea7e3aff220282586a704293fe927ef4",
+    "scope": "Sealed real c_ast Windows assembly from the historical pre-class-outline cold-slot compiler; assembler/encoder identical to current, no current frontend frequency or whole-Stage1 representativeness claim.",
+    "target": "x86_64-pc-windows-msvc"
+  },
+  "measurement_closed": true,
+  "more_runs_authorized": false,
+  "object_contract": {
+    "bytes": 12228800,
+    "complete_byte_equality": true,
+    "sections": [
+      {
+        "align": 8,
+        "bytes": 9912,
+        "flags": 3221225536,
+        "name": ".data",
+        "relocations": 0,
+        "sha256": "cfc19e15ae589cf65195e54c051190b91a1b189436dfab74e81325164d6f751e"
+      },
+      {
+        "align": 8,
+        "bytes": 17010,
+        "flags": 1073741888,
+        "name": ".rodata",
+        "relocations": 1,
+        "sha256": "fd7af7b32b941552c9903475694fd329cf2121a0a81558c4773afe25acedcd39"
+      },
+      {
+        "align": 16,
+        "bytes": 6362931,
+        "flags": 1610612768,
+        "name": ".text",
+        "relocations": 150410,
+        "sha256": "79395b20a186f26ea967635a7677d1c148f1044c77a0cc67ee1a7545a95d7ee9"
+      },
+      {
+        "align": 8,
+        "bytes": 4135736,
+        "flags": 1073741888,
+        "name": ".pcc_stackmaps",
+        "relocations": 231,
+        "sha256": "907bebc614c8e81349d580506be440bf639811c0f2712cef35aceff3e3b6391a"
+      },
+      {
+        "align": 1,
+        "bytes": 0,
+        "flags": 1073741888,
+        "name": ".note.GNU-stack",
+        "relocations": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "align": 4,
+        "bytes": 7384,
+        "flags": 1073741888,
+        "name": ".xdata",
+        "relocations": 0,
+        "sha256": "dcff9512a8f8bc6f8bc5ba950118f90d2725c6afd9b629919cb9e07627798b31"
+      },
+      {
+        "align": 4,
+        "bytes": 2772,
+        "flags": 1073741888,
+        "name": ".pdata",
+        "relocations": 693,
+        "sha256": "452db5fab03b1995817dd52a1a64bf40b0ac9c9ac4880b715445f72ce4ce45f5"
+      }
+    ],
+    "sha256": "4d910a121adc58f3f57f9d5041abcb406ff9ad3c6a5748581c6671d6cdcfcb6a",
+    "symbols": 3578
+  },
+  "packet_manifest_sha256": "5d8117659cdeb504ddb87adc8a2fc9aac5eb07739e91f007f2d3c98a81ee47ad",
+  "preserved_driver_commit": "e48751257f071de8bfd0152e1ee5c643b6d140e6",
+  "qualification_date_utc": "2026-10-10",
+  "resource_and_cleanup": {
+    "cleanup": "CLEAN; exact root reaped; ECHILD; no active handles",
+    "continuous_free_reserve_bytes": 4294967296,
+    "denied_audit_events": 0,
+    "exclusive_shared_lock_released": true,
+    "guard_elapsed_seconds": 20.87824365599954,
+    "guard_status": "COMPLETE",
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "max_output_growth_bytes": 536870912,
+    "outer_seconds": 300,
+    "process_lifetime_rss_high_water_bytes": 502521856,
+    "returncode": 0,
+    "rss_scope": "process lifetime including imports, observation and post-timing decode; not phase RSS",
+    "sampled_root_rss_peak_bytes": 502521856
+  },
+  "schema": "pcc.x86_assembler_observation_public_qualification.v1",
+  "scope_limits": [
+    "One Linux-host CPython replay of retained pre-class-outline Windows assembly.",
+    "No sizing optimization is implemented or admitted by this result. Both fixed opportunity thresholds failed; the observation is closed.",
+    "No frontend compile, runtime build, emitted native execution, pcc1, Windows-device or full Stage1 qualification was performed."
+  ],
+  "screen_decision": "HOLD_INSUFFICIENT_LAYOUT_OR_MISS_COVERAGE",
+  "source": {
+    "assembler_encoder_and_elf_byte_identical_to_historical": true,
+    "coff_and_target_dispatch_relation": "Current files add optional timing plumbing; the ordinary phase_timing=None path is used.",
+    "full_checkout_claim": false,
+    "historical_codegen_checksum": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+    "historical_source_manifest_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+    "pcc_tree": "ee02ba6bf0d79e9706c1791aa650093f5f91c338",
+    "production_commit": "d2334624197b5fc14aaca93bb916683fb1afcb79",
+    "relation": "The complete retained pcc subtree equals d233 production. Its unrelated retained snapshot files differ from the full CI checkout; the snapshot checksum is not the CI checkout checksum.",
+    "retained_snapshot_codegen_checksum": "e0145952375a080377be0084bcb6b91ce825102c213b5453473c3896d2fac36c",
+    "retained_source_manifest_sha256": "568c44d837939cde5ab4da2c2f0115ab30f978716bc423a40e07d9cf2bdc0185"
+  },
+  "source_and_input_postseals": "PASS, including independent complete current/historical source inventories after guard completion",
+  "status": "PASS: observation contracts and complete object equality"
+}

@@ -10,7 +10,7 @@ from pcc1_gate import find_current_pcc1, skip_or_fail_no_current_pcc1
 
 
 _UNSUPPORTED_SOURCE = """\
-from pcc.llvm_capi.compat import ir
+from pcc.ir.compat import ir
 
 
 def f():

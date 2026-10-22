@@ -658,11 +658,11 @@ def build_metal_executor_bridge_artifacts(
         )
 
     if compiler is None:
-        from pcc.gpu_metal import compile_metal_runtime_bridge
+        from pcc.backend.metal import compile_metal_runtime_bridge
 
         compiler = compile_metal_runtime_bridge
 
-    from pcc.gpu_metal import MetalCompileError, MetalToolchainUnavailable
+    from pcc.backend.metal import MetalCompileError, MetalToolchainUnavailable
 
     try:
         compiled_path = compiler(

@@ -1,0 +1,85 @@
+{
+  "base_full_source_relation": "Retained cold-slot compiler snapshot; complete pcc tree matches published02b9. Full source is not a02b9 checkout: older unrelated native test f391 and docs/bootstrap remain.",
+  "base_pcc_git_tree": "d234174fbac80575ea822f6100f65fe914dd4498",
+  "by_file": {
+    "tests/python/test_managed_phi_liveness.py": 18,
+    "tests/python/test_native_liveness_worklist.py": 33
+  },
+  "candidate_pcc_git_tree": "c291620d0277e22b7dffb731ba38a20a8ea59283",
+  "codegen_checksum": "71a7d53a6e959bd2e6664fc7544e62967ac4517372f49b535c245434a0381216",
+  "counts": {
+    "collected": 51,
+    "errors": 0,
+    "failed": 0,
+    "passed": 51,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  },
+  "denied_audit_events": 0,
+  "deselected": [],
+  "full_base_and_old_failure_after": "PASS: complete protected baseline and original failed source inventories unchanged",
+  "guard": {
+    "cleanup": "CLEAN",
+    "continuous_minimum_free_bytes": 4294967296,
+    "echild": true,
+    "elapsed_seconds": 5.126658639001107,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "outer_timeout_seconds": 300,
+    "peak_sampled_root_rss_bytes": 92233728,
+    "returncode": 0,
+    "root_reaped": true,
+    "status": "COMPLETE"
+  },
+  "guard_cleanup": "CLEAN/reaped/ECHILD",
+  "guard_sha256": "8d595bd09d61b4028fba288cd152d4689dc108d2c92f53fbafcfa116826b6d18",
+  "imported_source_closure": "PASS",
+  "limits": [
+    "Host list-storage tests, not native raw-memory/realloc execution",
+    "append2 failure injection occurs at method entry, not an actual realloc failure",
+    "Synthetic row-count savings establish no real workload or Stage1 speedup"
+  ],
+  "lock_released": true,
+  "old_failure_qualification_sha256": "1276dbddd29065f23ddee07b19cec71f02593ce70824ed53b10dc13be8199d0b",
+  "original_failure": {
+    "commit": "2e17768d069bb9a8a48cc0e3384636054c5e7c0a",
+    "coverage_correction": "Original cold-tail cases did not establish unreachable-block coverage because parsing removed the blocks; the failing precondition stopped before the malformed helper invocation.",
+    "failed": 1,
+    "passed": 27,
+    "preserved_as_failure": true,
+    "result_sha256": "5a24d9dacb2357fb53c33c9e7a24646e41b8e004a436aa295efab175d7b9330a",
+    "selected_unrun": 23
+  },
+  "original_test_manifest_sha256": "c87fc5bb8878bd48a6909be7766c145cf5f0f0d1ff48c83d214b7252827b3763",
+  "preservation_commit": "04f541f96dabf5fd08e576c87c17a0abee4df0e7",
+  "production_application": "UNAPPLIED",
+  "production_artifact_commit": "f6e7fffc35e6542d30a5eebb96dcbd08880e3352",
+  "production_manifest_sha256": "8d8de3cd946c9fdc7013e7b29f31bfb76f29951254af2d257b89259da235a978",
+  "qualification_sha256": "dc5283621a614d04c8d34b5f3c66808f36d8418fc44c7584d12198103ff6566d",
+  "result_sha256": "db0c269ded249f02248d9d9fe05f78bd35c3510af62db1828aac60a3a2087d3c",
+  "same_input_retries": 0,
+  "schema": "pcc.arm_liveness_public_host_qualification.v2",
+  "scope": "Host-only liveness/control helpers and independent set-oracle comparisons; no program/runtime build, linking or emitted native execution",
+  "selected_unrun": 0,
+  "source_after": {
+    "bytes": 390484266,
+    "files": 30025,
+    "status": "PASS"
+  },
+  "source_before": {
+    "bytes": 390484266,
+    "files": 30025,
+    "status": "PASS"
+  },
+  "source_manifest_sha256": "6e6b6d034804c0ebeb4c48fbfc11df2614043ea5150c816cd8b7d014f2fe9d2b",
+  "status": "PASS",
+  "test_correction": "The normal parser first retains a fully reachable valid block domain; target-only detachment then establishes the exact unreachable complement without replacing parser/solver methods. Original error/lifetime/state assertions retained. Production unchanged.",
+  "test_successor_manifest_sha256": "a6d4373ea96fda658d5509823882300defb9feb2ad0a98aeac7011a2b848d0c5",
+  "unrun": [
+    "Real ARM module mechanism/output comparison",
+    "Native compiler/arena error-path execution",
+    "Whole-pipeline timing",
+    "Full Stage1/Stage2"
+  ]
+}

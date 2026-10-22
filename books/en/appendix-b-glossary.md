@@ -11,7 +11,7 @@ appear verbatim throughout.
 | lowering | Translating a higher-level construct into lower-level IR. Most pcc bugs are lowering bugs, not parser bugs. |
 | translation unit (TU) | One compiled C source; directory mode merges many into one TU by default. |
 | constant folding | Treated as a semantic subsystem, not a mere optimization (playbook §12). |
-| usual arithmetic conversions | The C-standard conversion rules; mirrored by `_usual_arithmetic_conversion` in [pcc/codegen/c_codegen.py](../../pcc/codegen/c_codegen.py). |
+| usual arithmetic conversions | The C-standard conversion rules; mirrored by `_usual_arithmetic_conversion` in [pcc/frontends/c/codegen/c_codegen.py](../../pcc/frontends/c/codegen/c_codegen.py). |
 | signedness | A property tracked separately from the LLVM `i32` bit pattern; losing it flips `udiv`→`sdiv` etc. |
 | oracle | A known-good reference implementation compared against from identical input (native cc for C, CPython for Python, llvmlite for `llvm_capi`). |
 | parity | Two implementations producing identical output for the same input. |

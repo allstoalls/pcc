@@ -817,7 +817,7 @@ Decision to record explicitly:
 Files likely involved:
 
 - `pcc/pcc.py`
-- `pcc/evaluater/c_evaluator.py`
+- `pcc/frontends/c/evaluator/c_evaluator.py`
 - new `pcc/backend/`
 
 Landed slice:
@@ -830,7 +830,7 @@ Landed slice:
 
 Files likely involved:
 
-- `pcc/evaluater/c_evaluator.py`
+- `pcc/frontends/c/evaluator/c_evaluator.py`
 - cache tests in `tests/`
 
 Landed slice:

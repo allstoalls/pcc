@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def test_module_scope_if_block_def_compiles_without_libpython(tmp_path):
@@ -25,7 +25,7 @@ def test_module_scope_if_block_def_compiles_without_libpython(tmp_path):
     compile_python(
         str(src),
         str(exe),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )

@@ -1,3 +1,4 @@
+import platform
 import os
 import re
 import subprocess
@@ -126,6 +127,7 @@ from pcc.backend.self_backend_dispatch import (
     emit_self_asm,
     self_backend_target_identity,
 )
+import pcc.backend.self_backend_x86_64_linux as self_backend_x86_64_linux
 from pcc.backend.self_backend_x86_64_linux import emit_x86_64_linux_asm
 from pcc.tools.text_filecheck import check_text
 from pcc.backend.self_backend_emit import emit_function_blocks
@@ -163,8 +165,8 @@ from pcc.backend.self_backend_target_match import (
 from pcc.backend.self_backend_targets import (
     is_supported_self_backend_target_triple,
 )
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.project import TranslationUnit
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.driver.project import TranslationUnit
 
 
 def parse_self_backend_module(ir_text: str):
@@ -179,6 +181,19 @@ def parse_self_backend_module(ir_text: str):
 def _parsed_terminator(func: ParsedFunction, block: ParsedBlock) -> ParsedInstr:
     kernel = get_indexed_function_kernel(func)
     return kernel.diagnostic_terminator(kernel.block_id(block.name))
+
+
+def _x86_selection_asm(ir_text: str) -> str:
+    """The x86-64 instruction selector's own text, before the frame-register,
+    jump-threading and register-copy passes (tested in
+    test_x86_64_frame_registers, test_x86_jump_threading and
+    test_x86_64_register_copies)."""
+    saved = self_backend_x86_64_linux._POST_SELECTION_PASSES
+    self_backend_x86_64_linux._POST_SELECTION_PASSES = False
+    try:
+        return emit_x86_64_linux_asm(ir_text)
+    finally:
+        self_backend_x86_64_linux._POST_SELECTION_PASSES = saved
 
 
 def _parsed_phi(
@@ -451,13 +466,14 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert ".globl add" in asm_text
     assert ".globl main" in asm_text
     assert "add r10d, r11d" in asm_text
     assert "mov edi, 40" in asm_text
     assert "mov esi, 2" in asm_text
-    assert "xor eax, eax" in asm_text
+    # SysV sets %al only before variadic calls (test_x86_sysv_call_al).
+    assert "xor eax, eax" not in asm_text.split("main:", 1)[1]
     assert "call add" in asm_text
 
 
@@ -482,7 +498,7 @@ bb0:
     assert "movsd xmm10, QWORD PTR x[rip]" in asm_text
     assert "ucomisd xmm10, xmm11" in asm_text
     assert "setb al" in asm_text
-    assert "movzx r10d, BYTE PTR [rbp -" in asm_text
+    assert "and r10b, 1\n  movzx r10d, r10b" in asm_text
     assert '.section .note.GNU-stack,"",@progbits' in asm_text
 
 
@@ -503,8 +519,8 @@ entry:
 """.strip()
 
     asm_text = emit_x86_64_linux_asm(ir_text)
-    assert "mov r10b, 1\n  movzx r10d, r10b" in asm_text
-    assert "mov r10b, 0\n  movzx r10d, r10b" in asm_text
+    assert "mov r10b, 1\n  and r10b, 1\n  movzx r10d, r10b" in asm_text
+    assert "mov r10b, 0\n  and r10b, 1\n  movzx r10d, r10b" in asm_text
 
 
 def test_self_backend_x86_64_linux_lowers_floor_and_sqrt_intrinsics():
@@ -777,7 +793,7 @@ entry:
 }
     """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert "call first" in asm_text
     assert "movzx edi, WORD PTR [r10]" in asm_text
     assert "mov WORD PTR [r10], ax" in asm_text
@@ -841,7 +857,7 @@ entry:
 }
     """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert "mov BYTE PTR [r11], r10b" in asm_text
     assert "mov r10b, 7" in asm_text
 
@@ -855,7 +871,7 @@ declare void @llvm.va_end.p0(ptr)
 
 define i32 @probe(i32 %tag, ...) {
 entry:
-  %argp = alloca ptr
+  %argp = alloca { i32, i32, ptr, ptr }, align 8
   call void @llvm.va_start.p0(ptr %argp)
   %i = va_arg ptr %argp, i32
   call void @llvm.va_end.p0(ptr %argp)
@@ -872,7 +888,10 @@ entry:
     asm_text = emit_x86_64_linux_asm(ir_text)
     assert "llvm.va_start" not in asm_text
     assert "lea r10, [rbp + 16]" in asm_text
-    assert "mov DWORD PTR [rsp + 0], r10d" in asm_text
+    assert "mov DWORD PTR [r11], 8" in asm_text
+    assert "mov DWORD PTR [r11 + 4], 48" in asm_text
+    assert "cmp eax, 48" in asm_text
+    assert "mov esi, 7" in asm_text
     assert "call probe" in asm_text
 
 
@@ -982,7 +1001,7 @@ merge:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert ".Lmain_bb0_to_t:" in asm_text
     assert "mov r10d, 7" in asm_text
     assert "mov r10d, 3" in asm_text
@@ -1009,12 +1028,41 @@ done:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
 
     assert "mov DWORD PTR [rsp + 0], r10d" in asm_text
     assert "mov DWORD PTR [rsp + 4], r10d" in asm_text
     assert "mov r10d, DWORD PTR [rsp + 0]" in asm_text
     assert "mov r10d, DWORD PTR [rsp + 4]" in asm_text
+
+
+def test_self_backend_x86_64_linux_independent_phis_copy_without_temps():
+    ir_text = """
+target triple = "x86_64-unknown-linux-gnu"
+
+define i32 @main(i32 %n) {
+entry:
+  br label %loop
+
+loop:
+  %i = phi i32 [ 0, %entry ], [ %next, %loop ]
+  %acc = phi i32 [ 1, %entry ], [ %twice, %loop ]
+  %next = add i32 %i, 1
+  %twice = add i32 %acc, %acc
+  %again = icmp slt i32 %next, %n
+  br i1 %again, label %loop, label %done
+
+done:
+  ret i32 %twice
+}
+""".strip()
+
+    asm_text = _x86_selection_asm(ir_text)
+    body = asm_text.split("main:", 1)[1]
+    # No phi reads another phi's destination, so the edge copies go straight
+    # into the destination slots: no parallel-copy stack temps.
+    assert "[rsp + 0]" not in body.split("mov QWORD PTR [rsp + 0], rbx", 1)[1].split("mov rbx, QWORD PTR")[0]
+    assert "sub rsp, 16" not in body
 
 
 def test_self_backend_x86_64_linux_supports_pointer_valued_ssa_memory_subset():
@@ -1034,7 +1082,7 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert "mov r11, QWORD PTR [rbp -" in asm_text
     assert "mov DWORD PTR [r11], r10d" in asm_text
     assert "mov r10d, DWORD PTR [rbp -" in asm_text
@@ -1057,7 +1105,7 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
 
     assert "lea r11, v[rip]" in asm_text
     assert "lea r11, [r11 + 4]" in asm_text
@@ -1078,7 +1126,7 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert "cdq" in asm_text
     assert "idiv r10d" in asm_text
     assert "or r10d, r11d" in asm_text
@@ -1097,7 +1145,7 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
 
     assert "shl r10d, 3" in asm_text
     assert "mov cl, r11b" in asm_text
@@ -1116,7 +1164,7 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
 
     assert "mov r10d, DWORD PTR [rbp - 4]" in asm_text
     assert "mov DWORD PTR [rbp -" in asm_text
@@ -1133,7 +1181,7 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
 
     assert "test al, al" in asm_text
     assert "je .Lmain_sel_select_false" in asm_text
@@ -1179,7 +1227,8 @@ declare i32 @llvm.vector.reduce.mul.v4i32(<4 x i32>)
 
     assert "imul r10d, r11d" in asm_text
     assert "mov DWORD PTR [rax + 12], r10d" in asm_text
-    assert "mov r11d, DWORD PTR [rbp -" in asm_text
+    # The shared integer-reduction lowering folds lanes 1..3 into eax.
+    assert asm_text.count("imul eax, r10d") == 3
 
 
 def test_self_backend_x86_64_linux_emits_sext_and_gep_subset():
@@ -1197,7 +1246,7 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert "movsxd r10, r10d" in asm_text
     assert "lea r11, [rbp -" in asm_text
     assert "lea r11, [r11 + r10*4]" in asm_text
@@ -1216,7 +1265,7 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert "lea r10, [rbp -" in asm_text
     assert "mov QWORD PTR [rbp -" in asm_text
 
@@ -1233,7 +1282,7 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert "mov r10d, r10" not in asm_text
     assert "mov DWORD PTR [rbp -" in asm_text
 
@@ -1250,7 +1299,7 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert "mov r10, r10d" not in asm_text
     assert "mov r10d, DWORD PTR [rbp - 4]" in asm_text
     assert "mov QWORD PTR [rbp -" in asm_text
@@ -1268,7 +1317,7 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert "lea r10, [rbp -" in asm_text
     assert "mov QWORD PTR [rbp -" in asm_text
 
@@ -1302,7 +1351,7 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert "movq r10, xmm10" in asm_text
     assert "movq xmm10, r10" in asm_text
     assert "movd r10d, xmm10" in asm_text
@@ -1321,7 +1370,7 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert "mov r10d, 257" in asm_text
     assert "mov BYTE PTR [rbp -" in asm_text
     assert "movsx r10, r10b" in asm_text
@@ -1356,7 +1405,7 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert "cvttsd2si r10, xmm10" in asm_text
     assert "mov QWORD PTR [rbp -" in asm_text
 
@@ -1596,7 +1645,7 @@ default:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert "je .Lmain_bb0_to_zero" in asm_text
     assert "je .Lmain_bb0_to_one" in asm_text
     assert "jmp .Lmain_bb0_to_default" in asm_text
@@ -1621,7 +1670,7 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert "mov r10, QWORD PTR fp[rip]" in asm_text
     assert "mov r11, QWORD PTR [rbp -" in asm_text
     assert "call r11" in asm_text
@@ -1651,7 +1700,7 @@ entry:
 }
 """.strip()
 
-    asm_text = emit_x86_64_linux_asm(ir_text)
+    asm_text = _x86_selection_asm(ir_text)
     assert "lea r10, [rbp + 16]" in asm_text
     assert "mov QWORD PTR [r11 + 0], rax" in asm_text
     assert "mov QWORD PTR [r11 + 16], rax" in asm_text
@@ -1719,7 +1768,10 @@ entry:
     assert "bl _memset" in emit_aarch64_darwin_asm(source, optimize=False)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Darwin executable")
+# Darwin executable
+# AArch64 execution
+@pytest.mark.pcc_gate(probe=lambda: not (platform.machine() != "arm64"))
+@pytest.mark.pcc_gate(probe=lambda: not (sys.platform != "darwin"))
 @pytest.mark.parametrize("optimize", [False, True])
 def test_self_backend_small_zero_memset_preserves_every_byte_and_guards(tmp_path, optimize):
     import platform
@@ -1727,8 +1779,6 @@ def test_self_backend_small_zero_memset_preserves_every_byte_and_guards(tmp_path
     from pcc.backend.native_object import NativeObject
     from pcc.backend.macho_exec import link_executable
 
-    if platform.machine() != "arm64":
-        pytest.skip("AArch64 execution")
     declarations = ['target triple = "arm64-apple-darwin23.6.0"',
                     'declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)']
     body = []
@@ -3937,6 +3987,8 @@ entry:
 
 
 def test_self_backend_parse_and_materialize_support_inttoptr_constant_expr():
+    # LangRef inttoptr zero-extends the i32 bitvector, even when its textual
+    # spelling is negative: https://llvm.org/docs/LangRef.html#inttoptr-to-instruction
     ir_text = """
 target triple = "arm64-apple-darwin23.6.0"
 
@@ -3955,7 +4007,7 @@ entry:
         "p",
         TypeDesc("ptr", pointee=TypeDesc("void")),
         "cond",
-        "inttoptrconst:-1",
+        "inttoptrconst:4294967295",
         "null",
     )
 
@@ -3966,15 +4018,13 @@ entry:
     assign_stack_slots(func, aggregate_returned_indirect=lambda _ty: False)
     assert materialize_value(
         func,
-        "inttoptrconst:-1",
+        "inttoptrconst:4294967295",
         TypeDesc("ptr", pointee=TypeDesc("void")),
         9,
         symbols,
     ) == [
         "  movz x9, #65535, lsl #0",
         "  movk x9, #65535, lsl #16",
-        "  movk x9, #65535, lsl #32",
-        "  movk x9, #65535, lsl #48",
     ]
     assert materialize_pointer(func, "inttoptrconst:1", 9, symbols) == [
         "  movz x9, #1, lsl #0",
@@ -7252,15 +7302,37 @@ def test_self_backend_layout_aware_branches_keep_semantics(tmp_path, optimize):
     assert result == 0
 
 
+def _deny_external_compiler_owners(monkeypatch):
+    import builtins
+
+    original_import = builtins.__import__
+    original_popen = subprocess.Popen
+
+    def checked_import(name, *args, **kwargs):
+        if name.split(".")[0] in ("llvmlite", "pycparser", "ply"):
+            raise AssertionError("owned C path imported " + name)
+        return original_import(name, *args, **kwargs)
+
+    def checked_popen(command, *args, **kwargs):
+        executable = command[0] if isinstance(command, (list, tuple)) else command
+        name = os.path.basename(os.fspath(executable))
+        if kwargs.get("shell") or name in (
+            "cc", "clang", "gcc", "as", "ld", "ld.lld", "ar", "codesign",
+            "sh", "bash", "zsh",
+        ) or name.startswith(("python", "clang-", "gcc-")):
+            raise AssertionError("owned C path invoked " + str(command))
+        return original_popen(command, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", checked_import)
+    monkeypatch.setattr(subprocess, "Popen", checked_popen)
+
+
 def test_self_backend_evaluate_does_not_publish_llvm_native_cache(
     tmp_path, monkeypatch
 ):
-    import pcc.evaluater.c_evaluator as c_evaluator
+    import pcc.frontends.c.evaluator.c_evaluator as c_evaluator
 
-    def fail_native_cache(*_args, **_kwargs):
-        raise AssertionError("self backend must not enter LLVM native cache")
-
-    monkeypatch.setattr(c_evaluator, "_build_native_cache", fail_native_cache)
+    _deny_external_compiler_owners(monkeypatch)
     result = c_evaluator.CEvaluator(
         backend="self",
         allow_unimplemented_backend=True,
@@ -7277,7 +7349,7 @@ def test_self_backend_evaluate_does_not_publish_llvm_native_cache(
 def test_self_backend_system_link_uses_self_emitter_not_llvm_object_path(
     tmp_path, monkeypatch
 ):
-    import pcc.evaluater.c_evaluator as c_evaluator
+    import pcc.frontends.c.evaluator.c_evaluator as c_evaluator
 
     calls = []
     original_emit_self_asm = c_evaluator.emit_self_asm
@@ -7286,49 +7358,32 @@ def test_self_backend_system_link_uses_self_emitter_not_llvm_object_path(
         calls.append(ir_text)
         return original_emit_self_asm(ir_text)
 
-    def fail_llvm_object_path(self, *args, **kwargs):
-        raise AssertionError("strict self backend gate reached LLVM object path")
-
     monkeypatch.setattr(c_evaluator, "emit_self_asm", recording_emit_self_asm)
-    monkeypatch.setattr(
-        c_evaluator.CEvaluator, "_prepare_llvm_module", fail_llvm_object_path
-    )
+    _deny_external_compiler_owners(monkeypatch)
     unit = TranslationUnit(
         name="main.c",
         path=str(tmp_path / "main.c"),
         source="int main(void) { return 7; }\n",
     )
 
-    result = c_evaluator.CEvaluator(
-        backend="self",
-        allow_unimplemented_backend=True,
-    ).run_translation_units_with_system_cc(
-        [unit],
-        optimize=0,
-        use_system_cpp=False,
-        timeout=30,
-        capture_output=True,
-        text=True,
+    result = c_evaluator.CEvaluator(backend="self").evaluate_translation_units(
+        [unit], optimize=0, use_system_cpp=False, use_compile_cache=False,
     )
 
-    assert result.returncode == 7
-    assert len(calls) == 1
-    assert "define i32 @main" in calls[0]
+    assert result == 7
+    assert calls
+    assert any("@__pcc_evaluate_entry" in text for text in calls)
+    assert any("define i32 @main" in text for text in calls)
 
 
 def test_self_backend_emitter_failure_does_not_fallback_to_llvm(tmp_path, monkeypatch):
-    import pcc.evaluater.c_evaluator as c_evaluator
+    import pcc.frontends.c.evaluator.c_evaluator as c_evaluator
 
     def fail_self_emitter(_ir_text):
         raise BackendUnavailable("strict self backend sentinel")
 
-    def fail_llvm_object_path(self, *args, **kwargs):
-        raise AssertionError("strict self backend gate fell back to LLVM object path")
-
     monkeypatch.setattr(c_evaluator, "emit_self_asm", fail_self_emitter)
-    monkeypatch.setattr(
-        c_evaluator.CEvaluator, "_prepare_llvm_module", fail_llvm_object_path
-    )
+    _deny_external_compiler_owners(monkeypatch)
     unit = TranslationUnit(
         name="main.c",
         path=str(tmp_path / "main.c"),
@@ -7339,29 +7394,19 @@ def test_self_backend_emitter_failure_does_not_fallback_to_llvm(tmp_path, monkey
         c_evaluator.CEvaluator(
             backend="self",
             allow_unimplemented_backend=True,
-        ).run_translation_units_with_system_cc(
-            [unit],
-            optimize=0,
-            use_system_cpp=False,
-            timeout=30,
-            capture_output=True,
-            text=True,
+        ).evaluate_translation_units(
+            [unit], optimize=0, use_system_cpp=False, use_compile_cache=False,
         )
 
 
 def test_self_backend_emit_obj_failure_does_not_fallback_to_llvm(tmp_path, monkeypatch):
-    import pcc.evaluater.c_evaluator as c_evaluator
+    import pcc.frontends.c.evaluator.c_evaluator as c_evaluator
 
     def fail_self_emitter(_ir_text):
         raise BackendUnavailable("strict self emit-obj sentinel")
 
-    def fail_llvm_object_path(self, *args, **kwargs):
-        raise AssertionError("strict self emit-obj gate fell back to LLVM object path")
-
     monkeypatch.setattr(c_evaluator, "emit_self_asm", fail_self_emitter)
-    monkeypatch.setattr(
-        c_evaluator.CEvaluator, "_prepare_llvm_module", fail_llvm_object_path
-    )
+    _deny_external_compiler_owners(monkeypatch)
     ev, compiled_units = _compile_units(
         "int main(void) { return 0; }\n",
         tmp_path,
@@ -8641,25 +8686,18 @@ bb0:
     asm_text = emit_aarch64_darwin_asm(ir_text)
     lines = asm_text.splitlines()
 
-    # A precise-stackmap anchor after the call is an optimization barrier: the
-    # return-value store must not be forwarded across the metadata position.
+    # A store must not be forwarded to a load across a precise-stackmap
+    # anchor. The call's anchor is its return address, right after the bl
+    # (a stack walk finds the record there), so the return-value store and
+    # its reload both follow it and the reload may take x0 directly.
+    call = lines.index("  bl _callee")
+    assert lines[call + 1].startswith("L_pcc_smap_")
     result_store = next(
         index
         for index, line in enumerate(lines)
-        if line.startswith("  stur x0, [x29, #-")
+        if line.startswith("  stur x0, [x29, #-") and index > call
     )
-    stackmap_anchor = next(
-        index
-        for index, line in enumerate(lines)
-        if line.startswith("L_pcc_smap_") and index > result_store
-    )
-    result_reload = next(
-        index
-        for index, line in enumerate(lines)
-        if line.startswith("  ldur x10, [x29, #-")
-    )
-    assert result_store < stackmap_anchor < result_reload
-    assert "  mov x10, x0" not in lines
+    assert "  mov x10, x0" in lines[result_store:]
 
 
 def test_self_backend_aarch64_does_not_forward_through_aliasing_intervening_load():

@@ -8,10 +8,10 @@ a silently wrong double -- and a later attribute read passed that double to
 verifier saw the operand type:
 
     self IR verifier [operand-type] in
-    'user_pcc_codegen_c_codegen_LLVMCodeGenerator__eval_const_expr':
+    'user_pcc_frontends_c_codegen_c_codegen_CCodeGenerator__eval_const_expr':
     'call.cont.145681'/call expects void* for 'lhs.145688.3290', got double
 
-``pcc/codegen/c_codegen.py::_eval_const_expr`` is that function: it writes
+``pcc/frontends/c/codegen/c_codegen.py::_eval_const_expr`` is that function: it writes
 ``lhs = float(...)`` on the floating branch and ``lhs = integer_promotion(...)``
 (a ``ConstIntValue``) on the integer one, then reads ``lhs.width``.
 
@@ -70,7 +70,7 @@ main()
 
 def test_mixed_float_object_local_runs_and_matches_cpython(tmp_path):
     """backend="self" so the self IR verifier runs over the emitted function."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "mixed_local.py"
     exe = tmp_path / "mixed_local.out"
@@ -87,7 +87,7 @@ def test_mixed_float_object_local_runs_and_matches_cpython(tmp_path):
 
 
 def test_the_mixed_local_never_unboxes_an_instance_as_a_float(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "mixed_local.py"
     out = tmp_path / "mixed_local.ll"
@@ -136,20 +136,8 @@ main()
 '''
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "bool is not in mixed_scalar_object_local_names.  Including it made "
-        "two owned-local store paths reachable that still write a raw i1 into "
-        "the object slot -- stage1 failed with \"'is_cpy.owned.cont'/store "
-        "expects void* for 'm.bool_unbox', got i1\" -- so the planner covers "
-        "float only until those stores box.  Today the class instance is "
-        "coerced into the bool slot through py_obj_truthy and the attribute "
-        "read then fails."
-    ),
-)
 def test_mixed_bool_object_local_matches_cpython(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "bool_mixed.py"
     exe = tmp_path / "bool_mixed.out"
@@ -192,7 +180,7 @@ main()
     ],
 )
 def test_other_mixed_scalar_object_locals_match_cpython(tmp_path, source, expected):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "shape.py"
     exe = tmp_path / "shape.out"
@@ -206,3 +194,84 @@ def test_other_mixed_scalar_object_locals_match_cpython(tmp_path, source, expect
     )
     assert run.stdout == reference.stdout
     assert run.stdout.splitlines() == expected
+
+
+from tests.python.test_slot_call_lexical_roots import _emit
+from pcc.backend.self_backend_prepare import prepare_module_for_target
+from pcc.backend.self_backend_precise_stackmaps import build_stack_map_plans
+from pcc.backend.self_backend_x86_64_linux import _aggregate_returned_indirect
+
+SOURCES = {
+    'bool-then-list': 'def probe():\n    value = True\n    value = []\n    value.append(3)\n    return value\n',
+    'loop-bool-then-list': 'def probe(count):\n    while count:\n        value = count > 0\n        if value:\n            count = 0\n    value = []\n    value.append(3)\n    return value\n',
+    'method-bool-then-list': 'class Builder:\n    def probe(self):\n        value = True\n        value = []\n        value.append(3)\n        return value\n',
+    'list-then-bool': 'def probe():\n    value = []\n    value = True\n    return value\n',
+    'unpack-bool': 'def probe():\n    value = True\n    value = []\n    value, extra = (False, 5)\n    return [value, extra]\n',
+    'boxed-bool-unpack': 'def probe():\n    other = []\n    other = False\n    value = True\n    value = []\n    value, extra = other, 5\n    return [value, extra]\n',
+    'branch-false': 'def probe(take_branch):\n    value = False\n    if take_branch:\n        value = []\n        value.append(3)\n    return value\n',
+    'zero-iteration': 'def probe(count):\n    value = False\n    while count:\n        value = []\n        value.append(3)\n        count = 0\n    return value\n',
+    'owned-name-copy': 'def probe():\n    value = True\n    value = []\n    other = False\n    value = other\n    return value\n',
+}
+
+@pytest.mark.parametrize('source', SOURCES.values(), ids=SOURCES.keys())
+def test_mixed_boolean_local_uses_object_storage(source):
+    _codegen,text=_emit(source,'mixed_bool_storage')
+    assert re.search(r'%value\.addr[^ ]* = alloca ptr',text)
+    assert not re.search(r'call [^\n]*@py_obj_truthy\(ptr %list\.new',text)
+    prepared=prepare_module_for_target(text,aggregate_returned_indirect=_aggregate_returned_indirect)
+    plans=build_stack_map_plans(prepared.functions,prepared.globals_,target='x86_64-linux')
+    assert len(plans)==len(prepared.functions)
+
+
+_BOOL_REPLACEMENT = '''
+import gc
+released = []
+class Canary:
+    def __init__(self, name):
+        self.name = name
+    def __del__(self):
+        released.append(self.name)
+def fail():
+    raise ValueError("rhs")
+def replace():
+    value = Canary("first")
+    value = False
+    gc.collect()
+    assert released == ["first"]
+    assert value is False
+    value = []
+    value.append(7)
+    assert value == [7]
+    other = []
+    other = False
+    value, extra = other, 5
+    assert value is False and extra == 5
+def preserve_on_error():
+    value = Canary("second")
+    try:
+        value = fail()
+    except ValueError:
+        assert value.name == "second"
+        assert released == ["first"]
+    value = True
+    gc.collect()
+    assert value is True
+def main():
+    replace()
+    preserve_on_error()
+    gc.collect()
+    assert released == ["first", "second"]
+    print("BOOL_OBJECT_REPLACEMENT_OK")
+main()
+'''
+
+
+def test_mixed_bool_object_replacement_releases_once_and_preserves_error_owner(tmp_path):
+    from pcc.frontends.python.pipeline import compile_python
+
+    source = tmp_path / 'bool_replacement.py'
+    binary = tmp_path / 'bool_replacement'
+    source.write_text(_BOOL_REPLACEMENT, encoding='utf-8')
+    compile_python(str(source), str(binary), backend='self', libpython_mode='off', ir_scaffold_mode='on')
+    result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30)
+    assert (result.returncode, result.stdout, result.stderr) == (0, 'BOOL_OBJECT_REPLACEMENT_OK\n', '')

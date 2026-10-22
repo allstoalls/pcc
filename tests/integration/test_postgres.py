@@ -8,11 +8,10 @@ import shlex
 import tempfile
 
 import pytest
-from click.testing import CliRunner
 
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.pcc import main as pcc_cli_main
-from pcc.project import (
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from tests.cli_support import run_cli
+from pcc.driver.project import (
     collect_cpp_args,
     collect_translation_units,
     translation_unit_include_dirs,
@@ -664,8 +663,7 @@ def test_postgres_runtime_with_self_backend_system_link_depends_on_repo_local_zl
 def test_postgres_cli_system_link_depends_on():
     _ensure_postgres_support_archives()
 
-    result = CliRunner().invoke(
-        pcc_cli_main,
+    result = run_cli(
         [
             "--system-link",
             "--jobs",
@@ -678,20 +676,20 @@ def test_postgres_cli_system_link_depends_on():
             "--link-arg=-lm",
             POSTGRES_TEST_MAIN,
         ],
+        timeout=180,
     )
 
-    assert result.exit_code == 0, result.output
-    assert "libpq version 170004" in result.output
-    assert "conninfo: host=1 port=1 dbname=1" in result.output
-    assert "OK" in result.output
+    assert result.returncode == 0, (result.stdout + result.stderr)
+    assert "libpq version 170004" in (result.stdout + result.stderr)
+    assert "conninfo: host=1 port=1 dbname=1" in (result.stdout + result.stderr)
+    assert "OK" in (result.stdout + result.stderr)
 
 
 @pytest.mark.integration
 def test_postgres_cli_self_backend_system_link_depends_on():
     _ensure_postgres_support_archives()
 
-    result = CliRunner().invoke(
-        pcc_cli_main,
+    result = run_cli(
         [
             "--backend=self",
             "--system-link",
@@ -705,12 +703,13 @@ def test_postgres_cli_self_backend_system_link_depends_on():
             "--link-arg=-lm",
             POSTGRES_TEST_MAIN,
         ],
+        timeout=180,
     )
 
-    assert result.exit_code == 0, result.output
-    assert "libpq version 170004" in result.output
-    assert "conninfo: host=1 port=1 dbname=1" in result.output
-    assert "OK" in result.output
+    assert result.returncode == 0, (result.stdout + result.stderr)
+    assert "libpq version 170004" in (result.stdout + result.stderr)
+    assert "conninfo: host=1 port=1 dbname=1" in (result.stdout + result.stderr)
+    assert "OK" in (result.stdout + result.stderr)
 
 
 @pytest.mark.integration

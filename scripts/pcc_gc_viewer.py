@@ -5,7 +5,7 @@ import argparse
 import json
 from pathlib import Path
 
-from pcc.gc_log import parse_log_lines, summarize
+from pcc.diagnostics.gc_log import parse_log_lines, summarize
 
 
 def main(argv=None) -> int:

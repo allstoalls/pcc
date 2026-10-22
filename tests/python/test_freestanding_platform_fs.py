@@ -3,12 +3,14 @@ import platform
 import subprocess
 import sys
 
-from pcc.py_frontend import pipeline
+import pytest
+
+from pcc.frontends.python import pipeline
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLATFORM_SOURCE = (
-    REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_platform_fs.py"
+    REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_platform_fs.py"
 )
 PLATFORM_SYMBOLS = (
     "pcc_platform_access",
@@ -222,12 +224,23 @@ def test_platform_fs_object_owns_path_queries_with_platform_boundary(tmp_path):
     assert undefined.returncode == 0, undefined.stdout + undefined.stderr
     if sys.platform == "darwin":
         assert set(undefined.stdout.split()) == {
+            # path queries
             "_access",
             "_getcwd",
             "_getpid",
             "_mkdir",
             "_readlink",
             "_stat",
+            # mkstemp-style exclusive files and directory-tree removal
+            "_chmod",
+            "_openat",
+            "_opendir",
+            "_readdir",
+            "_closedir",
+            "_unlinkat",
+            "___error",
+            "_malloc",
+            "_free",
         }
     else:
         assert sys.platform.startswith("linux") and platform.machine() == "x86_64"
@@ -254,7 +267,7 @@ def test_platform_fs_mkdtemp_creates_unique_directories(tmp_path):
 
 def test_linux_platform_fs_lowers_to_raw_syscalls(tmp_path, monkeypatch):
     from pcc.backend.self_backend_dispatch import emit_self_asm
-    from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+    from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
     monkeypatch.setattr(
         UnsafeIntrinsicMixin,
@@ -282,7 +295,7 @@ def test_linux_platform_fs_lowers_to_raw_syscalls(tmp_path, monkeypatch):
 
 
 def test_runtime_archive_plan_selects_platform_fs_object():
-    runtime_dir = REPO_ROOT / "pcc" / "py_runtime"
+    runtime_dir = REPO_ROOT / "pcc" / "runtime"
     plan = subprocess.run(
         ["make", "-B", "-n", "libpy_runtime_pcc_py.a"],
         cwd=runtime_dir,
@@ -301,7 +314,7 @@ def test_runtime_archive_plan_selects_platform_fs_object():
 
 def test_default_runtime_routes_path_queries_through_platform_fs_object(
     tmp_path,
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
 ):
     source = tmp_path / "platform_fs_runtime_smoke.py"
     executable = tmp_path / "platform_fs_runtime_smoke"
@@ -338,7 +351,7 @@ def test_default_runtime_routes_path_queries_through_platform_fs_object(
         backend="self",
         ir_scaffold_mode="on",
         libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     symbols = subprocess.run(
         ["nm", "-g", str(executable)],
@@ -361,3 +374,16 @@ def test_default_runtime_routes_path_queries_through_platform_fs_object(
     assert run.stdout == (
         "True\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nFalse\n"
     )
+
+
+@pytest.mark.parametrize('target', ['x86_64-unknown-linux-gnu','aarch64-unknown-linux-gnu','arm64-apple-macosx11.0'])
+def test_complete_platform_module_owns_new_export(tmp_path, target):
+    import re
+    from pcc.frontends.python.pipeline import compile_python
+    from tests.owned_ir_validation import verify_ir_text
+    source=PLATFORM_SOURCE
+    output=tmp_path/'platform.ll'
+    compile_python(str(source),str(output),emit_llvm_only=True,python_library=True,libpython_mode='off',target_triple=target)
+    text=output.read_text();verify_ir_text(text)
+    assert re.search(r'define[^\n]*i64 @pcc_platform_mkstemp_suffix\(ptr ',text)
+    assert not re.search(r'\bcall[^\n]*@py_cpy_',text)

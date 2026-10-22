@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from pcc.build_cache import compute_cache_key
+from pcc.driver.build_cache import compute_cache_key
 
 
 def main(argv=None) -> int:

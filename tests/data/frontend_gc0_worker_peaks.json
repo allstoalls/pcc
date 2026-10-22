@@ -17,7 +17,7 @@
     },
     {
       "index": 1,
-      "module": "pcc.cli_bootstrap",
+      "module": "pcc.driver.cli_bootstrap",
       "input_bytes": 13215573,
       "input_sha256": "b182c10d0dbb116b3930035d1212fce3465f3cbf6ffaf7cbb1ec2c3c6408f461",
       "output_sha256": "6d8bb49daa11c7378352b58ddd2d33f0ebbd76573440558e48a61b72e4da8adc",
@@ -26,7 +26,7 @@
     },
     {
       "index": 2,
-      "module": "pcc.cli_contract",
+      "module": "pcc.driver.cli_contract",
       "input_bytes": 136335,
       "input_sha256": "12859a5fbd99b2cf03887a57f6d80ee5c1716afa105ee55baae2c3df65c5c917",
       "output_sha256": "e2f43696b02de4327aea161963c34d98f1fe9fdd10a489139176ca7e8f58adee",
@@ -35,7 +35,7 @@
     },
     {
       "index": 3,
-      "module": "pcc.package_schema",
+      "module": "pcc.package.schema",
       "input_bytes": 551659,
       "input_sha256": "50768ebcbd97d609eca4db23d8d8ce777b35e42845e5e0bfff6f8eaadd215618",
       "output_sha256": "8b1529c41430671ace36791aa79dc8c5b48376a88d769e06b8255b7b2fafe681",
@@ -44,7 +44,7 @@
     },
     {
       "index": 4,
-      "module": "pcc.package_environment",
+      "module": "pcc.package.environment",
       "input_bytes": 632227,
       "input_sha256": "84584e4b2e1f560ad99e4804ab7a78f7543d4981f0a5bcfb008c1b3fdd02dcd7",
       "output_sha256": "ab39896bbe4cbb79e2b2a1262f9c061561e5ea5895e628b5e0b5acf4d5b4b449",
@@ -53,7 +53,7 @@
     },
     {
       "index": 5,
-      "module": "pcc.package_metadata_paths",
+      "module": "pcc.package.metadata_paths",
       "input_bytes": 188028,
       "input_sha256": "81cb414b6c149f7fe12dc917eea9095b727f165cca7ee00f4037c633740ebd79",
       "output_sha256": "4c2d5d9090c7e1ba61ee0f8478379670c3fb0cd6846bc11dd8ddfdcaae1f7f8b",
@@ -62,7 +62,7 @@
     },
     {
       "index": 6,
-      "module": "pcc.py_frontend.pipeline",
+      "module": "pcc.frontends.python.pipeline",
       "input_bytes": 2932353,
       "input_sha256": "2c0e4dd22b356941566e0207ce9c0a3368e8f10f4bda6d1f615c06fb1b8bc783",
       "output_sha256": "20e05bf179900c36cd7eeddd4c8949ea0e2ff3f5c98aba387ca28490b7592ae5",
@@ -71,7 +71,7 @@
     },
     {
       "index": 7,
-      "module": "pcc.cli_bootstrap_array_core",
+      "module": "pcc.driver.cli_bootstrap_array_core",
       "input_bytes": 6508446,
       "input_sha256": "007a7223127d87dc2470a8c42ede022d09fe0e4de838f90049a35adbeed136a9",
       "output_sha256": "4029b35310988a0c864164d9e4bed310f92fba82e5c5d13cf549fac214c89e97",
@@ -80,7 +80,7 @@
     },
     {
       "index": 8,
-      "module": "pcc.cli_bootstrap_pytest",
+      "module": "pcc.driver.cli_bootstrap_pytest",
       "input_bytes": 444290,
       "input_sha256": "858dccbe3516e734c2e0c961fd3734827925c6175ea39064b438e3e2f84a5a32",
       "output_sha256": "2e6550144e913bebaad7a3d34dd0254ff7fac5ca7d0ea57d773ae9a206d3d6c2",
@@ -89,7 +89,7 @@
     },
     {
       "index": 9,
-      "module": "pcc.cli_core",
+      "module": "pcc.driver.cli_core",
       "input_bytes": 1669480,
       "input_sha256": "a5df2aaa53232b574dc196dc2c3120cea97e34af7b1a56232d76f1fe89e79fe2",
       "output_sha256": "1e867fae483ae70100c7e2b678a3a0bec3b5fa7f84128f6f126a1e10b3afd69a",
@@ -98,7 +98,7 @@
     },
     {
       "index": 10,
-      "module": "pcc.py_frontend.native_deferred",
+      "module": "pcc.frontends.python.native_deferred",
       "input_bytes": 299270,
       "input_sha256": "f22ce37ca8eca350c14b543086c0435f5d37770a7315e8a35b820dc281744fdd",
       "output_sha256": "8bcfaa6ffa1a4966833b602c76e881a448f51ea3b8e5510157db3e7a136e61b3",
@@ -107,7 +107,7 @@
     },
     {
       "index": 11,
-      "module": "pcc.python_target",
+      "module": "pcc.driver.python_target",
       "input_bytes": 9834,
       "input_sha256": "c14901cda3d8d72fd3c8fdad44bb327b90acbfda235fa7cb9b230ada72507ee2",
       "output_sha256": "1219d0634cf4c06b3d715614a8107d04f56b832b08db618a66e620f8f528eca4",
@@ -152,7 +152,7 @@
     },
     {
       "index": 16,
-      "module": "pcc.py_frontend.export_meta",
+      "module": "pcc.frontends.python.export_meta",
       "input_bytes": 263220,
       "input_sha256": "a2c0d0e5df58c5ce4273dc51e0daa7a9f87035d3200a7cce41cc1c9e9db0c2a6",
       "output_sha256": "91304a1d5518f02bdb2890f6eac3c05de9d3eabefab05415e062f70a04ecb6ce",
@@ -161,7 +161,7 @@
     },
     {
       "index": 17,
-      "module": "pcc.py_frontend.compile_cache",
+      "module": "pcc.frontends.python.compile_cache",
       "input_bytes": 483035,
       "input_sha256": "a0c3b3694e8724133dd24cdc72807cb7472412d5c8658a4a2e0d1b1fe3e42f9b",
       "output_sha256": "fdd2522aea9e33505862417c1bf8079bb5c0c1108f59154ecc7585cad9d66298",
@@ -170,7 +170,7 @@
     },
     {
       "index": 18,
-      "module": "pcc.py_frontend.codegen.host_contract",
+      "module": "pcc.frontends.python.codegen.host_contract",
       "input_bytes": 257666,
       "input_sha256": "07ced9eb1425838c371bdf39ea7249483d7f53537e7d35cc86a14542069044b4",
       "output_sha256": "b4dcad9055a075d43ccda5bfc2c90756688a2f9705c68b8b1a0d02d6cedbefa9",
@@ -179,7 +179,7 @@
     },
     {
       "index": 19,
-      "module": "pcc.py_frontend.codegen.layer1_support",
+      "module": "pcc.frontends.python.codegen.layer1_support",
       "input_bytes": 2028925,
       "input_sha256": "5fe5477e6f2a9fbf62bd0f6ec300a766dfb69cb8009bf47c27ff8880148cc16e",
       "output_sha256": "1ad4841d0dd9634d1dc728fc1ce800c892b448ba7d04fed1d72e2c6df7c4a069",
@@ -188,7 +188,7 @@
     },
     {
       "index": 20,
-      "module": "pcc.py_frontend.codegen.port_abi_exports",
+      "module": "pcc.frontends.python.codegen.port_abi_exports",
       "input_bytes": 496996,
       "input_sha256": "2bdad800120a92e760cf7cbf481d250bc546de5b642efa2eb4349eea9bc11855",
       "output_sha256": "d7e46cca95328d703d934cb1e87110d53e708094bb7f1deb3bf10c2af1c89539",
@@ -197,7 +197,7 @@
     },
     {
       "index": 21,
-      "module": "pcc.py_frontend.pipeline_paths",
+      "module": "pcc.driver.paths",
       "input_bytes": 426303,
       "input_sha256": "ec6d252204d49c71877fe6c0aa8413d508f01dc197bd7723f83a5332bf97d557",
       "output_sha256": "a533eb610ecf29c5f191427a2b00cc8a4b5ab32a832fbea19a6d17d4af1d9ba9",
@@ -206,7 +206,7 @@
     },
     {
       "index": 22,
-      "module": "pcc.py_frontend.pipeline_profile",
+      "module": "pcc.frontends.python.pipeline_profile",
       "input_bytes": 112650,
       "input_sha256": "78a631fc5ed740e84e1d17b154b6ec35a5f7cfc5ce10938eb10b79f213f17ad6",
       "output_sha256": "a352df9ef1b52c1ea64934901da5fc934c0e2e854fcbce8502cfb9106a5fbb11",
@@ -215,7 +215,7 @@
     },
     {
       "index": 23,
-      "module": "pcc.py_frontend.pipeline_modes",
+      "module": "pcc.frontends.python.pipeline_modes",
       "input_bytes": 187121,
       "input_sha256": "70aeed3112aab820e7c8b20bd4df040a3d9ef62f7324bf8954f9ca715a015a01",
       "output_sha256": "2d719b64859ed8e1641469d744a1658e5a3de2e571039c84bff77d48dd0347db",
@@ -224,7 +224,7 @@
     },
     {
       "index": 24,
-      "module": "pcc.py_frontend.pipeline_ir_text",
+      "module": "pcc.frontends.python.pipeline_ir_text",
       "input_bytes": 322366,
       "input_sha256": "e4a1028c1439a45143afb2250a7785ddeeb40ee4d37e999cbcd250ff573502c0",
       "output_sha256": "17732b941509748d3fe8af7dfe746e0dac34d111d426a59850831381a5704d2b",
@@ -233,7 +233,7 @@
     },
     {
       "index": 25,
-      "module": "pcc.py_frontend.pipeline_packages",
+      "module": "pcc.frontends.python.pipeline_packages",
       "input_bytes": 234219,
       "input_sha256": "17bbde5e8553b6e8abeffd5f95c2d5f694a52818090b35334e0e9a677356426f",
       "output_sha256": "a418bd29b2fc3e4c81f6e7d294f3a188948ee8b790c9b95c4da832b8ec09675d",
@@ -242,7 +242,7 @@
     },
     {
       "index": 26,
-      "module": "pcc.py_frontend.pipeline_pass_config",
+      "module": "pcc.frontends.python.pipeline_pass_config",
       "input_bytes": 360585,
       "input_sha256": "98ffd0c4ae6cc07a81e6f680a5eecdfde69f15526ad5392e011bfa269ae963f1",
       "output_sha256": "61cbce4b87be39d7871045646fcde2cb8ffb3f18a3ed69129d3d2ea7d7ddf2e9",
@@ -251,7 +251,7 @@
     },
     {
       "index": 27,
-      "module": "pcc.py_frontend.pipeline_pass_driver",
+      "module": "pcc.frontends.python.pipeline_pass_driver",
       "input_bytes": 428383,
       "input_sha256": "89a50bebfa8f2de8202835da76d86f63fb19cca0fc474139ab43a80dce2bb3cf",
       "output_sha256": "da37af7d41a8125135a26342f09c0f97c8d5800b3033e5ae9f3091dc55b87b31",
@@ -260,7 +260,7 @@
     },
     {
       "index": 28,
-      "module": "pcc.py_frontend.codegen.debug_info_lowering",
+      "module": "pcc.frontends.python.codegen.debug_info_lowering",
       "input_bytes": 142067,
       "input_sha256": "bb6960212a25b5976ab1f09990e968e57f2b32bb59df7b16f6c268ff279b392a",
       "output_sha256": "6ed18ea44df0babaa52ab9c0655bf8f897c82d9e80403a89aea3cde5ad0047dd",
@@ -269,7 +269,7 @@
     },
     {
       "index": 29,
-      "module": "pcc.py_frontend.pipeline_runtime_archive",
+      "module": "pcc.frontends.python.pipeline_runtime_archive",
       "input_bytes": 863695,
       "input_sha256": "e63e5d378dfc2b9e9b7834804b27e12103bd7f6ded75cbd13152c93cdb44bd0f",
       "output_sha256": "1101bc867c9303d7c6efb3994eabd72cd7cc56b915a882b50ce4dd75045cbbba",
@@ -278,7 +278,7 @@
     },
     {
       "index": 30,
-      "module": "pcc.py_frontend.pipeline_native_link",
+      "module": "pcc.frontends.python.pipeline_native_link",
       "input_bytes": 223722,
       "input_sha256": "a139057dfba953ae5ee69dcefe4894904d649925c83990dba6493d28b4f00060",
       "output_sha256": "a4bc92e84bc454f68fcd96922b111ffbccef8ab63312a4cb5038f5647b46570c",
@@ -287,7 +287,7 @@
     },
     {
       "index": 31,
-      "module": "pcc.py_frontend.pipeline_ir_split",
+      "module": "pcc.frontends.python.pipeline_ir_split",
       "input_bytes": 272896,
       "input_sha256": "c000a52635838df151b161fc19afb51cb28ca7d52b1d4ea3a93a10e1e1ca234f",
       "output_sha256": "23497ceaaaad93c002a6f6141049096645e0310fd2140d260c55ee39cb334343",
@@ -296,7 +296,7 @@
     },
     {
       "index": 32,
-      "module": "pcc.py_frontend.pipeline_ast_wire",
+      "module": "pcc.frontends.python.pipeline_ast_wire",
       "input_bytes": 1146202,
       "input_sha256": "7408cc950236b09ebbfde92b9833cda2aa8c4214abdeb735451a4f4f6c39ff73",
       "output_sha256": "c27b056b95c59f75ea49b26c4ae0bb35d154496e1ee7309893dec6cdb9040136",
@@ -305,7 +305,7 @@
     },
     {
       "index": 33,
-      "module": "pcc.py_frontend.pipeline_frontend_workers",
+      "module": "pcc.frontends.python.pipeline_frontend_workers",
       "input_bytes": 592016,
       "input_sha256": "2b544de327dc4e19ef20b0853d3b10429c15e0e586c0f3c7490a196bf51caec6",
       "output_sha256": "0832fd1a94e1299a732f2983653972a59491c58420c1b2fb26e013c371516640",
@@ -314,7 +314,7 @@
     },
     {
       "index": 34,
-      "module": "pcc.py_frontend.pipeline_frontend_worker_execution",
+      "module": "pcc.frontends.python.pipeline_frontend_worker_execution",
       "input_bytes": 836719,
       "input_sha256": "3068eae02574b4ef89b10ada732786f6fcc39dc04ab6e5d33e12ab83650fed97",
       "output_sha256": "65fc5024e514ab525604f570c65c256c94ea96653a6d9c399abd19fd0eccb089",
@@ -323,7 +323,7 @@
     },
     {
       "index": 35,
-      "module": "pcc.py_frontend.pipeline_frontend_parallel",
+      "module": "pcc.frontends.python.pipeline_frontend_parallel",
       "input_bytes": 1506625,
       "input_sha256": "1d28da87b37b3e8c2e015450ea79046641b61178740e27ce7b887794e394767f",
       "output_sha256": "e4b9aaf8c2c65d7db0438eabaa43b4ea87803c43224a7ffc91a6406b94725d3c",
@@ -332,7 +332,7 @@
     },
     {
       "index": 36,
-      "module": "pcc.py_frontend.pipeline_self_backend_host",
+      "module": "pcc.frontends.python.pipeline_self_backend_host",
       "input_bytes": 27216,
       "input_sha256": "fd6c07eaddfd94defda472999f2dc95f503a85d9384752d46cd4a3cc3b2ac13d",
       "output_sha256": "1f88bbd2c482051da93a3d1b55a599a093cdcf6c94c42dce52f89b8cb0c0b092",
@@ -341,7 +341,7 @@
     },
     {
       "index": 37,
-      "module": "pcc.py_frontend.pipeline_self_backend_config",
+      "module": "pcc.frontends.python.pipeline_self_backend_config",
       "input_bytes": 117230,
       "input_sha256": "bf3e1437f46692a5d17e5ad37d04c963e25693247af085de98c2a4a3b22abb23",
       "output_sha256": "7ef7c89e14af67f8187aeb48def4fad78d1c1706d089979ce6ceecebfdb16ee5",
@@ -350,7 +350,7 @@
     },
     {
       "index": 38,
-      "module": "pcc.py_frontend.pipeline_self_backend_cache",
+      "module": "pcc.frontends.python.pipeline_self_backend_cache",
       "input_bytes": 171853,
       "input_sha256": "486c2e13ff7a4bfba5b7f2fb0337baf44187aeb1b54d88a20b2ca0eb1390e811",
       "output_sha256": "7891156979ae7cef99cc5a1875bc7ffa58d88acb8f71982609f89e04691af937",
@@ -359,7 +359,7 @@
     },
     {
       "index": 39,
-      "module": "pcc.py_frontend.pipeline_self_backend_emit",
+      "module": "pcc.frontends.python.pipeline_self_backend_emit",
       "input_bytes": 1075819,
       "input_sha256": "b0a65d8a6e4e4746a0099dcedf2906ca6a3ae3e168f72a8b76d6d65b397a3a8c",
       "output_sha256": "b25f65fdc1e389983ed46a798fec4fd374a41817e0c937bd287479ba5eeca717",
@@ -368,7 +368,7 @@
     },
     {
       "index": 40,
-      "module": "pcc.py_frontend.pipeline_self_backend_link",
+      "module": "pcc.frontends.python.pipeline_self_backend_link",
       "input_bytes": 676361,
       "input_sha256": "66b5c235eb1280bc68e30aa1fdef943270aa81b2cb831da6d8e57a5780efec36",
       "output_sha256": "f186ef05d6c05ad6dfaebec76157e054a35e8fba6908dd79c2ee0feec252f35b",
@@ -377,7 +377,7 @@
     },
     {
       "index": 41,
-      "module": "pcc.py_frontend.pipeline_self_link",
+      "module": "pcc.frontends.python.pipeline_self_link",
       "input_bytes": 117462,
       "input_sha256": "0f1b089a599711b6cc36c97e9c8de861e1920071f13cc02fd070dc9f575f3483",
       "output_sha256": "2159b7fb00d7212acc4ebee13c9ced8b27d92e598431256caa1adbc140e7f80a",
@@ -386,7 +386,7 @@
     },
     {
       "index": 42,
-      "module": "pcc.py_frontend.pipeline_semantic_layout",
+      "module": "pcc.frontends.python.pipeline_semantic_layout",
       "input_bytes": 331344,
       "input_sha256": "69f0de6e5fa93484000882b35fc57c88a9b6560b3e78c78c9b2b7e4673e64d8d",
       "output_sha256": "a42048f4a04babfc7cc2f7fd0a87da33158909caa43ab882ad7a1fcf71bc6474",
@@ -395,7 +395,7 @@
     },
     {
       "index": 43,
-      "module": "pcc.py_frontend.pipeline_targets",
+      "module": "pcc.frontends.python.pipeline_targets",
       "input_bytes": 205552,
       "input_sha256": "57befb2fbf3f6d069be0ed13459cd6c2c9b938d1f75c55d596d20b3c0e00800c",
       "output_sha256": "a64b7ed666faf7d30b911599892b9ce0cf9b267dca8db0af8ed5d0735979ca59",
@@ -404,7 +404,7 @@
     },
     {
       "index": 44,
-      "module": "pcc.py_frontend.pipeline_import_scan",
+      "module": "pcc.frontends.python.pipeline_import_scan",
       "input_bytes": 640499,
       "input_sha256": "8911698ddef1c698ced121a28ab10ce47ed40585d72a1b3de013a1d4b1b3e93d",
       "output_sha256": "018273d200c833bfc99e91fe9afedc18729ae64c3137e4203950d5662768b09e",
@@ -413,7 +413,7 @@
     },
     {
       "index": 45,
-      "module": "pcc.py_frontend.pipeline_freestanding",
+      "module": "pcc.frontends.python.pipeline_freestanding",
       "input_bytes": 601431,
       "input_sha256": "71be66f80290bc95b2bb3c65a9c696e1bf2bf8969c0a52bae66a8c2ba9f67eda",
       "output_sha256": "e401a812fe18a427b58862a25a35f1835e68d74ef33edb8b969ac085d44b73be",
@@ -422,7 +422,7 @@
     },
     {
       "index": 46,
-      "module": "pcc.py_frontend.pipeline_exports",
+      "module": "pcc.frontends.python.pipeline_exports",
       "input_bytes": 1903989,
       "input_sha256": "0f0d0b7fbe7a6e6fc706289b1c0591637c3e11dac7ac84b64c0ea301d65951e1",
       "output_sha256": "0fa96389ee31c85c883691ac6ab604865bdd6b124653c14a683a03af4a89514c",
@@ -431,7 +431,7 @@
     },
     {
       "index": 47,
-      "module": "pcc.py_frontend.pipeline_closed_world",
+      "module": "pcc.frontends.python.pipeline_closed_world",
       "input_bytes": 951311,
       "input_sha256": "730cbc5ccb39dd98fcf5c9ecc581594f9e793291d000fca8676124d50ed680e3",
       "output_sha256": "2ff52553bab085dcdf61d0c870625340a2a5de4a9c527b4f9ec22ba5a7093868",
@@ -440,7 +440,7 @@
     },
     {
       "index": 48,
-      "module": "pcc.py_frontend.pipeline_import_policy",
+      "module": "pcc.frontends.python.pipeline_import_policy",
       "input_bytes": 128927,
       "input_sha256": "977a38c7fcbb717181934172cbc29c791ad52cf522dba5d8e1ac6f223657df46",
       "output_sha256": "82fb8f9f7e640315b7cec360b657967f2a6b02a0239e2a157a112f63b037c81a",
@@ -449,7 +449,7 @@
     },
     {
       "index": 49,
-      "module": "pcc.py_frontend.pipeline_libpython",
+      "module": "pcc.frontends.python.pipeline_libpython",
       "input_bytes": 456434,
       "input_sha256": "84c8cbe2c5c7139b93a6d087241373a460d2d5433d8539d9b9b11f3cd90538f3",
       "output_sha256": "5f0ffda4228265577417d7f5bb9568a6f7214c719096a5cc1525b249cce53be8",
@@ -458,7 +458,7 @@
     },
     {
       "index": 50,
-      "module": "pcc.py_frontend.pipeline_dependency_closure",
+      "module": "pcc.frontends.python.pipeline_dependency_closure",
       "input_bytes": 1709487,
       "input_sha256": "c6c8980b11d6deef67b4de5af2f1cb621f7cc152dde5ab583a01e94f09576095",
       "output_sha256": "efacc4510993c8a10e69ef2d341194bc2174f6deb7a9055e95fc5e2becff2e5b",
@@ -467,7 +467,7 @@
     },
     {
       "index": 51,
-      "module": "pcc.py_frontend.pipeline_context",
+      "module": "pcc.frontends.python.pipeline_context",
       "input_bytes": 1318604,
       "input_sha256": "3313b55a8de9fb32b2fd09a0338ecc9fe08f228677111d1ff382aecaa48dbbff",
       "output_sha256": "28d25e2943d58c9da9e8b5add2e3e9f7ca97108c943b1d723ade3948fe29a7bf",
@@ -476,7 +476,7 @@
     },
     {
       "index": 52,
-      "module": "pcc.py_frontend.module_action_dag",
+      "module": "pcc.frontends.python.module_action_dag",
       "input_bytes": 678175,
       "input_sha256": "385ed108d6f096aa7e28d3ecf47865faae973cb4c32a118eb54b70138945a0a3",
       "output_sha256": "00aafab18ccdf2fe7774e1b5b0465f8ade82dcd19832fcb0bc15deeb18ad4bf9",
@@ -485,7 +485,7 @@
     },
     {
       "index": 53,
-      "module": "pcc.py_frontend.type_infer",
+      "module": "pcc.frontends.python.type_infer",
       "input_bytes": 6889556,
       "input_sha256": "5f1b144b4e0f09c5b27c2d93402608830bd1dcd69834f56f016aee16b90e6922",
       "output_sha256": "84b76c7dcba79f0b706a4ee4cd1de71466cc3f108054aa8d7bde5abee1f0dfb5",
@@ -494,7 +494,7 @@
     },
     {
       "index": 54,
-      "module": "pcc.py_frontend.codegen.layer1",
+      "module": "pcc.frontends.python.codegen.layer1",
       "input_bytes": 17456,
       "input_sha256": "ffd67f59c341b92477173847255e6e0c64477eafdda8ed40b33280278285b1b9",
       "output_sha256": "1dbe070c78b543200f5d35862948a30a1fe5bbd8a0ad7f6ce95e4b23b2bacf49",
@@ -503,7 +503,7 @@
     },
     {
       "index": 55,
-      "module": "pcc.parse.py_lift",
+      "module": "pcc.frontends.python.py_lift",
       "input_bytes": 1657135,
       "input_sha256": "04a399df43811cb42b2592af3100a5d7dbc16b6e881486be9ceb2527784ec133",
       "output_sha256": "1928a360b0b6966df3764035477241a6a757bd37e7a33d2ac842de03d652920b",
@@ -512,7 +512,7 @@
     },
     {
       "index": 56,
-      "module": "pcc.array_numeric",
+      "module": "pcc.package.array_numeric",
       "input_bytes": 314676,
       "input_sha256": "abb75b3533e464c1d84a14c936051a17b6d6ea4c00dff0e073afc6199f3b9435",
       "output_sha256": "cd0b306366ac62c9ff6bd3488fd18df426ab3870babf403e4efb84a4bba44da7",
@@ -521,7 +521,7 @@
     },
     {
       "index": 57,
-      "module": "pcc.cli_shared_paths",
+      "module": "pcc.driver.cli_shared_paths",
       "input_bytes": 75407,
       "input_sha256": "b50029f22733cf4e0b33e5d6e1b56581ecfcac22d730c9aa6efcccaaf1798dae",
       "output_sha256": "27134f48ccae30367bef6fc3d169ad15ccd5915e12fbe15cbcd0faf2a92f1b7d",
@@ -530,7 +530,7 @@
     },
     {
       "index": 58,
-      "module": "pcc.passes",
+      "module": "pcc.frontends.c.passes",
       "input_bytes": 15950,
       "input_sha256": "32fcded7327c02afcd34e6d6a1cbb2cec03854a4240165e6e1d7f278793b869f",
       "output_sha256": "d2301e1950202bd45b847ae8bbb7a0779837f3b27b82fd1acaebd915f9220bba",
@@ -539,7 +539,7 @@
     },
     {
       "index": 59,
-      "module": "pcc.gpu_backend",
+      "module": "pcc.backend.gpu_dispatch",
       "input_bytes": 85338,
       "input_sha256": "3008fefa5aeb200fb091a3288b59d649cad6fa8d41dea83e350f2d22c0478aac",
       "output_sha256": "7ad8889e4b0637220274c763c4e9c06e470a687edb56a78416dfcff462aa68d8",
@@ -548,7 +548,7 @@
     },
     {
       "index": 60,
-      "module": "pcc.compile_observability",
+      "module": "pcc.diagnostics.compile_observability",
       "input_bytes": 175196,
       "input_sha256": "eb13277691490cbc082257940385b96eb2966f7ace2a80aeb772b2b596a774f1",
       "output_sha256": "5bec816b44930a2d81faffe35fc81dc85327bfbd60ac3e8d81574eb279ab5e56",
@@ -566,7 +566,7 @@
     },
     {
       "index": 62,
-      "module": "pcc.evaluater.c_evaluator",
+      "module": "pcc.frontends.c.evaluator.c_evaluator",
       "input_bytes": 3138013,
       "input_sha256": "c122ff80ec6baee6b76228426a0bd47f0917957ab3ff6574db031d55020fc289",
       "output_sha256": "a0d7e11b36ce314b788e076994221f24e0de14b8d222042dc3976b301437d0a6",
@@ -575,7 +575,7 @@
     },
     {
       "index": 63,
-      "module": "pcc.project",
+      "module": "pcc.driver.project",
       "input_bytes": 1257352,
       "input_sha256": "661382bd99345b8fcc0a13e14d9a02f829a49f7c3f713595b7c76fbef9be849f",
       "output_sha256": "2dceec17386981e7904c5ccab654abc6b68955bd434337f3f24c02227f8ab25a",
@@ -584,7 +584,7 @@
     },
     {
       "index": 64,
-      "module": "pcc.artifact_inspect",
+      "module": "pcc.diagnostics.artifact_inspect",
       "input_bytes": 270286,
       "input_sha256": "da323f5cd6805165ba1e57ee494a95ecebdbd4a1247533342b2917f0da33a7be",
       "output_sha256": "197d874349befd9ea45366a2003365b3799e13913f89d51e6a563596b5959abc",
@@ -593,7 +593,7 @@
     },
     {
       "index": 65,
-      "module": "pcc.bindgen",
+      "module": "pcc.frontends.c.bindgen",
       "input_bytes": 263329,
       "input_sha256": "74e04c8998d94802c422645f2f16a64ed5a15bb486db7934316a93dbef52fcda",
       "output_sha256": "22e538fb2d6b3b55105e66f6dc2950910ee09bdc5f7a5edf3858ccc860daa8b0",
@@ -611,7 +611,7 @@
     },
     {
       "index": 67,
-      "module": "pcc.py_frontend.deferred_frontend_schedule",
+      "module": "pcc.frontends.python.deferred_frontend_schedule",
       "input_bytes": 277149,
       "input_sha256": "ea726cbf057c71b9a2641689aeba13856388761e2fe6d3d07f94e7b14ccc5ba0",
       "output_sha256": "43ceda4e4df21b7518de9d01bb1430cffde5d9c696fa4407a170b12f93db5b98",
@@ -908,7 +908,7 @@
     },
     {
       "index": 100,
-      "module": "pcc.py_frontend.py_ast",
+      "module": "pcc.frontends.python.py_ast",
       "input_bytes": 253366,
       "input_sha256": "37da0ebb8761c8222c5c8d80e3a991cacab45b47aecdce1443047dac06b228bc",
       "output_sha256": "5aa64627ad671bd646cf0e21bf8c37958e5eabdf668c9f8ce481a36154678cef",
@@ -926,7 +926,7 @@
     },
     {
       "index": 102,
-      "module": "pcc.py_frontend.codegen._l1_codegen_static_methods",
+      "module": "pcc.frontends.python.codegen._l1_codegen_static_methods",
       "input_bytes": 2249348,
       "input_sha256": "3290113eddabcee0d95d2a38c928c81fa46044cf804b6cebe0502ef8ae4b91f0",
       "output_sha256": "2fa0b3d7a505571fa96cee348046523a05d8ffa1701ca53a8e660218e96663fc",
@@ -935,7 +935,7 @@
     },
     {
       "index": 103,
-      "module": "pcc.profile_events",
+      "module": "pcc.diagnostics.profile_events",
       "input_bytes": 137797,
       "input_sha256": "f8c8122776591efe48936169ea49cfd36c63cbef84ebef0667779fbe660dc0e8",
       "output_sha256": "601dd87b35e66c017b27a97470232795135fa63a4d7ea3780c5e467ea13f762e",
@@ -944,7 +944,7 @@
     },
     {
       "index": 104,
-      "module": "pcc.py_frontend.compiled_default_passes",
+      "module": "pcc.frontends.python.compiled_default_passes",
       "input_bytes": 1043778,
       "input_sha256": "6b053957e2e738d6abc477550be847c73e333a05385763861a2c83088b5f4bd3",
       "output_sha256": "9ba3e253f9662a7dfffb2772b23e40e26bf271b852b07f033fddf25e9a5e1fa4",
@@ -953,7 +953,7 @@
     },
     {
       "index": 105,
-      "module": "pcc.py_frontend.compiled_owned_passes",
+      "module": "pcc.frontends.python.compiled_owned_passes",
       "input_bytes": 139688,
       "input_sha256": "83d26801c31efd4418c34b8727205dc97ebc37a62dd7a7149d07d71870deb8db",
       "output_sha256": "b9c25e01cae1a6328d0d807bdc8c55b5d1d356a64ef15de4655c5f954c052d9b",
@@ -962,7 +962,7 @@
     },
     {
       "index": 106,
-      "module": "pcc.llvm_capi.ir",
+      "module": "pcc.ir.ir",
       "input_bytes": 4151467,
       "input_sha256": "3b816971064087d8a230150629c08a4d1cf5d4965d1589910666bfbe16061da1",
       "output_sha256": "c0d78c68742b7372b387211be80d03939c8ffee7233f6a976aa6ed7ffd862c83",
@@ -998,7 +998,7 @@
     },
     {
       "index": 110,
-      "module": "pcc.py_frontend.worker_process_pool",
+      "module": "pcc.frontends.python.worker_process_pool",
       "input_bytes": 243003,
       "input_sha256": "743db6f968f9cb7bda91c5012e38dfe847aade88166ec9fdbca8d471e2f55095",
       "output_sha256": "c5b6c9c8ecca708bfa7e0cd8b9214296f8c5be270c6c09b996caa93b14fce2ba",
@@ -1007,7 +1007,7 @@
     },
     {
       "index": 111,
-      "module": "pcc.llvm_capi.direct_indexed_kernel",
+      "module": "pcc.ir.direct_indexed_kernel",
       "input_bytes": 2263620,
       "input_sha256": "80d738fee8e9fbf27fc3311776cd46d68a43543a3c45426e32413d843bc3394c",
       "output_sha256": "fb04818ef894c13289ef0889a0b5056fde921ebc2d113c84a4a213616f5a6856",
@@ -1043,7 +1043,7 @@
     },
     {
       "index": 115,
-      "module": "pcc.py_frontend.codegen.runtime_abi",
+      "module": "pcc.frontends.python.codegen.runtime_abi",
       "input_bytes": 3206493,
       "input_sha256": "60463839ce5cf027fd6a88bba560f1aff9f6a4b485e3ca8b78916cb14ba8089b",
       "output_sha256": "d13e6606b309fa8240e363d1027f35f857be392eeb9009629af6adea4001dd5c",
@@ -1052,7 +1052,7 @@
     },
     {
       "index": 116,
-      "module": "pcc.parse.py_parse",
+      "module": "pcc.frontends.python.py_parse",
       "input_bytes": 3111809,
       "input_sha256": "e7a15316b98447c164195dd0bbc877636c107fb51e3767b410c101ca3372eb5e",
       "output_sha256": "d2bacfb63f8d849b721d8353c3266325a6d15360cc0060a768ef261a163eb9ea",
@@ -1061,7 +1061,7 @@
     },
     {
       "index": 117,
-      "module": "pcc.py_frontend.codegen.vthread_effect_analysis",
+      "module": "pcc.frontends.python.codegen.vthread_effect_analysis",
       "input_bytes": 2616561,
       "input_sha256": "22555dac4463a477f25ebbc4801260e21a7b9e3327d6c2ff641a2ae58c09b1c8",
       "output_sha256": "36bcf56b4ab5b1dbaaa361aebd86d151494db56377f43d64103e1931e5601693",
@@ -1070,7 +1070,7 @@
     },
     {
       "index": 118,
-      "module": "pcc.py_frontend.types",
+      "module": "pcc.frontends.python.types",
       "input_bytes": 627608,
       "input_sha256": "7df49c1dbdf18ac804a10a18f5ecd0873314d9512f55bfc5af264dddd6ae507d",
       "output_sha256": "6eb2e64f18d6db38f7b21e87ccdd4f95cd58970faf97466374a8e1d0d892ec13",
@@ -1079,7 +1079,7 @@
     },
     {
       "index": 119,
-      "module": "pcc.py_frontend.async_context_lowering",
+      "module": "pcc.frontends.python.async_context_lowering",
       "input_bytes": 199664,
       "input_sha256": "9ce79ae26911b9fd7788862336968624596907a05bf89dcc0d423ef9c04290d1",
       "output_sha256": "016e3b144892dbb91e3c732b3141dd9150165f4696a59b145bfe58098130c19c",
@@ -1088,7 +1088,7 @@
     },
     {
       "index": 120,
-      "module": "pcc.py_frontend.codegen.class_gen",
+      "module": "pcc.frontends.python.codegen.class_gen",
       "input_bytes": 7689729,
       "input_sha256": "5f3ad90e151a02a682f37e9243b307ab88762cb3f4db9be71c3ef221f3c1c7d0",
       "output_sha256": "b36b01ad110d213b070955cc713aaa9fc0f2fcabe1cc06c85c6ae7ade0a9db4a",
@@ -1097,7 +1097,7 @@
     },
     {
       "index": 121,
-      "module": "pcc.py_frontend.codegen.layer1_entrypoints",
+      "module": "pcc.frontends.python.codegen.layer1_entrypoints",
       "input_bytes": 329825,
       "input_sha256": "321e25d8decb866b2f37853a0569b7c17e4fcdb07aebe1a03f322443bfec703a",
       "output_sha256": "5ce65008d1451e2862e7554d3387698aa750bd28ca83c94c62fe5adcabc5f477",
@@ -1106,7 +1106,7 @@
     },
     {
       "index": 122,
-      "module": "pcc.py_frontend.codegen.layer1_mixins",
+      "module": "pcc.frontends.python.codegen.layer1_mixins",
       "input_bytes": 65013,
       "input_sha256": "1ce3f669cd6dcecb1f2e22da1b6be84a9c2ce80a6a2b4a28909d1eb2026250b7",
       "output_sha256": "dc3e9a5620d77f675cfd9e69a9182480672d362e9bcba879233298e35510c644",
@@ -1115,7 +1115,7 @@
     },
     {
       "index": 123,
-      "module": "pcc.py_frontend.codegen.layer1_constants",
+      "module": "pcc.frontends.python.codegen.layer1_constants",
       "input_bytes": 20006,
       "input_sha256": "83d26511d096255d06c4ff9e7c01af937dea89d42000014c95886d16bf11d88c",
       "output_sha256": "bc7f63efbc88d9239b8686bb6cd1838568e75b714a8b44df2659ff6cbe0ef5d2",
@@ -1124,7 +1124,7 @@
     },
     {
       "index": 124,
-      "module": "pcc.py_frontend.codegen.user_function_lowering",
+      "module": "pcc.frontends.python.codegen.user_function_lowering",
       "input_bytes": 3541848,
       "input_sha256": "10fc18f2aaca97a6e08400198d19d0727ed5fa893009ec1adc2cd0ea65b7584a",
       "output_sha256": "29b5edb47e634631e44ea39619318db11aa00405c07dae6a1dc27e4b8a257be9",
@@ -1133,7 +1133,7 @@
     },
     {
       "index": 125,
-      "module": "pcc.py_frontend.codegen.errors",
+      "module": "pcc.frontends.python.codegen.errors",
       "input_bytes": 9576,
       "input_sha256": "6a798fd9990c5ead6033e70de4aeefc21ab1f315f3c1026705b46b0fe8b6abfe",
       "output_sha256": "df7f255f6f1ea1f800d0d5ce4604f72b4504aa9604b0e802f44be593d4fdb14f",
@@ -1142,7 +1142,7 @@
     },
     {
       "index": 126,
-      "module": "pcc.py_frontend",
+      "module": "pcc.frontends.python",
       "input_bytes": 1010,
       "input_sha256": "0a332cd67cd84a78442a3f478410d9cdb1e05bd50b87fb1e0cc9f84346b85faf",
       "output_sha256": "edf6832bfc8a58903447f55f5903a1bc9bb83457ab6291dd3e1a5918c3a72783",
@@ -1151,7 +1151,7 @@
     },
     {
       "index": 127,
-      "module": "pcc.py_frontend.freestanding_constants",
+      "module": "pcc.frontends.python.freestanding_constants",
       "input_bytes": 242194,
       "input_sha256": "c363a5f22e66120b85e283ff73db60a3d095cc4a4bf4598523cec5c16b4751f5",
       "output_sha256": "1e0780ffaa518336626b8c66832246a0e6ce77af821c32d08d4997b74e819eff",
@@ -1160,7 +1160,7 @@
     },
     {
       "index": 128,
-      "module": "pcc.passes.context",
+      "module": "pcc.frontends.c.passes.context",
       "input_bytes": 340053,
       "input_sha256": "370e9432ebd9c61dba4be1d3e6bf5edc010700e15edd4d9c33976ea56cb95744",
       "output_sha256": "3e26ec1fb653ea480ac2344305477739a39a918cdf55004b0458061977b3aa9c",
@@ -1169,7 +1169,7 @@
     },
     {
       "index": 129,
-      "module": "pcc.passes.base",
+      "module": "pcc.frontends.c.passes.base",
       "input_bytes": 399201,
       "input_sha256": "00ae7c9f298646c1f3a65e31482f0cd131c2d27208f807107dc8fbf00ef476fd",
       "output_sha256": "fb813d07260524fca57bed93f5f6acc855aae39572c6e200dd09706b2fab1698",
@@ -1178,7 +1178,7 @@
     },
     {
       "index": 130,
-      "module": "pcc.passes.groups",
+      "module": "pcc.frontends.c.passes.groups",
       "input_bytes": 97616,
       "input_sha256": "2661bad379d80a20d3ae16cf7cf2d191737208f85c210a8a8e97aefd14af73ea",
       "output_sha256": "67df4ee97f5aac3251b516cf1d911662f31f74b9fc5b5fb9b682df4dff5dad75",
@@ -1187,7 +1187,7 @@
     },
     {
       "index": 131,
-      "module": "pcc.passes.llvm_python_registry",
+      "module": "pcc.frontends.c.passes.registry",
       "input_bytes": 587838,
       "input_sha256": "84a81de6ac0c1bd3e880ee0b9f77ae99c52c096e1f76e06bbdaade9b9c3b24b8",
       "output_sha256": "56b508b1ccd27df91f2f3c3a115cc009a7cbc5e6d8b80c9f55e0964b752d546c",
@@ -1196,7 +1196,7 @@
     },
     {
       "index": 132,
-      "module": "pcc.passes.llvm_text_pipeline",
+      "module": "pcc.frontends.c.passes.llvm_text_pipeline",
       "input_bytes": 349941,
       "input_sha256": "cafdda6c526609acc95bf03e56680d53e1971feaef7efc306142d2c2c5bbc0a1",
       "output_sha256": "79ef8ba72ce5eb7cd8cf575935555e67ae30d35166e69448b7887dbceb384bba",
@@ -1223,7 +1223,7 @@
     },
     {
       "index": 135,
-      "module": "pcc.codegen.c_codegen",
+      "module": "pcc.frontends.c.codegen.c_codegen",
       "input_bytes": 9990657,
       "input_sha256": "f675d523955426fdf1823ae93e6419c53e67d9e1aaa6ae288140c8549a36c158",
       "output_sha256": "880505d59b90ab217d50b92aa782e29adc5d5dd48a6caf80cfccbabb815d5da1",
@@ -1232,7 +1232,7 @@
     },
     {
       "index": 136,
-      "module": "pcc.parse.c_parser",
+      "module": "pcc.frontends.c.parse.c_parser",
       "input_bytes": 1849269,
       "input_sha256": "594cd43cb6899e5a5bffe63b56dbd89e4e388cb9ef9cbd52f13dd6d8975d2458",
       "output_sha256": "8114c19424775b13987a69702ad24cf168a22312ee3254f525f5c0fd359fe03e",
@@ -1241,7 +1241,7 @@
     },
     {
       "index": 137,
-      "module": "pcc.preprocessor",
+      "module": "pcc.frontends.c.preprocessor",
       "input_bytes": 1195359,
       "input_sha256": "3670427a96ca663fed2c5df2c4aa64327da1fd46cded5c594aed2b022a8889f9",
       "output_sha256": "8204e0d905d892cc3fc68e27359f1077f16e234c3c71abb5d9c74595f02be7b1",
@@ -1250,7 +1250,7 @@
     },
     {
       "index": 138,
-      "module": "pcc.llvm_capi",
+      "module": "pcc.ir",
       "input_bytes": 135561,
       "input_sha256": "c68d32315299e3301fcd67c4c814b5fb16ff72a09f04e92a9a2aeb129c503770",
       "output_sha256": "7a15a9f8a837fb306c66eb12d7947db866c30b439e443864b12212f6dd525eb2",
@@ -1268,7 +1268,7 @@
     },
     {
       "index": 140,
-      "module": "pcc.parse",
+      "module": "pcc.frontends.c.parse",
       "input_bytes": 8326,
       "input_sha256": "4434436988d2a734932887bdec0a2eb7805712eadced8fbf91cf510e6873d4c3",
       "output_sha256": "2e99949fc6eea1f392dd5184dffe0c377948f2b99e08e2c07c6729d3494dd5c4",
@@ -1313,7 +1313,7 @@
     },
     {
       "index": 145,
-      "module": "pcc.ast",
+      "module": "pcc.frontends.c.ast",
       "input_bytes": 144,
       "input_sha256": "e902630bf7fcbf1bf37f0ebcdf18fd38adf4289cd7f198f1ad982477a4149b01",
       "output_sha256": "d586c971be8e994aedaa6319ff65aed027e5fd06e232286e285b39c5a4185870",
@@ -1322,7 +1322,7 @@
     },
     {
       "index": 146,
-      "module": "pcc.ast.c_ast",
+      "module": "pcc.frontends.c.ast.c_ast",
       "input_bytes": 1026673,
       "input_sha256": "e754e4433ff3586118951bedc87814b88d34c6b526d7cca97b522b9baec6095f",
       "output_sha256": "9a81ad5a77626397ffa6bf471856b58d14d4e40a3e1a7ab761aa491c473c599c",
@@ -1331,7 +1331,7 @@
     },
     {
       "index": 147,
-      "module": "pcc.parse.c_parse_driver",
+      "module": "pcc.frontends.c.parse.c_parse_driver",
       "input_bytes": 216744,
       "input_sha256": "039ec8ccc645f3241f6ded3b38e75f10dca833a9046cde449c02923d800b0161",
       "output_sha256": "5eea6f56d657ad6638547def5066ee0bea8df61bbbf19ed3d07e7b04f0a145e7",
@@ -1340,7 +1340,7 @@
     },
     {
       "index": 148,
-      "module": "pcc.parse.plyparser",
+      "module": "pcc.frontends.c.parse.plyparser",
       "input_bytes": 37045,
       "input_sha256": "aad2e64fc12a7508250c552207caf5797a43eddb592c659e291989fe84b9fe79",
       "output_sha256": "dfc838ff878c1d4ab4e2fae06d76b330d098d91cbf59066e8731ff8acffe0106",
@@ -1511,7 +1511,7 @@
     },
     {
       "index": 167,
-      "module": "pcc.stdlib._float_bits",
+      "module": "pcc.ir.support._float_bits",
       "input_bytes": 226670,
       "input_sha256": "e4080159d21dca55b9b7d2ff23e12b6a3136706d2cfa8831503a1e67dd0cba3c",
       "output_sha256": "e68141613cff8c4a1516c8393074a6ed653ff5a099e9f2128339cdf47d3c4b8e",
@@ -1520,7 +1520,7 @@
     },
     {
       "index": 168,
-      "module": "pcc.native_ir.mem2reg",
+      "module": "pcc.ir.optimization.mem2reg",
       "input_bytes": 1071915,
       "input_sha256": "53e56e715a0a7a40ac53038da1624d580e484dd2727b84cfaa10911865dde3d2",
       "output_sha256": "0bc771185c613870268e9f4edbab1bc04e167f7943f78c5b42b82d49dfd8df2e",
@@ -1529,7 +1529,7 @@
     },
     {
       "index": 169,
-      "module": "pcc.native_ir.instsimplify",
+      "module": "pcc.ir.optimization.instsimplify",
       "input_bytes": 530525,
       "input_sha256": "664c8a0ff068996933529523eb60272fb07d3eee57a40fe4a2cbbf23b41d6cbb",
       "output_sha256": "68a2fd7de99830818868db396fac947979c0d59fbf2d7eae4108bfc62e83286e",
@@ -1538,7 +1538,7 @@
     },
     {
       "index": 170,
-      "module": "pcc.native_ir.simplifycfg",
+      "module": "pcc.ir.optimization.simplifycfg",
       "input_bytes": 3129817,
       "input_sha256": "875ec1f6cd5a9c2549c08387830346960893e68114b6e6ce2f4fbc0fe0ba453b",
       "output_sha256": "69f42d9bd793da1bb22ef0059ea3b4b8c236bab51d949b2557f6fc0420bc0270",
@@ -1547,7 +1547,7 @@
     },
     {
       "index": 171,
-      "module": "pcc.native_ir.foldselect",
+      "module": "pcc.ir.optimization.foldselect",
       "input_bytes": 311156,
       "input_sha256": "64441896ad2537d5802f73314856443211980654bbb257745d423188d072c435",
       "output_sha256": "b92cee8ad6ddd846e1a8a733e3fc886ced8f54b442af09f44cfc232f7af1e49d",
@@ -1556,7 +1556,7 @@
     },
     {
       "index": 172,
-      "module": "pcc.native_ir.instcombine",
+      "module": "pcc.ir.optimization.instcombine",
       "input_bytes": 2419821,
       "input_sha256": "f241f63aed00c1b0bad4d508e02d78ca10112d67739c75b0b770599fbf2c86cf",
       "output_sha256": "1b5c1437ade323d5939ca1fb46aa96a40229de9b451a3db69271bd80cfa22295",
@@ -1565,7 +1565,7 @@
     },
     {
       "index": 173,
-      "module": "pcc.native_ir.dce",
+      "module": "pcc.ir.optimization.dce",
       "input_bytes": 224947,
       "input_sha256": "5cf9f5f470e14cca6d1b7c9364df19e212cf0c7f46d8ec13b28fba62b1721f43",
       "output_sha256": "6021092750e9e797ce98614146c62ba86166807f487fa231df9c98ad0607a6b4",
@@ -1574,7 +1574,7 @@
     },
     {
       "index": 174,
-      "module": "pcc.native_ir.inline",
+      "module": "pcc.ir.optimization.inline",
       "input_bytes": 1206366,
       "input_sha256": "4e30c8b52f2387dd9e17f71b358aa70c9a308755f6df0cb093e060e03ffac748",
       "output_sha256": "377693063f10a9f057da9ecf0016e628ad665c8e369089db7cff203ba13b161b",
@@ -1592,7 +1592,7 @@
     },
     {
       "index": 176,
-      "module": "pcc.bootstrap_cache_identity",
+      "module": "pcc.driver.bootstrap_cache_identity",
       "input_bytes": 93321,
       "input_sha256": "2b10e124dfe806bfcb48664163efbfff12d4e1be44d1b81884e1fcbf28187617",
       "output_sha256": "4d8225324c665df424834789c29eb73f22c9a76331a5dedbc71bbbdbaa9dee50",
@@ -1628,7 +1628,7 @@
     },
     {
       "index": 180,
-      "module": "pcc.parse.py_lex",
+      "module": "pcc.frontends.python.py_lex",
       "input_bytes": 775738,
       "input_sha256": "f0960ca2297bbb14fdf0eb98e8e347405ab34b63d091e95f6fadd9613c269909",
       "output_sha256": "84e24209d93ab426e15317a4d2fe74a06de5f4b43796f700fc0fcd6a86432210",
@@ -1637,7 +1637,7 @@
     },
     {
       "index": 181,
-      "module": "pcc.py_frontend.codegen.hoist_analysis",
+      "module": "pcc.frontends.python.codegen.hoist_analysis",
       "input_bytes": 1172203,
       "input_sha256": "15fd21589a33cedfcce30dab269e3fa38e16f83b09009f595332f22e2b455561",
       "output_sha256": "afdd3d1159776581be666cf88e0d36232cb043edbec4ca671dd621d974687d32",
@@ -1646,7 +1646,7 @@
     },
     {
       "index": 182,
-      "module": "pcc.py_frontend.vthread_effect_summary_wire",
+      "module": "pcc.frontends.python.vthread_effect_summary_wire",
       "input_bytes": 134950,
       "input_sha256": "16a4307a061bf7b24657886cb8ee9e314e9b2353da9ebec66918267ccad8b6e0",
       "output_sha256": "a97760c5aaac9d6e1449999593f22988fca59f0f9c4e9acd3a07a45eb310fe76",
@@ -1655,7 +1655,7 @@
     },
     {
       "index": 183,
-      "module": "pcc.py_frontend.codegen.class_override_index",
+      "module": "pcc.frontends.python.codegen.class_override_index",
       "input_bytes": 87381,
       "input_sha256": "bfc6b88e714d2a7a8128663951994b16d29f51757aa242d47a19ce080e110e9d",
       "output_sha256": "386878af7ad5c5eb539fd0574e46d8e4843a9f4789e150c83ad0ba6fb093c671",
@@ -1664,7 +1664,7 @@
     },
     {
       "index": 184,
-      "module": "pcc.py_frontend.codegen.ownership_lowering",
+      "module": "pcc.frontends.python.codegen.ownership_lowering",
       "input_bytes": 1547501,
       "input_sha256": "433c7470cb1161cb8de5f4e00bef6ff63933901f657a3f081b681a3e44c7d0b0",
       "output_sha256": "1bced3618cd9f7ae74a4ccc3a134ca57b42dcb51718f7b3d506f6d2515a26d92",
@@ -1673,7 +1673,7 @@
     },
     {
       "index": 185,
-      "module": "pcc.py_frontend.py_ast_contract",
+      "module": "pcc.frontends.python.py_ast_contract",
       "input_bytes": 117367,
       "input_sha256": "c60972e1e1678b720ffde381d2778a199cf42a4086d648801826d19479380bf6",
       "output_sha256": "f7e628a34bc36d74befa9b17184b2bd8e9807c2a6057322771314cf9d93c2195",
@@ -1682,7 +1682,7 @@
     },
     {
       "index": 186,
-      "module": "pcc.py_frontend.codegen.marshal",
+      "module": "pcc.frontends.python.codegen.marshal",
       "input_bytes": 540229,
       "input_sha256": "d8c14710e6ef3e47900fcd70737a73e1ba14be2fc1f4ecb829bbf7851010ce80",
       "output_sha256": "588b737f184442cdd19fbbf8b5470d104f5de63aed3e9a721d6426de87db4279",
@@ -1691,7 +1691,7 @@
     },
     {
       "index": 187,
-      "module": "pcc.py_frontend.codegen.exact_int_lowering",
+      "module": "pcc.frontends.python.codegen.exact_int_lowering",
       "input_bytes": 1615010,
       "input_sha256": "47ea1c0565f0613819ab0df4294aa3542d174c6ad522f2f2da79cd1113d617ef",
       "output_sha256": "3cdd0a262a69b5b71564fbd314f7d9a65202e8b9ac5c43e2eec6acc97f46dc8b",
@@ -1700,7 +1700,7 @@
     },
     {
       "index": 188,
-      "module": "pcc.py_frontend.codegen.builtin_exceptions",
+      "module": "pcc.frontends.python.codegen.builtin_exceptions",
       "input_bytes": 49068,
       "input_sha256": "c726232a9097114ae92e4b6eddd1660e9d9be9fdbf131ae91624b28811f5cdb7",
       "output_sha256": "2d200d46c0958df5c783cfbf680a1ea27436f95703c99ac4b8ee572122b8c4d0",
@@ -1709,7 +1709,7 @@
     },
     {
       "index": 189,
-      "module": "pcc.py_frontend.codegen.module_name_lowering",
+      "module": "pcc.frontends.python.codegen.module_name_lowering",
       "input_bytes": 48369,
       "input_sha256": "bfff9033ad87bd2a548f44869e2ef842edfc53afb5193d1db086925e88f16250",
       "output_sha256": "6070b48c23539966cabf79d51d88af76e9b0f9a29f765d3e6fcdce1ce3aea6eb",
@@ -1718,7 +1718,7 @@
     },
     {
       "index": 190,
-      "module": "pcc.py_frontend.codegen.self_module_contracts",
+      "module": "pcc.frontends.python.codegen.self_module_contracts",
       "input_bytes": 35913,
       "input_sha256": "8dc9fa6ac3e1a86141b24e3a94fdc68344df26b768d275e701b27a8800be1a7f",
       "output_sha256": "3abb9449427876af3f999fcb473fbe4f232b3e7b72cacf871e4591b85b380985",
@@ -1727,7 +1727,7 @@
     },
     {
       "index": 191,
-      "module": "pcc.py_frontend.codegen.expr_dispatch_lowering",
+      "module": "pcc.frontends.python.codegen.expr_dispatch_lowering",
       "input_bytes": 716357,
       "input_sha256": "e2785d6e2f90e40a239ec4020e80a86ac7f5e66189f842538475dd1a2de451ab",
       "output_sha256": "cea6196563aa7e6cd331166cbdf68f91002b062f76ed2a2abff45522ceb1aa24",
@@ -1736,7 +1736,7 @@
     },
     {
       "index": 192,
-      "module": "pcc.py_frontend.codegen.generation_lowering",
+      "module": "pcc.frontends.python.codegen.generation_lowering",
       "input_bytes": 1027643,
       "input_sha256": "d3d1b35a015120790e1037121b74893e15e9a4100f600113f9aeaee5d556b482",
       "output_sha256": "b43607210a45718afb4bdc4c6bd5d54675b343285efd638e9edb972af985bdc5",
@@ -1745,7 +1745,7 @@
     },
     {
       "index": 193,
-      "module": "pcc.py_frontend.codegen.layer1_init",
+      "module": "pcc.frontends.python.codegen.layer1_init",
       "input_bytes": 359165,
       "input_sha256": "86ddec9897a075dc644e53fba377ac8e055f1fff88c53ec8f7864fe0f5c70f52",
       "output_sha256": "1ff6368a988257090e50e8d03291ab15ca8c4cda49db4f5f751f6cc0d1d3ad1e",
@@ -1754,7 +1754,7 @@
     },
     {
       "index": 194,
-      "module": "pcc.py_frontend.codegen.stmt_dispatch_lowering",
+      "module": "pcc.frontends.python.codegen.stmt_dispatch_lowering",
       "input_bytes": 375949,
       "input_sha256": "a6bf2c95d9ad2575fe1f34c52588a9cbd813cf72e987f83c11f784c0ee1e1ad2",
       "output_sha256": "e4c06fd6c7bc95463a03bc5b7a02c3333e37eb662cd3fc2d6cfc83648dccf9d5",
@@ -1763,7 +1763,7 @@
     },
     {
       "index": 195,
-      "module": "pcc.py_frontend.codegen.async_with_lowering",
+      "module": "pcc.frontends.python.codegen.async_with_lowering",
       "input_bytes": 835064,
       "input_sha256": "539577639b55e015285c5e09e7904ed7595ddf493fa582c295ac5fe582dc18cb",
       "output_sha256": "21709295210a66786a00363fbd568b646d0ce1822b05df4e6401e9e0f37cb42d",
@@ -1772,7 +1772,7 @@
     },
     {
       "index": 196,
-      "module": "pcc.py_frontend.codegen.attr_load_lowering",
+      "module": "pcc.frontends.python.codegen.attr_load_lowering",
       "input_bytes": 2258386,
       "input_sha256": "fe9343ef007dc1539066c5263a30fd6618b84a27f4003e095770c09abc60dc76",
       "output_sha256": "8b4313bc9ebbaefeae3cef6cb1948928216c849f8fb6e841048996bb35f48577",
@@ -1781,7 +1781,7 @@
     },
     {
       "index": 197,
-      "module": "pcc.py_frontend.codegen.attr_store_lowering",
+      "module": "pcc.frontends.python.codegen.attr_store_lowering",
       "input_bytes": 438185,
       "input_sha256": "ea3a7ac9afaa0d8748887725c86c96efe0b0360cb7737067f3bad53d94d0d41b",
       "output_sha256": "2890f215bca8a10b254c1f98aa7550c5c89533a5b2eec0a5a3189a678d380bfa",
@@ -1790,7 +1790,7 @@
     },
     {
       "index": 198,
-      "module": "pcc.py_frontend.codegen.assignment_statement_lowering",
+      "module": "pcc.frontends.python.codegen.assignment_statement_lowering",
       "input_bytes": 2612935,
       "input_sha256": "e4a5df1bd6ab8730ad7446b019d3d03ae291bdd5e8a718a8073a8723c7f5d2ed",
       "output_sha256": "26f8ea81b97635dc9d959e91bc78d67feddf77d1d515b26b067cfbae48ca92fb",
@@ -1799,7 +1799,7 @@
     },
     {
       "index": 199,
-      "module": "pcc.py_frontend.codegen.assignment_store_lowering",
+      "module": "pcc.frontends.python.codegen.assignment_store_lowering",
       "input_bytes": 509635,
       "input_sha256": "3e4bd072b4ecb49f89f23635ebb463780633b45c305a6ce44fbcf50014a29db5",
       "output_sha256": "d19759ad7830ff11864213963b44d3eadb09fa0b96670d0dcf91a27fe0843431",
@@ -1808,7 +1808,7 @@
     },
     {
       "index": 200,
-      "module": "pcc.py_frontend.codegen.binary_op_lowering",
+      "module": "pcc.frontends.python.codegen.binary_op_lowering",
       "input_bytes": 1534967,
       "input_sha256": "9257a58d7937b1534a312da0f1b3073bd163ae4e69ea06eeba1b17666160939f",
       "output_sha256": "459398175775c1e1604a18f425fd35de9307c896f0da1e2e2c8b0dde23f2f171",
@@ -1817,7 +1817,7 @@
     },
     {
       "index": 201,
-      "module": "pcc.py_frontend.codegen.builtin_type_attr_lowering",
+      "module": "pcc.frontends.python.codegen.builtin_type_attr_lowering",
       "input_bytes": 637107,
       "input_sha256": "52a8e5ab258e504980e22e5058448a42dd2c4ffc5f7520bd7b331f5e803fa688",
       "output_sha256": "2b0107637da280d33b3351cc67d5e69ecf380e030f3ff6c2fe2c7d476c20cccc",
@@ -1826,7 +1826,7 @@
     },
     {
       "index": 202,
-      "module": "pcc.py_frontend.codegen.call_arg_lowering",
+      "module": "pcc.frontends.python.codegen.call_arg_lowering",
       "input_bytes": 212817,
       "input_sha256": "ad14dc3e7d2096b0c430f5c25fa0440ce8a1f71285bc51fb1030cfad5c775960",
       "output_sha256": "8cb4e5559d1647015dbb47b31a2af989ee047466d5a55eda115b82886de23937",
@@ -1835,7 +1835,7 @@
     },
     {
       "index": 203,
-      "module": "pcc.py_frontend.codegen.call_expression_lowering",
+      "module": "pcc.frontends.python.codegen.call_expression_lowering",
       "input_bytes": 3376988,
       "input_sha256": "752fc86c73b6568a5a25b91fe1a258028d71abe01b6f1f3101e99db5300da0b1",
       "output_sha256": "486deff45cb1023fd59be8afeb1395eca88926013abfcb9a168b55fdcd09d90a",
@@ -1844,7 +1844,7 @@
     },
     {
       "index": 204,
-      "module": "pcc.py_frontend.codegen.call_object_lowering",
+      "module": "pcc.frontends.python.codegen.call_object_lowering",
       "input_bytes": 292966,
       "input_sha256": "b9fc75cf6cf9d43e916a08123662819db4f1ffa57237cca4b4401f9ebe11be7b",
       "output_sha256": "e491b068fe04498dec63fdf85a039a209eda94b1fe6412065eb6a8980ae88ff7",
@@ -1853,7 +1853,7 @@
     },
     {
       "index": 205,
-      "module": "pcc.py_frontend.codegen.call_resolution_lowering",
+      "module": "pcc.frontends.python.codegen.call_resolution_lowering",
       "input_bytes": 790633,
       "input_sha256": "8efa2066bf46b46590cafcd87b9df8ba8a5055871f9d16fd82d1a9aaaf5da412",
       "output_sha256": "32a5dacb180864e549f68614b8b594439c6c38c06383012c1054a9fc92ea8741",
@@ -1862,7 +1862,7 @@
     },
     {
       "index": 206,
-      "module": "pcc.py_frontend.codegen.class_alias_lowering",
+      "module": "pcc.frontends.python.codegen.class_alias_lowering",
       "input_bytes": 57472,
       "input_sha256": "039d263de26b2a51e3d1c4d29402691fae912c898d3948743f4c5064ca5b0b93",
       "output_sha256": "7ee46e810696750ef3f326ba1fef140bd4fdf7d236c878b9a99595d8f069f7c0",
@@ -1871,7 +1871,7 @@
     },
     {
       "index": 207,
-      "module": "pcc.py_frontend.codegen.class_model_lowering",
+      "module": "pcc.frontends.python.codegen.class_model_lowering",
       "input_bytes": 839601,
       "input_sha256": "e46e9d1ed5ee3f5885674b27d89c53dd0edf15214cfb6efacc92e3db5a7abc78",
       "output_sha256": "0a34cfffe359f3d43468c990aa8ecf708b3dd2da5621f4622d0dcb395c398e09",
@@ -1880,7 +1880,7 @@
     },
     {
       "index": 208,
-      "module": "pcc.py_frontend.codegen.coercion_lowering",
+      "module": "pcc.frontends.python.codegen.coercion_lowering",
       "input_bytes": 550147,
       "input_sha256": "fe64d0f9916a9be679bb2420738b022d58967c591ead93bcc9b3ff3773092a29",
       "output_sha256": "237907f2b02572fb2a52d11b1f17db68080d6ecc1bfee30ddcc42e39ade47380",
@@ -1889,7 +1889,7 @@
     },
     {
       "index": 209,
-      "module": "pcc.py_frontend.codegen.compare_membership_lowering",
+      "module": "pcc.frontends.python.codegen.compare_membership_lowering",
       "input_bytes": 1764835,
       "input_sha256": "918788a7c1a1f15319c2dda6eb63db89ee58a20277270cf568fd2535a3f95542",
       "output_sha256": "f05858ca05a672ba879f02cfec55311cfb11e1e5d8cee7a4017d79b45339df7e",
@@ -1898,7 +1898,7 @@
     },
     {
       "index": 210,
-      "module": "pcc.py_frontend.codegen.comprehension_lowering",
+      "module": "pcc.frontends.python.codegen.comprehension_lowering",
       "input_bytes": 1762773,
       "input_sha256": "b99b000ba3efc35f2b25fac5ee4a2302af393cec59ac23ae86d1244e93db7b15",
       "output_sha256": "6d1a07a54f7b8fa6d844da1031b943411751a5b57e750c7ea7e3f5587e8cf847",
@@ -1907,7 +1907,7 @@
     },
     {
       "index": 211,
-      "module": "pcc.py_frontend.codegen.control_flow_lowering",
+      "module": "pcc.frontends.python.codegen.control_flow_lowering",
       "input_bytes": 765382,
       "input_sha256": "f2068ad6d8e4c63281649717da38fd961984f8cc7c072d9b64ab189066911e62",
       "output_sha256": "6b75585eab8249a00c3ec3edde2631d6a9f58ca9f26a4a39f0db5d63ef7a28f9",
@@ -1916,7 +1916,7 @@
     },
     {
       "index": 212,
-      "module": "pcc.py_frontend.codegen.core_helpers",
+      "module": "pcc.frontends.python.codegen.core_helpers",
       "input_bytes": 222496,
       "input_sha256": "04f7debad7abcf7545a5060aaa51d087ad036846b41b2150e7fb0720f2cd5403",
       "output_sha256": "5f7b06dca6dd732bf39895060586930bcd2bd9decf938a73db655366989beb56",
@@ -1925,7 +1925,7 @@
     },
     {
       "index": 213,
-      "module": "pcc.py_frontend.codegen.cpy_bridge_lowering",
+      "module": "pcc.frontends.python.codegen.cpy_bridge_lowering",
       "input_bytes": 438805,
       "input_sha256": "9495058f73a678460cd0987196dac98eca4669b7c9bd5b7e8e9f6856b88eca43",
       "output_sha256": "4c1b4bf105d8fbbbc68c77d4c84b7099794710cad01295686161170325ebc2fc",
@@ -1934,7 +1934,7 @@
     },
     {
       "index": 214,
-      "module": "pcc.py_frontend.codegen.cpy_call_lowering",
+      "module": "pcc.frontends.python.codegen.cpy_call_lowering",
       "input_bytes": 1499597,
       "input_sha256": "3a007a85601ab30ef489cafa4f49e09a0ba816dc1b077c8711e4c13ae6b3767b",
       "output_sha256": "fa1c71197c80c0aab614db666f9b68702fe543aaad4387ac4d6fcc94cfb1559d",
@@ -1943,7 +1943,7 @@
     },
     {
       "index": 215,
-      "module": "pcc.py_frontend.codegen.cpy_import_state",
+      "module": "pcc.frontends.python.codegen.cpy_import_state",
       "input_bytes": 161619,
       "input_sha256": "ef811cf1050046e6d7a0945b67baa95ae2b32d79c3f361dfd0536c8ff00c3668",
       "output_sha256": "040c749ff4cf43a5144b65f420167ebeb309ea7f02cbc8daf61cd850081063ba",
@@ -1952,7 +1952,7 @@
     },
     {
       "index": 216,
-      "module": "pcc.py_frontend.codegen.cpy_return_analysis",
+      "module": "pcc.frontends.python.codegen.cpy_return_analysis",
       "input_bytes": 176288,
       "input_sha256": "e10f456a2df6d38cef941fb51104ec4bd2eb89306d8e8f1793f80c6b2959ad49",
       "output_sha256": "d4bd799ee43fc68e57964d6b873c8738e40eab84fa0f5d5317dedd793cfd8eab",
@@ -1961,7 +1961,7 @@
     },
     {
       "index": 217,
-      "module": "pcc.py_frontend.codegen.decorator_lowering",
+      "module": "pcc.frontends.python.codegen.decorator_lowering",
       "input_bytes": 274874,
       "input_sha256": "c4e731ac63bde34ca37a8120406e3f303db878d37480308a1b44861bd99ef2f5",
       "output_sha256": "34a30b486f30c95481c648e378e31fdcdc5d4c53a71c74b51883ec8606abd99e",
@@ -1970,7 +1970,7 @@
     },
     {
       "index": 218,
-      "module": "pcc.py_frontend.codegen.delete_lowering",
+      "module": "pcc.frontends.python.codegen.delete_lowering",
       "input_bytes": 375393,
       "input_sha256": "b6ac791297378dc8983d0c9d7ecb044de3f4ee428bff6ad9d15e83462bf164dd",
       "output_sha256": "92e0530e50c4f420c6eb8a700e024cb39dc960fa1e588fdad2bdc79e8c943cb9",
@@ -1979,7 +1979,7 @@
     },
     {
       "index": 219,
-      "module": "pcc.py_frontend.codegen.dict_lowering",
+      "module": "pcc.frontends.python.codegen.dict_lowering",
       "input_bytes": 855930,
       "input_sha256": "18030bfc98c6f94f7203b85d773f16e9dbc67ae8a89e95078d64e1fe6c6d1a64",
       "output_sha256": "52b42a34302c3f2274e63882b409dec59ab0d89d291ef0bf0e3aa229ec177345",
@@ -1988,7 +1988,7 @@
     },
     {
       "index": 220,
-      "module": "pcc.py_frontend.codegen.dynamic_type_lowering",
+      "module": "pcc.frontends.python.codegen.dynamic_type_lowering",
       "input_bytes": 178544,
       "input_sha256": "5fa3fc94eae006e754c59c1b2747dbe064ee8561a2ce2677d549877df01ad931",
       "output_sha256": "ed4c78cad91db6a2e85360d92c4d34fde46ab7af0c8de5881c0d7dfc81453798",
@@ -1997,7 +1997,7 @@
     },
     {
       "index": 221,
-      "module": "pcc.py_frontend.codegen.exception_lowering",
+      "module": "pcc.frontends.python.codegen.exception_lowering",
       "input_bytes": 1950949,
       "input_sha256": "ab08c94d01897b1405fdf48689ef86a9cfbd1e7816ab441c409a464f636d61ca",
       "output_sha256": "66269a74114da87ee94caf59738bcbdfb41ebf891eb17011d661e01f5ecd1678",
@@ -2006,7 +2006,7 @@
     },
     {
       "index": 222,
-      "module": "pcc.py_frontend.codegen.expr_helper_lowering",
+      "module": "pcc.frontends.python.codegen.expr_helper_lowering",
       "input_bytes": 395506,
       "input_sha256": "49a2e72815220a4f3e5ff08669cd9dcb7b4983bc9c32ee2b0ff715a1cb6f887e",
       "output_sha256": "37e24e1c3a1661d4d13b1d6a0931284c54488fd82a4cec312c1fa1377b3bf01d",
@@ -2015,7 +2015,7 @@
     },
     {
       "index": 223,
-      "module": "pcc.py_frontend.codegen.extern_func_info_lowering",
+      "module": "pcc.frontends.python.codegen.extern_func_info_lowering",
       "input_bytes": 144699,
       "input_sha256": "ede1aff4111bdb276103d95d9c87bec33bd2142f4d7ba4d6960e9b15541f6ae6",
       "output_sha256": "0a46ead460e728f844faa402aaabee8258d4f1c30f9651a928d90134935a6e70",
@@ -2024,7 +2024,7 @@
     },
     {
       "index": 224,
-      "module": "pcc.py_frontend.codegen.extern_lowering",
+      "module": "pcc.frontends.python.codegen.extern_lowering",
       "input_bytes": 326787,
       "input_sha256": "8fceb525fb8a719bcc070eff75f9970dbf371a10b0350688a6902e2d8be91f56",
       "output_sha256": "c96593b303f8fe2474742a1f8c865df09c4921004bb5cc36ce1d475c53d620cd",
@@ -2033,7 +2033,7 @@
     },
     {
       "index": 225,
-      "module": "pcc.py_frontend.codegen.for_loop_lowering",
+      "module": "pcc.frontends.python.codegen.for_loop_lowering",
       "input_bytes": 3088423,
       "input_sha256": "6ffba79cf9431ec74fb0f6de677c52de7c27d895bbd4fcc5798301c996910319",
       "output_sha256": "11769403c775e01d779801da1f1cc7901650ae5b07794db18097c32a80389f3e",
@@ -2042,7 +2042,7 @@
     },
     {
       "index": 226,
-      "module": "pcc.py_frontend.codegen.for_normalization_lowering",
+      "module": "pcc.frontends.python.codegen.for_normalization_lowering",
       "input_bytes": 381334,
       "input_sha256": "754609144c510a0b79e01cf0fe0f8b10646c4c467561868a53e6bb3585e02ec9",
       "output_sha256": "e5eae1ce84317d2d1a2320398642ebc625c1db22208652ac809d24e6cbf68248",
@@ -2051,7 +2051,7 @@
     },
     {
       "index": 227,
-      "module": "pcc.py_frontend.codegen.format_lowering",
+      "module": "pcc.frontends.python.codegen.format_lowering",
       "input_bytes": 1030256,
       "input_sha256": "c3a832c7b853af14d245ae6ee1e4db9c301236b4b94e4a16cacd375bd34cc4ed",
       "output_sha256": "8edb5e5601edadc5e6c56932b3171286e9ae9e5ce00e5ea5bb7c43c5f435b94b",
@@ -2060,7 +2060,7 @@
     },
     {
       "index": 228,
-      "module": "pcc.py_frontend.codegen.generator_lowering",
+      "module": "pcc.frontends.python.codegen.generator_lowering",
       "input_bytes": 2031233,
       "input_sha256": "351057da0501d522dc2831c26d4d8f8a439d15f9c4395520817c501b1ea861cb",
       "output_sha256": "d3ff8f7e806517404bad20d692325ebc79ef145b449f6e9de3d37fd3ffcb2fc3",
@@ -2069,7 +2069,7 @@
     },
     {
       "index": 229,
-      "module": "pcc.py_frontend.codegen.import_lowering",
+      "module": "pcc.frontends.python.codegen.import_lowering",
       "input_bytes": 1360520,
       "input_sha256": "717385c7af43abf512f17318f9c9c9000d69f079522ef18e0ba8604483151a3a",
       "output_sha256": "e84d3369226b0fdd6f5347728bded4afd065b89bc835bda3fd0261540136e9e5",
@@ -2078,7 +2078,7 @@
     },
     {
       "index": 230,
-      "module": "pcc.py_frontend.codegen.ir_decl_helpers",
+      "module": "pcc.frontends.python.codegen.ir_decl_helpers",
       "input_bytes": 85101,
       "input_sha256": "ecb80af27cde7347a11441e10150da73f5f9db4b712c129eeacd4997e233a712",
       "output_sha256": "56c0aa97bba625701752b6da0041b16e18dca7e1858d6e90a75ff9ca8b81c3c0",
@@ -2087,7 +2087,7 @@
     },
     {
       "index": 231,
-      "module": "pcc.py_frontend.codegen.ir_scaffold_lowering",
+      "module": "pcc.frontends.python.codegen.ir_scaffold_lowering",
       "input_bytes": 1884519,
       "input_sha256": "8d2dcca0bed493df1c880c2ea6b3f968e15fe37a1d4d11fe0134483c094210f1",
       "output_sha256": "70660f38be148d8f025de7c76ff4a5454dc50ed4a931335be8b8a534f91ef3d4",
@@ -2096,7 +2096,7 @@
     },
     {
       "index": 232,
-      "module": "pcc.py_frontend.codegen.isinstance_lowering",
+      "module": "pcc.frontends.python.codegen.isinstance_lowering",
       "input_bytes": 737060,
       "input_sha256": "4fb89c5686588500b91f14a3eddcbd1728790b282ab40a263d55723ba02345f8",
       "output_sha256": "55183b8c14063df9b06783747183df9b613acb99866abf9fc3d0a86939ccc84f",
@@ -2105,7 +2105,7 @@
     },
     {
       "index": 233,
-      "module": "pcc.py_frontend.codegen.dyn_method_guard",
+      "module": "pcc.frontends.python.codegen.dyn_method_guard",
       "input_bytes": 114879,
       "input_sha256": "e916ab607a9de581d31d3ae8f2232a07b19c2184a0231aa5eb9546a4ec007d2d",
       "output_sha256": "96b1a0ff0fdd459608f40c52d63ff1ea3510393360e3241d30b94db8e4284d18",
@@ -2114,7 +2114,7 @@
     },
     {
       "index": 234,
-      "module": "pcc.py_frontend.codegen.iterator_builtin_lowering",
+      "module": "pcc.frontends.python.codegen.iterator_builtin_lowering",
       "input_bytes": 470137,
       "input_sha256": "9594900769d66d5ecfea4cb7ea2e4f54884db1c5d1e499fabf6aa78648b870b5",
       "output_sha256": "9fc5c2bc9be38508f8b185f62f4af9cff30516f9b5fc44ce4ce8355c13ceb27c",
@@ -2123,7 +2123,7 @@
     },
     {
       "index": 235,
-      "module": "pcc.py_frontend.codegen.lambda_callback_lowering",
+      "module": "pcc.frontends.python.codegen.lambda_callback_lowering",
       "input_bytes": 255845,
       "input_sha256": "20e4621ab5bb10633ff6a93c6c8993795c57f612b6c048e51764591c03818a5f",
       "output_sha256": "0db80c72fceced1eaa7e23cad5b44e38fe5f09f8ee28e5f064154109a7146112",
@@ -2132,7 +2132,7 @@
     },
     {
       "index": 236,
-      "module": "pcc.py_frontend.codegen.lambda_helpers_lowering",
+      "module": "pcc.frontends.python.codegen.lambda_helpers_lowering",
       "input_bytes": 1322316,
       "input_sha256": "6d4da578cd0c02476840606039a484146512c820bb73d136897bfc7c7ae5adf9",
       "output_sha256": "a5df751a85e3589977ba1f0de530e3c9c5bdb3ab39453a3dc843e1e1b2a5244b",
@@ -2141,7 +2141,7 @@
     },
     {
       "index": 237,
-      "module": "pcc.py_frontend.codegen.list_builtin_lowering",
+      "module": "pcc.frontends.python.codegen.list_builtin_lowering",
       "input_bytes": 796949,
       "input_sha256": "904f5d3cc8adb218ac8fe193566ca3de9814bde65713abcf93ef391c4ad2c6af",
       "output_sha256": "2c5a6062ba22272dba2dbd2f54f5f6832cad049f49c6b8ae42c7a2a66120b0e0",
@@ -2150,7 +2150,7 @@
     },
     {
       "index": 238,
-      "module": "pcc.py_frontend.codegen.list_method_lowering",
+      "module": "pcc.frontends.python.codegen.list_method_lowering",
       "input_bytes": 2002994,
       "input_sha256": "9ead8b495e263abaa8d3c89dcbb85336294622d3b63fc05a27c0a3288eed03a8",
       "output_sha256": "b124a73bb6528baef874e3a4e606c953e4c55a0364073906f7d30ae87c0fc9b1",
@@ -2159,7 +2159,7 @@
     },
     {
       "index": 239,
-      "module": "pcc.py_frontend.codegen.literal_lowering",
+      "module": "pcc.frontends.python.codegen.literal_lowering",
       "input_bytes": 2855166,
       "input_sha256": "f3ab3c3b798f6bc827c148637e0712042336311ded9c764506646b17610289e0",
       "output_sha256": "385f7e7b3611023d140e8849154a3048904bde73923595099a1074e8aaa40b44",
@@ -2168,7 +2168,7 @@
     },
     {
       "index": 240,
-      "module": "pcc.py_frontend.codegen.method_call_expression_lowering",
+      "module": "pcc.frontends.python.codegen.method_call_expression_lowering",
       "input_bytes": 2855820,
       "input_sha256": "668e1294d8b7f04c08858ca40d619052ec806c08c4458c11d6cdcb9a6e8c0250",
       "output_sha256": "3f951cd4120779741d87a6d4f8599d79f8a4807f0397746de352d0b2d1b1512e",
@@ -2177,7 +2177,7 @@
     },
     {
       "index": 241,
-      "module": "pcc.py_frontend.codegen.method_call_lowering",
+      "module": "pcc.frontends.python.codegen.method_call_lowering",
       "input_bytes": 1180122,
       "input_sha256": "e98f6dc1906b331e53db41522b7cd57a6b1cd4ef22942da80c5b7abeee2bd46d",
       "output_sha256": "a39149b302d644b243550d96d98ccc103661edad5e467100719c9d06339b7513",
@@ -2186,7 +2186,7 @@
     },
     {
       "index": 242,
-      "module": "pcc.py_frontend.codegen.module_global_lowering",
+      "module": "pcc.frontends.python.codegen.module_global_lowering",
       "input_bytes": 973377,
       "input_sha256": "7036cbbb5c0bc1bfad9193353cc5c0fcaae6d64cea3e33da90fbae925dbd9e96",
       "output_sha256": "7e84a379fc525c76c7fd8801794167ebca8ea4a528d107ec1570c198960a8206",
@@ -2195,7 +2195,7 @@
     },
     {
       "index": 243,
-      "module": "pcc.py_frontend.codegen.module_lifecycle_lowering",
+      "module": "pcc.frontends.python.codegen.module_lifecycle_lowering",
       "input_bytes": 641321,
       "input_sha256": "69d65e1147a3fb093e58837a1c9d2f35400974f568f411030d48dc1977d769cd",
       "output_sha256": "03d326510bf91f5b65ef32febce00568cd4a6c6e0f0628e22fe2eb0552a96896",
@@ -2204,7 +2204,7 @@
     },
     {
       "index": 244,
-      "module": "pcc.py_frontend.codegen.name_lowering",
+      "module": "pcc.frontends.python.codegen.name_lowering",
       "input_bytes": 1526061,
       "input_sha256": "d28bf6040607b6741ef46bbaa3fa959bc78cfd2ea4f7d9f6ed17acce6d42c640",
       "output_sha256": "93431153e84e6230811189d40ccf2805bc59383e08d86f4de03d0d078836f759",
@@ -2213,7 +2213,7 @@
     },
     {
       "index": 245,
-      "module": "pcc.py_frontend.codegen.native_asyncio",
+      "module": "pcc.frontends.python.codegen.native_asyncio",
       "input_bytes": 145923,
       "input_sha256": "c401636879e025ad5983046f97bb40ab0e12448791c09607e5d2d1f05a283b81",
       "output_sha256": "d8842ffed2f84afc149b086f8fe6e9c2e6f12d45ca1a850ce0541c7c160838c1",
@@ -2222,7 +2222,7 @@
     },
     {
       "index": 246,
-      "module": "pcc.py_frontend.codegen.native_dataclasses",
+      "module": "pcc.frontends.python.codegen.native_dataclasses",
       "input_bytes": 147071,
       "input_sha256": "56806b918ca88616814721ae7c99429d9945e565e09046ee66b49f8aeeb08d7a",
       "output_sha256": "8579e41080315e34781ed9d649cf362c6bb0976f149db0e3017ccf3d9883879c",
@@ -2231,7 +2231,7 @@
     },
     {
       "index": 247,
-      "module": "pcc.py_frontend.codegen.native_files",
+      "module": "pcc.frontends.python.codegen.native_files",
       "input_bytes": 449378,
       "input_sha256": "ff73be6829e2657cedfe42d756ef42b185d007700311b3dd2ea4900b494f213d",
       "output_sha256": "fd1f07edbdf1d07b93f2d1a4a7323b4370a3ca4a635226968b28b9eabe9674f2",
@@ -2240,7 +2240,7 @@
     },
     {
       "index": 248,
-      "module": "pcc.py_frontend.codegen.native_gc",
+      "module": "pcc.frontends.python.codegen.native_gc",
       "input_bytes": 343783,
       "input_sha256": "e6a62f97cd38d1b5c4cbc9272be3129be3e87bd1ca037a21ef71694ef1c94221",
       "output_sha256": "ce12c9fb98bce315e925d36e184ba8a6b7e1a33ece150f15afbc8b3a2a744d72",
@@ -2249,7 +2249,7 @@
     },
     {
       "index": 249,
-      "module": "pcc.py_frontend.codegen.native_math",
+      "module": "pcc.frontends.python.codegen.native_math",
       "input_bytes": 585594,
       "input_sha256": "44ab961e54a3357955433879c9cd8ed74ec52ad193e18ad155c1ec921a4d2d38",
       "output_sha256": "35271a6f99ea019842bffc0c2f51dd3f4f0939ad362d8e894fc0533fea4b6daf",
@@ -2258,7 +2258,7 @@
     },
     {
       "index": 250,
-      "module": "pcc.py_frontend.codegen.native_modules",
+      "module": "pcc.frontends.python.codegen.native_modules",
       "input_bytes": 4102727,
       "input_sha256": "2b30f6073cdd5e9c252e617552f51c0969f17d6a074be79b1d97f50c55809728",
       "output_sha256": "91fc2be04cb0c9e0caa7d02e041bd4feeb9c5ccb38494fb91d0eca41a0ec52a7",
@@ -2267,7 +2267,7 @@
     },
     {
       "index": 251,
-      "module": "pcc.py_frontend.codegen.native_os",
+      "module": "pcc.frontends.python.codegen.native_os",
       "input_bytes": 1189202,
       "input_sha256": "f6e1ff8bc5f9b6feba95dfb4d3796f8e5e0bcf142cb2bc65367de4f29d2c9674",
       "output_sha256": "e6471ebaacf35c222c61920b627716099d3431b83a6bc57e92d8d444cfda38eb",
@@ -2276,7 +2276,7 @@
     },
     {
       "index": 252,
-      "module": "pcc.py_frontend.codegen.native_system",
+      "module": "pcc.frontends.python.codegen.native_system",
       "input_bytes": 794528,
       "input_sha256": "e16ec408f7bac2652b08185deb42db0993ec7c046c0e09f1ef126756b8003bfe",
       "output_sha256": "451871eded1da93914782e04396a7fd70095a121244c7d85fc30aa941c7fd9e8",
@@ -2285,7 +2285,7 @@
     },
     {
       "index": 253,
-      "module": "pcc.py_frontend.codegen.native_text_modules",
+      "module": "pcc.frontends.python.codegen.native_text_modules",
       "input_bytes": 1726967,
       "input_sha256": "b22047bcb5684e5797d03390b76cb71de7ac457fc6a933caaa1698383ab1a0a8",
       "output_sha256": "19300895ce232157ba55d3213d5085b3c59a641d0663d2ca0fa51db6011df046",
@@ -2294,7 +2294,7 @@
     },
     {
       "index": 254,
-      "module": "pcc.py_frontend.codegen.native_threading",
+      "module": "pcc.frontends.python.codegen.native_threading",
       "input_bytes": 723913,
       "input_sha256": "667648fa65f90d1d5eb9453e8136f6b76c3477e2ab335f523b0161745653db79",
       "output_sha256": "5d325f7183efc11c23c4c799097803deb7524310bc4ca1381f139c6974ad39fa",
@@ -2303,7 +2303,7 @@
     },
     {
       "index": 255,
-      "module": "pcc.py_frontend.codegen.native_virtual_thread",
+      "module": "pcc.frontends.python.codegen.native_virtual_thread",
       "input_bytes": 2881037,
       "input_sha256": "11561079c1b3423b4768dd192d03df2cbe15ce235b88d342fc171b7e22b50de2",
       "output_sha256": "b53230268fc769fe63ecd686016cb7adb5d4f598303a308ea235a32990b5a79f",
@@ -2312,7 +2312,7 @@
     },
     {
       "index": 256,
-      "module": "pcc.py_frontend.codegen.native_weakref",
+      "module": "pcc.frontends.python.codegen.native_weakref",
       "input_bytes": 151902,
       "input_sha256": "6adf6156289acd55eea20233dc4efb56b98dd05dc158b98ae02db068e90dc97a",
       "output_sha256": "3d145fe3f80af2df18123ee080d78b88fc05deeb7fe6ca238b68ba930f07d894",
@@ -2321,7 +2321,7 @@
     },
     {
       "index": 257,
-      "module": "pcc.py_frontend.codegen.numeric_builtin_lowering",
+      "module": "pcc.frontends.python.codegen.numeric_builtin_lowering",
       "input_bytes": 2573879,
       "input_sha256": "f21cb0145195eca4e21c5f020151aea53eda329c98e6514a56202b3ce085c7f0",
       "output_sha256": "cdedea0defd88f6a147e1cf5401e769df83fd7216128f524257d763c433f230e",
@@ -2330,7 +2330,7 @@
     },
     {
       "index": 258,
-      "module": "pcc.py_frontend.codegen.print_lowering",
+      "module": "pcc.frontends.python.codegen.print_lowering",
       "input_bytes": 460431,
       "input_sha256": "8d9bf1569ddd8ae891e3b17c288d1824eaa0d20837403f5699e20e11a5b07517",
       "output_sha256": "18c21639e0173c17ef768d5f4c0adeba8f3f774729ad3b0205008e358bb26365",
@@ -2339,7 +2339,7 @@
     },
     {
       "index": 259,
-      "module": "pcc.py_frontend.codegen.return_lowering",
+      "module": "pcc.frontends.python.codegen.return_lowering",
       "input_bytes": 563957,
       "input_sha256": "0cb647027ee1e8723a9803cad7136f2fee18bdc428810dfd6b6333bf8e0a1e78",
       "output_sha256": "0ca309cf13f4922b801657017acab83427fec7c8f9b47b5abf128e27f043d4e9",
@@ -2348,7 +2348,7 @@
     },
     {
       "index": 260,
-      "module": "pcc.py_frontend.codegen.set_lowering",
+      "module": "pcc.frontends.python.codegen.set_lowering",
       "input_bytes": 748209,
       "input_sha256": "a66fe25ea07345f7022fe516fde6157bfcb52600174c70ec23e42af31d33dfff",
       "output_sha256": "bcc20d086ab5ae7dff082e1a60f946566796f08428818bd1f51ef419e961584f",
@@ -2357,7 +2357,7 @@
     },
     {
       "index": 261,
-      "module": "pcc.py_frontend.codegen.static_test_runner_lowering",
+      "module": "pcc.frontends.python.codegen.static_test_runner_lowering",
       "input_bytes": 399220,
       "input_sha256": "cf93950702b1ffaab030079ede37b497f76ddf848302bf9f0cd840de68cb57b4",
       "output_sha256": "ea932763e075af6408f92a33ed1f2101a3b0ab88c16dade399e674c53a6ef358",
@@ -2366,7 +2366,7 @@
     },
     {
       "index": 262,
-      "module": "pcc.py_frontend.codegen.stmt_misc_lowering",
+      "module": "pcc.frontends.python.codegen.stmt_misc_lowering",
       "input_bytes": 552729,
       "input_sha256": "60b1b4760d4efbb6f2a530b5e830c8559776dedb37ef2c77ae1c259237ff3e78",
       "output_sha256": "4e764f9cfd4a5d30ce3471c3a2f28d0c1ad794fc847497d5c543b54157926131",
@@ -2375,7 +2375,7 @@
     },
     {
       "index": 263,
-      "module": "pcc.py_frontend.codegen.string_globals_lowering",
+      "module": "pcc.frontends.python.codegen.string_globals_lowering",
       "input_bytes": 250321,
       "input_sha256": "37135b4a444fbe82e7db9802c3d831fc118121dfa5fdfc0b8e9f090801fb7953",
       "output_sha256": "79abd1ea2268dc008ab6a9278b92315ca54a846189238755b0080afb4c704962",
@@ -2384,7 +2384,7 @@
     },
     {
       "index": 264,
-      "module": "pcc.py_frontend.codegen.string_method_lowering",
+      "module": "pcc.frontends.python.codegen.string_method_lowering",
       "input_bytes": 1799098,
       "input_sha256": "adea56a3b820f6563e60f862ab749ec082208abf47c13a21f5d6defe337f9a9e",
       "output_sha256": "4f951778fe8991a377c58a1b4bf4c4277546520838d32c921863be63fb1b33c8",
@@ -2393,7 +2393,7 @@
     },
     {
       "index": 265,
-      "module": "pcc.py_frontend.codegen.subscript_lowering",
+      "module": "pcc.frontends.python.codegen.subscript_lowering",
       "input_bytes": 1213627,
       "input_sha256": "f2c6bf8bdcf8665c7a8a731e2a7463dcaef2b4c154098e6bc40ef1b4214c14de",
       "output_sha256": "6c0c4c42d8f2415171c2287c8322f0eeca64da4c5c0f42f5e72d492240aac545",
@@ -2402,7 +2402,7 @@
     },
     {
       "index": 266,
-      "module": "pcc.py_frontend.codegen.tuple_zip_lowering",
+      "module": "pcc.frontends.python.codegen.tuple_zip_lowering",
       "input_bytes": 653132,
       "input_sha256": "eb33060e457cdaad4e2fd31cdbbd443a34215a8b61b8659fd64bb60c1ff93439",
       "output_sha256": "075780462bd4f423765412d97f009012b6eac1c87dcdaac4e29542cd34bcf673",
@@ -2411,7 +2411,7 @@
     },
     {
       "index": 267,
-      "module": "pcc.py_frontend.codegen.type_abi_lowering",
+      "module": "pcc.frontends.python.codegen.type_abi_lowering",
       "input_bytes": 790176,
       "input_sha256": "e0989c9cef70781df851a014315048cfd19a99d1ecfd35e4ffb43559d33649bb",
       "output_sha256": "1017128652ac946a9a6ce1fc43ce53c1a776ed83e8def2b2f3b890089f6ffa3c",
@@ -2420,7 +2420,7 @@
     },
     {
       "index": 268,
-      "module": "pcc.py_frontend.codegen.typed_int_abi",
+      "module": "pcc.frontends.python.codegen.typed_int_abi",
       "input_bytes": 929556,
       "input_sha256": "fc58aea4ed1abdd0f476f42c7c1b39b00494a937588016ea17a0d017bbf36bc8",
       "output_sha256": "05550b0cca6f98d3892696d2a7357fac92af11fd963a08f1dd3ff8edea6f5a65",
@@ -2429,7 +2429,7 @@
     },
     {
       "index": 269,
-      "module": "pcc.py_frontend.codegen.typing_lowering",
+      "module": "pcc.frontends.python.codegen.typing_lowering",
       "input_bytes": 257676,
       "input_sha256": "6cb368b3370de0756ec763e8a739a81e1a2d597352446391e273bcdd7eafb8f6",
       "output_sha256": "2972ecfe664a5eefeae3c52a0eb1f1f17089f3895a38ef69abf47ae915ae0e0a",
@@ -2438,7 +2438,7 @@
     },
     {
       "index": 270,
-      "module": "pcc.py_frontend.codegen.unary_call_lowering",
+      "module": "pcc.frontends.python.codegen.unary_call_lowering",
       "input_bytes": 782953,
       "input_sha256": "1a6320409fa37d4e6654485f6758b8f91bce4e6184545e4172d61902bb2e8f75",
       "output_sha256": "42722558d29ae156c5c1eeb75baea77030226d5c9e1b58b629d883eb8826efaf",
@@ -2447,7 +2447,7 @@
     },
     {
       "index": 271,
-      "module": "pcc.py_frontend.codegen.unsafe_lowering",
+      "module": "pcc.frontends.python.codegen.unsafe_lowering",
       "input_bytes": 7732246,
       "input_sha256": "811f8df53e89a055f6bfb12e82013f7063a995b2477a9aa642de6eca9f9a1dbd",
       "output_sha256": "55d191b829b6b26b59277de02e5d15f0fe7df625eb21ace8f962d5940d17f7d4",
@@ -2456,7 +2456,7 @@
     },
     {
       "index": 272,
-      "module": "pcc.py_frontend.codegen.user_function_decl_lowering",
+      "module": "pcc.frontends.python.codegen.user_function_decl_lowering",
       "input_bytes": 365792,
       "input_sha256": "ebb987e372dbb296a0ff42edeee7a0796ef298d5f29c7fe5cfcffc52ea3a8461",
       "output_sha256": "9d575da50c51a26e390d947cc67f0d19301733ac838141fb626b768a6a832993",
@@ -2465,7 +2465,7 @@
     },
     {
       "index": 273,
-      "module": "pcc.py_frontend.low_ir",
+      "module": "pcc.frontends.python.low_ir",
       "input_bytes": 186937,
       "input_sha256": "2433171ed376b7955e203dd4c2112a7dd0da30701195a689380d6685eb3a760c",
       "output_sha256": "b4be5efb7c3ce567e9e6e785604fb11cc3ecc5b64bb75600e7a587d8fafba945",
@@ -2474,7 +2474,7 @@
     },
     {
       "index": 274,
-      "module": "pcc.passes.escape_analysis",
+      "module": "pcc.frontends.c.passes.escape_analysis",
       "input_bytes": 295907,
       "input_sha256": "880c4a027c844cdfd36d8a3c39fd7f7b2f08167827975a5869d78fa0b4f7ebe4",
       "output_sha256": "5c056a95f170a1a92f36547f68f989200dad71298b4579b4a6890a2f400fb966",
@@ -2483,7 +2483,7 @@
     },
     {
       "index": 275,
-      "module": "pcc.passes.alloc_decision",
+      "module": "pcc.frontends.c.passes.alloc_decision",
       "input_bytes": 69901,
       "input_sha256": "4449d9305a07f6ed0b8970bc3c8937b5a981a81f1e3569ff13bf6e6548da7358",
       "output_sha256": "36fe90464807568632b6e859ed8a49c6d57bd0176f83c642360b93535659cb70",
@@ -2492,7 +2492,7 @@
     },
     {
       "index": 276,
-      "module": "pcc.passes.nsw_inference",
+      "module": "pcc.frontends.c.passes.nsw_inference",
       "input_bytes": 205712,
       "input_sha256": "45cf7097a7ea7af8cbfa2a1a8e8691caf03644336d20d38efbcac76a52847641",
       "output_sha256": "a46eebf8cd9b2785e8d3961ccd5d182874097ce879f15d02530e409b338be90a",
@@ -2501,7 +2501,7 @@
     },
     {
       "index": 277,
-      "module": "pcc.passes.canonicalize",
+      "module": "pcc.frontends.c.passes.canonicalize",
       "input_bytes": 460034,
       "input_sha256": "a2a80a3131e6ce790871eb9651dc7bbb28500b2bcdaf859c43450aeca3d3a089",
       "output_sha256": "668a17c0b05a4d71077b66992df86060ab775203dcf5f60d6ba813852b8b0c1b",
@@ -2510,7 +2510,7 @@
     },
     {
       "index": 278,
-      "module": "pcc.passes.dce",
+      "module": "pcc.frontends.c.passes.dce",
       "input_bytes": 331109,
       "input_sha256": "797b9f35ea3baf1d0a5f9e5634717ae266f323fa8cf855fefc2e10bd9cfb94f1",
       "output_sha256": "b8cf756731acfaf94b52b584a406995c076585377e8f102ca16799e1389209e0",
@@ -2519,7 +2519,7 @@
     },
     {
       "index": 279,
-      "module": "pcc.passes.control_flow",
+      "module": "pcc.frontends.c.passes.control_flow",
       "input_bytes": 397797,
       "input_sha256": "cd7cd05cc1443692697e60f23df00414ef0280a0ceaa99614d12d60115c938b3",
       "output_sha256": "e1667843960913fb67128b1771c9ebe31d725e7247bd2c52ff3eb2465894c582",
@@ -2528,7 +2528,7 @@
     },
     {
       "index": 280,
-      "module": "pcc.passes.global_dce",
+      "module": "pcc.frontends.c.passes.global_dce",
       "input_bytes": 114574,
       "input_sha256": "ecf17b5745b90c0decb9ac3a3e4946b00651e97ab9be5800a5be83c9ca039878",
       "output_sha256": "f082267ada161a3045b53103d59a75d2fb469df098a6d9da0c173adeff61307d",
@@ -2537,7 +2537,7 @@
     },
     {
       "index": 281,
-      "module": "pcc.passes.lower_expect",
+      "module": "pcc.frontends.c.passes.lower_expect",
       "input_bytes": 62546,
       "input_sha256": "e65eca0a1233f7105e94106bf78e11412cd5672eb02976d4765f960e12202f0a",
       "output_sha256": "119b2a8b39495176ab5d7f54b7b4cc43e66bff5c1e5e7b401a9c615227f4f58b",
@@ -2546,7 +2546,7 @@
     },
     {
       "index": 282,
-      "module": "pcc.passes.propagation",
+      "module": "pcc.frontends.c.passes.propagation",
       "input_bytes": 797083,
       "input_sha256": "18b98122d45785f9dfd5ff1dc68fad4b997c2585173efd60979ca079ec7386d9",
       "output_sha256": "47564b14a7e20e172f20537fdf4676e2191e3dae116f742789b225f2eef485c0",
@@ -2555,7 +2555,7 @@
     },
     {
       "index": 283,
-      "module": "pcc.passes.ssa_bootstrap",
+      "module": "pcc.frontends.c.passes.ssa_bootstrap",
       "input_bytes": 44894,
       "input_sha256": "89ff207773c27430f6df7b670e14857880f03679f7d45ea64eb287f79e21b990",
       "output_sha256": "33c45ba0b3bca7554fa548b2b02fbddc1779041af90b12acd80a36a382f535d9",
@@ -2564,7 +2564,7 @@
     },
     {
       "index": 284,
-      "module": "pcc.passes.ssa_adce",
+      "module": "pcc.frontends.c.passes.ssa_adce",
       "input_bytes": 404268,
       "input_sha256": "cc895bc57b52bc50d5ed47b649d9357bbf89ccf47ecd0200cf7dec8d58e975da",
       "output_sha256": "d6a747316dc32c139ee0a58e1577bc73ed6aaf329b77b7a7fcb0208f7260fd83",
@@ -2573,7 +2573,7 @@
     },
     {
       "index": 285,
-      "module": "pcc.passes.ssa_branch_prune",
+      "module": "pcc.frontends.c.passes.ssa_branch_prune",
       "input_bytes": 104035,
       "input_sha256": "cff5f66c605f2f26b43ff31e36f17a9622699d64b50c4b60890d22eaf01b18bf",
       "output_sha256": "a0c0362778454e4416bc14a50489248f4373e161930f2be7f72417270f161034",
@@ -2582,7 +2582,7 @@
     },
     {
       "index": 286,
-      "module": "pcc.passes.ssa_dse",
+      "module": "pcc.frontends.c.passes.ssa_dse",
       "input_bytes": 304758,
       "input_sha256": "a1fc018530822a6e961a1f3f03635ba5247283c181b032adeaaf99e7873b36c9",
       "output_sha256": "3bc43b5d73a54adbad3af829d6034f4c7976eb720d4deccd9360a502681cb759",
@@ -2591,7 +2591,7 @@
     },
     {
       "index": 287,
-      "module": "pcc.passes.ssa_gvn",
+      "module": "pcc.frontends.c.passes.ssa_gvn",
       "input_bytes": 48530,
       "input_sha256": "88f8a802a54f3f6463669a40f6e8e75d010d4e7d9467efbfd2cefb8915694b15",
       "output_sha256": "4c2ecf6b341fc782eed38a3dd5616b58370a9048c236fb039ff37142c9ccfc04",
@@ -2600,7 +2600,7 @@
     },
     {
       "index": 288,
-      "module": "pcc.passes.ssa_gvn_rewrite",
+      "module": "pcc.frontends.c.passes.ssa_gvn_rewrite",
       "input_bytes": 304896,
       "input_sha256": "2db2531008eff81754ccc7f150d92d448dffe6fe453016d4216874dfc7b34be3",
       "output_sha256": "2a7a470dd94126fb9fae8d9cb61c5bdc4709c6c2d85f6d576e981f0d69d7acd1",
@@ -2609,7 +2609,7 @@
     },
     {
       "index": 289,
-      "module": "pcc.passes.ssa_loop_phi",
+      "module": "pcc.frontends.c.passes.ssa_loop_phi",
       "input_bytes": 65671,
       "input_sha256": "dfe2968d8e40dbbac2d59aa173262f29106e6d2b9a74e43403469c989c3cd5fa",
       "output_sha256": "af6c1e47eb35db43e3d41aa4541d59746d342cd8a50123ec4c7f028dcd3fc775",
@@ -2618,7 +2618,7 @@
     },
     {
       "index": 290,
-      "module": "pcc.passes.ssa_sccp",
+      "module": "pcc.frontends.c.passes.ssa_sccp",
       "input_bytes": 64679,
       "input_sha256": "0a763c212c8d9041613998e6f6cb08328de060547991dedaf4e043d53a94572b",
       "output_sha256": "7f792eb9fcd07e785ecff55779bfeba6ab67377d093701c25686a2090ff8096d",
@@ -2627,7 +2627,7 @@
     },
     {
       "index": 291,
-      "module": "pcc.passes.ssa_sccp_rewrite",
+      "module": "pcc.frontends.c.passes.ssa_sccp_rewrite",
       "input_bytes": 378519,
       "input_sha256": "e81038133a2327dedb0048c838fa49286ad9c6d64275abef88c72e269afb690a",
       "output_sha256": "c1146b8db7536c0b3d67f945d191310f013dd11aa12cf9008d1002ea09189ee5",
@@ -2636,7 +2636,7 @@
     },
     {
       "index": 292,
-      "module": "pcc.passes.loop_opt",
+      "module": "pcc.frontends.c.passes.loop_opt",
       "input_bytes": 455116,
       "input_sha256": "0f3b99f730a6d6f4e9de90dba4d0346c41fb75ce183dc2421b264bd382c56571",
       "output_sha256": "37a79939416915d3d46149ef77fe01648bcfc9d6a1ab1d3e2930573998d3bcfd",
@@ -2645,7 +2645,7 @@
     },
     {
       "index": 293,
-      "module": "pcc.passes.llvm_loop_explicit",
+      "module": "pcc.frontends.c.passes.llvm_loop_explicit",
       "input_bytes": 713718,
       "input_sha256": "35a539324603aacaa52306662987f3f6a6cfa8ad5d8232e47172762c0e54a3ba",
       "output_sha256": "1c94eb0c4df4e7fb0274452a8b6ab591a93eb47f52e2b9db87662b70822735cd",
@@ -2654,7 +2654,7 @@
     },
     {
       "index": 294,
-      "module": "pcc.passes.inline_opt",
+      "module": "pcc.frontends.c.passes.inline_opt",
       "input_bytes": 385040,
       "input_sha256": "45d99208910c31c57fe53b47f87dcf6e7cce4305170d6bb7de356f9cb6ff93cd",
       "output_sha256": "48d26829ffc03c582cd2110fed195f55ad776985d82deb35b441a324298626d5",
@@ -2663,7 +2663,7 @@
     },
     {
       "index": 295,
-      "module": "pcc.passes.ipo_boundary",
+      "module": "pcc.frontends.c.passes.ipo_boundary",
       "input_bytes": 112924,
       "input_sha256": "ae4605c99921efe62946d23e38031a00dca024cd5a6054f37015b1c04098a674",
       "output_sha256": "944a7b094be3c35129b4603d6bd6d4b83565a4fbc479e3efea4a502429e4bb3a",
@@ -2672,7 +2672,7 @@
     },
     {
       "index": 296,
-      "module": "pcc.passes.llvm_explicit",
+      "module": "pcc.frontends.c.passes.llvm_explicit",
       "input_bytes": 2669141,
       "input_sha256": "02c962ad0c31d40824a82c73cec872d541e430e99509cac67c306ccc0a7e8df7",
       "output_sha256": "e11edba45669340197c5de09996b9d30d55b553c55ae43a94af31a366b89fa75",
@@ -2681,7 +2681,7 @@
     },
     {
       "index": 297,
-      "module": "pcc.passes.chez_transforms",
+      "module": "pcc.frontends.c.passes.chez_transforms",
       "input_bytes": 504364,
       "input_sha256": "08f5e1bde01e0e546d067cabbc5bd99b334896a5b0657449f8a63447ee795061",
       "output_sha256": "08accb2fa88b7c8b346c7bc039eba2fa9878e9155fdc3253981a5f6bed7808e1",
@@ -2690,7 +2690,7 @@
     },
     {
       "index": 298,
-      "module": "pcc.passes.ir_metadata",
+      "module": "pcc.frontends.c.passes.ir_metadata",
       "input_bytes": 269415,
       "input_sha256": "80d5db027c7d6b3d7df8912df3c954b7ce15d0c2a801612947273777a8ae9770",
       "output_sha256": "5eaa558d51a4abf3d904e40560fb253fc9da85267e0ad5daae1709a1f71199aa",
@@ -2699,7 +2699,7 @@
     },
     {
       "index": 299,
-      "module": "pcc.passes.memory_opt",
+      "module": "pcc.frontends.c.passes.memory_opt",
       "input_bytes": 610633,
       "input_sha256": "3e003cbed4fdfa5b86fa123c8dcb3886bdf458978c2afec8ed84789e5195dfec",
       "output_sha256": "c703f7f2c51f0e4f5753323985e07c63b63e775c038a18a244db40a57b1d3b79",
@@ -2708,7 +2708,7 @@
     },
     {
       "index": 300,
-      "module": "pcc.passes.clang_compat",
+      "module": "pcc.frontends.c.passes.clang_compat",
       "input_bytes": 185219,
       "input_sha256": "e36b1ddc5ebd1b8adac75bfde76410728930e804cfe4a035be280530aa586a50",
       "output_sha256": "ab97e918598aeada14ce643f37e74b11c93fc6123ab0bcdddc47f9ba72b0e84a",
@@ -2717,7 +2717,7 @@
     },
     {
       "index": 301,
-      "module": "pcc.passes.tbaa",
+      "module": "pcc.frontends.c.passes.tbaa",
       "input_bytes": 142734,
       "input_sha256": "beeff785260100ac681e21fc1dbb5bdbb9582d8addbe46c96bb24093baee4bf4",
       "output_sha256": "7872c1d2cb47aa42b310004289767c35697a900b56af2f30db0d5b727caca5c3",
@@ -2726,7 +2726,7 @@
     },
     {
       "index": 302,
-      "module": "pcc.passes.llvm_builtin_registry",
+      "module": "pcc.frontends.c.passes.llvm_builtin_registry",
       "input_bytes": 83201,
       "input_sha256": "da53eb986318763fae822580231ab19f6ced9cd934d270949f037f07ac8bac43",
       "output_sha256": "5dc7c71e28227ed171b59621bab03b61791fae98a7f41c66299717cfb4d43b1d",
@@ -2744,7 +2744,7 @@
     },
     {
       "index": 304,
-      "module": "pcc.c_abi_layout",
+      "module": "pcc.frontends.c.c_abi_layout",
       "input_bytes": 72574,
       "input_sha256": "ea441eb76d4996f4f4cecb8a5c943411b2f6b1bf750a5a67764a3c2061b4eac1",
       "output_sha256": "4ac75c90429726c78cbecb2e0be84f248c50af766c8a61a72a6d09bd24d37561",
@@ -2753,7 +2753,7 @@
     },
     {
       "index": 305,
-      "module": "pcc.codegen.c_declaration_state",
+      "module": "pcc.frontends.c.codegen.c_declaration_state",
       "input_bytes": 19178,
       "input_sha256": "a74abd23c1417f55a26ec92f85a01eafe63deb3216dade7d6fe0173aa7acab03",
       "output_sha256": "b3449b61131cc0dfe58b1d73b7d0e64760487bd7ae66f6581189cda63f62f02d",
@@ -2762,7 +2762,7 @@
     },
     {
       "index": 306,
-      "module": "pcc.codegen.c_layout",
+      "module": "pcc.frontends.c.codegen.c_layout",
       "input_bytes": 114823,
       "input_sha256": "20ae8f08731f5e30f659d9701c0551221ccbc9a71c49cd54dd1e9df81e9ed632",
       "output_sha256": "c7f673a85f59ee4a6b98563ec0d58898de629ec61fab6d96061a6ff691bea3db",
@@ -2771,7 +2771,7 @@
     },
     {
       "index": 307,
-      "module": "pcc.codegen.c_scope_context",
+      "module": "pcc.frontends.c.codegen.c_scope_context",
       "input_bytes": 80704,
       "input_sha256": "1f569bd308920f806494eaf87c2b1582ff6ee6baa5a1143092298c45a0eca0c5",
       "output_sha256": "8a76169610491e4fbceb82dc5dd5f99c3f70400edbba6c058a2a21bb4cfdb775",
@@ -2780,7 +2780,7 @@
     },
     {
       "index": 308,
-      "module": "pcc.codegen.c_types",
+      "module": "pcc.frontends.c.codegen.c_types",
       "input_bytes": 256029,
       "input_sha256": "110f8205f01328d14ce7e95ff33290ca24e2a2f677d23a078ffb939c887d236a",
       "output_sha256": "6c0dcc6e0b04e35b8b207f51ba5ea6ba4ee46585098af63d3242394439686fd3",
@@ -2789,7 +2789,7 @@
     },
     {
       "index": 309,
-      "module": "pcc.codegen.c_libc_declarations",
+      "module": "pcc.frontends.c.codegen.c_libc_declarations",
       "input_bytes": 826766,
       "input_sha256": "3eae78ba3c1492905422fdcd90d7969e07060c9d2861e6c9b7fc36790af8a3cd",
       "output_sha256": "53f6d215b56440c605a5f04db907c98103a82db5cefdebbd0986d07f66a46b9c",
@@ -2798,7 +2798,7 @@
     },
     {
       "index": 310,
-      "module": "pcc.codegen.c_expression_flow",
+      "module": "pcc.frontends.c.codegen.c_expression_flow",
       "input_bytes": 85991,
       "input_sha256": "afd0b654c55bba339d11baa780adb6e9bb41e5d41a374eb1d1cf3bf7371d3678",
       "output_sha256": "fa558dd027e42dc53baa159dd465a3b4ec7fbe00e7803bb22ad17afe99bc8c39",
@@ -2807,7 +2807,7 @@
     },
     {
       "index": 311,
-      "module": "pcc.codegen.c_control_flow",
+      "module": "pcc.frontends.c.codegen.c_control_flow",
       "input_bytes": 212116,
       "input_sha256": "b04829cc65571e82c5c13493bd7175392f8a2389250c3e27663ee73d1ab7a4c2",
       "output_sha256": "2f13b2f9211df6259fc192d191f9b595211028732cc8a3c61c4f849a32355e5a",
@@ -2816,7 +2816,7 @@
     },
     {
       "index": 312,
-      "module": "pcc.codegen.c_declaration_lowering",
+      "module": "pcc.frontends.c.codegen.c_declaration_lowering",
       "input_bytes": 911774,
       "input_sha256": "17f9e59c0c4f4c42113c23d936fc9a62a5da06b7ab1ad6dab40c5d353226c2a2",
       "output_sha256": "09bb34be03fe9e9a2cc15a9d6306ccc9039724d0201ea826161179f617e1271c",
@@ -2825,7 +2825,7 @@
     },
     {
       "index": 313,
-      "module": "pcc.codegen.c_initializer_lowering",
+      "module": "pcc.frontends.c.codegen.c_initializer_lowering",
       "input_bytes": 2001862,
       "input_sha256": "96ca5ad5c6923c53b23ebfb0202555b150fd043d64601d7afcd39d1f1869a186",
       "output_sha256": "52ff39311a8d9865a46f5b42f53ce99684489221ee3cb34e0ca1792cfd7e7fcb",
@@ -2834,7 +2834,7 @@
     },
     {
       "index": 314,
-      "module": "pcc.codegen.c_integer_fold_contract",
+      "module": "pcc.frontends.c.codegen.c_integer_fold_contract",
       "input_bytes": 193263,
       "input_sha256": "b277cf9d8fc3a3be1e699642abe6f5af4ddfb1d6da5e9a2bf9b08b7c1477ef75",
       "output_sha256": "05e2ae8746805d6db2cbd368dbb76dd84370d59a4237ab11df257d77bd1aad8c",
@@ -2843,7 +2843,7 @@
     },
     {
       "index": 315,
-      "module": "pcc.codegen.c_switch_flow",
+      "module": "pcc.frontends.c.codegen.c_switch_flow",
       "input_bytes": 364135,
       "input_sha256": "eae8e1c2fc476b4cf6d6afe285fbeb22b30d161d7f72020aea7207f17c7028f9",
       "output_sha256": "399babbef7e8f9dfa8f78a1e40dbfbe012e2ee2b382e3e192bc2ba6c15715f1f",
@@ -2852,7 +2852,7 @@
     },
     {
       "index": 316,
-      "module": "pcc.codegen.c_ssa_lowering",
+      "module": "pcc.frontends.c.codegen.c_ssa_lowering",
       "input_bytes": 1225587,
       "input_sha256": "5c7c8bfba4a8dd1bcab993413a6cd37671d1ebb3359cd54af5cef416a69359b4",
       "output_sha256": "f63603bf4f21ad72429f8eac641f682bc18ccfb1f38b833a10d950ce02ee2f07",
@@ -2861,7 +2861,7 @@
     },
     {
       "index": 317,
-      "module": "pcc.codegen.c_varargs",
+      "module": "pcc.frontends.c.codegen.c_varargs",
       "input_bytes": 151418,
       "input_sha256": "10dff6713cabf439a0ebb9e22bacca7caaa264922c59d2f3acead1be321f39ba",
       "output_sha256": "c922c8a5adc0463caed34e3aacf767433d08e33a78e3d8d0aea01027267a6669",
@@ -2870,7 +2870,7 @@
     },
     {
       "index": 318,
-      "module": "pcc.ply",
+      "module": "pcc.frontends.c.ply",
       "input_bytes": 2618,
       "input_sha256": "eecf27457350814b05ef8bc48fec3b9182c9a408ccf3e30de1cf7db6a2cf89a3",
       "output_sha256": "6f2a932cf72f6b75c4ba90f63d9e48c9195d4722e00438f836bcd7957bee3e1d",
@@ -2879,7 +2879,7 @@
     },
     {
       "index": 319,
-      "module": "pcc.ply.yacc",
+      "module": "pcc.frontends.c.ply.yacc",
       "input_bytes": 2946927,
       "input_sha256": "bbc317ec874e1c37936b1265ad8d01ded9cb36319383ea4267501a4d0cd09321",
       "output_sha256": "74f5fcc385e301fc7029393e263e44213d26bb877b2e348d613451a214b9c460",
@@ -2888,7 +2888,7 @@
     },
     {
       "index": 320,
-      "module": "pcc.lex.c_lexer",
+      "module": "pcc.frontends.c.lex.c_lexer",
       "input_bytes": 400495,
       "input_sha256": "417fec088c5231e97548b106428a21c444156ea9fcaeeb81158807a9b69cbbb3",
       "output_sha256": "b4d6c19fde1ebff2b3e691c545f6106f3ce9795471f7a6ef7439bc1e0fa66d70",
@@ -2897,7 +2897,7 @@
     },
     {
       "index": 321,
-      "module": "pcc.ast.ast_transforms",
+      "module": "pcc.frontends.c.ast.ast_transforms",
       "input_bytes": 45210,
       "input_sha256": "8389d2937d74d0f0ceb5a7f22d8c4914169a73c2ee93c260eac547290aaf5491",
       "output_sha256": "a1355ebc93aa293c05da24c6ddec972e3e28f69685efd14a3fa34e77f242c573",
@@ -2915,7 +2915,7 @@
     },
     {
       "index": 323,
-      "module": "pcc.parse.c_parsetab",
+      "module": "pcc.frontends.c.parse.c_parsetab",
       "input_bytes": 14840286,
       "input_sha256": "bcae2a0581f0cd170dd1ba0f48f91b6dc8a3befbff2ff9c10b645a12e9417c1a",
       "output_sha256": "308381c041abd3c1c6552eef19219823c47a360d6608e0229086585c2ebca41c",
@@ -2924,7 +2924,7 @@
     },
     {
       "index": 324,
-      "module": "pcc.parse.c_parser_actions",
+      "module": "pcc.frontends.c.parse.c_parser_actions",
       "input_bytes": 1782001,
       "input_sha256": "29accc35fefa0beee38aceaaf1415ca0ec1f7b893bc1c644a5be0626e59f22e9",
       "output_sha256": "3417ea29b021839b858175bc8b6f6c6884574316b2fe5d1a2a0a667b2170415f",
@@ -2933,7 +2933,7 @@
     },
     {
       "index": 325,
-      "module": "pcc.parse.c_lex",
+      "module": "pcc.frontends.c.parse.c_lex",
       "input_bytes": 731344,
       "input_sha256": "9aee65c271c7e30f9638b040df6ce9e5752adee4991f19d905711981e2569484",
       "output_sha256": "ad944854af95f9dfa4def4d293cc97c8632de33322964c4da6671b35f272dada",
@@ -2969,7 +2969,7 @@
     },
     {
       "index": 329,
-      "module": "pcc.native_ir.ir_mutator",
+      "module": "pcc.ir.optimization.ir_mutator",
       "input_bytes": 554844,
       "input_sha256": "cceaf892a1c9006b3477de1784ad73b68b87131e9f159bd9b0558ebecae197f4",
       "output_sha256": "999c63c3ba17b6bf7c369b3faae7bb957e433c7dee2d6eecc9b525c632898c39",
@@ -2978,7 +2978,7 @@
     },
     {
       "index": 330,
-      "module": "pcc.native_ir.text_tokens",
+      "module": "pcc.ir.optimization.text_tokens",
       "input_bytes": 88459,
       "input_sha256": "43b351722882f4d0d0c07bd111358ee72283964a744a35306c8cd2742bf9df21",
       "output_sha256": "55e7b0b11a1f657387afb28cdb65b294db5ab606a508fce03281fbcf1921ace9",
@@ -2987,7 +2987,7 @@
     },
     {
       "index": 331,
-      "module": "pcc.native_ir.integer_fold_contract",
+      "module": "pcc.ir.optimization.integer_fold_contract",
       "input_bytes": 257566,
       "input_sha256": "b75b9ec33b5bbcfa5cb5cfa7a5fe44d3d96ee4f0dcb72981b975f33ef4e72f2d",
       "output_sha256": "c60386787f34a50e28e0f8826c9eddffbb1f5d97f415169f4ee265240c1fedc1",
@@ -2996,7 +2996,7 @@
     },
     {
       "index": 332,
-      "module": "pcc.py_frontend.codegen.hoist_lowering",
+      "module": "pcc.frontends.python.codegen.hoist_lowering",
       "input_bytes": 1823960,
       "input_sha256": "790ff1834b5ca6f900212769d188d0ae801607f77caaa48025ed88728bc3792e",
       "output_sha256": "48c01dcce35eb14c55a091eff5430f1e6c833ea07fdce04b4d24b18da730e580",
@@ -3005,7 +3005,7 @@
     },
     {
       "index": 333,
-      "module": "pcc.py_frontend.codegen.typed_int_bounded_proof",
+      "module": "pcc.frontends.python.codegen.typed_int_bounded_proof",
       "input_bytes": 841294,
       "input_sha256": "727ce806b965f5d7866e69829a8bf8558acae8f2f63bb2356d81807669e729e2",
       "output_sha256": "81a2b3e8e640b2803b1c4e0a60a2c05f6fc6c9e223ea9be2498ea086238d2a3f",
@@ -3014,7 +3014,7 @@
     },
     {
       "index": 334,
-      "module": "pcc.py_frontend.codegen.bootstrap_trace",
+      "module": "pcc.frontends.python.codegen.bootstrap_trace",
       "input_bytes": 27811,
       "input_sha256": "fffb790be880899bf30515bcb0e3c63d4731a077d558c888d26850bcc3368169",
       "output_sha256": "a217b297b209b8726de1ea6fc9bd1b0f8a0449d7023d8de4bcb21f39e50e80a9",
@@ -3023,7 +3023,7 @@
     },
     {
       "index": 335,
-      "module": "pcc.py_frontend.codegen.guarded_loop_lowering",
+      "module": "pcc.frontends.python.codegen.guarded_loop_lowering",
       "input_bytes": 700325,
       "input_sha256": "b613320bfb50551c58848ff14c53fa5a356cecbb4b2d787aa6f1633556372ab2",
       "output_sha256": "8bee2223c712eb7ff0d0ef3bbd27ca5ce86984047b285d97a18327b14e02808c",
@@ -3032,7 +3032,7 @@
     },
     {
       "index": 336,
-      "module": "pcc.py_runtime.py.py_abi_constants",
+      "module": "pcc.runtime.py.py_abi_constants",
       "input_bytes": 182935,
       "input_sha256": "a479b66a8dbb757308ae05b2f6cc9f09e1109e5b1aea74fad244d8df5918a545",
       "output_sha256": "8d4e740ec17eaf07bfce096219e9a18461088d8ef0978c0e8b44d7ac1977bb0f",
@@ -3041,7 +3041,7 @@
     },
     {
       "index": 337,
-      "module": "pcc.py_frontend.codegen.freestanding_abi_constants",
+      "module": "pcc.frontends.python.codegen.freestanding_abi_constants",
       "input_bytes": 182867,
       "input_sha256": "320a870a73fd93efa12c6a7b9d64f921b72ff8f4589b4b56cb4d9c1658019062",
       "output_sha256": "c57da73d8037e094823724b02260bcc1c93eb604ddcbc663284eb36b30b6ef89",
@@ -3050,7 +3050,7 @@
     },
     {
       "index": 338,
-      "module": "pcc.py_frontend.codegen.async_await_lowering",
+      "module": "pcc.frontends.python.codegen.async_await_lowering",
       "input_bytes": 201691,
       "input_sha256": "2446c213ab18b64a29bb8debd22df5b7fb1a7d0110e3c8551716c54b072fef2f",
       "output_sha256": "9b071dcd96fd2fc9e059d49c3592e3fb324fa23cf5a8ca6e22458d3a52fbd0d4",
@@ -3059,7 +3059,7 @@
     },
     {
       "index": 339,
-      "module": "pcc.passes.ast_utils",
+      "module": "pcc.frontends.c.passes.ast_utils",
       "input_bytes": 524676,
       "input_sha256": "2eaacdf0c848bb6573057ba837a1e67556421ea27b36a67ba888cdebd6b228e0",
       "output_sha256": "45f686f74b16d0df16b1324ecf454225a5f91000300bf9036cbfb90655dc1e7c",
@@ -3068,7 +3068,7 @@
     },
     {
       "index": 340,
-      "module": "pcc.ssa",
+      "module": "pcc.frontends.c.ssa",
       "input_bytes": 16497,
       "input_sha256": "5cda9194078a87757ed1097cc4bb0d50d0de48a527abd30dc254d7233be7318e",
       "output_sha256": "77b4843d880b7aca7e3280b3e152b5e0624678f0111277084a40b5b9854b2799",
@@ -3086,7 +3086,7 @@
     },
     {
       "index": 342,
-      "module": "pcc.c_libc_registry",
+      "module": "pcc.frontends.c.c_libc_registry",
       "input_bytes": 108363,
       "input_sha256": "74a5c589e6f6a3104f03beb841e2b67bb35b07dbaff5917e94ad32ff60e50359",
       "output_sha256": "0cb1374354994532d41599bc4ace32e68e077b28b2d0d764c31b62ea6df49d66",
@@ -3095,7 +3095,7 @@
     },
     {
       "index": 343,
-      "module": "pcc.ssa.ir",
+      "module": "pcc.frontends.c.ssa.ir",
       "input_bytes": 259913,
       "input_sha256": "25678ce5899899b2309bfa801a802408a141683e805a79159efe2d9c228fe763",
       "output_sha256": "80d06ec0595bd6bf2796724c9bc391dfc7fed6c138ab673ebdfe38ab037a5669",
@@ -3104,7 +3104,7 @@
     },
     {
       "index": 344,
-      "module": "pcc.ssa.builder",
+      "module": "pcc.frontends.c.ssa.builder",
       "input_bytes": 4795003,
       "input_sha256": "ceb048b6c02332a3114f41493fe3a771641d0fc44b41c3b4db0c3e164f1539f9",
       "output_sha256": "f464c530901bf5bc9cf385a6f2e11394cd843d2336820a5030f05854cf2e5851",
@@ -3113,7 +3113,7 @@
     },
     {
       "index": 345,
-      "module": "pcc.ply.lex",
+      "module": "pcc.frontends.c.ply.lex",
       "input_bytes": 1116992,
       "input_sha256": "33ced30fd05bc722a571614302a177d4e1640bfa9e5974381ffb4d53add5abab",
       "output_sha256": "5e5942e5f5d61ebaeb6a8d9bcc1d1e415ed8e559397aad34dba9a4c9f06fb62b",
@@ -3122,7 +3122,7 @@
     },
     {
       "index": 346,
-      "module": "pcc.package_compat",
+      "module": "pcc.package.compat",
       "input_bytes": 66227,
       "input_sha256": "bb1fbbc4e7906871344ab8a199c2ea3742527987ba1b9e2a87a166dbd290f25a",
       "output_sha256": "3b15b4951e1525f6d57add6a7fffd2075ca6c9f90861a50c44413d222385c0bb",
@@ -3131,7 +3131,7 @@
     },
     {
       "index": 347,
-      "module": "pcc.py_frontend.codegen.hoist_boxing",
+      "module": "pcc.frontends.python.codegen.hoist_boxing",
       "input_bytes": 388168,
       "input_sha256": "393bf651bd313813fae62760af3ec537768f4937f770fca3b7c29c1a19f8a976",
       "output_sha256": "400032dae2f560f757214ae2d8104c2ba2992b7f63f72735c6e77bebce825c15",
@@ -3140,7 +3140,7 @@
     },
     {
       "index": 348,
-      "module": "pcc.py_frontend.codegen.hoist_free_names",
+      "module": "pcc.frontends.python.codegen.hoist_free_names",
       "input_bytes": 550085,
       "input_sha256": "4bd08d59f454c4f8f78e812888dba2454fe70707b1c2608b034fa70c593d5d29",
       "output_sha256": "d430400f34dbefbfd3620d68c3747b11c359f26b01f3696a95b7e244d26403e8",
@@ -3149,7 +3149,7 @@
     },
     {
       "index": 349,
-      "module": "pcc.py_frontend.codegen.hoist_predicates",
+      "module": "pcc.frontends.python.codegen.hoist_predicates",
       "input_bytes": 380039,
       "input_sha256": "62fedd75b81282b9cb1bd1f1d9bd44cb6626e360d835c54a8b1c700cada091af",
       "output_sha256": "7591da827ad56fb845ee66dedf16f6dd13cb38ff0fbb8aaef9d4aaeeb2c51b51",
@@ -3158,7 +3158,7 @@
     },
     {
       "index": 350,
-      "module": "pcc.ssa.adce",
+      "module": "pcc.frontends.c.ssa.adce",
       "input_bytes": 116333,
       "input_sha256": "0cc657436e29a8704190fc4714fdc4b2d4eb5c6f01b025829afa783f6fec391d",
       "output_sha256": "a8dbbf85236622ff461ff4c57b3654b99cf5e67385a70fba77d1ff9e60979a5d",
@@ -3167,7 +3167,7 @@
     },
     {
       "index": 351,
-      "module": "pcc.ssa.gvn",
+      "module": "pcc.frontends.c.ssa.gvn",
       "input_bytes": 133562,
       "input_sha256": "16ec33e695969e9ab8bc24b07e14c98412ffe0aeec193ff8a07a8914f5675e54",
       "output_sha256": "f4238a3e9d513f5c99bc221a784c03951e58c9b1b48df1f7a2ac10225978e3c6",
@@ -3176,7 +3176,7 @@
     },
     {
       "index": 352,
-      "module": "pcc.ssa.loop_phi",
+      "module": "pcc.frontends.c.ssa.loop_phi",
       "input_bytes": 239249,
       "input_sha256": "98b01e4dd193e3bd9e743b50dfbdd161e9e3d93ea8ddba62839bda5a78c81680",
       "output_sha256": "c7a4081280001b8fca0df8d1bff8510ee437a340acc2c6e9c658197bf8cce6b3",
@@ -3185,7 +3185,7 @@
     },
     {
       "index": 353,
-      "module": "pcc.ssa.sccp",
+      "module": "pcc.frontends.c.ssa.sccp",
       "input_bytes": 479298,
       "input_sha256": "9d2a28869be4ee300b1d6a155d9ef1a28b8786ce7750fe4fa494ae51cbe0f83b",
       "output_sha256": "b9f9ea11fbbade3b5311e62a66492df3c603ad021ae6593dbe9dc0753ecea4d8",

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pcc.stdlib_status import (
+from pcc.diagnostics.stdlib_status import (
     MODE_COMPAT_BRIDGE,
     MODE_NATIVE_DYNAMIC,
     MODE_NATIVE_STATIC,

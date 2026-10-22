@@ -1,0 +1,200 @@
+{
+  "contracts": {
+    "class_construction_and_interleaved_function_binding_order": "PASS",
+    "expanded_runtime_call_counts": "equal in raw and post-default IR; no other expanded runtime-call count differences",
+    "generated_owned_record_containers": "PASS before textual rendering",
+    "helper_root_and_lease_checks": {
+      "post": {
+        "active_root_groups_at_every_helper_return": 0,
+        "exact_token_cleanup_attempt_coverage": "PASS",
+        "helper_call_status_edges": 110,
+        "helper_contracts": 55,
+        "lease_acquisition_sites": 2808,
+        "lease_release_call_sites": 4850,
+        "terminal_root_states": 110
+      },
+      "raw": {
+        "active_root_groups_at_every_helper_return": 0,
+        "exact_token_cleanup_attempt_coverage": "PASS",
+        "helper_call_status_edges": 110,
+        "helper_contracts": 55,
+        "lease_acquisition_sites": 2808,
+        "lease_release_call_sites": 4850,
+        "terminal_root_states": 110
+      }
+    },
+    "helper_success_failure_edges": "PASS; success status 1, failure follows the original error exit and cannot reach later helpers or success",
+    "lease_scope": "This proves emitted exact-token cleanup-attempt coverage, including failed acquisitions. It does not execute or prove successful runtime releases or full collector safety.",
+    "libpython_calls": 0,
+    "public_function_count": 229,
+    "public_function_signatures_and_globals": "equal",
+    "raw_and_post_all_function_arm_root_planning": "PASS",
+    "raw_and_post_owned_ssa_type_cfg_verification": "PASS for every function in both arms",
+    "strict_stubs": 0
+  },
+  "date_utc": "2026-10-10",
+  "decision": "MECHANISM_THRESHOLD_MET_REVIEW_ONLY",
+  "execution": {
+    "audit_denials": 0,
+    "both_arms_exit_code": 0,
+    "both_cleanup": "CLEAN, known root reaped, ECHILD",
+    "complete_source_inventories_before_and_after": "PASS for both sources around both arms",
+    "diagnostic_observations": {
+      "baseline": {
+        "guard_elapsed_seconds": 74.67439177400229,
+        "sampled_peak_rss_bytes": 485306368
+      },
+      "candidate": {
+        "guard_elapsed_seconds": 48.66776334399765,
+        "sampled_peak_rss_bytes": 284663808
+      }
+    },
+    "exclusive_shared_lock": true,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "lock_released": true,
+    "maximum_disk_growth_bytes_per_arm": 536870912,
+    "measurement_limits": "Elapsed values include generation, verification, root planning, hashing and cleanup; the candidate also includes comparison. Sampled RSS is observational. These single ordered runs establish no speedup or memory improvement.",
+    "minimum_free_bytes": 4294967296,
+    "order": [
+      "baseline",
+      "candidate"
+    ],
+    "packet_and_import_source_guards": "PASS",
+    "runs_per_arm": 1,
+    "same_lock_identity": true,
+    "seconds_limit_per_arm": 300
+  },
+  "input": {
+    "host": "Linux CPython 3.15.0rc1",
+    "passes": [
+      "mem2reg",
+      "sroa"
+    ],
+    "path": "pcc/frontends/c/ast/c_ast.py",
+    "route": "Each arm independently parses, lifts, infers and generates the real module; no reused indexed input or fabricated export context.",
+    "runtime_threads": false,
+    "sha256": "21eacf1370cec218ea7ff97092ee47a96752505067caad2699f20239c74f2b58",
+    "target": "arm64-apple-darwin23.6.0"
+  },
+  "observed_mechanism": {
+    "counts": {
+      "baseline": {
+        "post": {
+          "blocks": 49117,
+          "entrypoints": {
+            "_pcc_py_module_init_pcc_frontends_c_ast_c_ast": 113742,
+            "_pcc_py_module_top_pcc_frontends_c_ast_c_ast": 114780
+          },
+          "functions": 231,
+          "helpers": 0,
+          "indexed_instructions": 219278,
+          "max_function_text_instructions": 114780,
+          "phis": 548,
+          "public_functions": 229,
+          "terminators": 48161,
+          "text_bytes": 24283132,
+          "text_instructions_including_terminators": 273293
+        },
+        "raw": {
+          "blocks": 49117,
+          "entrypoints": {
+            "_pcc_py_module_init_pcc_frontends_c_ast_c_ast": 113910,
+            "_pcc_py_module_top_pcc_frontends_c_ast_c_ast": 114948
+          },
+          "functions": 231,
+          "helpers": 0,
+          "indexed_instructions": 219614,
+          "max_function_text_instructions": 114948,
+          "phis": 548,
+          "public_functions": 229,
+          "terminators": 48161,
+          "text_bytes": 24301681,
+          "text_instructions_including_terminators": 273629
+        }
+      },
+      "candidate": {
+        "post": {
+          "blocks": 28978,
+          "entrypoints": {
+            "_pcc_py_module_init_pcc_frontends_c_ast_c_ast": 1984,
+            "_pcc_py_module_top_pcc_frontends_c_ast_c_ast": 3022
+          },
+          "functions": 286,
+          "helpers": 55,
+          "indexed_instructions": 130161,
+          "max_function_text_instructions": 6302,
+          "phis": 328,
+          "public_functions": 229,
+          "terminators": 28350,
+          "text_bytes": 13875507,
+          "text_instructions_including_terminators": 161865
+        },
+        "raw": {
+          "blocks": 28978,
+          "entrypoints": {
+            "_pcc_py_module_init_pcc_frontends_c_ast_c_ast": 1987,
+            "_pcc_py_module_top_pcc_frontends_c_ast_c_ast": 3025
+          },
+          "functions": 286,
+          "helpers": 55,
+          "indexed_instructions": 130332,
+          "max_function_text_instructions": 6302,
+          "phis": 328,
+          "public_functions": 229,
+          "terminators": 28350,
+          "text_bytes": 13884107,
+          "text_instructions_including_terminators": 162036
+        }
+      }
+    },
+    "helper_abi": "internal noinline i32 ()",
+    "helper_calls_per_entrypoint": 55,
+    "inline_classes": [
+      "Node"
+    ],
+    "largest_function_instruction_reduction": 0.9450949642794912,
+    "metric": "all textual function instructions, including PHIs and terminators",
+    "outlined_helpers": 55,
+    "post_default_instruction_reduction": 0.40772357872320186,
+    "predeclared_thresholds": {
+      "max_function_instruction_reduction": 0.5,
+      "total_post_default_instruction_reduction": 0.25
+    },
+    "source_classes": 56
+  },
+  "preserved_limits": [
+    "The earlier V4 production failure and V5 text-order oracle failure remain preserved; this result does not relabel them.",
+    "The V1 real-module harness was preserved unexecuted. V2 repaired exceptional kernel cleanup before these two executions.",
+    "No object emission, linking, runtime build, emitted native execution, FFI, pcc1, device validation, full Stage1, or full regression suite was performed by this gate.",
+    "Thread-enabled frontend behavior and runtime freshness/failure-injection behavior remain unqualified for this candidate.",
+    "Meeting the structural thresholds authorizes review only; production application and any timing/native gate require separate admission."
+  ],
+  "production_application": "UNAPPLIED",
+  "provenance": {
+    "baseline_codegen_checksum": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+    "baseline_pcc_tree": "d234174fbac80575ea822f6100f65fe914dd4498",
+    "baseline_production_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+    "baseline_result_sha256": "9a124fc456bb33522be49220226f4bb64a4fb7d60ef56ff84a9d9eddf5754b09",
+    "baseline_source_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+    "baseline_source_scope": "The retained full source inventory has a pcc subtree equal to the named production commit; it is not a full checkout of that commit. Unrelated archived native-test and documentation/bootstrap bytes are older.",
+    "candidate_codegen_checksum": "68581b5d714a4d11835199b80fd6cbcb6e3178245c79dcef6843d73469b1a5e5",
+    "candidate_pcc_tree": "dc63c2a946f533f7b31ce63db2f759a044fdc37f",
+    "candidate_result_sha256": "d19e28215613604690cfd8dd9c152cb612f488d5c0c9476f5fee4a82856dda4c",
+    "candidate_source_inventory_sha256": "98d5eff5e571bf80e863f665284a568b5d10b1f19b4ff02c89bf79aed5ba9136",
+    "candidate_source_scope": "An ordinary independent copy of that retained baseline plus only class_gen.py, generation_lowering.py, and test_class_init_outlining.py from the saved V1/V4/V5/V6 candidate chain.",
+    "comparison_sha256": "bebf21383e4f786aae599f476364e85571c2af1a9cd2e2feea2caaf65367b21e",
+    "focused_host_precedent": {
+      "passed": 29,
+      "qualification_sha256": "98e005e61093b3d89b2df47336fc33aa2023fad07adec3ceb71b197764890db7",
+      "scope": "Separate small host gate; not repeated by this experiment."
+    },
+    "full_qualification_sha256": "943ca38c62b49cff2f618ad5e76c8a4d9d035fbe3a7ffca4f33622b423465a19",
+    "packet_manifest_sha256": "5c50e21a0afe8e2531f72ff61f5cbb1080c5900967f904bb7de78b79adacf7f7",
+    "packet_preservation_commit": "33f60976dc4e87644f429eabf11cfcf3e23d1a06",
+    "repository": "ikshengmin/pcc"
+  },
+  "schema": "pcc.class-init-outlining-real-module-qualification.v2",
+  "scope": "One fresh baseline generation and one fresh candidate generation of the unchanged complete c_ast module, followed by raw and default-owned-pass IR checks and ordinary AArch64 root planning. Host structural evidence only.",
+  "status": "PASS_HOST_STRUCTURAL_CONTRACTS"
+}

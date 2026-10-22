@@ -22,14 +22,14 @@ from pathlib import Path
 
 import pytest
 
-from pcc.parse.py_lift import parse_and_lift
-from pcc.py_frontend.py_ast import Assign, DynType, FuncDef, FuncType, IntType, Return
-from pcc.py_frontend.pipeline import compile_python
-from pcc.py_frontend.pipeline_freestanding import (
+from pcc.frontends.python.py_lift import parse_and_lift
+from pcc.frontends.python.py_ast import Assign, DynType, FuncDef, FuncType, IntType, Return
+from pcc.frontends.python.pipeline import compile_python
+from pcc.frontends.python.pipeline_freestanding import (
     source_declares_freestanding_module,
     source_declares_runtime_port_module,
 )
-from pcc.py_frontend.type_infer import PyFrontendError, infer_module
+from pcc.frontends.python.type_infer import PyFrontendError, infer_module
 
 
 def _infer(source: str, name: str = "raw_addr_mod"):
@@ -154,7 +154,7 @@ def test_runtime_port_directive_scanner_matches_the_freestanding_contract() -> N
 def test_every_non_freestanding_runtime_port_declares_the_directive() -> None:
     """The object-model kernel builds objects out of raw memory; every port
     module must opt into the pointer lane explicitly."""
-    ports = Path(__file__).resolve().parents[2] / "pcc" / "py_runtime" / "py"
+    ports = Path(__file__).resolve().parents[2] / "pcc" / "runtime" / "py"
     missing = []
     for path in sorted(ports.glob("*.py")):
         source = path.read_text(encoding="utf-8")
@@ -243,7 +243,7 @@ def test_raw_addresses_execute_as_ints_on_the_self_backend(tmp_path: Path) -> No
 
 
 @pytest.mark.parametrize("directive", ["", "__pcc_runtime_port__ = True\n"])
-def test_pointer_difference_decodes_dynamic_address_arguments(tmp_path, pcc_py_runtime_archive, directive):
+def test_pointer_difference_decodes_dynamic_address_arguments(tmp_path, pcc_runtime_archive, directive):
     src = tmp_path / "address_difference.py"
     exe = tmp_path / "address_difference"
     src.write_text(directive + '''from pcc.unsafe import malloc, free, ptr_add, ptr_diff, null
@@ -265,7 +265,7 @@ def main():
 main()
 ''')
     compile_python(str(src), str(exe), libpython_mode="off", ir_scaffold_mode="on",
-                   backend="self", runtime_archive=str(pcc_py_runtime_archive))
+                   backend="self", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         done = subprocess.run([str(exe)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
                               capture_output=True, text=True, timeout=20)

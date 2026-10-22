@@ -12,7 +12,7 @@ import pytest
     "closure_default", "closure",
 ])
 def test_comprehension_owners_leave_scope(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive, shape,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive, shape,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     bodies = {
@@ -89,7 +89,7 @@ main()
 '''.replace("BODY", bodies[shape]).replace("SHAPE", shape))
     binary = tmp_path / "comp_owners"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run(
             [str(binary)], capture_output=True, text=True, timeout=30,

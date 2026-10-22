@@ -10,6 +10,7 @@ default value or ``KeyError``.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import textwrap
@@ -21,12 +22,12 @@ REPO = Path(__file__).resolve().parents[2]
 
 def test_hash_runtime_mirrors_reject_mutable_builtins_and_guard_callers():
     compare_py = (
-        REPO / "pcc" / "py_runtime" / "py" / "py_obj_ops_compare.py"
+        REPO / "pcc" / "runtime" / "py" / "py_obj_ops_compare.py"
     ).read_text(encoding="utf-8")
-    dict_py = (REPO / "pcc" / "py_runtime" / "py" / "py_dict.py").read_text(
+    dict_py = (REPO / "pcc" / "runtime" / "py" / "py_dict.py").read_text(
         encoding="utf-8"
     )
-    set_py = (REPO / "pcc" / "py_runtime" / "py" / "py_set.py").read_text(
+    set_py = (REPO / "pcc" / "runtime" / "py" / "py_set.py").read_text(
         encoding="utf-8"
     )
 
@@ -39,12 +40,17 @@ def test_hash_runtime_mirrors_reject_mutable_builtins_and_guard_callers():
         assert "PY_TYPE_BYTEARRAY" in source
         assert "py_err_occurred()" in source
 
-    assert dict_py.count(
-        "h: int = py_obj_hash(key)\n    if py_err_occurred() != 0:"
-    ) == 4
-    assert set_py.count(
-        "h: int = py_obj_hash(item)\n    if py_err_occurred() != 0:"
-    ) == 3
+    # Every hash computed for a probe or mutation is followed by the pending
+    # exception check before the table is touched. The GC0 fast path hashes
+    # only tagged ints and str, which cannot fail.
+    fast0 = "def _dict_fast0_hash(" + dict_py.split("def _dict_fast0_hash(", 1)[1].split("\n\n\n", 1)[0]
+    assert "py_str_hash(key)" in fast0 and "kind == 1" in fast0
+    for source, expected in ((dict_py.replace(fast0, ""), 2), (set_py, 3)):
+        sites = [match.start() for match in re.finditer(r"py_obj_hash\(", source)]
+        assert len(sites) == expected
+        for site in sites:
+            following = "\n".join(source[site:].splitlines()[:6])
+            assert "py_err_occurred()" in following, following
 
     assert dict_py.count(
         "if ptr_is_null(v) == 0:\n        return v\n"
@@ -60,10 +66,10 @@ def test_hash_runtime_mirrors_reject_mutable_builtins_and_guard_callers():
 def test_mutable_builtin_hash_failures_match_cpython_without_mutation(
     tmp_path,
     monkeypatch,
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
 ):
-    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_py_runtime_archive))
-    from pcc.py_frontend.pipeline import compile_python
+    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_runtime_archive))
+    from pcc.frontends.python.pipeline import compile_python
 
     source = textwrap.dedent(
         """

@@ -29,7 +29,7 @@ def _run_test(tmp_path, monkeypatch, source, compiler):
             check=True,
         )
     else:
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
         compile_python(str(src), str(exe), ir_scaffold_mode="on", libpython_mode="off")
     return subprocess.run([str(exe)], capture_output=True, text=True).stdout.strip()
 

@@ -4,7 +4,7 @@ CPython constructs with ``obj = Cls.__new__(Cls, *args)`` and then applies
 ``Cls.__init__(obj, *args)`` to whatever ``__new__`` returned.  pcc consulted
 ``__new__`` only when a class had no ``__init__``, so every interning or
 singleton ``__new__`` that also defined one was silently skipped:
-``pcc/llvm_capi/ir.py`` interns ``IntType`` per width in ``__new__`` and
+``pcc/ir/ir.py`` interns ``IntType`` per width in ``__new__`` and
 defines ``__init__`` as well, so ``IntType(8) is IntType(8)`` was False where
 CPython says True -- and codegen's ``value.type is _I64`` identity checks
 depend on that interning holding.
@@ -94,7 +94,7 @@ main()
 
 
 def _build_and_run(tmp_path, name, source):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / (name + ".py")
     exe = tmp_path / (name + ".out")

@@ -7,9 +7,9 @@ semantics that must hold IDENTICALLY under all five production GC backends
 Run it under every backend with:
 
 ```bash
-scripts/run_gc_production_contract.sh
+scripts/run_test_gates.py --gate gc-production-contract
 # or a subset:
-GC_BACKENDS="0 3 4" scripts/run_gc_production_contract.sh
+scripts/run_test_gates.py --gate gc-production-contract --backends "0 3 4"
 ```
 
 A runtime/GC-touching feature is `DONE_STRONG` / "5-GC production contract pass"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from pcc.cli_observability import (
+from pcc.driver.cli_observability import (
     emit_exception_diagnostic,
     normalize_diagnostic_format,
     parse_observability_args,

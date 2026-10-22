@@ -250,7 +250,7 @@ work concurrently.
 Plan:
 
 1. Extract behavior-preserving helper modules from
-   `pcc/py_frontend/codegen/layer1.py` by concern: scope analysis,
+   `pcc/frontends/python/codegen/layer1.py` by concern: scope analysis,
    call lowering, literal/container lowering, control-flow lowering,
    and import/class helpers.
 2. Keep `L1CodeGen`'s public surface stable during the first split.
@@ -286,7 +286,7 @@ linear in IR size, so this directly hits P-1 too.
 
 **State:** partially landed. Codex's translation of LLVM passes (67
 passes, 22k+ lines under `pcc/ir_passes/`) is wired through
-`pcc/py_frontend/ir_pass_pipeline.py`. The default Python frontend
+`pcc/frontends/python/ir_pass_pipeline.py`. The default Python frontend
 pipeline now runs a bounded fast preset:
 
 ```
@@ -745,10 +745,10 @@ Telemetry:
 - 117 modules;
 - 819 pass events;
 - status counts: 805 memory cache hits, 14 memory runs;
-- largest modules included `pcc.py_frontend.pipeline` at 3925033 input bytes,
-  `pcc.py_frontend.type_infer` at 2847364, and
-  `pcc.py_frontend.codegen.class_gen` at 2809431;
-- largest elapsed pass sum was `pcc.py_frontend.pipeline` at about 6901 ms.
+- largest modules included `pcc.frontends.python.pipeline` at 3925033 input bytes,
+  `pcc.frontends.python.type_infer` at 2847364, and
+  `pcc.frontends.python.codegen.class_gen` at 2809431;
+- largest elapsed pass sum was `pcc.frontends.python.pipeline` at about 6901 ms.
 
 Cold-cache memory-transport experiment:
 
@@ -784,12 +784,12 @@ Telemetry:
 - 117 modules;
 - 819 pass events;
 - status counts: 819 memory runs, 0 cache hits;
-- largest modules included `pcc.py_frontend.pipeline` at 3925033 input bytes,
-  `pcc.py_frontend.type_infer` at 2847364, and
-  `pcc.py_frontend.codegen.class_gen` at 2809431;
-- largest elapsed pass sums were `pcc.py_frontend.pipeline` at about 8017 ms,
-  `pcc.parse.py_parse` at about 6382 ms, and
-  `pcc.py_frontend.codegen.class_gen` at about 5423 ms.
+- largest modules included `pcc.frontends.python.pipeline` at 3925033 input bytes,
+  `pcc.frontends.python.type_infer` at 2847364, and
+  `pcc.frontends.python.codegen.class_gen` at 2809431;
+- largest elapsed pass sums were `pcc.frontends.python.pipeline` at about 8017 ms,
+  `pcc.frontends.python.py_parse` at about 6382 ms, and
+  `pcc.frontends.python.codegen.class_gen` at about 5423 ms.
 
 Text-transport comparison:
 
@@ -821,10 +821,10 @@ Telemetry:
 - 110 modules;
 - 763 pass events;
 - status counts: 756 runs, 7 huge-module skips;
-- slow modules included `pcc.py_frontend.codegen.call_expression_lowering`
-  at about 31107 ms, `pcc.py_frontend.pipeline` at about 22590 ms,
-  `pcc.py_frontend.type_infer` at about 19271 ms, and
-  `pcc.py_frontend.codegen.layer1_support` at about 17095 ms.
+- slow modules included `pcc.frontends.python.codegen.call_expression_lowering`
+  at about 31107 ms, `pcc.frontends.python.pipeline` at about 22590 ms,
+  `pcc.frontends.python.type_infer` at about 19271 ms, and
+  `pcc.frontends.python.codegen.layer1_support` at about 17095 ms.
 
 Fixes needed to make the memory experiment complete:
 
@@ -907,19 +907,19 @@ Telemetry:
 - 117 modules after parent-side sharding;
 - start transports: 117 memory;
 - pass status counts: 819 memory runs, 0 cache hits;
-- largest modules included `pcc.py_frontend.pipeline` at 3941638 input bytes,
-  `pcc.py_frontend.type_infer` at 2847364, and
-  `pcc.py_frontend.codegen.class_gen` at 2809431;
-- largest elapsed pass sums were `pcc.py_frontend.pipeline` at about 8166 ms,
-  `pcc.parse.py_parse` at about 5991 ms, and
-  `pcc.py_frontend.codegen.class_gen` at about 5432 ms.
+- largest modules included `pcc.frontends.python.pipeline` at 3941638 input bytes,
+  `pcc.frontends.python.type_infer` at 2847364, and
+  `pcc.frontends.python.codegen.class_gen` at 2809431;
+- largest elapsed pass sums were `pcc.frontends.python.pipeline` at about 8166 ms,
+  `pcc.frontends.python.py_parse` at about 5991 ms, and
+  `pcc.frontends.python.codegen.class_gen` at about 5432 ms.
 
 Self-backend boundary:
 
 - An intermediate probe that let explicit self-backend
   `--python-ir-passes default` auto-select memory initially failed in stage1
   with `self backend expected pointer value 'poison' in
-  'user_pcc_parse_py_lift__Lifter__e_Call'`.
+  'user_pcc_frontends_python_py_lift__Lifter__e_Call'`.
 - The minimized shape was an unreachable exception block after LLVM memory
   passes where owned-flag storage had become `load/store ..., ptr poison`.
 - The AArch64 and x86_64 self backends now materialize pointer
@@ -959,9 +959,9 @@ Telemetry:
 - 118 modules after parent-side sharding;
 - start transports: 118 memory;
 - pass status counts: 826 memory runs, 0 cache hits;
-- largest elapsed pass sums were `pcc.py_frontend.pipeline` at about 10936 ms,
-  `pcc.parse.py_parse` at about 9002 ms, and
-  `pcc.py_frontend.codegen.class_gen` at about 7312 ms.
+- largest elapsed pass sums were `pcc.frontends.python.pipeline` at about 10936 ms,
+  `pcc.frontends.python.py_parse` at about 9002 ms, and
+  `pcc.frontends.python.codegen.class_gen` at about 7312 ms.
 
 Remaining gap:
 
@@ -1033,9 +1033,9 @@ Telemetry:
 - 118 distinct modules, three stages worth of pass events;
 - start transports: 354 memory;
 - pass status counts: 2478 memory runs, 0 cache hits;
-- largest elapsed pass sums were `pcc.py_frontend.pipeline` at about 24146 ms,
-  `pcc.parse.py_parse` at about 18894 ms, and
-  `pcc.py_frontend.codegen.class_gen` at about 15083 ms.
+- largest elapsed pass sums were `pcc.frontends.python.pipeline` at about 24146 ms,
+  `pcc.frontends.python.py_parse` at about 18894 ms, and
+  `pcc.frontends.python.codegen.class_gen` at about 15083 ms.
 
 Scope boundary:
 
@@ -1159,7 +1159,7 @@ Result:
 Self-host safety evidence:
 
 - contextual fallback count for
-  `pcc.py_frontend.codegen.user_function_lowering` is 0 after adding
+  `pcc.frontends.python.codegen.user_function_lowering` is 0 after adding
   `LowF64Const`;
 - direct LLVM stage1 bootstrap exited 0 in 22.704s with
   `--python-libpython off`.
@@ -1218,7 +1218,7 @@ Result:
 
 - 11 tests passed.
 - contextual fallback count for
-  `pcc.py_frontend.codegen.user_function_lowering` remained 0.
+  `pcc.frontends.python.codegen.user_function_lowering` remained 0.
 
 2026-05-25 AArch64 self-backend typed-float follow-up:
 
@@ -1256,7 +1256,7 @@ Result:
 
   Result: 18 tests passed.
 
-- Stage1 benchmark sample after `make -C pcc/py_runtime distclean` and a clean
+- Stage1 benchmark sample after `make -C pcc/runtime distclean` and a clean
   runtime rebuild:
 
   ```bash
@@ -1775,7 +1775,7 @@ Rejected 2026-05-25 direct-accumulator lowering probe:
 
   | backend | stage | libpython | text pcc/C | top symbols and source attribution for all three user-runtime cases |
   |---|---:|---|---:|---|
-  | LLVM | 1 | false | 19.000 | `_user_py_gc_backend__relocate_copy_payload` 5452 -> `py_gc_backend.o` (`pcc/py_runtime/py/py_gc_backend.py`); `_pcc_gc_telemetry` 3184 -> `py_gc_backend.o` (`pcc/py_runtime/py/py_gc_backend.py`); `_py_str_mod` 2900 -> `py_format.o` (`pcc/py_runtime/src/py_format.c`); `_pcc_capi_format_message` 2820 -> `py_capi_shim.o` (`pcc/py_runtime/src/py_capi_shim.c`); `_py_obj_format` 2028 -> `py_format.o` (`pcc/py_runtime/src/py_format.c`) |
+  | LLVM | 1 | false | 19.000 | `_user_py_gc_backend__relocate_copy_payload` 5452 -> `py_gc_backend.o` (`pcc/runtime/py/py_gc_backend.py`); `_pcc_gc_telemetry` 3184 -> `py_gc_backend.o` (`pcc/runtime/py/py_gc_backend.py`); `_py_str_mod` 2900 -> `py_format.o` (`pcc/runtime/src/py_format.c`); `_pcc_capi_format_message` 2820 -> `py_capi_shim.o` (`pcc/runtime/src/py_capi_shim.c`); `_py_obj_format` 2028 -> `py_format.o` (`pcc/runtime/src/py_format.c`) |
   | self | 1 | false | 19.000 | same as LLVM |
 
   Interpretation:
@@ -2690,7 +2690,7 @@ class-dealloc archive split probe:
   `15.167` and text pcc/C `19.000`.
 - Follow-up cleanup:
   - reverted the source/link behavior changes;
-  - ran `make -C pcc/py_runtime distclean` to remove stale probe-built runtime
+  - ran `make -C pcc/runtime distclean` to remove stale probe-built runtime
     archives;
   - reran the stage1 dashboard and recorded the clean-rebuild baseline above.
 - Interpretation:

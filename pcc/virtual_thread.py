@@ -84,6 +84,29 @@ def continuation_factory(fn):
     return invoke
 
 
+def transparent_call(fn):
+    """Mark a forwarding wrapper transparent to a deferred call.
+
+    Under pcc the function object carries the transparent-call role: when a
+    deferred caller (``call``) invokes the wrapper, its deferral passes
+    through, and the wrapper's ``return forward_call(target, args, kwargs)``
+    calls ``target`` the way the wrapper itself was called. A parking target
+    then hands its continuation to the resumable caller instead of hitting
+    the synchronous boundary. The wrapper itself must not park. Outside pcc
+    the function is returned unchanged.
+    """
+    return fn
+
+
+def forward_call(fn: Callable[..., Any], args: tuple, kwargs: dict) -> Any:
+    """``fn(*args, **kwargs)``, as the returned value of a transparent_call."""
+    if not isinstance(args, tuple):
+        raise TypeError("forward_call() arguments must be a tuple")
+    if not isinstance(kwargs, dict):
+        raise TypeError("forward_call() keyword arguments must be a dict")
+    return fn(*args, **kwargs)
+
+
 def join(vthread: Any) -> Any:
     _trap("join")
 
@@ -275,6 +298,8 @@ __all__ = [
     "continuation",
     "completed",
     "continuation_factory",
+    "transparent_call",
+    "forward_call",
     "call",
     "join",
     "cancel",

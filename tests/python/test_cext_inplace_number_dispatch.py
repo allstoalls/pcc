@@ -164,7 +164,7 @@ def _compile_extension(tmp_path: Path) -> Path:
         "-I",
         str(REPO / "utils" / "fake_libc_include"),
         "-I",
-        str(REPO / "pcc" / "py_runtime" / "include"),
+        str(REPO / "pcc" / "runtime" / "include"),
         str(source),
         "-o",
         str(site / "scaledemo.so"),
@@ -177,7 +177,7 @@ def _compile_extension(tmp_path: Path) -> Path:
 
 def test_cext_inplace_true_divide_and_fallback(
     tmp_path,
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
 ):
     site = _compile_extension(tmp_path)
     main = tmp_path / "main.py"
@@ -193,7 +193,7 @@ def test_cext_inplace_true_divide_and_fallback(
     # linker explicitly so this regression remains about runtime slot dispatch.
     env["PCC_SELF_LINK"] = "cc"
     env["PCC_RUNTIME_CC"] = "pcc"
-    env["PCC_RUNTIME_ARCHIVE"] = str(pcc_py_runtime_archive)
+    env["PCC_RUNTIME_ARCHIVE"] = str(pcc_runtime_archive)
 
     compile_proc = subprocess.run(
         [

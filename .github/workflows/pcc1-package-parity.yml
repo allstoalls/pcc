@@ -2,6 +2,11 @@ name: Package platform and pcc1 wheel gates
 
 on:
   workflow_dispatch:
+    inputs:
+      full_chain:
+        description: "Linux/Windows: run every collector's Stage2/Stage3 fixed point after Stage1"
+        type: boolean
+        default: false
   push:
     branches: [master]
     paths:
@@ -11,10 +16,243 @@ on:
       - "tests/python/test_package_*.py"
       - "tests/python/pcc1_gate.py"
       - "tests/python/test_pcc_native_extension_loader.py"
+      - "tests/python/test_owned_darwin_time_runtime.py"
+      - "tests/python/test_recursion_limit_setter_range.py"
+      - "tests/test_native_regex_status_mapping.py"
+      - "tests/python/test_worker_state_clock_contract.py"
+      - "tests/python/test_native_worker_state_clock.py"
+      - "tests/python/test_worker_resource_setpgid.py"
+      - "tests/python/test_worker_resource_plan.py"
+      - "tests/python/test_native_cold_cover_order.py"
+      - "tests/python/test_stage2_export_capture.py"
+      - "tests/python/test_aarch64_call_target_reuse.py"
+      - "tests/python/test_x86_jump_threading.py"
+      - "tests/python/test_aarch64_stackmap_plan_ownership.py"
+      - "tests/python/test_native_func_top_level_identity.py"
+      - "tests/python/test_owned_elf_assembler_dispatch.py"
+      - "tests/python/test_platform_machine_provider.py"
+      - "tests/python/test_worker_guard_cadence.py"
+      - "tests/python/test_worker_current_rss.py"
+      - "tests/python/test_worker_tree_recovery_guard.py"
+      - "tests/c/test_self_backend_function_body_lines.py"
+      - "tests/python/test_compiled_default_pass_tier.py"
+      - "tests/python/test_owned_mem2reg_frontiers.py"
+      - "tests/c/test_self_backend_text_index.py"
+      - "tests/c/test_self_backend_type_parser.py"
+      - "conftest.py"
+      - "tests/conftest.py"
+      - "tests/xdist_cpu_budget.py"
+      - "tests/test_xdist_cpu_budget.py"
+      - "tests/test_test_infrastructure_efficiency.py"
+      - "uv.lock"
+      - ".python-version"
+      - "tests/python/test_worker_size_priors.py"
+      - "tests/python/test_worker_size_prior_processes.py"
+      - "tests/python/test_host_indexed_process_split.py"
+      - "tests/python/test_pipeline_frontend_worker_owners.py"
+      - "tests/python/test_dynamic_handoff_slots.py"
+      - "tests/python/test_indexed_phase_timing.py"
+      - "tests/python/test_gc_phase_attribution.py"
+      - "tests/python/test_gc_phase_counter_widths.py"
+      - "tests/python/test_gc_mark_color_atomic.py"
+      - "tests/python/test_x86_64_windows_packed_stackmaps.py"
+      - "tests/python/test_direct_indexed_worker_validation.py"
+      - "tests/python/test_windows_symbol_immediates.py"
+      - "tests/python/test_windows_global_memory_scratch.py"
+      - "tests/python/test_windows_pe_absolute_relocations.py"
+      - "tests/python/test_pe_stackmap_merge.py"
+      - "tests/python/test_pe_host_budget.py"
+      - "tests/python/test_pe_image_size_limit.py"
+      - "tests/python/test_pe_image_stackmap_partition.py"
+      - "tests/python/test_x86_64_x87_table_prefix.py"
+      - "tests/python/test_x86_64_x87_table_encoding.py"
+      - "tests/python/test_x86_64_parse_buffer_publication.py"
+      - "tests/python/test_x86_64_parse_buffer_objects.py"
+      - "tests/python/test_x86_64_assembler_lifetime.py"
+      - "tests/python/test_x86_64_numeric_data_batching.py"
+      - "tests/python/data/x86_64_parse_buffer_before_81776.py.txt"
+      - "tests/python/data/x86_64_asm_driver_two_pass.py.txt"
+      - "tests/python/test_x86_64_x87_table_native.py"
+      - "tests/x86_64_x87_reference.py"
+      - "tests/x86_64_x87_source.py"
+      - "tests/x86_64_operand_whitespace.py"
+      - "tests/c/test_self_backend_aarch64_regalloc.py"
+      - "tests/c/test_self_backend_aarch64_callee_saved.py"
+      - "tests/python/test_aarch64_branch_layout_parity.py"
+      - "tests/aarch64_regalloc_scan_reference.py"
+      - "tests/aarch64_regalloc_facts_reference.py"
+      - "tests/python/test_aarch64_regalloc_single_seed.py"
+      - "tests/python/test_aarch64_home_summary_ci.py"
+      - "tests/python/test_aarch64_facts_structure.py"
+      - "tests/python/test_aarch64_facts_native_boundary.py"
+      - "tests/python/test_scalar_arena_projections.py"
+      - "tests/scalar_arena_projection_reference.json"
+      - "tests/scalar_arena_projection_ci_reference.py"
+      - "tests/python/test_managed_scratch_retirement.py"
+      - "tests/python/test_managed_scratch_host_memory.py"
+      - "tests/python/test_managed_phi_liveness.py"
+      - "tests/managed_scratch_retirement_reference.json"
+      - "tests/python/test_managed_liveness_dirty_rows.py"
+      - "tests/managed_liveness_dirty_rows_reference.json"
+      - "tests/managed_liveness_dirty_rows_reference.py"
+      - "tests/managed_liveness_dirty_rows_ci_reference.py"
+      - "tests/python/test_precise_stackmap_abi.py"
+      - "tests/python/test_unsafe_syscall6.py"
+      - "tests/python/test_linux_aarch64_worker_transport.py"
+      - "tests/python/test_linux_aarch64_transport_native.py"
+      - "tests/python/test_elf_x86_64.py"
+      - "tests/python/test_aarch64_relocation_error_context.py"
+      - "tests/python/test_aarch64_elf_call_veneers.py"
+      - "tests/python/test_elf_arm_branch_slot_defaults.py"
+      - "tests/elf_arm_branch_slot_reference.py"
+      - "tests/elf_x86_packed_classification_reference.py"
+      - "tests/elf_x86_packed_application_reference.py"
+      - "tests/python/test_elf_x86_packed_classification.py"
+      - "tests/python/test_elf_x86_packed_application.py"
+      - "tests/python/test_compact_stackmap_processing_budget.py"
+      - "tests/python/test_stackmap_host_budget.py"
+      - "tests/python/test_macho_host_relocations.py"
+      - "tests/python/test_macho_output_payload_spool.py"
+      - "tests/python/test_macho_output_spool_failures.py"
+      - "tests/python/test_macho_payload_windows.py"
+      - "tests/python/test_macho_archive_symbol_state.py"
+      - "tests/python/test_macho_section_placement.py"
+      - "tests/python/test_macho_archive_framing.py"
+      - "tests/python/test_macho_windowed_prepare.py"
+      - "tests/python/test_macho_windowed_parity.py"
+      - "tests/python/test_macho_staged_source_target_order.py"
+      - "tests/python/test_macho_phase_events.py"
+      - "tests/python/test_macho_section_target_index.py"
+      - "tests/python/test_macho_archive_retirement.py"
+      - "tests/elf_validate_object_preimage.py"
+      - "tests/elf_link_image_preimage.py"
+      - "tests/python/test_elf_packed_link_classification.py"
+      - "tests/test_elf_packed_classification_source_controls.py"
+      - "tests/python/test_elf_negative_classification_summary.py"
+      - "tests/test_elf_negative_classification_source_controls.py"
+      - "tests/elf_negative_classification_preimage.py"
+      - "tests/python/test_elf_relocation_progress.py"
+      - "tests/test_elf_relocation_progress_source_controls.py"
+      - "tests/elf_relocation_progress_preimage.py"
+      - "tests/python/test_elf_packed_application.py"
+      - "tests/test_elf_packed_application_source_controls.py"
+      - "tests/elf_packed_application_preimage.py"
+      - "scripts/pcc_record_inventory.py"
+      - "pcc/backend/elf_aarch64_relocations.py"
+      - "tests/python/test_owned_elf_staging.py"
+      - "tests/python/test_pipeline_self_backend_link_owner.py"
+      - "pcc/backend/owned_elf_inputs.py"
+      - "pcc/backend/elf_x86_64.py"
+      - "pcc/backend/owned_elf_link.py"
+      - "pcc/backend/indexed_phase_timing.py"
+      - "tests/python/test_owned_windows_exit.py"
+      - "tests/python/test_windows_direct_scalar_call_args.py"
+      - "tests/python/test_consumed_unsafe_dependency.py"
+      - "pcc/backend/self_backend_win64_abi.py"
+      - "tests/python/test_windows_tar_attributes.py"
+      - "tests/test_tar_attribute_strict_oracle.py"
+      - "tests/test_ir_builder_call9.py"
+      - "tests/tar_attribute_strict_oracle.py"
+      - "tests/strict_exception_oracle.py"
+      - "tests/fixtures/strict_stackmap_catch.ll"
+      - "pcc/backend/pe_x86_64.py"
+      - "pcc/backend/pe_host_budget.py"
+      - "pcc/backend/coff_x86_64.py"
+      - "pcc/backend/precise_stackmap.py"
+      - "pcc/frontends/python/codegen/platform_machine_abis.py"
+      - "pcc/frontends/python/codegen/unsafe_lowering.py"
+      - "pcc/frontends/python/codegen/windows_platform.py"
+      - "pcc/frontends/python/pipeline_freestanding.py"
+      - "pcc/frontends/python/type_infer.py"
+      - "pcc/runtime/py/freestanding_windows.py"
+      - "pcc/stdlib/tarfile.py"
+      - "pcc/unsafe/__init__.py"
+      - "tests/python/process_timeout.py"
+      - "tests/c/test_owned_linux_c_exports.py"
+      - "tests/c/fixtures/owned_linux_c_exports/exit_lifecycle.c"
+      - "tests/c/fixtures/owned_linux_c_exports/immediate_bypass.c"
+      - "tests/fixtures/native/worker_size_priors.py"
+      - "tests/integration/test_worker_size_prior_closed_world.py"
+      - "tests/owned_ir_validation.py"
+      - "tests/python/test_worker_resource_publication.py"
+      - "tests/python/test_worker_resource_reader.py"
+      - "tests/python/test_worker_resource_publisher.py"
+      - "tests/python/test_worker_resource_native_windows.py"
+      - "tests/python/test_worker_resource_windows_filesystem.py"
+      - "tests/test_ci_worker_size_prior_gate.py"
+      - "scripts/ci_worker_size_prior_gate.py"
+      - "tests/python/test_indexed_process_split_real.py"
+      - "tests/python/test_indexed_handoff_closed_world.py"
+      - "tests/python/test_pipeline_indexed_handoff.py"
+      - "tests/python/test_worker_memory_budget_selection.py"
+      - "tests/python/test_process_tree_sample_tool.py"
+      - "tests/python/test_valueclass_aggregate_ownership_native.py"
+      - "tests/python/test_os_error_constructors.py"
+      - "tests/python/test_native_open_errno.py"
+      - "tests/python/test_native_open_pathlike.py"
+      - "tests/python/test_native_float_protocol.py"
+      - "tests/python/test_native_class_docstrings.py"
+      - "tests/python/test_native_float_callback_movement.py"
+      - "tests/python/test_owned_fdopen_provider.py"
+      - "tests/python/owned_regression_support.py"
+      - "tests/python/test_object_type_identity.py"
+      - "tests/python/test_super_call_result_roots.py"
+      - "tests/python/test_dict_method_result_ownership.py"
+      - "tests/python/test_runtime_abi_chunking.py"
+      - "tests/python/test_gc_relocation_page_cursor_model.py"
+      - "tests/python/test_gc4_copy_page_probe_native.py"
+      - "tests/python/test_gc_relocation_membership_lifecycle.py"
+      - "tests/python/test_gc_remembered_membership_lifecycle.py"
+      - "tests/python/test_gc_remembered_membership_native.py"
+      - "tests/python/test_owned_runtime_pass_prefix.py"
+      - "tests/python/test_pipeline_ir_split.py"
+      - "tests/python/test_pipeline_ir_frame_maps.py"
+      - "tests/python/test_x86_64_branch_syntax_cache.py"
+      - "tests/python/test_x86_64_instruction_encoding_cache.py"
+      - "tests/python/test_x86_64_instruction_encoding_cache_lowering.py"
+      - "tests/python/test_x86_64_operand_cache.py"
+      - "tests/python/test_freestanding_gc_relocation_copy.py"
+      - "tests/python/fixtures/gc4_copy_page_probe_native.c"
+      - "pcc/runtime/py/freestanding_gc_relocation_selector.py"
+      - "pcc/runtime/py/freestanding_gc_zpage_lifecycle.py"
+      - "tests/python/test_owned_cleanup_helpers.py"
+      - "tests/python/test_owned_cleanup_helper_ir.py"
+      - "tests/python/test_slot_call_cleanup_reuse.py"
+      - "tests/python/test_slot_call_exception_cleanup.py"
+      - "tests/python/test_foreign_address_leases.py"
+      - "tests/python/test_slot_call_lexical_roots.py"
+      - "tests/python/test_shared_call_binding.py"
+      - "pcc/frontends/python/codegen/call_object_lowering.py"
+      - "pcc/frontends/python/codegen/runtime_abi.py"
+      - "pcc/runtime/py/py_cleanup_runtime.py"
+      - "pcc/runtime/include/py_runtime.h"
+      - "tests/test_ci_native_object_regressions.py"
+      - "scripts/ci_native_object_regressions.py"
+      - "scripts/ci_native_ordering_gate.py"
+      - "tests/test_ci_native_ordering_gate.py"
+      - "tests/python/test_native_ordering_semantics.py"
+      - "tests/python/test_user_ordering_exhaustion.py"
+      - "scripts/ci_stage1_artifact_export.py"
+      - "tests/test_ci_stage1_artifact_export.py"
+      - "tests/fixtures/native/worker_resource_admission.py"
+      - "tests/runtime_fixture_provenance.py"
+      - "tests/python/test_gc_relocation_sweep_verdict.py"
+      - "tests/python/test_gc_tracing_sweep_verdict_native.py"
+      - "tests/fixtures/native/gc_tracing_pending_verdict.c"
+      - "tests/owned_runtime_c_fixture.py"
+      - "tests/python/test_gc_tracing_sweep_verdict.py"
+      - "tests/python/test_freestanding_gc_tracing_sweep_collector.py"
+      - "tests/test_ci_macos_regression_gate.py"
       - "tests/integration/test_uv_pcc_project_environment.py"
+      - "scripts/ci_macos_regression_gate.py"
+      - "scripts/pytest_live_report.py"
+      - "scripts/run_process_tree_sample.py"
+      - "scripts/run_pcc_stage1_build.py"
       - "scripts/ci_native_wheel_gate.py"
-      - "scripts/bootstrap.sh"
+      - "scripts/bootstrap.py"
       - "scripts/bootstrap_platform.py"
+      - "scripts/host_assembly_profile.py"
+      - "tests/python/test_host_assembly_profile.py"
       - "scripts/platform_process_watchdog.py"
       - ".github/workflows/pcc1-package-parity.yml"
   pull_request:
@@ -25,14 +263,553 @@ on:
       - "tests/python/test_package_*.py"
       - "tests/python/pcc1_gate.py"
       - "tests/python/test_pcc_native_extension_loader.py"
+      - "tests/python/test_owned_darwin_time_runtime.py"
+      - "tests/python/test_recursion_limit_setter_range.py"
+      - "tests/test_native_regex_status_mapping.py"
+      - "tests/python/test_worker_state_clock_contract.py"
+      - "tests/python/test_native_worker_state_clock.py"
+      - "tests/python/test_worker_resource_setpgid.py"
+      - "tests/python/test_worker_resource_plan.py"
+      - "tests/python/test_native_cold_cover_order.py"
+      - "tests/python/test_stage2_export_capture.py"
+      - "tests/python/test_aarch64_call_target_reuse.py"
+      - "tests/python/test_x86_jump_threading.py"
+      - "tests/python/test_aarch64_stackmap_plan_ownership.py"
+      - "tests/python/test_native_func_top_level_identity.py"
+      - "tests/python/test_owned_elf_assembler_dispatch.py"
+      - "tests/python/test_platform_machine_provider.py"
+      - "tests/python/test_worker_guard_cadence.py"
+      - "tests/python/test_worker_current_rss.py"
+      - "tests/python/test_worker_tree_recovery_guard.py"
+      - "tests/c/test_self_backend_function_body_lines.py"
+      - "tests/python/test_compiled_default_pass_tier.py"
+      - "tests/python/test_owned_mem2reg_frontiers.py"
+      - "tests/c/test_self_backend_text_index.py"
+      - "tests/c/test_self_backend_type_parser.py"
+      - "conftest.py"
+      - "tests/conftest.py"
+      - "tests/xdist_cpu_budget.py"
+      - "tests/test_xdist_cpu_budget.py"
+      - "tests/test_test_infrastructure_efficiency.py"
+      - "uv.lock"
+      - ".python-version"
+      - "tests/python/test_worker_size_priors.py"
+      - "tests/python/test_worker_size_prior_processes.py"
+      - "tests/python/test_host_indexed_process_split.py"
+      - "tests/python/test_pipeline_frontend_worker_owners.py"
+      - "tests/python/test_dynamic_handoff_slots.py"
+      - "tests/python/test_indexed_phase_timing.py"
+      - "tests/python/test_gc_phase_attribution.py"
+      - "tests/python/test_gc_phase_counter_widths.py"
+      - "tests/python/test_gc_mark_color_atomic.py"
+      - "tests/python/test_x86_64_windows_packed_stackmaps.py"
+      - "tests/python/test_direct_indexed_worker_validation.py"
+      - "tests/python/test_windows_symbol_immediates.py"
+      - "tests/python/test_windows_global_memory_scratch.py"
+      - "tests/python/test_windows_pe_absolute_relocations.py"
+      - "tests/python/test_pe_stackmap_merge.py"
+      - "tests/python/test_pe_host_budget.py"
+      - "tests/python/test_pe_image_size_limit.py"
+      - "tests/python/test_pe_image_stackmap_partition.py"
+      - "tests/python/test_x86_64_x87_table_prefix.py"
+      - "tests/python/test_x86_64_x87_table_encoding.py"
+      - "tests/python/test_x86_64_parse_buffer_publication.py"
+      - "tests/python/test_x86_64_parse_buffer_objects.py"
+      - "tests/python/test_x86_64_assembler_lifetime.py"
+      - "tests/python/test_x86_64_numeric_data_batching.py"
+      - "tests/python/data/x86_64_parse_buffer_before_81776.py.txt"
+      - "tests/python/data/x86_64_asm_driver_two_pass.py.txt"
+      - "tests/python/test_x86_64_x87_table_native.py"
+      - "tests/x86_64_x87_reference.py"
+      - "tests/x86_64_x87_source.py"
+      - "tests/x86_64_operand_whitespace.py"
+      - "tests/c/test_self_backend_aarch64_regalloc.py"
+      - "tests/c/test_self_backend_aarch64_callee_saved.py"
+      - "tests/python/test_aarch64_branch_layout_parity.py"
+      - "tests/aarch64_regalloc_scan_reference.py"
+      - "tests/aarch64_regalloc_facts_reference.py"
+      - "tests/python/test_aarch64_regalloc_single_seed.py"
+      - "tests/python/test_aarch64_home_summary_ci.py"
+      - "tests/python/test_aarch64_facts_structure.py"
+      - "tests/python/test_aarch64_facts_native_boundary.py"
+      - "tests/python/test_scalar_arena_projections.py"
+      - "tests/scalar_arena_projection_reference.json"
+      - "tests/scalar_arena_projection_ci_reference.py"
+      - "tests/python/test_managed_scratch_retirement.py"
+      - "tests/python/test_managed_scratch_host_memory.py"
+      - "tests/python/test_managed_phi_liveness.py"
+      - "tests/managed_scratch_retirement_reference.json"
+      - "tests/python/test_managed_liveness_dirty_rows.py"
+      - "tests/managed_liveness_dirty_rows_reference.json"
+      - "tests/managed_liveness_dirty_rows_reference.py"
+      - "tests/managed_liveness_dirty_rows_ci_reference.py"
+      - "tests/python/test_precise_stackmap_abi.py"
+      - "tests/python/test_unsafe_syscall6.py"
+      - "tests/python/test_linux_aarch64_worker_transport.py"
+      - "tests/python/test_linux_aarch64_transport_native.py"
+      - "tests/python/test_elf_x86_64.py"
+      - "tests/python/test_aarch64_relocation_error_context.py"
+      - "tests/python/test_aarch64_elf_call_veneers.py"
+      - "tests/python/test_elf_arm_branch_slot_defaults.py"
+      - "tests/elf_arm_branch_slot_reference.py"
+      - "tests/elf_x86_packed_classification_reference.py"
+      - "tests/elf_x86_packed_application_reference.py"
+      - "tests/python/test_elf_x86_packed_classification.py"
+      - "tests/python/test_elf_x86_packed_application.py"
+      - "tests/python/test_compact_stackmap_processing_budget.py"
+      - "tests/python/test_stackmap_host_budget.py"
+      - "tests/python/test_macho_host_relocations.py"
+      - "tests/python/test_macho_output_payload_spool.py"
+      - "tests/python/test_macho_output_spool_failures.py"
+      - "tests/python/test_macho_payload_windows.py"
+      - "tests/python/test_macho_archive_symbol_state.py"
+      - "tests/python/test_macho_section_placement.py"
+      - "tests/python/test_macho_archive_framing.py"
+      - "tests/python/test_macho_windowed_prepare.py"
+      - "tests/python/test_macho_windowed_parity.py"
+      - "tests/python/test_macho_staged_source_target_order.py"
+      - "tests/python/test_macho_phase_events.py"
+      - "tests/python/test_macho_section_target_index.py"
+      - "tests/python/test_macho_archive_retirement.py"
+      - "tests/elf_validate_object_preimage.py"
+      - "tests/elf_link_image_preimage.py"
+      - "tests/python/test_elf_packed_link_classification.py"
+      - "tests/test_elf_packed_classification_source_controls.py"
+      - "tests/python/test_elf_negative_classification_summary.py"
+      - "tests/test_elf_negative_classification_source_controls.py"
+      - "tests/elf_negative_classification_preimage.py"
+      - "tests/python/test_elf_relocation_progress.py"
+      - "tests/test_elf_relocation_progress_source_controls.py"
+      - "tests/elf_relocation_progress_preimage.py"
+      - "tests/python/test_elf_packed_application.py"
+      - "tests/test_elf_packed_application_source_controls.py"
+      - "tests/elf_packed_application_preimage.py"
+      - "scripts/pcc_record_inventory.py"
+      - "pcc/backend/elf_aarch64_relocations.py"
+      - "tests/python/test_owned_elf_staging.py"
+      - "tests/python/test_pipeline_self_backend_link_owner.py"
+      - "pcc/backend/owned_elf_inputs.py"
+      - "pcc/backend/elf_x86_64.py"
+      - "pcc/backend/owned_elf_link.py"
+      - "pcc/backend/indexed_phase_timing.py"
+      - "tests/python/test_owned_windows_exit.py"
+      - "tests/python/test_windows_direct_scalar_call_args.py"
+      - "tests/python/test_consumed_unsafe_dependency.py"
+      - "pcc/backend/self_backend_win64_abi.py"
+      - "tests/python/test_windows_tar_attributes.py"
+      - "tests/test_tar_attribute_strict_oracle.py"
+      - "tests/test_ir_builder_call9.py"
+      - "tests/tar_attribute_strict_oracle.py"
+      - "tests/strict_exception_oracle.py"
+      - "tests/fixtures/strict_stackmap_catch.ll"
+      - "pcc/backend/pe_x86_64.py"
+      - "pcc/backend/pe_host_budget.py"
+      - "pcc/backend/coff_x86_64.py"
+      - "pcc/backend/precise_stackmap.py"
+      - "pcc/frontends/python/codegen/platform_machine_abis.py"
+      - "pcc/frontends/python/codegen/unsafe_lowering.py"
+      - "pcc/frontends/python/codegen/windows_platform.py"
+      - "pcc/frontends/python/pipeline_freestanding.py"
+      - "pcc/frontends/python/type_infer.py"
+      - "pcc/runtime/py/freestanding_windows.py"
+      - "pcc/stdlib/tarfile.py"
+      - "pcc/unsafe/__init__.py"
+      - "tests/python/process_timeout.py"
+      - "tests/c/test_owned_linux_c_exports.py"
+      - "tests/c/fixtures/owned_linux_c_exports/exit_lifecycle.c"
+      - "tests/c/fixtures/owned_linux_c_exports/immediate_bypass.c"
+      - "tests/fixtures/native/worker_size_priors.py"
+      - "tests/integration/test_worker_size_prior_closed_world.py"
+      - "tests/owned_ir_validation.py"
+      - "tests/python/test_worker_resource_publication.py"
+      - "tests/python/test_worker_resource_reader.py"
+      - "tests/python/test_worker_resource_publisher.py"
+      - "tests/python/test_worker_resource_native_windows.py"
+      - "tests/python/test_worker_resource_windows_filesystem.py"
+      - "tests/test_ci_worker_size_prior_gate.py"
+      - "scripts/ci_worker_size_prior_gate.py"
+      - "tests/python/test_indexed_process_split_real.py"
+      - "tests/python/test_indexed_handoff_closed_world.py"
+      - "tests/python/test_pipeline_indexed_handoff.py"
+      - "tests/python/test_worker_memory_budget_selection.py"
+      - "tests/python/test_process_tree_sample_tool.py"
+      - "tests/python/test_valueclass_aggregate_ownership_native.py"
+      - "tests/python/test_os_error_constructors.py"
+      - "tests/python/test_native_open_errno.py"
+      - "tests/python/test_native_open_pathlike.py"
+      - "tests/python/test_native_float_protocol.py"
+      - "tests/python/test_native_class_docstrings.py"
+      - "tests/python/test_native_float_callback_movement.py"
+      - "tests/python/test_owned_fdopen_provider.py"
+      - "tests/python/owned_regression_support.py"
+      - "tests/python/test_object_type_identity.py"
+      - "tests/python/test_super_call_result_roots.py"
+      - "tests/python/test_dict_method_result_ownership.py"
+      - "tests/python/test_runtime_abi_chunking.py"
+      - "tests/python/test_gc_relocation_page_cursor_model.py"
+      - "tests/python/test_gc4_copy_page_probe_native.py"
+      - "tests/python/test_gc_relocation_membership_lifecycle.py"
+      - "tests/python/test_gc_remembered_membership_lifecycle.py"
+      - "tests/python/test_gc_remembered_membership_native.py"
+      - "tests/python/test_owned_runtime_pass_prefix.py"
+      - "tests/python/test_pipeline_ir_split.py"
+      - "tests/python/test_pipeline_ir_frame_maps.py"
+      - "tests/python/test_x86_64_branch_syntax_cache.py"
+      - "tests/python/test_x86_64_instruction_encoding_cache.py"
+      - "tests/python/test_x86_64_instruction_encoding_cache_lowering.py"
+      - "tests/python/test_x86_64_operand_cache.py"
+      - "tests/python/test_freestanding_gc_relocation_copy.py"
+      - "tests/python/fixtures/gc4_copy_page_probe_native.c"
+      - "pcc/runtime/py/freestanding_gc_relocation_selector.py"
+      - "pcc/runtime/py/freestanding_gc_zpage_lifecycle.py"
+      - "tests/python/test_owned_cleanup_helpers.py"
+      - "tests/python/test_owned_cleanup_helper_ir.py"
+      - "tests/python/test_slot_call_cleanup_reuse.py"
+      - "tests/python/test_slot_call_exception_cleanup.py"
+      - "tests/python/test_foreign_address_leases.py"
+      - "tests/python/test_slot_call_lexical_roots.py"
+      - "tests/python/test_shared_call_binding.py"
+      - "pcc/frontends/python/codegen/call_object_lowering.py"
+      - "pcc/frontends/python/codegen/runtime_abi.py"
+      - "pcc/runtime/py/py_cleanup_runtime.py"
+      - "pcc/runtime/include/py_runtime.h"
+      - "tests/test_ci_native_object_regressions.py"
+      - "scripts/ci_native_object_regressions.py"
+      - "scripts/ci_native_ordering_gate.py"
+      - "tests/test_ci_native_ordering_gate.py"
+      - "tests/python/test_native_ordering_semantics.py"
+      - "tests/python/test_user_ordering_exhaustion.py"
+      - "scripts/ci_stage1_artifact_export.py"
+      - "tests/test_ci_stage1_artifact_export.py"
+      - "tests/fixtures/native/worker_resource_admission.py"
+      - "tests/runtime_fixture_provenance.py"
+      - "tests/python/test_gc_relocation_sweep_verdict.py"
+      - "tests/python/test_gc_tracing_sweep_verdict_native.py"
+      - "tests/fixtures/native/gc_tracing_pending_verdict.c"
+      - "tests/owned_runtime_c_fixture.py"
+      - "tests/python/test_gc_tracing_sweep_verdict.py"
+      - "tests/python/test_freestanding_gc_tracing_sweep_collector.py"
+      - "tests/test_ci_macos_regression_gate.py"
       - "tests/integration/test_uv_pcc_project_environment.py"
+      - "scripts/ci_macos_regression_gate.py"
+      - "scripts/pytest_live_report.py"
+      - "scripts/run_process_tree_sample.py"
+      - "scripts/run_pcc_stage1_build.py"
       - "scripts/ci_native_wheel_gate.py"
-      - "scripts/bootstrap.sh"
+      - "scripts/bootstrap.py"
       - "scripts/bootstrap_platform.py"
+      - "scripts/host_assembly_profile.py"
+      - "tests/python/test_host_assembly_profile.py"
       - "scripts/platform_process_watchdog.py"
       - ".github/workflows/pcc1-package-parity.yml"
 
+# Let active native qualification finish; only queued initial pushes supersede
+# each other. Manual runs, PRs and reruns keep independent groups, including
+# manual full-chain qualification.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'push' && github.run_attempt == 1 && github.ref || format('{0}-{1}', github.run_id, github.run_attempt) }}
+  cancel-in-progress: false
+
 jobs:
+  macos-pcc0-regressions:
+    name: macOS arm64 focused pcc0 native regressions
+    runs-on: macos-15
+    timeout-minutes: 25
+    # Separate from Stage1: these exact programs use a threaded/atomic runtime.
+    # Stage1 has its own runtime and deadline, independent of these tests.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Execute focused Darwin regressions with one matched runtime
+        run: |
+          env -u LC_ALL uv run python scripts/run_process_tree_sample.py \
+            --result build/macos-regressions/work/supervisor/result.json \
+            --samples build/macos-regressions/work/supervisor/samples.tsv \
+            --stdout build/macos-regressions/work/supervisor/target.stdout \
+            --stderr build/macos-regressions/work/supervisor/target.stderr \
+            --timeout 1200 --interval 0.25 --progress-interval 30 \
+            --auto-tree-rss-ceiling-bytes 4294967296 \
+            --min-tree-rss-bytes 2147483648 \
+            --darwin-preflight-reserve-bytes 536870912 \
+            -- uv run python scripts/ci_macos_regression_gate.py \
+            --out-dir build/macos-regressions
+
+      - name: Collect complete bounded Mac regression receipts
+        if: always()
+        run: |
+          env -u LC_ALL uv run python scripts/ci_macos_regression_gate.py \
+            --out-dir build/macos-regressions --collect-evidence
+
+      - name: Preserve Mac regression receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-pcc0-regression-receipts
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: warn
+          # Complete compressed logs/receipts only; no archives, objects or IR.
+          path: build/macos-regressions/evidence/
+
+  macos-pcc0-float-doc-regressions:
+    name: macOS arm64 pcc0 float and class-doc regressions
+    runs-on: macos-15
+    timeout-minutes: 25
+    # Independent of the existing regression and Stage1 jobs.
+    # Build a source-matched threaded/atomic runtime within this job's own cap.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Execute float and class-doc regressions with one matched runtime
+        run: |
+          uv run python scripts/run_process_tree_sample.py \
+            --result build/macos-float-doc/work/supervisor/result.json \
+            --samples build/macos-float-doc/work/supervisor/samples.tsv \
+            --stdout build/macos-float-doc/work/supervisor/target.stdout \
+            --stderr build/macos-float-doc/work/supervisor/target.stderr \
+            --timeout 1200 --interval 0.25 --progress-interval 30 \
+            --auto-tree-rss-ceiling-bytes 4294967296 \
+            --min-tree-rss-bytes 2147483648 \
+            --darwin-preflight-reserve-bytes 536870912 \
+            -- uv run python scripts/ci_macos_regression_gate.py \
+            --out-dir build/macos-float-doc --profile float-doc
+
+      - name: Collect complete bounded float and class-doc receipts
+        if: always()
+        run: |
+          uv run python scripts/ci_macos_regression_gate.py \
+            --out-dir build/macos-float-doc --profile float-doc --collect-evidence
+
+      - name: Preserve float and class-doc receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-pcc0-float-doc-receipts
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: warn
+          # Complete compressed logs/receipts only; no archives, objects or IR.
+          path: build/macos-float-doc/evidence/
+
+  macos-pcc0-indexed-split:
+    name: macOS arm64 pcc0 indexed-stage bridge gate
+    runs-on: macos-15
+    timeout-minutes: 25
+    # Real host child/object and compiler-owned helper lowering evidence.
+    # No runtime build or native helper execution is claimed by this gate.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Verify handoff contracts with the normal six-worker pytest default
+        run: |
+          uv run python scripts/run_process_tree_sample.py \
+            --result build/macos-indexed-split/work/handoff-xdist-supervisor/result.json \
+            --samples build/macos-indexed-split/work/handoff-xdist-supervisor/samples.tsv \
+            --stdout build/macos-indexed-split/work/handoff-xdist-supervisor/target.stdout \
+            --stderr build/macos-indexed-split/work/handoff-xdist-supervisor/target.stderr \
+            --timeout 300 --interval 1 --progress-interval 30 \
+            --auto-tree-rss-ceiling-bytes 4294967296 \
+            --min-tree-rss-bytes 2147483648 \
+            --darwin-preflight-reserve-bytes 536870912 \
+            -- uv run python scripts/ci_macos_regression_gate.py \
+            --out-dir build/macos-indexed-split --handoff-xdist
+
+      - name: Verify real split objects and helper closed-world lowering
+        run: |
+          uv run python scripts/run_process_tree_sample.py \
+            --result build/macos-indexed-split/work/supervisor/result.json \
+            --samples build/macos-indexed-split/work/supervisor/samples.tsv \
+            --stdout build/macos-indexed-split/work/supervisor/target.stdout \
+            --stderr build/macos-indexed-split/work/supervisor/target.stderr \
+            --timeout 1200 --interval 0.25 --progress-interval 30 \
+            --auto-tree-rss-ceiling-bytes 4294967296 \
+            --min-tree-rss-bytes 2147483648 \
+            --darwin-preflight-reserve-bytes 536870912 \
+            -- uv run python scripts/ci_macos_regression_gate.py \
+            --out-dir build/macos-indexed-split --profile indexed-split
+
+      - name: Collect complete bounded indexed-stage receipts
+        if: always()
+        run: |
+          uv run python scripts/ci_macos_regression_gate.py \
+            --out-dir build/macos-indexed-split --profile indexed-split --collect-evidence
+
+      - name: Preserve indexed-stage receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-pcc0-indexed-split-receipts
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: warn
+          path: build/macos-indexed-split/evidence/
+
+  worker-prior-preflight:
+    name: Worker prior and changed-module gate / ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    # Separate hosted runners: no needs, artifact download or shared job-level
+    # concurrency group may put this gate on the Stage1 critical path.
+    # Budget: 20 min runtime + up to 40 min bounded tests + 100 min strict
+    # closure + 30 min setup/receipts. Failures remain hard job failures.
+    timeout-minutes: 190
+    env:
+      PCC_BUILD_BACKEND: self
+      PCC_RUNTIME_CC: pcc
+      PCC_RUNTIME_HIGH: py
+      PCC_PY_FRONTEND_WORKER_TIMING: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: macos-arm64, runner: macos-15 }
+          - { platform: linux-x86_64, runner: ubuntu-24.04 }
+          - { platform: linux-aarch64, runner: ubuntu-24.04-arm }
+          - { platform: windows-x86_64, runner: windows-2022 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install locked development dependencies
+        run: uv sync --frozen --dev
+
+      - name: Verify frontend environment restoration and checkpoint reuse
+        timeout-minutes: 6
+        shell: uv run --frozen --no-sync python {0}
+        run: |
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, str(Path.cwd()))
+          from scripts.ci_worker_size_prior_gate import (
+              environment, guarded, pytest_command, save, sha, source_identity,
+              verify_pytest,
+          )
+
+          test_file = "tests/python/test_pipeline_frontend_worker_owners.py"
+          selected = [
+              test_file + "::test_native_in_process_codegen_reuses_coordinator_and_forces_asm",
+              test_file + "::test_native_codegen_checkpoint_persists_sidecars_and_singleton_manifests",
+          ]
+          output = Path("build/frontend-environment-host").resolve()
+          assert not output.exists(), "refuse stale frontend environment receipts"
+          env = environment()
+          env["PCC_TEST_NO_NATIVE_PROVISIONING"] = "1"
+          source = source_identity()
+          for path in (
+              test_file,
+              "pcc/frontends/python/pipeline_frontend_parallel.py",
+              ".github/workflows/pcc1-package-parity.yml",
+          ):
+              source["test_inputs"][path] = sha(Path(path))
+          # Reuse the existing 300-second platform tree guard and unchanged
+          # six-worker loadgroup default; no native build is needed here.
+          try:
+              guarded(pytest_command(output, selected), output, 300, env)
+          finally:
+              save(output / "source.json", source)
+          executed = verify_pytest(output, [test_file], file_counts=(66,))
+          for node, count in zip(selected, (64, 2)):
+              assert sum(case.startswith(node + "[") for case in executed) == count, node
+
+      - name: Verify Windows global addressing and PE relocations
+        timeout-minutes: 2
+        run: uv run --frozen --no-sync python -m pytest -x -q --junitxml=build/worker-prior-focused-host.xml tests/python/test_native_cold_cover_order.py tests/python/test_windows_symbol_immediates.py tests/python/test_windows_global_memory_scratch.py tests/python/test_windows_pe_absolute_relocations.py tests/python/test_pe_stackmap_merge.py tests/python/test_aarch64_stackmap_plan_ownership.py tests/python/test_native_func_top_level_identity.py tests/python/test_pe_host_budget.py tests/python/test_pe_image_size_limit.py tests/python/test_recursion_limit_setter_range.py tests/test_native_regex_status_mapping.py ${{ matrix.platform == 'macos-arm64' && 'tests/python/test_macho_phase_events.py' || '' }} ${{ matrix.platform == 'macos-arm64' && 'tests/python/test_macho_output_payload_spool.py tests/python/test_macho_output_spool_failures.py tests/python/test_macho_payload_windows.py' || '' }} tests/python/test_macho_staged_source_target_order.py
+
+      # fa62fbd9 receipts: compile alone took 189-278s; the 634 MB whole
+      # parse was still incomplete at 300s. 85825b40 receipts (Linux): the
+      # whole-closure phases end at 1640 s (aarch64) and 2040 s (x86_64);
+      # module verify+emit runs at ~2.4-2.5 s per IR MB, so all 34 modules
+      # project to ~3200 s and ~3700 s. Its CI budget stays at 6000 s;
+      # Stage1 has a separate 7200 s allowance. macOS records the strict
+      # closure as not run: its ~8.6 GB peak
+      # exceeds the 7 GB runner. Local default stays 300s.
+      - name: Validate default xdist, native prior workers, and changed-module emission
+        run: uv run --frozen --no-sync python scripts/ci_worker_size_prior_gate.py --out-dir build/worker-prior-preflight --phase preflight --strict-closure-timeout 6000
+
+      - name: Preserve independent preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-prior-preflight-${{ matrix.platform }}
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            build/worker-prior-focused-host.xml
+            build/frontend-environment-host/*.json
+            build/frontend-environment-host/*.jsonl
+            build/frontend-environment-host/*.stdout
+            build/frontend-environment-host/*.stderr
+            build/frontend-environment-host/*.tsv
+            build/frontend-environment-host/*.xml
+            build/worker-prior-preflight/**/*.json
+            build/worker-prior-preflight/**/*.jsonl
+            build/worker-prior-preflight/**/*.log
+            build/worker-prior-preflight/**/*.stdout
+            build/worker-prior-preflight/**/*.stderr
+            build/worker-prior-preflight/**/*.tsv
+            build/worker-prior-preflight/**/*.xml
+            build/worker-prior-preflight/windows-exit-native/tests/**/metadata.exe
+
+  windows-rss-publication:
+    name: Windows RSS publication with a held reader
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install Windows publication test tools
+        run: python -m pip install pytest pytest-xdist
+
+      - name: Verify Windows RSS publication with a held reader
+        timeout-minutes: 2
+        # This isolated test needs no POSIX-only repository conftest fixtures.
+        run: python -m pytest --noconftest -o "addopts=" -x -n6 --dist=loadgroup -vv --tb=short tests/python/test_worker_resource_publication.py tests/python/test_worker_resource_reader.py tests/python/test_worker_resource_publisher.py tests/python/test_worker_resource_native_windows.py tests/python/test_worker_resource_windows_filesystem.py
+
   other-platform-native-wheel:
     name: Native wheel / ${{ matrix.platform }}
     runs-on: ${{ matrix.runner }}
@@ -41,6 +818,8 @@ jobs:
       PCC_BUILD_BACKEND: self
       PCC_RUNTIME_CC: pcc
       PCC_RUNTIME_HIGH: py
+      # Qualification logs retain the existing worker phase/function timings.
+      PCC_PY_FRONTEND_WORKER_TIMING: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -54,13 +833,207 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version-file: .python-version
 
       - name: Install wheel-build tools
         run: python -m pip install build hatchling
 
-      - name: Qualify all five GC self-host chains
-        run: python scripts/bootstrap_platform.py --gc all --out-dir build/platform-qualification
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install locked development dependencies
+        run: uv sync --frozen --dev
+
+      - name: Verify host Stage2 export-retention, AArch64 call-emission, and ELF assembly contracts
+        run: uv run --frozen --no-sync python -m pytest -x -q tests/python/test_stage2_export_capture.py tests/python/test_aarch64_call_target_reuse.py tests/python/test_x86_jump_threading.py tests/python/test_owned_elf_assembler_dispatch.py tests/python/test_elf_arm_branch_slot_defaults.py tests/python/test_gc_phase_attribution.py tests/python/test_gc_phase_counter_widths.py tests/test_ci_native_object_regressions.py tests/test_ci_native_ordering_gate.py tests/python/test_user_ordering_exhaustion.py ${{ matrix.platform == 'linux-x86_64' && 'tests/test_ci_stage1_artifact_export.py tests/python/test_gc4_copy_page_probe_native.py tests/python/test_gc_relocation_membership_lifecycle.py tests/python/test_gc_remembered_membership_lifecycle.py tests/python/test_gc_remembered_membership_native.py tests/python/test_owned_runtime_pass_prefix.py tests/python/test_pipeline_ir_split.py tests/python/test_pipeline_ir_frame_maps.py tests/python/test_x86_64_branch_syntax_cache.py tests/python/test_x86_64_instruction_encoding_cache.py tests/python/test_x86_64_instruction_encoding_cache_lowering.py tests/python/test_x86_64_operand_cache.py' || '' }}
+
+      # A push qualifies Stage1 and the native canary under all five
+      # collectors. Stage2 codegen alone needs ~66k-116k pcc1 task-s today
+      # (8-14x Stage1 per module, docs/status.md), beyond this 6 h job; run
+      # the Stage2/Stage3 fixed point by manual dispatch with full_chain.
+      - name: Build Stage1 and run the five-collector native canary
+        id: platform_qualification
+        env:
+          # Explicit marker opts in only this push commit and Linux ARM Stage1.
+          # PRs and later unmarked commits stay off. These times include
+          # deterministic profiling overhead, never baseline timings.
+          PCC_HOST_ASSEMBLY_PROFILE: "0"
+          PCC_HOST_ELF_STAGE_PROFILE: "0"
+          PCC_HOST_ARM_BACKEND_PROFILE: ${{ github.event_name == 'push' && matrix.platform == 'linux-aarch64' && contains(github.event.head_commit.message, '[stage1-arm-backend-profile]') && '1' || '0' }}
+        run: uv run --frozen --no-sync python scripts/ci_worker_size_prior_gate.py --out-dir build/worker-prior-gate --phase stage1${{ inputs.full_chain && ' --full-chain' || '' }}
+
+      - name: Admit this gate's existing runtime for the platform provider probe
+        id: platform_runtime
+        if: ${{ !cancelled() && (steps.platform_qualification.outcome == 'success' || steps.platform_qualification.outcome == 'failure') }}
+        shell: uv run --frozen --no-sync python {0}
+        env:
+          PCC_TEST_NO_NATIVE_PROVISIONING: "1"
+          UV_PYTHON_DOWNLOADS: "never"
+        run: |
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, str(Path.cwd()))
+          from scripts.bootstrap_platform import source_identity
+          from pcc.frontends.python.owned_runtime_build import runtime_build_config
+          from pcc.frontends.python.pipeline_targets import host_target_triple
+          from tests.runtime_fixture_provenance import _verified_test_runtime_archive
+
+          def unrun(reason):
+              message = "UNRUN platform machine provider probe: " + reason
+              print("::notice::" + message)
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+                  output.write("ready=false\n")
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+                  summary.write(message + "\n")
+              raise SystemExit(0)
+
+          receipt_path = Path("build/worker-prior-gate/stage1.json")
+          if not receipt_path.exists():
+              unrun("this gate did not publish stage1.json")
+          receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+          if receipt.get("phase") != "stage1" or receipt.get("status") not in ("PASS", "FAIL"):
+              raise RuntimeError("invalid terminal Stage1 gate receipt")
+          source = receipt["source"]
+          current = source_identity()
+          if (
+              source.get("clean_commit") is not True
+              or source.get("commit") != os.environ["GITHUB_SHA"]
+              or source.get("commit") != current["commit"]
+              or source.get("source_sha256") != current["source_sha256"]
+          ):
+              raise RuntimeError("Stage1 runtime receipt does not identify this clean checkout")
+          runtime = receipt.get("runtime")
+          if runtime is None:
+              unrun("this gate did not publish a completed runtime identity")
+          if runtime["target"] != host_target_triple() or runtime["config"] != runtime_build_config():
+              raise RuntimeError("Stage1 runtime target/configuration mismatch")
+          raw_path = runtime["path"]
+          if not isinstance(raw_path, str) or any(ch in raw_path for ch in "\r\n"):
+              raise RuntimeError("invalid Stage1 runtime path")
+          archive = Path(raw_path)
+          if not archive.is_absolute():
+              raise RuntimeError("Stage1 runtime path must be absolute")
+          files = [(suffix, Path(raw_path + suffix))
+                   for suffix in ("", ".capi_syms", ".provenance.json")]
+          for suffix, path in files:
+              expected = runtime["hashes"][suffix]
+              if (
+                  not isinstance(expected, str) or len(expected) != 64
+                  or any(ch not in "0123456789abcdef" for ch in expected)
+              ):
+                  raise RuntimeError("invalid recorded runtime hash: " + suffix)
+          missing = []
+          for suffix, path in files:
+              if not path.exists():
+                  missing.append(suffix or "archive")
+                  continue
+              if not path.is_file():
+                  raise RuntimeError("runtime artifact is not a file: " + str(path))
+              with path.open("rb") as stream:
+                  observed = hashlib.file_digest(stream, "sha256").hexdigest()
+              if observed != runtime["hashes"][suffix]:
+                  raise RuntimeError("runtime artifact hash mismatch: " + str(path))
+          if missing:
+              unrun("recorded runtime artifacts missing: " + ", ".join(missing))
+          verified, _manifest = _verified_test_runtime_archive(archive)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("archive=" + str(verified) + "\nready=true\n")
+              output.write("source_sha256=" + source["source_sha256"] + "\n")
+
+      - name: Export the admitted Linux x86-64 Stage1 identity
+        id: stage1_export
+        if: ${{ !cancelled() && matrix.platform == 'linux-x86_64' && steps.platform_qualification.outcome == 'success' && steps.platform_runtime.outputs.ready == 'true' }}
+        env:
+          PCC_RUNTIME_ARCHIVE: ${{ steps.platform_runtime.outputs.archive }}
+          PCC_STAGE1_EXPORT_SOURCE_SHA256: ${{ steps.platform_runtime.outputs.source_sha256 }}
+        # Retain the existing bytes before unrelated later gates can fail.
+        # This package claims Stage1 identity, not complete qualification.
+        run: uv run --frozen --no-sync python scripts/ci_stage1_artifact_export.py --runtime-archive "$PCC_RUNTIME_ARCHIVE" --source-sha256 "$PCC_STAGE1_EXPORT_SOURCE_SHA256"
+
+      - name: Preserve the existing Linux x86-64 Stage1 bundle
+        if: ${{ !cancelled() && matrix.platform == 'linux-x86_64' && steps.stage1_export.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage1-native-${{ matrix.platform }}-${{ github.sha }}-${{ github.run_attempt }}
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
+          path: |
+            build/stage1-native-export/stage1-native.tar.gz
+            build/stage1-native-export/manifest.json
+
+      - name: Verify the compiled sibling platform machine provider
+        if: ${{ !cancelled() && steps.platform_runtime.outputs.ready == 'true' }}
+        env:
+          PCC_RUNTIME_ARCHIVE: ${{ steps.platform_runtime.outputs.archive }}
+          PCC_TEST_NO_NATIVE_PROVISIONING: "1"
+        run: uv run --frozen --no-sync python -m pytest -x -q --junitxml=build/worker-prior-gate/platform-machine-provider.xml tests/python/test_platform_machine_provider.py
+
+      - name: Verify GC4 relocation with the existing single-thread runtime
+        if: ${{ !cancelled() && startsWith(matrix.platform, 'linux-') && steps.platform_runtime.outputs.ready == 'true' }}
+        timeout-minutes: 6
+        shell: uv run --frozen --no-sync python {0}
+        env:
+          PCC_RUNTIME_ARCHIVE: ${{ steps.platform_runtime.outputs.archive }}
+          PCC_TEST_NO_NATIVE_PROVISIONING: "1"
+          PCC_NO_AUTO_PCC1: "1"
+          PCC_WITH_THREADS: "1"
+          PCC_REFCOUNT_KIND: "atomic"
+          PCC_PYTEST_AUTO_CLEAN: "0"
+        run: |
+          import os
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, str(Path.cwd()))
+          from scripts.ci_worker_size_prior_gate import run_pytest
+
+          # Exact native execution, including after the canary fails. Reuse
+          # the verified archive; do not rebuild or substitute a threaded one.
+          # This is host-pcc0 C emission, not a native-pcc1 compiler result.
+          run_pytest(
+              Path("build/worker-prior-gate"), "gc4-single-thread-relocation",
+              ["tests/python/test_gc_relocation_sweep_verdict.py::"
+               "test_relocation_copy_clears_stale_sweep_verdict_backend4_single_thread"],
+              os.environ.copy(), integration=True, timeout=300,
+          )
+
+      - name: Verify native object ownership and cleanup with the existing runtime
+        # A terminal Stage1 attempt is enough to reuse its admitted runtime.
+        # Missing admission is a hard failure in this separate pcc0 gate.
+        if: ${{ !cancelled() && (steps.platform_qualification.outcome == 'success' || steps.platform_qualification.outcome == 'failure') }}
+        timeout-minutes: 6
+        env:
+          PCC_RUNTIME_ARCHIVE: ${{ steps.platform_runtime.outputs.archive }}
+          PCC_TEST_NO_NATIVE_PROVISIONING: "1"
+          PCC_NO_AUTO_PCC1: "1"
+          PCC_WITH_THREADS: "1"
+          PCC_REFCOUNT_KIND: "atomic"
+          PCC_PYTEST_AUTO_CLEAN: "0"
+          UV_PYTHON_DOWNLOADS: "never"
+        run: uv run --frozen --no-sync python scripts/ci_native_object_regressions.py --out-dir build/worker-prior-gate
+
+      - name: Verify native ordering with the existing runtime
+        # This is host-pcc0-emitted execution, not a pcc1 compiler result.
+        # Admission/receipt failures remain failures; no runtime is rebuilt.
+        if: ${{ !cancelled() && (steps.platform_qualification.outcome == 'success' || steps.platform_qualification.outcome == 'failure') }}
+        timeout-minutes: 6
+        env:
+          PCC_RUNTIME_ARCHIVE: ${{ steps.platform_runtime.outputs.archive }}
+          PCC_TEST_NO_NATIVE_PROVISIONING: "1"
+          PCC_NO_AUTO_PCC1: "1"
+          PCC_WITH_THREADS: "1"
+          PCC_REFCOUNT_KIND: "atomic"
+          PCC_PYTEST_AUTO_CLEAN: "0"
+          UV_PYTHON_DOWNLOADS: "never"
+        run: uv run --frozen --no-sync python scripts/ci_native_ordering_gate.py --out-dir build/worker-prior-gate
+
+      - name: Verify the new pcc1 on native prior worker shapes
+        run: uv run --frozen --no-sync python scripts/ci_worker_size_prior_gate.py --out-dir build/worker-prior-gate --phase pcc1
 
       - name: Preserve platform qualification evidence
         if: always()
@@ -71,11 +1044,28 @@ jobs:
             build/platform-qualification/**/*.log
             build/platform-qualification/**/*.json
             build/platform-qualification/**/*.jsonl
+            build/platform-qualification/gc0/stage2-export-evidence/selected.manifest
+            build/platform-qualification/gc0/stage2-export-evidence/result.tsv
+            build/worker-prior-gate/**/*.json
+            build/worker-prior-gate/**/*.jsonl
+            build/worker-prior-gate/**/*.log
+            build/worker-prior-gate/**/*.stdout
+            build/worker-prior-gate/**/*.stderr
+            build/worker-prior-gate/**/*.tsv
+            build/worker-prior-gate/**/*.xml
+
+      # Bundle the Stage1 pcc1 recorded above; hatch's own self-compile has
+      # a 10-minute budget that a Stage1 build cannot fit. GITHUB_ENV reaches
+      # only later steps, so the handoff is its own step.
+      - name: Hand the Stage1 pcc1 to the wheel build
+        run: uv run --frozen --no-sync python scripts/ci_stage1_compiler.py
 
       - name: Build this machine's native wheel
         id: build
         run: python -m build --wheel --no-isolation --outdir dist
 
+      # The images install the wheel on the requires-python floor (3.13);
+      # every other step runs the interpreter .python-version names.
       - name: Install and execute the Linux wheel inside Docker
         if: startsWith(matrix.platform, 'linux-')
         shell: bash
@@ -107,8 +1097,10 @@ jobs:
 
   pcc1-package-parity:
     name: macOS arm64 native pcc1 and installed wheel
-    runs-on: macos-14
-    timeout-minutes: 45
+    runs-on: macos-15
+    # 20 min runtime + up to 120 min Stage1 + the existing 60 min allowance
+    # for setup, native checks, wheel and receipts. Hosted jobs stay below 6 h.
+    timeout-minutes: 200
     env:
       PCC_REQUIRE_CURRENT_PCC1: "1"
       PCC_BOOTSTRAP_OUT_DIR: "${{ github.workspace }}/build/bootstrap"
@@ -116,7 +1108,16 @@ jobs:
       PCC_BOOTSTRAP_RUNTIME_CC: "pcc"
       PCC_BOOTSTRAP_RUNTIME_HIGH: "py"
       PCC_BOOTSTRAP_PYTHON_LIBPYTHON: "off"
-      PCC_BOOTSTRAP_MAX_TREE_RSS_BYTES: "6442450944"
+      # Select from observed reclaimable RAM, disk space and swap pressure on
+      # the 7 GB runner. Keep a 4 GiB ceiling, a 2 GiB admission floor and the
+      # existing 512 MiB reserve; never round a low observation up to the floor.
+      PCC_BOOTSTRAP_AUTO_TREE_RSS_CEILING_BYTES: "4294967296"
+      PCC_BOOTSTRAP_MIN_TREE_RSS_BYTES: "2147483648"
+      PCC_BOOTSTRAP_HOST_MEMORY_RESERVE_BYTES: "536870912"
+      # Two-hour Stage1 allowance; memory admission remains unchanged.
+      PCC_BOOTSTRAP_STAGE_TIMEOUT: "7200"
+      # Keep phase/module timing in the retained process stderr on timeout.
+      PCC_PY_FRONTEND_WORKER_TIMING: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -128,21 +1129,45 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version-file: .python-version
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --frozen --dev
 
       - name: Build current pcc1
-        run: |
-          env -u LC_ALL bash scripts/bootstrap.sh \
-            --backend self \
-            --stage 1 \
-            --out-dir "$PCC_BOOTSTRAP_OUT_DIR"
-          test -x "$PCC_BOOTSTRAP_OUT_DIR/pcc1"
+        env:
+          # Opt in only this Stage1 build; the bridge gate runs independently.
+          PCC_HOST_INDEXED_PROCESS_SPLIT: "1"
+          PCC_MACHO_LINK_PHASE_EVENTS: "1"
+        run: uv run --frozen --no-sync python scripts/ci_worker_size_prior_gate.py --out-dir build/worker-prior-gate --phase stage1
+
+      - name: Verify the new pcc1 on native prior worker shapes
+        run: uv run --frozen --no-sync python scripts/ci_worker_size_prior_gate.py --out-dir build/worker-prior-gate --phase pcc1
+
+      - name: Preserve macOS bootstrap evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-macos-arm64
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            build/bootstrap/stage*.process.*/result.json
+            build/bootstrap/stage*.process.*/samples.tsv
+            build/bootstrap/stage*.process.*/target.stdout
+            build/bootstrap/stage*.process.*/target.stderr
+            build/bootstrap/stage*.process.*/result.json.worker-rss.tsv
+            build/bootstrap/stage*.json
+            build/worker-prior-gate/**/*.json
+            build/worker-prior-gate/**/*.jsonl
+            build/worker-prior-gate/**/*.log
+            build/worker-prior-gate/**/*.stdout
+            build/worker-prior-gate/**/*.stderr
+            build/worker-prior-gate/**/*.tsv
+            build/worker-prior-gate/**/*.xml
 
       - name: Build, install, and execute the native wheel
         run: |

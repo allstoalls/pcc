@@ -9,8 +9,8 @@ LLVM reference boundary:
   We go top-down via the SSA builder's structured phi placement.
 """
 
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.project import TranslationUnit
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.driver.project import TranslationUnit
 
 
 def _compile_and_run(source: str, prog_args=None):

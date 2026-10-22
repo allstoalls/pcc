@@ -17,7 +17,7 @@ import textwrap
 import pytest
 
 from pcc1_gate import find_current_pcc1, repo_root, skip_or_fail_no_current_pcc1
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 _REPO_ROOT = repo_root()
@@ -84,7 +84,8 @@ def test_owned_ifexpr_ir_normalizes_branches_and_tracks_target(
         r"br i1 true, label %selected\.owned\.release\.",
         body,
     )
-    assert re.search(r"bitcast ptr %selected\.addr\.\d+ to ptr", body)
+    # The selected slot is passed directly, or through an identity alias.
+    assert re.search(r"bitcast ptr %selected\.addr\.\d+ to ptr|\(ptr %selected\.addr\.\d+[,)]", body)
     assert "pcc_gc_frame_enter" in body
     assert "selected.owned.release" in body
 
@@ -102,7 +103,7 @@ def test_owned_ifexpr_local_survives_source_rebind(
     compile_python(
         str(source),
         str(binary),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )
@@ -124,7 +125,7 @@ def test_owned_ifexpr_local_survives_source_rebind(
 @pytest.mark.parametrize("gc_backend", ["0", "3", "4"])
 def test_current_pcc1_owned_ifexpr_local_survives_source_rebind(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
     gc_backend: str,
 ) -> None:
     pcc1 = find_current_pcc1(_REPO_ROOT)
@@ -138,7 +139,7 @@ def test_current_pcc1_owned_ifexpr_local_survives_source_rebind(
     source.write_text(_SOURCE, encoding="utf-8")
     env = os.environ.copy()
     env.pop("LC_ALL", None)
-    env["PCC_RUNTIME_ARCHIVE"] = str(pcc_py_runtime_archive)
+    env["PCC_RUNTIME_ARCHIVE"] = str(pcc_runtime_archive)
     env["PCC_GC_BACKEND"] = gc_backend
     compile_run = subprocess.run(
         [

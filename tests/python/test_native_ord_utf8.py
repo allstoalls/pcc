@@ -13,7 +13,7 @@ _BUILD.mkdir(parents=True, exist_ok=True)
 
 
 def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -50,7 +50,9 @@ def test_ord_uses_native_utf8_codepoint_helper():
     body = _function_body(ir_text, "f")
 
     assert body is not None
-    assert "@py_str_ord" in body, body
+    # The checked builtin entry (CPython's one-character TypeError) decodes
+    # the code point with py_str_ord; no UTF-8 copy is materialized.
+    assert "@py_builtin_ord(" in body, body
     assert "@py_str_utf8" not in body, body
 
 
@@ -66,12 +68,14 @@ def test_ord_of_str_subscript_uses_indexed_helper():
     body = _function_body(ir_text, "f")
 
     assert body is not None
-    assert "@py_str_ord_at_i64" in body, body
+    # py_builtin_ord_at reads the indexed code point (py_str_ord_at_i64)
+    # after the index check; no one-character substring is built.
+    assert "@py_builtin_ord_at(" in body, body
     assert "@py_str_index" not in body, body
 
 
 def test_native_ord_runtime_matches_python_for_multibyte(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"

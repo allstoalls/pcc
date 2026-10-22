@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from pcc import cli_bootstrap
+from pcc.driver import cli_bootstrap
 from pcc.package import build_exec
 from pcc.package import install
 from pcc.package.pip_shim import _parse_install_args

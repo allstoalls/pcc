@@ -319,11 +319,9 @@ def instruction_used_values(instr: ParsedInstr) -> list[str]:
         _dest, _value_type, _ptr_type, ptr_name = data
         values = [ptr_name]
     elif kind == "load_atomic":
-        _dest, _value_type, _ptr_type, ptr_name, _ordering = data
-        values = [ptr_name]
+        values = [data[3]]
     elif kind == "store_atomic":
-        _value_type, value, _ptr_type, ptr_name, _ordering = data
-        values = [value, ptr_name]
+        values = [data[1], data[3]]
     elif kind == "atomicrmw":
         _dest, _op, _ptr_type, ptr_name, _value_type, value, _ordering = data
         values = [ptr_name, value]
@@ -424,7 +422,7 @@ def _stable_text_bucket_key(text: str) -> int:
         # Negative keys reserve a collision-free lane for the canonical
         # ``.N``/``%.N`` aliases while ordinary polynomial keys stay >= 0.
         return -numeric_id - 1
-    # llvm_capi's function-wide name allocator gives every generated value and
+    # The owned builder's function-wide name allocator gives every generated value and
     # block a unique decimal suffix (``name.N``).  The suffix is already the
     # dense provenance key; hashing the often-long diagnostic prefix one
     # character at a time merely repeats work.  Equal suffixes remain safe:

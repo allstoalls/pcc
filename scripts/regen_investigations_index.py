@@ -9,7 +9,7 @@ documents without ``ls``-ing the directory.
 
 Run:
 
-    env -u LC_ALL uv run python scripts/regen_investigations_index.py
+    uv run python scripts/regen_investigations_index.py
 
 The script is idempotent — re-running overwrites ``INDEX.md`` with
 the current state of the directory.
@@ -156,7 +156,7 @@ def main() -> int:
     )
     lines.append("")
     lines.append(
-        "Regenerate with `env -u LC_ALL uv run python "
+        "Regenerate with `uv run python "
         "scripts/regen_investigations_index.py`."
     )
     lines.append("")

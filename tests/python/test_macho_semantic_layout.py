@@ -173,8 +173,8 @@ def test_reachable_atom_cannot_be_dropped_even_when_marked_eliminable():
 
 
 def test_frontend_policy_materializes_exact_atoms_and_keeps_unknown_runtime():
-    from pcc.py_frontend import pipeline_ir_split, pipeline_ir_text
-    from pcc.py_frontend.pipeline_semantic_layout import (
+    from pcc.frontends.python import pipeline_ir_split, pipeline_ir_text
+    from pcc.frontends.python.pipeline_semantic_layout import (
         build_frontend_semantic_layout_policy,
     )
 
@@ -295,8 +295,8 @@ def test_frontend_policy_rejects_missing_merged_function_and_schema_drift():
 def test_frontend_policy_internal_namespace_includes_module_global_symbols():
     from pcc.backend.self_backend_module_symbols import prepare_module_symbols
     from pcc.backend.self_backend_parse import parse_self_backend_module
-    from pcc.py_frontend import pipeline_ir_split, pipeline_ir_text
-    from pcc.py_frontend.pipeline_semantic_layout import (
+    from pcc.frontends.python import pipeline_ir_split, pipeline_ir_text
+    from pcc.frontends.python.pipeline_semantic_layout import (
         build_frontend_semantic_layout_policy,
     )
 
@@ -423,3 +423,49 @@ def test_semantic_layout_packs_stackmap_entries_with_kept_functions():
         packed_section.relocations[0].symbol_index
     ]
     assert target.name == "_main"
+
+
+def test_semantic_layout_refuses_a_version_3_runtime_table(monkeypatch):
+    # Semantic layout re-encodes a version 2 table; a compact runtime table
+    # is a final-link product it cannot rebuild, so both entry points refuse.
+    from pcc.backend.macho_exec import prepare_executable_object
+    from pcc.backend.macho_link import LinkError
+    from pcc.backend.precise_stackmap import (
+        PRECISE_STACKMAP_FORMAT_ENV,
+        transcode_runtime_table,
+    )
+
+    stackmap_data = encode_stack_map(PreciseStackMap(
+        ARCH_AARCH64, (FunctionStackMap(function_id("_main"), 0, 8, 0, ()),),
+    ))
+    runtime, remapped = transcode_runtime_table(
+        stackmap_data,
+        ((function_id("_main"), function_address_offsets(stackmap_data)[0]),),
+    )
+    obj = NativeObject(
+        (
+            NativeSection(
+                "__TEXT", "__text", spec.S_REGULAR | spec.S_ATTR_PURE_INSTRUCTIONS,
+                2, b"M" * 8,
+            ),
+            NativeSection(
+                "__DATA", "__pcc_stackmaps", PCC_STACKMAP_SECTION_FLAGS, 3, runtime,
+                relocations=(NativeRelocation(remapped[0][1], 0, spec.ARM64_RELOC_UNSIGNED, False, 3),),
+            ),
+        ),
+        (NativeSymbol("_main", 1, 0, True),),
+    )
+    manifest = SemanticLayoutManifest.create(
+        object_sha256=native_object_sha256(obj),
+        entry="_main",
+        roots=(),
+        atoms=(SemanticAtom.create(
+            name="_main", segname="__TEXT", sectname="__text", offset=0, size=8,
+            align_log2=2, temperature="hot",
+        ),),
+    )
+    with pytest.raises(SemanticLayoutError, match="version 3 runtime stack-map table"):
+        apply_semantic_layout(obj, manifest)
+    monkeypatch.setenv(PRECISE_STACKMAP_FORMAT_ENV, "3")
+    with pytest.raises(LinkError, match="semantic layout cannot emit a version 3"):
+        prepare_executable_object([obj], semantic_manifest=manifest)

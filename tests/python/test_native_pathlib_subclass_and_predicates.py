@@ -3,7 +3,7 @@
 Two defects, both of which made the compiled compiler mis-identify itself:
 
 ``is_file`` and ``is_dir`` both answered ``exists()``.  A directory was a
-file and a file was a directory.  ``pcc/bootstrap_cache_identity.py`` branches
+file and a file was a directory.  ``pcc/driver/bootstrap_cache_identity.py`` branches
 on ``entry.is_file()`` to choose between "hash this one file" and "walk this
 tree", so compiled it hashed 2 paths where the host hashed 606.
 
@@ -32,7 +32,7 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PROVIDER = REPO_ROOT / "pcc" / "py_stdlib" / "pathlib.py"
+PROVIDER = REPO_ROOT / "pcc" / "stdlib" / "pathlib.py"
 
 
 def _provider():
@@ -43,7 +43,7 @@ def _provider():
 
 
 def _samples():
-    stdlib = REPO_ROOT / "pcc" / "py_stdlib"
+    stdlib = REPO_ROOT / "pcc" / "stdlib"
     return [
         str(stdlib),
         str(stdlib / "json.py"),
@@ -60,7 +60,7 @@ def test_predicates_distinguish_files_from_directories():
             expected = getattr(host_pathlib.Path(path), name)()
             actual = getattr(provider.Path(path), name)()
             assert actual == expected, f"{name}({path}) -> {actual}, host {expected}"
-    stdlib = REPO_ROOT / "pcc" / "py_stdlib"
+    stdlib = REPO_ROOT / "pcc" / "stdlib"
     assert provider.Path(str(stdlib)).is_dir()
     assert not provider.Path(str(stdlib)).is_file()
     assert provider.Path(str(stdlib / "json.py")).is_file()
@@ -70,7 +70,7 @@ def test_predicates_distinguish_files_from_directories():
 def test_combining_preserves_the_concrete_class():
     provider = _provider()
     root = provider.Path(str(REPO_ROOT))
-    child = root / "pcc" / "py_stdlib" / "json.py"
+    child = root / "pcc" / "stdlib" / "json.py"
     assert isinstance(child, provider.Path), type(child).__name__
     assert child.is_file()
     for value in (child.parent, child.with_suffix(".bak"),
@@ -82,7 +82,7 @@ def test_combining_preserves_the_concrete_class():
 
 def test_relative_to_matches_the_host():
     provider = _provider()
-    base = str(REPO_ROOT / "pcc" / "py_stdlib")
+    base = str(REPO_ROOT / "pcc" / "stdlib")
     for path in (base + "/json.py", base, base + "/urllib/parse.py", base + "/urllib"):
         expected = str(host_pathlib.Path(path).relative_to(base))
         assert str(provider.Path(path).relative_to(base)) == expected
@@ -94,7 +94,7 @@ def test_relative_to_matches_the_host():
 
 def test_glob_and_rglob_match_the_host():
     provider = _provider()
-    base = str(REPO_ROOT / "pcc" / "py_stdlib")
+    base = str(REPO_ROOT / "pcc" / "stdlib")
     for pattern in ("*.py", "*", "js*.py"):
         expected = sorted(str(p) for p in host_pathlib.Path(base).glob(pattern))
         actual = sorted(str(p) for p in provider.Path(base).glob(pattern))
@@ -125,7 +125,7 @@ def test_name_matcher_agrees_with_fnmatch_on_star_and_question():
 
 def test_bootstrap_identity_sees_the_whole_source_set():
     """The end the defects were found through, asserted directly."""
-    from pcc.bootstrap_cache_identity import bootstrap_source_files, repo_root
+    from pcc.driver.bootstrap_cache_identity import bootstrap_source_files, repo_root
 
     base = repo_root()
     files = bootstrap_source_files(base)

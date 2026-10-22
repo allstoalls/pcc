@@ -132,6 +132,29 @@ def test_build_plan_consumes_compile_commands_and_build_surfaces(tmp_path):
     assert "lapack_vendor_required" in plan["diagnostics"]
 
 
+@pytest.mark.parametrize("shape", ["command", "arguments"])
+def test_public_native_build_plan_json_consumes_canonical_command_records(tmp_path, shape):
+    from pcc.driver.cli_bootstrap import _native_build_plan_json
+
+    project = _write_build_project(tmp_path / "demo_pkg-0.1")
+    entry = {"file": str(project / "demo_pkg.c"), "directory": str(project)}
+    tokens = ["cc", "-I", "include path", "-DVALUE=1", "-c", "demo_pkg.c", "-o", "demo_pkg.o", "-lopenblas"]
+    if shape == "arguments":
+        entry["arguments"] = tokens
+    else:
+        entry["command"] = "cc -I 'include path' -DVALUE=1 -c demo_pkg.c -o demo_pkg.o -lopenblas"
+    (project / "compile_commands.json").write_text(json.dumps([entry]))
+    native = json.loads(_native_build_plan_json("demo-pkg", str(project)))
+    canonical = build_plan_for_artifact("demo-pkg", project).as_dict()
+    assert native["commands"] == canonical["commands"]
+    assert native["commands"][0]["compiler"] == "cc"
+    assert native["commands"][0]["include_dirs"] == ["include path"]
+    assert native["commands"][0]["defines"] == ["VALUE=1"]
+    assert native["commands"][0]["libraries"] == ["openblas"]
+    assert native["source_summary"] == canonical["source_summary"]
+    assert native["compile_commands"]["entries"] == 1
+
+
 def test_build_plan_consumes_meson_introspection_when_compile_commands_absent(tmp_path):
     project = _write_meson_only_project(tmp_path / "demo_pkg-0.1")
     commands = load_meson_introspection_commands(project)
@@ -188,6 +211,9 @@ def test_build_plan_finds_pcc_package_compile_commands(tmp_path):
 
     assert "consume_compile_commands" in plan["actions"]
     assert plan["commands"][0]["compiler"] == "cc"
+    assert plan["commands"][1]["compiler"] == "gfortran"
+    assert plan["commands"][0]["libraries"] == ["openblas"]
+    assert plan["commands"][1]["libraries"] == ["lapack"]
 
 
 def test_build_plan_excludes_docs_tests_and_vendored_examples(tmp_path):
@@ -287,6 +313,9 @@ def test_pcc_package_build_plan_cli(tmp_path):
     assert plan["ok"] is True
     assert plan["source_summary"]["fortran"] == 1
     assert plan["commands"][0]["compiler"] == "cc"
+    assert plan["commands"][1]["compiler"] == "gfortran"
+    assert plan["commands"][0]["libraries"] == ["openblas"]
+    assert plan["commands"][1]["libraries"] == ["lapack"]
 
 
 def test_pcc1_build_plan_excludes_non_build_tree_surfaces(tmp_path):

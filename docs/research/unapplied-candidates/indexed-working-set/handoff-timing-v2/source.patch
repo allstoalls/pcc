@@ -1,0 +1,692 @@
+--- a/pcc/backend/indexed_phase_timing.py
++++ b/pcc/backend/indexed_phase_timing.py
+@@ -86,3 +86,102 @@
+         except Exception:
+             # Optional diagnostics must not replace a compiler result/error.
+             pass
++
++
++def handoff_timing_start(enabled: bool) -> int:
++    """Return a positive clock token, or zero without affecting the caller."""
++    if not enabled:
++        return 0
++    try:
++        started_ns = time.perf_counter_ns()
++        if started_ns > 0:
++            return started_ns
++    except Exception:
++        pass
++    return 0
++
++
++def handoff_timing_report(
++    stream,
++    module_name: str,
++    scope: str,
++    started_ns: int,
++    complete: bool,
++    task_index: int = -1,
++    worker_pid: int = 0,
++) -> int:
++    """Emit one best-effort line; return elapsed nanoseconds or -1 on bad clock."""
++    elapsed_ns = -1
++    try:
++        if started_ns > 0:
++            measured_ns = time.perf_counter_ns() - started_ns
++            if measured_ns >= 0:
++                elapsed_ns = measured_ns
++    except Exception:
++        pass
++    try:
++        # Bound identifiers before escaping, and numeric renderings afterward.
++        # Even pathological labels fit a single line of at most 2048 characters.
++        parts = [
++            "pcc indexed handoff timing",
++            "module=" + repr(module_name[:96]),
++            "scope=" + repr(scope[:64])[1:-1],
++            "task=" + str(task_index)[:32],
++            "pid=" + str(worker_pid)[:32],
++            "elapsed_ns=" + str(elapsed_ns if elapsed_ns >= 0 else 0)[:32],
++            "scope_complete=" + str(int(complete)),
++            "clock_ok=" + str(int(elapsed_ns >= 0)),
++        ]
++        stream.write(" ".join(parts) + "\n")
++    except Exception:
++        # Preserve the measured scalar even when the diagnostic sink fails.
++        pass
++    return elapsed_ns
++
++
++def handoff_pool_report(
++    stream,
++    started_ns: int,
++    totals_ns,
++    counts,
++    clock_ok: bool,
++    complete: bool,
++    terminal: bool,
++    owner_pid: int,
++) -> bool:
++    """Report three cumulative blocking totals against the current pool wall."""
++    elapsed_ns = -1
++    try:
++        if started_ns > 0:
++            measured_ns = time.perf_counter_ns() - started_ns
++            if measured_ns >= 0:
++                elapsed_ns = measured_ns
++    except Exception:
++        pass
++    clock_ok = clock_ok and elapsed_ns >= 0
++    try:
++        blocking_ns = totals_ns[0] + totals_ns[1] + totals_ns[2]
++        # These synchronous scopes partition coordinator blocking work. Child
++        # phase totals overlap this wall clock and must never be added here.
++        fraction_ppm = (blocking_ns * 1000000 // elapsed_ns
++                        if clock_ok and elapsed_ns > 0 else -1)
++        parts = [
++            "pcc indexed handoff pool totals",
++            "pid=" + str(owner_pid)[:32],
++            "snapshot=" + ("terminal" if terminal else "progress"),
++            "scope_complete=" + str(int(complete)),
++            "clock_ok=" + str(int(clock_ok)),
++            "pool_elapsed_ns=" + str(elapsed_ns if elapsed_ns >= 0 else 0)[:32],
++            "prepare_ns=" + str(totals_ns[0])[:32],
++            "reset_ns=" + str(totals_ns[1])[:32],
++            "retire_ns=" + str(totals_ns[2])[:32],
++            "prepare_calls=" + str(counts[0])[:32],
++            "reset_calls=" + str(counts[1])[:32],
++            "retire_calls=" + str(counts[2])[:32],
++            "blocking_ns=" + str(blocking_ns)[:32],
++            "blocking_fraction_ppm=" + str(fraction_ppm)[:32],
++        ]
++        stream.write(" ".join(parts) + "\n")
++    except Exception:
++        pass
++    return clock_ok
+--- a/pcc/backend/self_backend_indexed_emit.py
++++ b/pcc/backend/self_backend_indexed_emit.py
+@@ -68,11 +68,30 @@
+     if artifact_kind not in ("ASM", "PCO"):
+         raise ValueError("indexed module artifact kind must be ASM or PCO")
+     _debug_phase("decode-start")
+-    module = decode_indexed_module_file(sidecar_path)
+-    if handoff_request:
+-        from pcc.frontends.python.pipeline_indexed_handoff import validate_handoff_module
+-
+-        validate_handoff_module(handoff_request, module)
++    handoff_timing_enabled = bool(handoff_request) and phase_timing is not None
++    if handoff_timing_enabled:
++        try:
++            from .indexed_phase_timing import handoff_timing_start, handoff_timing_report
++        except Exception:
++            handoff_timing_enabled = False
++    decode_started = handoff_timing_start(True) if handoff_timing_enabled else 0
++    decode_complete = False
++    try:
++        module = decode_indexed_module_file(sidecar_path)
++        if handoff_request:
++            from pcc.frontends.python.pipeline_indexed_handoff import validate_handoff_module
++
++            validate_handoff_module(handoff_request, module)
++        decode_complete = True
++    finally:
++        if handoff_timing_enabled:
++            try:
++                handoff_timing_report(
++                    sys.stderr, phase_timing.module_name, "backend_decode_shape",
++                    decode_started, decode_complete, -1, os.getpid(),
++                )
++            except Exception:
++                pass
+     _debug_phase("decode-complete")
+     if is_aarch64_linux_triple(module.triple) or is_x86_64_linux_triple(module.triple) or is_x86_64_windows_triple(module.triple):
+         stack_map_plans = []
+--- a/pcc/frontends/python/worker_process_pool.py
++++ b/pcc/frontends/python/worker_process_pool.py
+@@ -208,6 +208,25 @@
+     unavailable_since = time.monotonic()
+     fresh_after = unavailable_since
+     preflight_done = False
++    # Handoff-only diagnostics reuse the existing trace switch. They retain no
++    # task/IR owners and never replace an operation's original result/error.
++    handoff_timing_enabled = False
++    if str(os.environ.get("PCC_PY_FRONTEND_WORKER_TIMING", "") or "").strip().lower() in (
++        "1", "true", "yes", "on",
++    ):
++        if any(task.get("handoff_request", "") for task in tasks):
++            try:
++                from pcc.backend.indexed_phase_timing import (
++                    handoff_timing_start, handoff_timing_report, handoff_pool_report,
++                )
++                handoff_timing_enabled = True
++            except Exception:
++                pass
++    handoff_totals = [0, 0, 0] if handoff_timing_enabled else []
++    handoff_counts = [0, 0, 0] if handoff_timing_enabled else []
++    handoff_clock_ok = True
++    handoff_pool_started = handoff_timing_start(True) if handoff_timing_enabled else 0
++    handoff_pool_complete = False
+     try:
+         while pending or active:
+             survivors = []
+@@ -245,7 +264,29 @@
+                 if tasks[index].get("handoff_request", ""):
+                     from pcc.frontends.python.pipeline_indexed_handoff import retire_handoff_task
+ 
+-                    retire_handoff_task(tasks[index], attempt_tokens[pid])
++                    handoff_started = handoff_timing_start(True) if handoff_timing_enabled else 0
++                    handoff_complete = False
++                    try:
++                        retire_handoff_task(tasks[index], attempt_tokens[pid])
++                        handoff_complete = True
++                    finally:
++                        if handoff_timing_enabled:
++                            try:
++                                handoff_elapsed = handoff_timing_report(
++                                    sys.stderr, (tasks[index].get("diagnostic_modules", []) or ["unresolved"])[0],
++                                    "pool_retire", handoff_started, handoff_complete, index, pid,
++                                )
++                                handoff_counts[2] += 1
++                                if handoff_elapsed < 0:
++                                    handoff_clock_ok = False
++                                else:
++                                    handoff_totals[2] += handoff_elapsed
++                                handoff_clock_ok = handoff_pool_report(
++                                    sys.stderr, handoff_pool_started, handoff_totals, handoff_counts,
++                                    handoff_clock_ok, False, False, owner_pid,
++                                )
++                            except Exception:
++                                handoff_clock_ok = False
+                 observations.append((tasks[index]["class"], tasks[index]["inputs"], observed_peak))
+                 completed_tokens[index] = attempt_tokens[pid]
+                 if tasks[index].get("retry_calibration", False):
+@@ -369,7 +410,29 @@
+                     if tasks[item].get("handoff_request", "") and not tasks[item].get("input_ready", False):
+                         from pcc.frontends.python.pipeline_indexed_handoff import prepare_handoff_task
+ 
+-                        prepare_handoff_task(tasks[item], completed_tokens[dependency])
++                        handoff_started = handoff_timing_start(True) if handoff_timing_enabled else 0
++                        handoff_complete = False
++                        try:
++                            prepare_handoff_task(tasks[item], completed_tokens[dependency])
++                            handoff_complete = True
++                        finally:
++                            if handoff_timing_enabled:
++                                try:
++                                    handoff_elapsed = handoff_timing_report(
++                                        sys.stderr, (tasks[item].get("diagnostic_modules", []) or ["unresolved"])[0],
++                                        "pool_prepare", handoff_started, handoff_complete, item, 0,
++                                    )
++                                    handoff_counts[0] += 1
++                                    if handoff_elapsed < 0:
++                                        handoff_clock_ok = False
++                                    else:
++                                        handoff_totals[0] += handoff_elapsed
++                                    handoff_clock_ok = handoff_pool_report(
++                                        sys.stderr, handoff_pool_started, handoff_totals, handoff_counts,
++                                        handoff_clock_ok, False, False, owner_pid,
++                                    )
++                                except Exception:
++                                    handoff_clock_ok = False
+                     input_path = str(tasks[item].get("input_path", "") or "")
+                     if input_path and not tasks[item].get("input_ready", False):
+                         with open(input_path, "rb") as stream:
+@@ -420,7 +483,29 @@
+                 if tasks[index].get("handoff_request", ""):
+                     from pcc.frontends.python.pipeline_indexed_handoff import ENV_SEAL, reset_handoff_output
+ 
+-                    reset_handoff_output(tasks[index])
++                    handoff_started = handoff_timing_start(True) if handoff_timing_enabled else 0
++                    handoff_complete = False
++                    try:
++                        reset_handoff_output(tasks[index])
++                        handoff_complete = True
++                    finally:
++                        if handoff_timing_enabled:
++                            try:
++                                handoff_elapsed = handoff_timing_report(
++                                    sys.stderr, (tasks[index].get("diagnostic_modules", []) or ["unresolved"])[0],
++                                    "pool_reset", handoff_started, handoff_complete, index, 0,
++                                )
++                                handoff_counts[1] += 1
++                                if handoff_elapsed < 0:
++                                    handoff_clock_ok = False
++                                else:
++                                    handoff_totals[1] += handoff_elapsed
++                                handoff_clock_ok = handoff_pool_report(
++                                    sys.stderr, handoff_pool_started, handoff_totals, handoff_counts,
++                                    handoff_clock_ok, False, False, owner_pid,
++                                )
++                            except Exception:
++                                handoff_clock_ok = False
+                     vector = [entry for entry in vector if not entry.startswith(ENV_SEAL + "=")]
+                     vector.append(ENV_SEAL + "=" + tasks[index]["handoff_seal_sha256"])
+                 specs[index] = (argv, vector)
+@@ -444,9 +529,20 @@
+                 break
+             if active:
+                 time.sleep(0.01)
++        handoff_pool_complete = True
+     finally:
+-        for _index, pid, _reservation, _exclusive, _peak in active:
+-            _stop_resource_worker(pid)
++        try:
++            for _index, pid, _reservation, _exclusive, _peak in active:
++                _stop_resource_worker(pid)
++        finally:
++            if handoff_timing_enabled:
++                try:
++                    handoff_pool_report(
++                        sys.stderr, handoff_pool_started, handoff_totals, handoff_counts,
++                        handoff_clock_ok, handoff_pool_complete, True, owner_pid,
++                    )
++                except Exception:
++                    pass
+ 
+ 
+ def _host_pool(specs, width):
+--- /dev/null
++++ b/tests/python/test_indexed_handoff_timing.py
+@@ -0,0 +1,402 @@
++"""Fast host-only checks of the opt-in scalar handoff diagnostics."""
++
++import ast
++import hashlib
++import io
++from pathlib import Path
++
++import pytest
++
++from pcc.backend import indexed_phase_timing as timing
++
++
++def test_disabled_start_does_not_read_clock(monkeypatch):
++    calls = []
++
++    def forbidden_clock():
++        calls.append(1)
++        raise AssertionError("disabled timing read the clock")
++
++    monkeypatch.setattr(timing.time, "perf_counter_ns", forbidden_clock)
++    assert timing.handoff_timing_start(False) == 0
++    assert calls == []
++
++
++@pytest.mark.parametrize("tick, expected", ((100, 100), (0, 0), (-1, 0)))
++def test_start_accepts_only_positive_clock_tokens(monkeypatch, tick, expected):
++    calls = []
++
++    def clock():
++        calls.append(1)
++        return tick
++
++    monkeypatch.setattr(timing.time, "perf_counter_ns", clock)
++    assert timing.handoff_timing_start(True) == expected
++    assert len(calls) == 1
++
++
++def test_start_clock_exception_is_best_effort(monkeypatch):
++    def broken_clock():
++        raise RuntimeError("clock unavailable")
++
++    monkeypatch.setattr(timing.time, "perf_counter_ns", broken_clock)
++    assert timing.handoff_timing_start(True) == 0
++
++
++@pytest.mark.parametrize("complete", (False, True))
++@pytest.mark.parametrize("end, elapsed", ((100, 0), (137, 37)))
++def test_report_exact_scalar_fields(monkeypatch, complete, end, elapsed):
++    monkeypatch.setattr(timing.time, "perf_counter_ns", lambda: end)
++    stream = io.StringIO()
++    assert timing.handoff_timing_report(
++        stream, "sample", "pool_communicate", 100, complete, 7, 123,
++    ) == elapsed
++    assert stream.getvalue() == (
++        "pcc indexed handoff timing module='sample' scope=pool_communicate "
++        "task=7 pid=123 elapsed_ns=" + str(elapsed)
++        + " scope_complete=" + str(int(complete)) + " clock_ok=1\n"
++    )
++
++
++@pytest.mark.parametrize("started", (0, -1))
++def test_invalid_start_reports_unavailable_without_reading_clock(monkeypatch, started):
++    calls = []
++
++    def clock():
++        calls.append(1)
++        return 100
++
++    monkeypatch.setattr(timing.time, "perf_counter_ns", clock)
++    stream = io.StringIO()
++    assert timing.handoff_timing_report(stream, "sample", "scope", started, False) == -1
++    assert calls == []
++    assert "task=-1 pid=0 elapsed_ns=0 scope_complete=0 clock_ok=0\n" in stream.getvalue()
++
++
++@pytest.mark.parametrize("failure", ("exception", "backwards", "zero"))
++def test_end_clock_failure_reports_unavailable(monkeypatch, failure):
++    def clock():
++        if failure == "exception":
++            raise RuntimeError("clock unavailable")
++        return 0 if failure == "zero" else 99
++
++    monkeypatch.setattr(timing.time, "perf_counter_ns", clock)
++    stream = io.StringIO()
++    assert timing.handoff_timing_report(stream, "sample", "scope", 100, True) == -1
++    assert "elapsed_ns=0 scope_complete=1 clock_ok=0\n" in stream.getvalue()
++
++
++def test_stream_failure_preserves_elapsed_scalar_without_retry(monkeypatch):
++    calls = []
++
++    class BrokenStream:
++        def write(self, text):
++            calls.append(text)
++            raise OSError("diagnostic stream closed")
++
++    monkeypatch.setattr(timing.time, "perf_counter_ns", lambda: 137)
++    assert timing.handoff_timing_report(BrokenStream(), "sample", "scope", 100, True) == 37
++    assert len(calls) == 1
++
++
++@pytest.mark.parametrize("clock_failure", (False, True))
++def test_diagnostics_in_finally_preserve_same_original_error(monkeypatch, clock_failure):
++    original = ValueError("original compilation error")
++
++    def clock():
++        if clock_failure:
++            raise RuntimeError("clock unavailable")
++        return 137
++
++    class BrokenStream:
++        def write(self, text):
++            raise OSError("diagnostic stream closed")
++
++    monkeypatch.setattr(timing.time, "perf_counter_ns", clock)
++    with pytest.raises(ValueError) as caught:
++        try:
++            raise original
++        finally:
++            timing.handoff_timing_report(BrokenStream(), "sample", "scope", 100, False)
++            timing.handoff_pool_report(
++                BrokenStream(), 100, [0, 0, 0], [0, 0, 0], True, False, True, 123,
++            )
++    assert caught.value is original
++
++
++def test_labels_escape_newlines_and_control_characters(monkeypatch):
++    monkeypatch.setattr(timing.time, "perf_counter_ns", lambda: 137)
++    stream = io.StringIO()
++    module_name = "sample\nforged\r\t\x00"
++    scope = "scope\nforged\r\t\x00"
++    timing.handoff_timing_report(stream, module_name, scope, 100, True)
++    report = stream.getvalue()
++    assert len(report.splitlines()) == 1
++    assert "module=" + repr(module_name) in report
++    assert "scope=" + repr(scope)[1:-1] in report
++    assert report.count("\n") == 1
++    assert "\r" not in report and "\t" not in report and "\x00" not in report
++
++
++def test_report_is_bounded_for_pathological_labels_and_scalar_widths(monkeypatch):
++    large = 10 ** 100
++    monkeypatch.setattr(timing.time, "perf_counter_ns", lambda: large)
++    stream = io.StringIO()
++    label = "\U000e0001\n" * 10000
++    assert timing.handoff_timing_report(stream, label, label, 1, True, large, large) == large - 1
++    report = stream.getvalue()
++    assert len(report) <= 2048
++    assert len(report.splitlines()) == 1
++    assert report.endswith(" scope_complete=1 clock_ok=1\n")
++    for field in ("module=", "scope=", "task=", "pid=", "elapsed_ns="):
++        assert field in report
++
++
++def test_existing_phase_provider_is_byte_identical():
++    source = Path(timing.__file__).read_bytes()
++    original, separator, appended = source.partition(b"\n\ndef handoff_timing_start")
++    assert separator and appended
++    assert hashlib.sha256(original).hexdigest() == (
++        "b2123e4546245e39d0dc937bc7da2e22d3fa3d57e6f351946b1912663714b7ca"
++    )
++
++
++@pytest.mark.parametrize("terminal, complete", ((False, False), (True, False), (True, True)))
++def test_pool_snapshot_exact_scalar_contract(monkeypatch, terminal, complete):
++    monkeypatch.setattr(timing.time, "perf_counter_ns", lambda: 1100)
++    stream = io.StringIO()
++    totals, counts = [10, 20, 30], [1, 2, 3]
++    assert timing.handoff_pool_report(
++        stream, 100, totals, counts, True, complete, terminal, 123,
++    ) is True
++    assert totals == [10, 20, 30] and counts == [1, 2, 3]
++    assert stream.getvalue() == (
++        "pcc indexed handoff pool totals pid=123 snapshot="
++        + ("terminal" if terminal else "progress")
++        + " scope_complete=" + str(int(complete))
++        + " clock_ok=1 pool_elapsed_ns=1000 prepare_ns=10 reset_ns=20 retire_ns=30"
++        + " prepare_calls=1 reset_calls=2 retire_calls=3 blocking_ns=60 blocking_fraction_ppm=60000\n"
++    )
++
++
++@pytest.mark.parametrize("started, end, prior_ok, expected_elapsed", (
++    (100, 1100, False, 1000), (0, 1100, True, 0),
++    (100, 99, True, 0), (100, 0, True, 0), (100, None, True, 0),
++))
++def test_pool_invalid_clock_is_sticky_and_fraction_unavailable(
++    monkeypatch, started, end, prior_ok, expected_elapsed,
++):
++    calls = []
++
++    def clock():
++        calls.append(1)
++        if end is None:
++            raise RuntimeError("clock unavailable")
++        return end
++
++    monkeypatch.setattr(timing.time, "perf_counter_ns", clock)
++    stream = io.StringIO()
++    assert timing.handoff_pool_report(
++        stream, started, [1, 2, 3], [1, 1, 1], prior_ok, False, False, 123,
++    ) is False
++    assert len(calls) == int(started > 0)
++    assert "clock_ok=0 pool_elapsed_ns=" + str(expected_elapsed) in stream.getvalue()
++    assert stream.getvalue().endswith("blocking_ns=6 blocking_fraction_ppm=-1\n")
++
++
++def test_pool_zero_elapsed_clock_is_valid_without_division(monkeypatch):
++    monkeypatch.setattr(timing.time, "perf_counter_ns", lambda: 100)
++    stream = io.StringIO()
++    assert timing.handoff_pool_report(
++        stream, 100, [0, 0, 0], [0, 0, 0], True, False, False, 123,
++    ) is True
++    assert "clock_ok=1 pool_elapsed_ns=0" in stream.getvalue()
++    assert stream.getvalue().endswith("blocking_fraction_ppm=-1\n")
++
++
++@pytest.mark.parametrize("clock_ok", (False, True))
++def test_pool_stream_failure_does_not_change_clock_status(monkeypatch, clock_ok):
++    writes = []
++
++    class BrokenStream:
++        def write(self, text):
++            writes.append(text)
++            raise OSError("diagnostic stream closed")
++
++    monkeypatch.setattr(timing.time, "perf_counter_ns", lambda: 1100)
++    assert timing.handoff_pool_report(
++        BrokenStream(), 100, [1, 2, 3], [1, 1, 1], clock_ok, False, True, 123,
++    ) is clock_ok
++    assert len(writes) == 1
++
++
++def test_pool_snapshot_is_bounded(monkeypatch):
++    large = 10 ** 100
++    monkeypatch.setattr(timing.time, "perf_counter_ns", lambda: large)
++    stream = io.StringIO()
++    assert timing.handoff_pool_report(
++        stream, 1, [large, large, large], [large, large, large], True, True, True, large,
++    ) is True
++    assert len(stream.getvalue()) <= 1024
++    assert len(stream.getvalue().splitlines()) == 1
++
++
++@pytest.mark.parametrize("relative, expected", (
++    ("pcc/frontends/python/worker_process_pool.py", {
++        "pool_prepare": ("prepare_handoff_task",),
++        "pool_reset": ("reset_handoff_output",),
++        "pool_retire": ("retire_handoff_task",),
++    }),
++    ("pcc/backend/self_backend_indexed_emit.py", {
++        "backend_decode_shape": ("decode_indexed_module_file", "validate_handoff_module"),
++    }),
++))
++def test_scope_placement_guards_and_original_operation_counts(relative, expected):
++    root = Path(__file__).resolve().parents[2]
++    tree = ast.parse((root / relative).read_text())
++    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
++
++    def ancestors(node):
++        while node in parents:
++            node = parents[node]
++            yield node
++
++    def enabled_guard(node):
++        return ast.unparse(node) in ("handoff_timing_enabled", "phase_timing is not None")
++
++    calls = [
++        node for node in ast.walk(tree)
++        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
++    ]
++    reports = [call for call in calls if call.func.id == "handoff_timing_report"]
++    assert len(reports) == len(expected)
++    assert {call.args[2].value for call in reports} == set(expected)
++    for report in reports:
++        chain = list(ancestors(report))
++        assert any(isinstance(node, ast.If) and enabled_guard(node.test) for node in chain)
++        boundary = next(
++            node for node in chain if isinstance(node, ast.Try)
++            and any(report in ast.walk(final) for final in node.finalbody)
++        )
++        for operation in expected[report.args[2].value]:
++            original_calls = [call for call in calls if call.func.id == operation]
++            assert len(original_calls) == 1
++            original = original_calls[0]
++            assert any(original in ast.walk(body) for body in boundary.body)
++            assert not any(
++                isinstance(node, ast.If) and enabled_guard(node.test)
++                for node in ancestors(original)
++            )
++    starts = [call for call in calls if call.func.id == "handoff_timing_start"]
++    assert len(starts) == len(expected) + int(relative.endswith("worker_process_pool.py"))
++    for start in starts:
++        guard = parents[start]
++        assert isinstance(guard, ast.IfExp) and guard.body is start
++        assert enabled_guard(guard.test)
++        assert isinstance(guard.orelse, ast.Constant) and guard.orelse.value == 0
++
++
++def test_pool_snapshots_are_operation_bound_and_terminal_after_cleanup():
++    root = Path(__file__).resolve().parents[2]
++    source = (root / "pcc/frontends/python/worker_process_pool.py").read_text()
++    tree = ast.parse(source)
++    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
++    summaries = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
++                 and isinstance(node.func, ast.Name) and node.func.id == "handoff_pool_report"]
++    assert len(summaries) == 4
++    progress = [call for call in summaries if call.args[6].value is False]
++    terminal = [call for call in summaries if call.args[6].value is True]
++    assert len(progress) == 3 and len(terminal) == 1
++    for call in summaries:
++        assert [arg.id for arg in call.args[1:5]] == [
++            "handoff_pool_started", "handoff_totals", "handoff_counts", "handoff_clock_ok",
++        ]
++        assert any(
++            isinstance(node, ast.If) and isinstance(node.test, ast.Name)
++            and node.test.id == "handoff_timing_enabled" and call in ast.walk(node)
++            for node in ast.walk(tree)
++        )
++    for call in progress:
++        assignment = parents[call]
++        assert isinstance(assignment, ast.Assign)
++        assert assignment.targets[0].id == "handoff_clock_ok"
++        boundary = assignment
++        while not isinstance(boundary, ast.Try):
++            boundary = parents[boundary]
++        assert call in ast.walk(boundary.body[-1])
++        assert any(
++            isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
++            and child.func.id == "handoff_timing_report" for child in ast.walk(boundary)
++        )
++    assert 'handoff_totals = [0, 0, 0] if handoff_timing_enabled else []' in source
++    assert 'handoff_counts = [0, 0, 0] if handoff_timing_enabled else []' in source
++    assert '_stop_resource_worker(pid)' in source[:source.index(ast.get_source_segment(source, terminal[0]))]
++    assert '"pool_loop_inclusive"' not in source
++
++
++@pytest.mark.parametrize("enabled", (False, True))
++@pytest.mark.parametrize("cleanup_error", (False, True))
++def test_mock_pool_timing_preserves_lifecycle_and_error_identity(
++    tmp_path, monkeypatch, enabled, cleanup_error,
++):
++    from tests.python.test_host_indexed_process_split import (
++        MIB, _mock_lifecycle, _run_mock_pool, handoff, pool,
++    )
++
++    tasks, events, tokens, sidecar = _mock_lifecycle(
++        tmp_path, monkeypatch, cleanup_error=cleanup_error,
++    )
++    monkeypatch.setenv("PCC_PY_FRONTEND_WORKER_TIMING", "1" if enabled else "0")
++    clock_calls, original_errors = [], []
++    cleanup = handoff.retire_handoff_task
++
++    def clock():
++        clock_calls.append(1)
++        return 100 + 10 * len(clock_calls)
++
++    def observed_cleanup(task, token):
++        try:
++            return cleanup(task, token)
++        except OSError as error:
++            original_errors.append(error)
++            raise
++
++    monkeypatch.setattr(timing.time, "perf_counter_ns", clock)
++    monkeypatch.setattr(handoff, "retire_handoff_task", observed_cleanup)
++    stream = io.StringIO()
++    monkeypatch.setattr(pool.sys, "stderr", stream)
++    observations = []
++    if cleanup_error:
++        with pytest.raises(OSError, match="mock cleanup blocked") as caught:
++            _run_mock_pool(tasks, observations)
++        assert caught.value is original_errors[0]
++        assert sidecar.read_bytes() == b"sealed input"
++    else:
++        _run_mock_pool(tasks, observations)
++        assert not sidecar.exists() and not original_errors
++    lifecycle = [event for event in events if event[0] in ("start", "prepare", "reset", "cleanup")]
++    assert lifecycle == [
++        ("start", 0), ("prepare", tokens[0]), ("reset", 1),
++        ("start", 1), ("cleanup", tokens[1]),
++    ] + ([] if cleanup_error else [("start", 2)])
++    assert [sample[0] for sample in observations] == (
++        ["frontend"] if cleanup_error else ["frontend", "backend", "frontend"]
++    )
++    assert all(sample[2] == MIB for sample in observations)
++    assert len(clock_calls) == (11 if enabled else 0)
++    lines = [line for line in stream.getvalue().splitlines()
++             if line.startswith("pcc indexed handoff ")]
++    if not enabled:
++        assert lines == []
++        return
++    operations = [line for line in lines if line.startswith("pcc indexed handoff timing ")]
++    assert len(operations) == 3
++    assert [line.split(" scope=", 1)[1].split()[0] for line in operations] == [
++        "pool_prepare", "pool_reset", "pool_retire",
++    ]
++    assert sum("snapshot=progress" in line for line in lines) == 3
++    assert sum("snapshot=terminal" in line for line in lines) == 1
++    complete = "scope_complete=" + str(int(not cleanup_error))
++    assert complete in operations[-1] and complete in lines[-1]
++    assert "snapshot=terminal" in lines[-1]
++    assert all("clock_ok=1" in line for line in lines)

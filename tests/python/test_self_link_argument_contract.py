@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -8,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 def _load_pcc_link_driver():
@@ -155,11 +156,14 @@ def test_self_link_mode_uses_host_default_and_accepts_explicit_modes(
     [
         ("darwin", "arm64", "pcc"),
         ("darwin", "aarch64", "pcc"),
-        ("darwin", "x86_64", "cc"),
-        ("linux", "arm64", "cc"),
+        ("linux", "x86_64", "pcc"),
+        ("linux", "arm64", "pcc"),
+        ("linux", "aarch64", "pcc"),
+        ("win32", "AMD64", "pcc"),
+        ("win32", "x86_64", "pcc"),
     ],
 )
-def test_default_self_link_mode_is_pcc_only_on_darwin_arm64(
+def test_default_self_link_mode_is_owned_on_each_supported_host(
     monkeypatch: pytest.MonkeyPatch,
     host_platform: str,
     machine: str,
@@ -171,7 +175,91 @@ def test_default_self_link_mode_is_pcc_only_on_darwin_arm64(
         "uname",
         lambda: SimpleNamespace(machine=machine),
     )
+    monkeypatch.setattr(platform, "machine", lambda: machine)
     assert pipeline._default_self_link_mode() == expected
+
+
+@pytest.mark.parametrize(("host_platform", "machine"), [("darwin", "x86_64"), ("linux", "i686"), ("win32", "arm64"), ("freebsd", "amd64")])
+def test_unsupported_default_host_fails_instead_of_selecting_cc(monkeypatch, host_platform, machine):
+    monkeypatch.setattr(pipeline.sys, "platform", host_platform)
+    monkeypatch.setattr(pipeline.os, "uname", lambda: SimpleNamespace(machine=machine))
+    monkeypatch.setattr(platform, "machine", lambda: machine)
+    monkeypatch.delenv("PCC_SELF_LINK", raising=False)
+    with pytest.raises(pipeline.PyPipelineError, match="does not support host target"):
+        pipeline._resolve_self_link_mode()
+
+
+@pytest.mark.parametrize("options", [{"needs_libpython": True}, {"needs_native_extension_exports": True}, {"extra_link_args": ("-lz",)}])
+def test_default_compatibility_requests_keep_owned_mode_and_fail_before_commands(tmp_path, monkeypatch, options):
+    monkeypatch.setattr(pipeline, "_default_self_link_mode", lambda: "pcc")
+    monkeypatch.delenv("PCC_SELF_LINK", raising=False)
+    calls = []
+    monkeypatch.setattr(pipeline.subprocess, "run", lambda *args, **kwargs: calls.append(args))
+    assert pipeline._resolve_self_link_mode(**options) == "pcc"
+    with pytest.raises(pipeline.PyPipelineError, match="pcc self-link mode does not support"):
+        pipeline._run_self_link_command(["cc", "input.s", "-o", str(tmp_path / "output")],
+                                        "input.s", str(tmp_path / "output"), None, (), False, **options)
+    assert calls == []
+    assert not (tmp_path / "output").exists()
+
+
+def test_native_pcc1_rejects_cc_oracle_before_link_or_sign_commands(tmp_path, monkeypatch):
+    implementation = SimpleNamespace(**vars(pipeline.sys.implementation))
+    implementation.name = "pcc"
+    monkeypatch.setattr(pipeline.sys, "implementation", implementation)
+    monkeypatch.setenv("PCC_SELF_LINK", "cc")
+    calls = []
+    monkeypatch.setattr(pipeline.subprocess, "run", lambda *args, **kwargs: calls.append(args))
+    with pytest.raises(pipeline.PyPipelineError, match="native pcc1 requires the pcc-owned linker"):
+        pipeline._run_self_link_command(["cc", "input.s", "-o", str(tmp_path / "output")],
+                                        "input.s", str(tmp_path / "output"), None, (), False)
+    assert calls == []
+
+
+def test_explicit_host_cc_mode_is_labelled_as_reference_oracle(monkeypatch, capsys):
+    monkeypatch.setenv("PCC_SELF_LINK", "cc")
+    assert pipeline._resolve_self_link_mode() == "cc"
+    assert "explicit host reference oracle PCC_SELF_LINK=cc" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(("host_platform", "machine", "target", "assembly"), [
+    ("darwin", "arm64", "arm64-apple-darwin", ".section __TEXT,__text,regular,pure_instructions\n.globl _main\n_main:\n mov w0, #37\n ret\n"),
+    ("linux", "x86_64", "x86_64-unknown-linux-gnu", ".intel_syntax noprefix\n.text\n.globl _start\n_start:\n mov edi, 37\n mov eax, 60\n syscall\n"),
+    ("linux", "aarch64", "aarch64-unknown-linux-gnu", ".section __TEXT,__text,regular,pure_instructions\n.globl _start\n_start:\n mov x0, #37\n mov x8, #93\n svc #0\n"),
+    ("win32", "AMD64", "x86_64-pc-windows-msvc", ".intel_syntax noprefix\n.text\n.globl pcc_windows_start\npcc_windows_start:\n sub rsp, 40\n mov ecx, 37\n call ExitProcess\n ret\n"),
+])
+def test_default_route_links_real_small_objects_without_host_tools(tmp_path, monkeypatch, host_platform, machine, target, assembly):
+    from pcc.backend.macho_codesign import parse_signature
+    from pcc.backend.elf_x86_64 import parse_static_executable
+
+    native_darwin = sys.platform == "darwin" and platform.machine() == "arm64"
+    original_run = subprocess.run
+    asm = tmp_path / "input.s"
+    output = tmp_path / "native"
+    asm.write_text(assembly)
+    monkeypatch.setattr(pipeline.sys, "platform", host_platform)
+    monkeypatch.setattr(pipeline.os, "uname", lambda: SimpleNamespace(machine=machine))
+    monkeypatch.setattr(platform, "machine", lambda: machine)
+    monkeypatch.delenv("PCC_SELF_LINK", raising=False)
+
+    def forbidden(command, **kwargs):
+        raise AssertionError("owned default invoked a host command: " + repr(command))
+
+    monkeypatch.setattr(pipeline.subprocess, "run", forbidden)
+    pipeline._run_self_link_command(["cc", str(asm), "-o", str(output)], str(asm),
+                                    str(output), None, (), False, target_triple=target)
+    data = output.read_bytes()
+    if host_platform == "darwin":
+        assert parse_signature(data).identifier == b"pcc-linked"
+        if native_darwin:
+            assert original_run([str(output)], timeout=10).returncode == 37
+    elif host_platform == "linux":
+        assert parse_static_executable(data)["entry"] != 0
+        assert int.from_bytes(data[18:20], "little") == (183 if machine == "aarch64" else 62)
+    else:
+        pe = int.from_bytes(data[60:64], "little")
+        assert data[:2] == b"MZ" and data[pe:pe + 4] == b"PE\0\0"
+        assert int.from_bytes(data[pe + 4:pe + 6], "little") == 0x8664
 
 
 @pytest.mark.parametrize("failure", [OSError("uname failed"), None])
@@ -205,7 +293,7 @@ def test_darwin_arm64_default_routes_through_the_pcc_driver(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from pcc.py_frontend import pipeline_self_backend_link
+    from pcc.frontends.python import pipeline_self_backend_link
 
     calls: list[dict] = []
     output = tmp_path / "output"
@@ -514,7 +602,7 @@ def test_pcc_self_link_accepts_indexed_internal_asm_inputs_separately(
     second = tmp_path / "second.s"
     external = tmp_path / "external.o"
     calls: list[dict] = []
-    from pcc.py_frontend import pipeline_self_backend_link
+    from pcc.frontends.python import pipeline_self_backend_link
 
     def owned_link(**kwargs):
         calls.append(kwargs)
@@ -548,7 +636,7 @@ def test_pcc_self_link_passes_the_stable_output_as_incremental_patch_base(
 ) -> None:
     # A plain internal-input link now runs in process; the subprocess command
     # (semantic layout, mixed ASM+PCO inputs) still owns the patch base.
-    from pcc.py_frontend import pipeline_self_link
+    from pcc.frontends.python import pipeline_self_link
 
     final_output = tmp_path / "compiler"
     temporary_output = Path(str(final_output) + ".tmp")
@@ -632,7 +720,7 @@ def test_pcc_self_link_rejects_success_without_an_executable_output(
     monkeypatch.setenv("PCC_SELF_LINK", "pcc")
     # The plain internal-input link runs in process: a linker that returns
     # without writing the output must still be rejected.
-    from pcc.py_frontend import pipeline_self_backend_link
+    from pcc.frontends.python import pipeline_self_backend_link
 
     monkeypatch.setattr(
         pipeline_self_backend_link,

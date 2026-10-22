@@ -482,7 +482,7 @@ def _runtime_archive_symbol_sources(archive: str) -> dict[str, str]:
 
 
 def _runtime_archive_for_symbol_sources() -> str:
-    runtime_dir = os.path.join(_repo_root(), "pcc", "py_runtime")
+    runtime_dir = os.path.join(_repo_root(), "pcc", "runtime")
     return os.path.join(runtime_dir, "libpy_runtime_pcc_py.a")
 
 
@@ -1071,8 +1071,8 @@ def _run_bootstrap(
     )
     bin_path = _stage_bin(out_dir, stage)
     cmd = [
-        "bash",
-        os.path.join(repo, "scripts", "bootstrap.sh"),
+        sys.executable,
+        os.path.join(repo, "scripts", "bootstrap.py"),
         "--out-dir",
         out_dir,
         "--backend",
@@ -1473,9 +1473,9 @@ def _print_result(result: BootstrapResult) -> None:
 
 
 def _selected_backends(value: str) -> tuple[str, ...]:
-    if value == "both":
-        return ("llvm", "self")
-    return (value,)
+    if value != "self":
+        raise ValueError("the bootstrap gate requires the owned self backend")
+    return ("self",)
 
 
 def _fmt_seconds(value: float | None) -> str:
@@ -1496,80 +1496,6 @@ def _ratio(value: float | None, baseline: float | None) -> float | None:
     if baseline <= 0:
         return None
     return value / baseline
-
-
-def _check_ratio(
-    *,
-    label: str,
-    value: float | None,
-    baseline: float | None,
-    threshold: float,
-) -> bool:
-    ratio = _ratio(value, baseline)
-    if ratio is None:
-        print(f"{label}_ratio=n/a", flush=True)
-        return True
-    print(f"{label}_ratio self/llvm={ratio:.3f}", flush=True)
-    if ratio > threshold:
-        print(
-            f"FAIL {label} ratio {ratio:.3f} exceeds threshold {threshold:.3f}",
-            file=sys.stderr,
-        )
-        return False
-    return True
-
-
-def _check_performance_thresholds(
-    results: list[BootstrapResult],
-    *,
-    bootstrap_threshold: float,
-    help_threshold: float,
-    smoke_compile_threshold: float,
-    smoke_run_threshold: float,
-) -> bool:
-    by_backend = {result.backend: result for result in results}
-    llvm = by_backend.get("llvm")
-    self_result = by_backend.get("self")
-    if llvm is None or self_result is None:
-        return True
-    ok = True
-    ok = (
-        _check_ratio(
-            label="bootstrap_elapsed",
-            value=self_result.elapsed_seconds,
-            baseline=llvm.elapsed_seconds,
-            threshold=bootstrap_threshold,
-        )
-        and ok
-    )
-    ok = (
-        _check_ratio(
-            label="help_elapsed",
-            value=self_result.help_elapsed_seconds,
-            baseline=llvm.help_elapsed_seconds,
-            threshold=help_threshold,
-        )
-        and ok
-    )
-    ok = (
-        _check_ratio(
-            label="smoke_compile_elapsed",
-            value=self_result.smoke_compile_seconds,
-            baseline=llvm.smoke_compile_seconds,
-            threshold=smoke_compile_threshold,
-        )
-        and ok
-    )
-    ok = (
-        _check_ratio(
-            label="smoke_run_elapsed",
-            value=self_result.smoke_run_seconds,
-            baseline=llvm.smoke_run_seconds,
-            threshold=smoke_run_threshold,
-        )
-        and ok
-    )
-    return ok
 
 
 def _check_stage_elapsed_threshold(
@@ -1670,15 +1596,15 @@ def _check_user_runtime_threshold(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Run the supported-host Python bootstrap gate with LLVM and/or "
-            "self native emission."
+            "Run the supported-host Python bootstrap gate with owned self "
+            "native emission."
         )
     )
     parser.add_argument(
         "--backend",
-        choices=("llvm", "self", "both"),
-        default="both",
-        help="backend selection to run; default: both",
+        choices=("self",),
+        default="self",
+        help="owned backend selection; default: self",
     )
     parser.add_argument(
         "--stage",
@@ -1697,32 +1623,6 @@ def main(argv: list[str] | None = None) -> int:
         "--allow-non-supported-host",
         action="store_true",
         help="run even when the host is not the supported macOS arm64 target",
-    )
-    parser.add_argument(
-        "--max-bootstrap-ratio",
-        type=float,
-        default=2.0,
-        help="maximum allowed self/LLVM bootstrap wall-time ratio; default: 2.0",
-    )
-    parser.add_argument(
-        "--max-help-ratio",
-        type=float,
-        default=2.0,
-        help=("maximum allowed self/LLVM pcc --help latency ratio; " "default: 2.0"),
-    )
-    parser.add_argument(
-        "--max-smoke-compile-ratio",
-        type=float,
-        default=2.0,
-        help=("maximum allowed self/LLVM toy compile latency ratio; " "default: 2.0"),
-    )
-    parser.add_argument(
-        "--max-smoke-run-ratio",
-        type=float,
-        default=2.0,
-        help=(
-            "maximum allowed self/LLVM toy executable runtime ratio; " "default: 2.0"
-        ),
     )
     parser.add_argument(
         "--max-stage-elapsed",
@@ -1828,23 +1728,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         results.append(result)
         _print_result(result)
-
-    if len(results) == 2:
-        first, second = results
-        if first.size_bytes and second.size_bytes:
-            ratio = second.size_bytes / first.size_bytes
-            print(
-                f"size_ratio {second.backend}/{first.backend}={ratio:.3f}",
-                flush=True,
-            )
-        if not _check_performance_thresholds(
-            results,
-            bootstrap_threshold=args.max_bootstrap_ratio,
-            help_threshold=args.max_help_ratio,
-            smoke_compile_threshold=args.max_smoke_compile_ratio,
-            smoke_run_threshold=args.max_smoke_run_ratio,
-        ):
-            return 1
 
     if not _check_stage_elapsed_threshold(
         results,

@@ -85,7 +85,7 @@ _DICT_RELEASE_PROGRAM = textwrap.dedent(
 
 @pytest.fixture(scope="module")
 def dict_release_binary(tmp_path_factory):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     base = tmp_path_factory.mktemp("dict_release")
     src = base / "dict_release_prog.py"
@@ -128,7 +128,7 @@ def test_raw_scaffold_str_call_gets_owned_management(tmp_path):
     owned-local management (release-on-rebind). Asserts the owned
     resolve marker the assignment path only emits when the RHS is
     classified owned in raw-scaffold mode."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "raw_scaffold_str.py"
     src.write_text(

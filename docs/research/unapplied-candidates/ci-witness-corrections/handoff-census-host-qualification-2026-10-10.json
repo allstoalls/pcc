@@ -1,0 +1,65 @@
+{
+  "base_and_postimage_origins_after": "PASS",
+  "base_commit": "8aa2881c005d11dfeba05c0275386b954eeb312c",
+  "candidate_pcc_tree": "e0fe5ee61793cc74d4b1564d4cb6787c13d884a4",
+  "changes": [
+    {
+      "bytes": 12868,
+      "mode": "100644",
+      "path": "tests/python/test_indexed_handoff_closed_world.py",
+      "post_sha256": "1d48b533b50517c47ff8f2efbdb8ea6d9e5b2900de4b3ec85e146472d304f010",
+      "pre_sha256": "1c3a2d496b00cb34abfd47aa62e8387f9f64e4f40b9e5a3f72a896718330def4"
+    }
+  ],
+  "codegen_checksum": "eaf3d122bd46674030f43784c75d60bb500e14987e55d34ce71b89fa4c1c7ae8",
+  "counts": {
+    "collected": 1,
+    "errors": 0,
+    "failed": 0,
+    "passed": 1,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  },
+  "execution_count": 1,
+  "guard": {
+    "cleanup": "CLEAN",
+    "denied_events": 0,
+    "echild": true,
+    "elapsed_s": 1.5447907010020572,
+    "free_floor_bytes": 4294967296,
+    "growth_limit_bytes": 536870912,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "lock_released": true,
+    "returncode": 0,
+    "root_reaped": true,
+    "status": "COMPLETE",
+    "timeout_s": 300
+  },
+  "import_roots": "PASS",
+  "limits": [
+    "Actual five-provider public compilation, all31 helper bodies, zero-fallback and ARM emission remain UNRUN for this corrected test.",
+    "The earlier realCI 3PASS/closureFAIL and skipped Mac Stage1 retain their original identities.",
+    "No production bytes or source-matched runtime changed. No native, process, GC or performance claim."
+  ],
+  "nodes": [
+    "tests/python/test_indexed_handoff_closed_world.py::test_handoff_owned_import_census_source_policy"
+  ],
+  "payload_sha256": "b138ae4eb8ceab1ef3bfc93d2a2bf9e0c58389a39e5fcf6751be93f65b74becd",
+  "qualification_sha256": "021475a48cd8326ac53b290db8cc8e23e3cd209a7a649a228fd3f2e1203420b2",
+  "schema": "pcc.handoff-import-census.host-qualification.v1",
+  "scope": "One pure source-AST owned-provider import census. No PCC compilation, real split process, closed-world IR or native execution is selected.",
+  "source_before_after": "PASS",
+  "source_manifest_sha256": "9fb2f02d6eb48e30596e60dfa20b244b6d8136b251ffbdf1150e382d47ebbef6",
+  "status": "PASS",
+  "subtest_counts": {
+    "collected": 0,
+    "errors": 0,
+    "failed": 0,
+    "passed": 0,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  }
+}

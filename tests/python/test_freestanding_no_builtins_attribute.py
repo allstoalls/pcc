@@ -16,7 +16,8 @@ frame pointers.  The defect was in pcc's emission, not in the optimizer that
 found it, and it would bite the first owned pass that learns to recognize a
 memset shape.
 
-llvmlite appears here only as the optimizer that demonstrates the hazard.
+The historical LLVM experiment is preserved in ``experiments/llvm_reference``.
+These tests check the owned pipeline that now ships.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ import re
 import textwrap
 from pathlib import Path
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 _APPLICATION_SHAPE = """
@@ -47,7 +48,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # module the failure was found in, and a freestanding fixture has its own
 # authoring rules (every function needs @c_abi_export, integer comparisons
 # need pcc.i64) that would only test the fixture.
-MEM_STR_SRC = REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_mem_str.py"
+MEM_STR_SRC = REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_mem_str.py"
 
 
 def _emit_path(tmp_path: Path, src: Path, name: str) -> str:
@@ -116,23 +117,16 @@ def test_declarations_do_not_carry_the_attribute(tmp_path: Path) -> None:
             assert '"no-builtins"' not in line, line
 
 
-def test_llvm_o2_no_longer_rewrites_the_definition_into_a_call_to_itself(
+def test_owned_passes_preserve_libc_definitions_without_recursive_libcalls(
     tmp_path: Path,
 ) -> None:
-    """The behavioural half: run the optimizer that produced the hang.
-
-    Without the attribute LLVM turned ``@bzero``'s delegation into
-    ``llvm.memset.p0.i64``, which lowers to a call to ``memset`` -- and in a
-    freestanding link ``memset`` is the very function being optimized.
-    """
-    import llvmlite.binding as llvm
-
-    from pcc.llvm_capi import binding as capi
+    from pcc.frontends.python.compiled_owned_passes import run_owned_passes
+    from tests.owned_ir_validation import verify_ir_text
 
     ir_text = _emit_path(tmp_path, MEM_STR_SRC, "fs_mem_o2")
-    llvm.parse_assembly(ir_text).verify()
-    optimized = capi.run_passes_on_ir(ir_text, "default<O2>")
-    llvm.parse_assembly(optimized).verify()
+    verify_ir_text(ir_text)
+    optimized = run_owned_passes(ir_text, ["mem2reg", "sroa", "instsimplify", "instcombine", "dce", "inline-defined"], True)
+    verify_ir_text(optimized)
 
     defined_names = set(_defined_functions(optimized))
     assert "memset" in defined_names, sorted(defined_names)

@@ -36,7 +36,7 @@ def test_pcc1_libc_imports_stay_within_baseline():
     if pcc1 is None:
         pytest.fail(
             "no fresh pcc1 even after auto-provisioning; "
-            "run scripts/bootstrap.sh --stage 1 and read its output"
+            "run scripts/bootstrap.py --stage 1 and read its output"
         )
     out = subprocess.run(
         ["nm", "-u", str(pcc1)], capture_output=True, text=True, timeout=60
@@ -91,11 +91,11 @@ def test_threads_pcc1_libc_imports_stay_within_baseline():
 
         # Isolate the threads build behind a private runtime-dir copy:
         # PCC_WITH_THREADS=1 rebuilds runtime archives, and doing that in
-        # the shared pcc/py_runtime tree taints every later threads-off
+        # the shared pcc/runtime tree taints every later threads-off
         # binary (this bit the threads-off ratchet on 2026-08-01).
         with tempfile.TemporaryDirectory(prefix="pcc-threads-runtime-") as tmp:
             runtime_copy = Path(tmp) / "py_runtime"
-            source_runtime = REPO / "pcc" / "py_runtime"
+            source_runtime = REPO / "pcc" / "runtime"
             runtime_copy.mkdir()
             # vendor/ carries the musl sources pcc compiles in place of
             # libSystem imports; omitting it silently re-imports them.
@@ -106,7 +106,7 @@ def test_threads_pcc1_libc_imports_stay_within_baseline():
                 elif source_entry.is_file():
                     shutil.copy2(source_entry, runtime_copy / entry)
             build = subprocess.run(
-                ["bash", str(REPO / "scripts" / "bootstrap.sh"), "--stage", "1"],
+                [sys.executable, str(REPO / "scripts" / "bootstrap.py"), "--stage", "1"],
                 capture_output=True,
                 text=True,
                 timeout=880,
@@ -143,7 +143,7 @@ def test_threads_pcc1_libc_imports_stay_within_baseline():
 
 
 BASELINE_LINUX = REPO / "tests" / "libc_import_baseline_linux.json"
-_LINUX_HARNESS = REPO / "scripts" / "run_self_backend_linux_x86_64_docker.sh"
+_LINUX_HARNESS = REPO / "scripts" / "run_self_backend_linux_x86_64_docker.py"
 _LINUX_PCC1 = REPO / "build" / "libc-ratchet-linux" / "pcc1"
 
 
@@ -181,20 +181,20 @@ def test_linux_pcc1_libc_imports_stay_within_baseline():
             )
         build = subprocess.run(
             [
-                "bash",
+                sys.executable,
                 str(_LINUX_HARNESS),
                 "bash",
                 "-c",
                 "set -e; RT=/workspace/build/linux_rt; rm -rf $RT; mkdir -p $RT; "
-                "cp -r /workspace/pcc/py_runtime/src /workspace/pcc/py_runtime/py "
-                "/workspace/pcc/py_runtime/include /workspace/pcc/py_runtime/Makefile $RT/; "
-                "cp -r /workspace/pcc/py_runtime/vendor $RT/ 2>/dev/null || true; "
+                "cp -r /workspace/pcc/runtime/src /workspace/pcc/runtime/py "
+                "/workspace/pcc/runtime/include /workspace/pcc/runtime/Makefile $RT/; "
+                "cp -r /workspace/pcc/runtime/vendor $RT/ 2>/dev/null || true; "
                 "cd $RT && make PYTHON=python3 'PCC=python3 -m pcc' "
                 "PCC_REPO_ROOT=/workspace libpy_runtime_pcc_py.a >/dev/null 2>&1; "
                 "cd /workspace; "
                 "PCC_RUNTIME_ARCHIVE=$RT/libpy_runtime_pcc_py.a PCC_RUNTIME_DIR=$RT "
                 "PCC_BOOTSTRAP_OUT_DIR=/workspace/build/libc-ratchet-linux "
-                "bash scripts/bootstrap.sh --backend llvm --stage 1",
+                "python3 scripts/bootstrap.py --backend llvm --stage 1",
             ],
             capture_output=True,
             text=True,

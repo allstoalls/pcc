@@ -30,7 +30,7 @@ def main(argv=None) -> int:
                     records.append(record)
             except ValueError as exc:
                 parser.error(f"{ns.telemetry}:{number}: {exc}")
-    data = {"schema": "pcc.pass_explain.v1", "status": "OBSERVED" if records else "UNKNOWN",
+    data = {"schema": "pcc.diagnostics.pass_explain.v1", "status": "OBSERVED" if records else "UNKNOWN",
             "source": identity, "passes": records,
             "ran": [r["pass"] for r in records if r["status"] == "run"],
             "skipped": [r["pass"] for r in records if r["status"].startswith("skip")],

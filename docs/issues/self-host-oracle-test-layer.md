@@ -51,7 +51,7 @@ self-host run.
 The Codex investigation found bugs of this exact shape:
 
 ```python
-# pcc/llvm_capi/ir.py, called from _emit_user_function:
+# pcc/ir/ir.py, called from _emit_user_function:
 return_ty = fn.function_type.return_type
 # Under CPython: return_ty is a populated ir.IntType / ir.PointerType / ...
 # Under pcc1:    return_ty is NULL → _zero_of() raises
@@ -93,7 +93,7 @@ A freshly created Module with one function should produce the
 same IR text whether the host running this program is CPython
 or a pcc1 binary.
 """
-from pcc.llvm_capi import ir
+from pcc.ir import ir
 
 m = ir.Module(name="probe")
 fn_ty = ir.FunctionType(ir.VoidType(), [])

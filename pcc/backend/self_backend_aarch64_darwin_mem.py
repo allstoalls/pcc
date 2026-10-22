@@ -32,6 +32,9 @@ from .self_backend_value_arena import CompilerIntArena
 
 
 DIRECT_INSTRUCTION_PLACEHOLDER = "  pcc_direct_instruction"
+# Preserve call boundaries until the packed words are consumed. Both markers
+# still consume exactly one record from the same four-scalar instruction arena.
+DIRECT_CALL_INSTRUCTION_PLACEHOLDER = "  pcc_direct_call_instruction"
 _DIRECT_INSTRUCTION_RECORDS: CompilerIntArena | None = None
 _DIRECT_INSTRUCTION_SYMBOL_NAMES: list[str] = []
 _DIRECT_INSTRUCTION_SYMBOL_IDS: dict[str, int] = {}
@@ -98,12 +101,31 @@ def emitted_memory_instruction_line(
     records = _DIRECT_INSTRUCTION_RECORDS
     if records is not None:
         try:
-            word = encode_emitted_load_store_parts(
-                mnemonic,
-                register,
-                base,
-                offset,
-            )
+            if mnemonic in ("ldar", "stlr", "ldarb", "ldarh", "stlrb", "stlrh"):
+                if offset != 0 or not register.startswith(("w", "x")):
+                    raise EncodeError("atomic scalar memory requires a bare address and integer register")
+                # Reuse the established typed register/address validation.
+                # Only Rn/Rt and the W/X size bit survive; acquire/release
+                # opcodes come from the same ISA words as the ASM encoder.
+                access_op = "ldr"
+                if mnemonic.endswith("b"):
+                    access_op = "ldrb"
+                elif mnemonic.endswith("h"):
+                    access_op = "ldrh"
+                ordinary = encode_emitted_load_store_parts(access_op, register, base, 0)
+                opcode = {
+                    "ldar": 0x88DFFC00, "stlr": 0x889FFC00,
+                    "ldarb": 0x08DFFC00, "ldarh": 0x48DFFC00,
+                    "stlrb": 0x089FFC00, "stlrh": 0x489FFC00,
+                }[mnemonic]
+                word = opcode | (ordinary & 0x40000000) | (ordinary & 0x3FF)
+            else:
+                word = encode_emitted_load_store_parts(
+                    mnemonic,
+                    register,
+                    base,
+                    offset,
+                )
         except EncodeError:
             pass
         else:
@@ -256,7 +278,7 @@ def emitted_direct_call_line(target: str) -> str:
     if records is not None:
         symbol_id = _capture_direct_symbol(target)
         records.append4(0, EMITTED_INSTRUCTION_CALL, 0, symbol_id)
-        return DIRECT_INSTRUCTION_PLACEHOLDER
+        return DIRECT_CALL_INSTRUCTION_PLACEHOLDER
     return "  bl " + target
 
 
@@ -288,6 +310,8 @@ def emitted_fixed_instruction_line(mnemonic: str) -> str:
             word = 0xD65F03C0
         elif mnemonic == "nop":
             word = 0xD503201F
+        elif mnemonic == "svc #0":
+            word = 0xD4000001
         elif mnemonic == "paciasp":
             word = 0xD503233F
         elif mnemonic == "autiasp":

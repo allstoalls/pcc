@@ -3,8 +3,8 @@ import unittest
 
 sys.path.insert(0, '..')
 sys.path.insert(0, '../pcc')
-from pcc.parse.file_parser import parse_file
-from pcc.ast import c_ast as c_ast
+from pcc.frontends.c.parse.file_parser import parse_file
+from pcc.frontends.c.ast import c_ast as c_ast
 
 # CPPPATH = 'cpp'
 CPPPATH = 'gcc'

@@ -47,6 +47,7 @@ from .precise_stackmap import (
     NO_OFFSET,
     POINTER_SIZE,
     PreciseStackMap,
+    PreciseStackMapError,
     RECORD_HAS_EXCEPTION_EDGE,
     RECORD_SUSPENDED,
     SAFEPOINT_CALL,
@@ -64,6 +65,7 @@ from .precise_stackmap import (
     stable_id_prefix_limb,
     scoped_stable_id,
     validate_stack_map,
+    _check_uint,
     _FUNCTION as _STACK_MAP_FUNCTION_CODEC,
     _HEADER as _STACK_MAP_HEADER_CODEC,
     _LOCATION as _STACK_MAP_LOCATION_CODEC,
@@ -118,6 +120,7 @@ from .self_backend_ir import (
 )
 from .self_backend_kernel import get_indexed_function_kernel
 from .self_backend_kernel import (
+    _scalar_window_is_complete,
     IndexedFunctionKernel,
     TYPE_KIND_ARRAY,
     TYPE_KIND_PTR,
@@ -142,8 +145,14 @@ _STACK_MAP_RECORD_SCALAR_COUNT = 10
 _py_bytes_new: "extern" = extern("py_bytes_new", (c_ptr, c_int64), c_obj)
 
 
-_FRAME_ENTER = frozenset(("pcc_gc_frame_enter", "pcc_gc_frame_enter_lifo"))
-_FRAME_LEAVE = frozenset(("pcc_gc_frame_leave", "pcc_gc_frame_leave_lifo"))
+_FRAME_ENTER = frozenset((
+    "pcc_gc_frame_enter", "pcc_gc_frame_enter_lifo",
+    "pcc_gc_frame_enter_mapped", "pcc_gc_frame_enter_lifo_mapped",
+))
+_FRAME_LEAVE = frozenset((
+    "pcc_gc_frame_leave", "pcc_gc_frame_leave_lifo",
+    "pcc_gc_frame_leave_mapped", "pcc_gc_frame_leave_lifo_mapped",
+))
 _FRAME_PROTOCOL = _FRAME_ENTER | _FRAME_LEAVE
 
 # Shared empty answer for instruction slots with no managed live-out.  It is
@@ -711,6 +720,65 @@ def _native_triple_hash(first: int, second: int, third: int) -> int:
     return _native_pair_hash(_native_pair_hash(first, second), third)
 
 
+def _rebuilt_pair_index(
+    previous: CompilerIntArena,
+    previous_capacity: int,
+    capacity: int,
+) -> CompilerIntArena:
+    """Reinsert (hash, encoded ID) entries into a larger linear-probe index.
+
+    Index capacities start from call-protocol hints. Frame slots, groups and
+    states are not bounded by those hints, so inserts grow the index at half
+    load instead of failing; lookups always reach an empty slot.
+    """
+    index = CompilerIntArena(capacity * 2)
+    index.append_zeros(capacity * 2)
+    mask = capacity - 1
+    slot_index = 0
+    while slot_index < previous_capacity:
+        offset = slot_index * 2
+        encoded = previous.get_unchecked(offset + 1)
+        if encoded != 0:
+            key_hash = previous.get_unchecked(offset)
+            slot = key_hash & mask
+            while index.get_unchecked(slot * 2 + 1) != 0:
+                slot = (slot + 1) & mask
+            index.set2_unchecked(slot * 2, key_hash, encoded)
+        slot_index += 1
+    previous.close()
+    return index
+
+
+def _rebuilt_transition_index(
+    previous: CompilerIntArena,
+    previous_capacity: int,
+    capacity: int,
+) -> CompilerIntArena:
+    """Rehash (state, group, operation, result) transition-cache entries."""
+    index = CompilerIntArena(capacity * 4)
+    index.append_zeros(capacity * 4)
+    mask = capacity - 1
+    slot_index = 0
+    while slot_index < previous_capacity:
+        offset = slot_index * 4
+        encoded = previous.get_unchecked(offset + 3)
+        if encoded != 0:
+            state_id = previous.get_unchecked(offset)
+            group_id = previous.get_unchecked(offset + 1)
+            operation = previous.get_unchecked(offset + 2)
+            slot = _native_triple_hash(state_id, group_id, operation) & mask
+            while index.get_unchecked(slot * 4 + 3) != 0:
+                slot = (slot + 1) & mask
+            target = slot * 4
+            index.set_unchecked(target, state_id)
+            index.set_unchecked(target + 1, group_id)
+            index.set_unchecked(target + 2, operation)
+            index.set_unchecked(target + 3, encoded)
+        slot_index += 1
+    previous.close()
+    return index
+
+
 class PackedPointerAliases:
     """Dense value-ID pointer provenance; text refs remain negative IDs."""
 
@@ -766,6 +834,7 @@ class PackedRootStatePlane:
         "state_index_capacity",
         "transition_index",
         "transition_index_capacity",
+        "transition_count",
         "state_location_spans",
         "state_locations",
         "entry_state_ids",
@@ -801,6 +870,7 @@ class PackedRootStatePlane:
         self.transition_index_capacity = transition_capacity
         self.transition_index = CompilerIntArena(transition_capacity * 4)
         self.transition_index.append_zeros(transition_capacity * 4)
+        self.transition_count = 0
         self.state_location_spans = CompilerIntArena()
         self.state_locations = CompilerIntArena()
         self.entry_state_ids = CompilerIntArena(max(1, block_count))
@@ -816,6 +886,15 @@ class PackedRootStatePlane:
         self._insert_state_index(0, 0)
 
     def _insert_state_index(self, state_hash: int, state_id: int) -> None:
+        # state_spans already holds the inserted state.
+        if (len(self.state_spans) // 4) * 2 > self.state_index_capacity:
+            capacity = self.state_index_capacity * 2
+            self.state_index = _rebuilt_pair_index(
+                self.state_index,
+                self.state_index_capacity,
+                capacity,
+            )
+            self.state_index_capacity = capacity
         slot = state_hash & (self.state_index_capacity - 1)
         probes = 0
         while probes < self.state_index_capacity:
@@ -863,6 +942,14 @@ class PackedRootStatePlane:
         add: bool,
         result_state_id: int,
     ) -> None:
+        if (self.transition_count + 1) * 2 > self.transition_index_capacity:
+            capacity = self.transition_index_capacity * 2
+            self.transition_index = _rebuilt_transition_index(
+                self.transition_index,
+                self.transition_index_capacity,
+                capacity,
+            )
+            self.transition_index_capacity = capacity
         operation = 1 if add else 0
         key_hash = _native_triple_hash(state_id, group_id, operation)
         slot = key_hash & (self.transition_index_capacity - 1)
@@ -871,6 +958,7 @@ class PackedRootStatePlane:
             offset = slot * 4
             encoded = self.transition_index.get_unchecked(offset + 3)
             if encoded == 0:
+                self.transition_count += 1
                 self.transition_index.set_unchecked(offset, state_id)
                 self.transition_index.set_unchecked(offset + 1, group_id)
                 self.transition_index.set_unchecked(offset + 2, operation)
@@ -920,6 +1008,15 @@ class PackedRootStatePlane:
         offset: int,
         group_id: int,
     ) -> None:
+        # group_keys already holds the inserted group.
+        if (len(self.group_keys) // 2) * 2 > self.group_index_capacity:
+            capacity = self.group_index_capacity * 2
+            self.group_index = _rebuilt_pair_index(
+                self.group_index,
+                self.group_index_capacity,
+                capacity,
+            )
+            self.group_index_capacity = capacity
         key_hash = _native_pair_hash(base_ref, offset)
         slot = key_hash & (self.group_index_capacity - 1)
         probes = 0
@@ -942,6 +1039,14 @@ class PackedRootStatePlane:
         byte_offset: int,
         frame_offset: int,
     ) -> None:
+        if (len(self.registered_roots) // 3 + 1) * 2 > self.registered_index_capacity:
+            capacity = self.registered_index_capacity * 2
+            self.registered_index = _rebuilt_pair_index(
+                self.registered_index,
+                self.registered_index_capacity,
+                capacity,
+            )
+            self.registered_index_capacity = capacity
         key_hash = _native_pair_hash(base_ref, byte_offset)
         slot = key_hash & (self.registered_index_capacity - 1)
         probes = 0
@@ -1230,6 +1335,22 @@ class PackedRootStatePlane:
             (locations.first + low) * 2
         ) == offset
 
+    def retire_construction_state(self) -> None:
+        """Drop lookup and traversal scratch after managed origins are copied.
+
+        Only the complete planner owns this boundary. Standalone root-state
+        callers may still register groups, transition states or query origins.
+        Location groups, state membership and the location scratch remain live
+        for lazy safepoint locations and reload checks.
+        """
+        self.group_keys.close()
+        self.group_index.close()
+        self.registered_roots.close()
+        self.registered_index.close()
+        self.state_index.close()
+        self.transition_index.close()
+        self.queue.close()
+
     def close(self) -> None:
         self.group_keys.close()
         self.group_location_spans.close()
@@ -1257,6 +1378,30 @@ _TRANSFER_NONE = 0
 _TRANSFER_COPY = 1
 _TRANSFER_GEP = 2
 _TRANSFER_JOIN = 3
+
+
+def _managed_origin_types_identical(actual: object, expected: object) -> bool:
+    return actual is expected
+
+
+def _managed_origin_arena_has_shape(arena: CompilerIntArena, length: int) -> bool:
+    """Check only ordinary storage metadata, never scan host payload values."""
+    if type(arena) is not CompilerIntArena:
+        return False
+    try:
+        if type(arena._address) is not int or type(arena._length) is not int:
+            return False
+        if type(arena._capacity) is not int or arena._closed is not False:
+            return False
+        if arena._length < 0 or arena._capacity < 0:
+            return False
+        if length >= 0 and arena._length != length:
+            return False
+        if arena._address != 0:
+            return arena._length <= arena._capacity
+        return type(arena._values) is list and len(arena._values) == arena._length
+    except AttributeError:
+        return False
 
 
 class PackedManagedOrigins:
@@ -1468,6 +1613,129 @@ class PackedManagedOrigins:
             ):
                 self.set_state(value_id, _ORIGIN_AMBIGUOUS)
             value_id += 1
+
+    def _converge_fresh(self, transfer_count: int) -> None:
+        """Converge builder-proven plain payloads using the unused fourth lanes.
+
+        Only _native_managed_origins supplies the freshness/payload proof.
+        Public construction, mutation and repeated convergence keep converge.
+        """
+
+        if (
+            type(self) is not PackedManagedOrigins
+            or type(self.value_count) is not int
+            or self.value_count < 0
+            or type(transfer_count) is not int
+            or transfer_count < 0
+            or not _managed_origin_arena_has_shape(self.states, self.value_count * 3)
+            or not _managed_origin_arena_has_shape(self.transfers, self.value_count * 4)
+            or not _managed_origin_arena_has_shape(self.transfer_ids, -1)
+            or not _managed_origin_arena_has_shape(self.proposal, 3)
+        ):
+            self.converge()
+            return
+        if transfer_count == 0:
+            return
+        if 4 * transfer_count >= self.value_count:
+            self.converge()
+            return
+
+        # M counts successful transfer writes, so T <= M even with duplicate
+        # destinations. With R >= 2, 4*M < V bounds index-related operations:
+        # 2*V + (R+2)*T < (R+1)*V old outer-kind reads. This is an operation
+        # bound, not a timing claim. Host storage temporarily holds T ID ints.
+        # The original first sweep never writes the index, including R == 1.
+        indexed = False
+        active_count = 0
+        covered_prefix = 0
+        failed = False
+        try:
+            changed = True
+            while changed:
+                changed = False
+                position = 0
+                sweep_count = active_count if indexed else self.value_count
+                while position < sweep_count:
+                    value_id = position
+                    if indexed:
+                        value_id = self.transfers.get_unchecked(position * 4 + 3)
+                    elif self.transfers.get_unchecked(value_id * 4) == _TRANSFER_NONE:
+                        position += 1
+                        continue
+                    state_offset = value_id * 3
+                    old_kind = self.states.get_unchecked(state_offset)
+                    old_root = self.states.get_unchecked(state_offset + 1)
+                    old_derived = self.states.get_unchecked(state_offset + 2)
+                    if old_kind == _ORIGIN_AMBIGUOUS:
+                        position += 1
+                        continue
+                    self.write_proposed(value_id)
+                    proposed_kind = self.proposal.get_unchecked(0)
+                    proposed_root = self.proposal.get_unchecked(1)
+                    proposed_derived = self.proposal.get_unchecked(2)
+                    if proposed_kind == _ORIGIN_UNKNOWN:
+                        position += 1
+                        continue
+                    if (
+                        old_kind == proposed_kind
+                        and old_root == proposed_root
+                        and old_derived == proposed_derived
+                    ):
+                        position += 1
+                        continue
+                    if old_kind == _ORIGIN_UNKNOWN:
+                        self.set_state(
+                            value_id,
+                            proposed_kind,
+                            proposed_root,
+                            proposed_derived,
+                        )
+                    else:
+                        self.set_state(value_id, _ORIGIN_AMBIGUOUS)
+                    changed = True
+                    position += 1
+                if changed and not indexed:
+                    value_id = 0
+                    while value_id < self.value_count:
+                        if self.transfers.get_unchecked(value_id * 4) != _TRANSFER_NONE:
+                            # Fresh initialization made these lanes zero and
+                            # builder-checked destinations restrict every prior
+                            # setter to the other three lanes. Cover a store
+                            # before attempting it, including a failing store.
+                            covered_prefix = active_count + 1
+                            self.transfers.set_unchecked(active_count * 4 + 3, value_id)
+                            active_count += 1
+                        value_id += 1
+                    indexed = True
+            position = 0
+            sweep_count = active_count if indexed else self.value_count
+            while position < sweep_count:
+                value_id = position
+                if indexed:
+                    value_id = self.transfers.get_unchecked(position * 4 + 3)
+                elif self.transfers.get_unchecked(value_id * 4) == _TRANSFER_NONE:
+                    position += 1
+                    continue
+                if self.states.get_unchecked(value_id * 3) == _ORIGIN_UNKNOWN:
+                    self.set_state(value_id, _ORIGIN_AMBIGUOUS)
+                position += 1
+        except BaseException:
+            failed = True
+            raise
+        finally:
+            cleanup_error = None
+            position = 0
+            while position < covered_prefix:
+                try:
+                    self.transfers.set_unchecked(position * 4 + 3, 0)
+                except BaseException as exc:
+                    # Attempt all covered lanes; preserve a primary failure.
+                    if cleanup_error is None:
+                        cleanup_error = exc
+                position += 1
+            if not failed and cleanup_error is not None:
+                raise cleanup_error
+
 
     def is_tracked(self, value_id: int) -> bool:
         kind = self.states.get_unchecked(value_id * 3)
@@ -1848,6 +2116,41 @@ class FunctionStackMapPlan:
             return
         owner.append_label(fragment, records.label(record_index))
         self._append_reload_span_packed(owner, fragment, records, record_index)
+
+    def append_packed_label_span(
+        self,
+        owner: AArch64EmissionFragments,
+        fragment: CompilerInt2,
+        record_index: int,
+    ) -> None:
+        """The record's label alone: a call safepoint's goes right after the
+        call, and its reloads (``append_packed_reload_span``) after the
+        call's result moves."""
+        if self.target != "aarch64-darwin":
+            raise BackendUnavailable("native stack-map fragments require AArch64")
+        records = self.packed_records
+        if records is None:
+            return
+        owner.append_label(fragment, records.label(record_index))
+
+    def append_packed_reload_span(
+        self,
+        owner: AArch64EmissionFragments,
+        fragment: CompilerInt2,
+        record_index: int,
+    ) -> None:
+        if self.target != "aarch64-darwin":
+            raise BackendUnavailable("native stack-map fragments require AArch64")
+        records = self.packed_records
+        if records is None:
+            return
+        self._append_reload_span_packed(owner, fragment, records, record_index)
+
+    def packed_record_label_line(self, record_index: int) -> str:
+        return self.packed_records.label(record_index) + ":"
+
+    def packed_record_reload_lines(self, record_index: int) -> list[str]:
+        return self._reload_asm_lines_packed(self.packed_records, record_index)
 
     def append_packed_terminator_span(
         self,
@@ -2481,6 +2784,31 @@ def _root_group(
     return _RootGroup(key, tuple(locations))
 
 
+def _frame_protocol_enter_group(
+    func: ParsedFunction,
+    globals_by_name: dict[str, GlobalDef],
+    aliases: dict[int, list[tuple[str, _PointerOrigin]]],
+    frame_map_value: str,
+    slots_value: str,
+) -> _RootGroup | None:
+    """Track local registry-frame lifetime without inventing machine roots."""
+    origin = _resolve_pointer(func, aliases, slots_value)
+    if _frame_map_is_registry_owned(func, aliases, frame_map_value):
+        if _origin_is_registry_owned(func, origin):
+            return None
+        # Explicit C/runtime maps need no static count: the root registry owns
+        # their tracing. Their local slots still need a matched enter/leave
+        # fact at every CFG edge, including aliases and loop backedges.
+        return _RootGroup(f"{origin.base}@{origin.offset}", ())
+    # Preserve the strict compiler-map path, including untraceable slots.
+    group = _root_group(
+        func, globals_by_name, aliases, frame_map_value, slots_value,
+    )
+    if _origin_is_registry_owned(func, origin):
+        return None
+    return group
+
+
 def _direct_call_parts(kind: str, data: tuple) -> tuple[str, tuple] | None:
     if kind != "call":
         return None
@@ -2518,27 +2846,10 @@ def _apply_frame_protocol_parts(
     if callee in _FRAME_ENTER:
         if len(args) != 2:
             _fail(func, f"{callee} has the wrong argument count")
-        if _frame_map_is_registry_owned(func, aliases, args[0][1]):
-            return True
-        group = _root_group(
-            func,
-            globals_by_name,
-            aliases,
-            args[0][1],
-            args[1][1],
+        group = _frame_protocol_enter_group(
+            func, globals_by_name, aliases, args[0][1], args[1][1],
         )
-        slots_origin = _resolve_pointer(func, aliases, args[1][1])
-        if (
-            slots_origin.base == "null"
-            or slots_origin.base.startswith("@")
-            or any(arg.name == slots_origin.base for arg in func.args)
-        ):
-            # Global, heap/continuation and caller-owned slot arrays are
-            # registered roots, but they are not locations in this function's
-            # machine frame.  Their lifetime may deliberately cross this
-            # function (module globals do), so including them in the local
-            # control-flow state creates a false join mismatch on an
-            # already-initialized fast path.
+        if group is None:
             return True
         if group.key in active:
             _fail(func, f"managed slot {group.key!r} is registered twice")
@@ -2598,17 +2909,10 @@ def _apply_frame_protocol_indexed(
             if second.second >= 0
             else kernel.call_texts[second.third]
         )
-        if _frame_map_is_registry_owned(func, aliases, frame_map_value):
-            return True
-        group = _root_group(
-            func,
-            globals_by_name,
-            aliases,
-            frame_map_value,
-            slots_value,
+        group = _frame_protocol_enter_group(
+            func, globals_by_name, aliases, frame_map_value, slots_value,
         )
-        slots_origin = _resolve_pointer(func, aliases, slots_value)
-        if _origin_is_registry_owned(func, slots_origin):
+        if group is None:
             return True
         if group.key in active:
             _fail(func, f"managed slot {group.key!r} is registered twice")
@@ -3613,12 +3917,38 @@ def _native_pointer_aliases(
             if kind_id == PARSED_INSTRUCTION_KIND_CAST:
                 raw: CompilerInt4 = kernel.instruction_record(metadata.second)
                 fact: CompilerInt4 = kernel.instruction_fact_by_id(instruction_id)
-                src_type: CompilerInt4 = kernel.type_header(raw.second)
-                dst_type: CompilerInt4 = kernel.type_header(raw.fourth)
+                src_type_is_scalar = False
+                if type(kernel) is IndexedFunctionKernel:
+                    src_type_scalar_id = raw.second
+                    src_type_is_scalar = _scalar_window_is_complete(
+                        kernel.type_scalars, src_type_scalar_id, 12, 0
+                    )
+                    if src_type_is_scalar:
+                        src_type_scalar = kernel.type_scalars.get_unchecked(
+                            src_type_scalar_id * 12 + 0
+                        )
+                    else:
+                        src_type: CompilerInt4 = kernel.type_header(src_type_scalar_id)
+                else:
+                    src_type: CompilerInt4 = kernel.type_header(raw.second)
+                dst_type_is_scalar = False
+                if type(kernel) is IndexedFunctionKernel:
+                    dst_type_scalar_id = raw.fourth
+                    dst_type_is_scalar = _scalar_window_is_complete(
+                        kernel.type_scalars, dst_type_scalar_id, 12, 0
+                    )
+                    if dst_type_is_scalar:
+                        dst_type_scalar = kernel.type_scalars.get_unchecked(
+                            dst_type_scalar_id * 12 + 0
+                        )
+                    else:
+                        dst_type: CompilerInt4 = kernel.type_header(dst_type_scalar_id)
+                else:
+                    dst_type: CompilerInt4 = kernel.type_header(raw.fourth)
                 if (
                     fact.first >= 0
-                    and src_type.first == TYPE_KIND_PTR
-                    and dst_type.first == TYPE_KIND_PTR
+                    and (src_type_scalar if src_type_is_scalar else src_type.first) == TYPE_KIND_PTR
+                    and (dst_type_scalar if dst_type_is_scalar else dst_type.first) == TYPE_KIND_PTR
                 ):
                     aliases.set_alias(fact.first, raw.third, 0)
             elif kind_id == PARSED_INSTRUCTION_KIND_GEP:
@@ -3706,17 +4036,24 @@ def _native_frame_group_id(
     frame_map_ref: int,
     slots_ref: int,
 ) -> int:
-    signed_count = _native_frame_map_count(
-        func,
-        globals_by_name,
-        aliases,
-        kernel,
-        frame_map_ref,
+    registry_map = _native_frame_map_is_registry_owned(
+        aliases, kernel, frame_map_ref,
     )
+    if registry_map:
+        # An empty location group records the local registration lifetime;
+        # the runtime registry remains responsible for tracing its slots.
+        signed_count = 0
+    else:
+        signed_count = _native_frame_map_count(
+            func, globals_by_name, aliases, kernel, frame_map_ref,
+        )
     aliases.resolve(slots_ref)
     origin_base = aliases.result.get_unchecked(0)
     origin_offset = aliases.result.get_unchecked(1)
-    if _native_ref_is_nonstack(kernel, origin_base):
+    if registry_map:
+        if _native_ref_is_registry_owned(kernel, origin_base):
+            return -1
+    elif _native_ref_is_nonstack(kernel, origin_base):
         return -1
     alloca_offset = kernel.alloca_offset(origin_base)
     if alloca_offset < 0:
@@ -3761,12 +4098,6 @@ def _native_protocol_transition(
             _fail(func, f"{callee} has the wrong argument count")
         first: CompilerInt4 = kernel.call_arg(header.fourth)
         second: CompilerInt4 = kernel.call_arg(header.fourth + 1)
-        if _native_frame_map_is_registry_owned(
-            aliases,
-            kernel,
-            _native_call_arg_ref(first),
-        ):
-            return state_id
         group_id = _native_frame_group_id(
             func,
             globals_by_name,
@@ -3934,29 +4265,49 @@ def _native_root_states(
     # skipped by safepoint planning, which drops its stack maps instead of
     # failing; that is how an edge-only cleanup block once lost its records.
     reachable = CompilerIntArena(len(kernel.block_names))
-    reachable.append_zeros(len(kernel.block_names))
-    reachable.set_unchecked(0, 1)
-    pending = CompilerIntArena()
-    pending.append(0)
-    pending_index = 0
-    while pending_index < len(pending):
-        block_id = pending.get_unchecked(pending_index)
-        pending_index += 1
-        if roots.entry_state_ids.get_unchecked(block_id) < 0:
-            _fail(
-                func,
-                "reachable block "
-                + repr(kernel.block_names[block_id])
-                + " has no entry root state",
-            )
-        successor_position = 0
-        successor_count = kernel.cfg_successor_count(block_id)
-        while successor_position < successor_count:
-            successor = kernel.cfg_successor_id(block_id, successor_position)
-            if reachable.get_unchecked(successor) == 0:
-                reachable.set_unchecked(successor, 1)
-                pending.append(successor)
-            successor_position += 1
+    # Own each audit arena as soon as construction succeeds. Preserve an
+    # active audit/initialization error if either scratch release also fails.
+    try:
+        reachable.append_zeros(len(kernel.block_names))
+        reachable.set_unchecked(0, 1)
+        pending = CompilerIntArena()
+        try:
+            pending.append(0)
+            pending_index = 0
+            while pending_index < len(pending):
+                block_id = pending.get_unchecked(pending_index)
+                pending_index += 1
+                if roots.entry_state_ids.get_unchecked(block_id) < 0:
+                    _fail(
+                        func,
+                        "reachable block "
+                        + repr(kernel.block_names[block_id])
+                        + " has no entry root state",
+                    )
+                successor_position = 0
+                successor_count = kernel.cfg_successor_count(block_id)
+                while successor_position < successor_count:
+                    successor = kernel.cfg_successor_id(block_id, successor_position)
+                    if reachable.get_unchecked(successor) == 0:
+                        reachable.set_unchecked(successor, 1)
+                        pending.append(successor)
+                    successor_position += 1
+        except BaseException:
+            try:
+                pending.close()
+            except BaseException:
+                pass
+            raise
+        else:
+            pending.close()
+    except BaseException:
+        try:
+            reachable.close()
+        except BaseException:
+            pass
+        raise
+    else:
+        reachable.close()
     return roots
 
 
@@ -3968,11 +4319,28 @@ def _native_managed_origins(
 ) -> PackedManagedOrigins:
     origins = PackedManagedOrigins(len(kernel.value_names))
     join_values = CompilerIntArena()
+    # Ordinary fresh storage permits callback-free checks after existing
+    # copies. Keep the original call expressions and their argument lifetimes.
+    # These O(seed + M + J) proof reads are additional to convergence's bound.
+    plain_origins = (
+        type(kernel) is IndexedFunctionKernel
+        and type(origins) is PackedManagedOrigins
+        and type(origins.value_count) is int
+        and origins.value_count >= 0
+        and _managed_origin_arena_has_shape(origins.states, origins.value_count * 3)
+        and _managed_origin_arena_has_shape(origins.transfers, origins.value_count * 4)
+        and _managed_origin_arena_has_shape(origins.transfer_ids, 0)
+        and _managed_origin_arena_has_shape(origins.proposal, 3)
+        and _managed_origin_arena_has_shape(join_values, 0)
+    )
+    transfer_count = 0
     for arg in func.args:
         if arg.type.is_ptr:
             value_id = kernel.value_id(arg.name)
             if value_id >= 0:
                 origins.set_state(value_id, _ORIGIN_RAW)
+                if plain_origins:
+                    plain_origins = type(value_id) is int and 0 <= value_id < origins.value_count
     block_id = 0
     while block_id < len(kernel.block_names):
         block: CompilerInt4 = kernel.block_fact(block_id)
@@ -3980,8 +4348,21 @@ def _native_managed_origins(
         phi_index = 0
         while phi_index < phi_fact.second:
             phi: CompilerInt4 = kernel.phi_record(phi_fact.first + phi_index)
-            phi_type: CompilerInt4 = kernel.type_header(phi.second)
-            if phi_type.first == TYPE_KIND_PTR:
+            phi_type_is_scalar = False
+            if type(kernel) is IndexedFunctionKernel:
+                phi_type_scalar_id = phi.second
+                phi_type_is_scalar = _scalar_window_is_complete(
+                    kernel.type_scalars, phi_type_scalar_id, 12, 0
+                )
+                if phi_type_is_scalar:
+                    phi_type_scalar = kernel.type_scalars.get_unchecked(
+                        phi_type_scalar_id * 12 + 0
+                    )
+                else:
+                    phi_type: CompilerInt4 = kernel.type_header(phi_type_scalar_id)
+            else:
+                phi_type: CompilerInt4 = kernel.type_header(phi.second)
+            if (phi_type_scalar if phi_type_is_scalar else phi_type.first) == TYPE_KIND_PTR:
                 join_values.clear()
                 incoming_index = 0
                 while incoming_index < phi.fourth:
@@ -3989,14 +4370,38 @@ def _native_managed_origins(
                         phi.third + incoming_index
                     )
                     join_values.append(incoming.first)
+                    if plain_origins:
+                        plain_origins = type(join_values.get_unchecked(len(join_values) - 1)) is int
                     incoming_index += 1
                 origins.set_join(phi.first, join_values)
+                transfer_count += 1
+                if plain_origins:
+                    # Only an exact value record has an ordinary first field;
+                    # custom record getters must not be read a second time.
+                    plain_origins = (
+                        _managed_origin_types_identical(type(phi), CompilerInt4)
+                        and type(phi.first) is int
+                        and 0 <= phi.first < origins.value_count
+                    )
             phi_index += 1
         instruction_index = 0
         while instruction_index < block.second:
             instruction_id = block.first + instruction_index
-            fact: CompilerInt4 = kernel.instruction_fact_by_id(instruction_id)
-            dest_id = fact.first
+            fact_is_scalar = False
+            if type(kernel) is IndexedFunctionKernel:
+                fact_scalar_id = instruction_id
+                fact_is_scalar = _scalar_window_is_complete(
+                    kernel.instruction_facts, fact_scalar_id, 4, 0
+                )
+                if fact_is_scalar:
+                    fact_scalar = kernel.instruction_facts.get_unchecked(
+                        fact_scalar_id * 4 + 0
+                    )
+                else:
+                    fact: CompilerInt4 = kernel.instruction_fact_by_id(fact_scalar_id)
+            else:
+                fact: CompilerInt4 = kernel.instruction_fact_by_id(instruction_id)
+            dest_id = (fact_scalar if fact_is_scalar else fact.first)
             if dest_id < 0:
                 instruction_index += 1
                 continue
@@ -4004,8 +4409,21 @@ def _native_managed_origins(
             if type_id < 0:
                 instruction_index += 1
                 continue
-            value_type_header: CompilerInt4 = kernel.type_header(type_id)
-            if value_type_header.first != TYPE_KIND_PTR:
+            value_type_header_is_scalar = False
+            if type(kernel) is IndexedFunctionKernel:
+                value_type_header_scalar_id = type_id
+                value_type_header_is_scalar = _scalar_window_is_complete(
+                    kernel.type_scalars, value_type_header_scalar_id, 12, 0
+                )
+                if value_type_header_is_scalar:
+                    value_type_header_scalar = kernel.type_scalars.get_unchecked(
+                        value_type_header_scalar_id * 12 + 0
+                    )
+                else:
+                    value_type_header: CompilerInt4 = kernel.type_header(value_type_header_scalar_id)
+            else:
+                value_type_header: CompilerInt4 = kernel.type_header(type_id)
+            if (value_type_header_scalar if value_type_header_is_scalar else value_type_header.first) != TYPE_KIND_PTR:
                 instruction_index += 1
                 continue
             metadata: CompilerInt4 = kernel.instruction_metadata_by_id(
@@ -4013,6 +4431,7 @@ def _native_managed_origins(
             )
             kind_id = metadata.first
             payload_id = metadata.second
+            copied_transfer_source = False
             if kind_id == PARSED_INSTRUCTION_KIND_LOAD:
                 load_record: CompilerInt4 = kernel.instruction_record(payload_id)
                 aliases.resolve(load_record.third)
@@ -4031,17 +4450,32 @@ def _native_managed_origins(
                         root_offset,
                         0,
                     )
+                    if plain_origins:
+                        plain_origins = type(root_offset) is int
             elif kind_id == PARSED_INSTRUCTION_KIND_CAST:
                 cast_record: CompilerInt4 = kernel.instruction_record(payload_id)
-                cast_source_type: CompilerInt4 = kernel.type_header(
-                    cast_record.second
-                )
-                if cast_source_type.first == TYPE_KIND_PTR:
+                cast_source_type_is_scalar = False
+                if type(kernel) is IndexedFunctionKernel:
+                    cast_source_type_scalar_id = cast_record.second
+                    cast_source_type_is_scalar = _scalar_window_is_complete(
+                        kernel.type_scalars, cast_source_type_scalar_id, 12, 0
+                    )
+                    if cast_source_type_is_scalar:
+                        cast_source_type_scalar = kernel.type_scalars.get_unchecked(
+                            cast_source_type_scalar_id * 12 + 0
+                        )
+                    else:
+                        cast_source_type: CompilerInt4 = kernel.type_header(cast_source_type_scalar_id)
+                else:
+                    cast_source_type: CompilerInt4 = kernel.type_header(cast_record.second)
+                if (cast_source_type_scalar if cast_source_type_is_scalar else cast_source_type.first) == TYPE_KIND_PTR:
                     origins.set_transfer(
                         dest_id,
                         _TRANSFER_COPY,
                         cast_record.third,
                     )
+                    transfer_count += 1
+                    copied_transfer_source = True
                 else:
                     origins.set_state(dest_id, _ORIGIN_RAW)
             elif kind_id == PARSED_INSTRUCTION_KIND_GEP:
@@ -4053,20 +4487,36 @@ def _native_managed_origins(
                     header.third,
                     NO_OFFSET if offset is None else offset,
                 )
+                transfer_count += 1
+                copied_transfer_source = True
+                if plain_origins:
+                    plain_origins = offset is None or type(offset) is int
             elif kind_id == PARSED_INSTRUCTION_KIND_SELECT:
                 select_record: CompilerInt4 = kernel.instruction_record(payload_id)
                 join_values.clear()
                 join_values.append(select_record.third)
+                if plain_origins:
+                    plain_origins = type(join_values.get_unchecked(len(join_values) - 1)) is int
                 join_values.append(select_record.fourth)
+                if plain_origins:
+                    plain_origins = type(join_values.get_unchecked(len(join_values) - 1)) is int
                 origins.set_join(dest_id, join_values)
+                transfer_count += 1
             else:
                 # Cold/unsupported pointer-producing shapes stay raw; they do
                 # not gain managed provenance merely from LLVM's opaque ptr.
                 origins.set_state(dest_id, _ORIGIN_RAW)
+            if plain_origins:
+                plain_origins = type(dest_id) is int and 0 <= dest_id < origins.value_count
+                if plain_origins and copied_transfer_source:
+                    plain_origins = type(origins.transfers.get_unchecked(dest_id * 4 + 1)) is int
             instruction_index += 1
         block_id += 1
     join_values.close()
-    origins.converge()
+    if plain_origins:
+        origins._converge_fresh(transfer_count)
+    else:
+        origins.converge()
     return origins
 
 
@@ -4091,11 +4541,9 @@ def _native_managed_liveness(
     matrix_size = block_count * word_count
     uses = CompilerIntArena(max(1, matrix_size))
     definitions = CompilerIntArena(max(1, matrix_size))
-    live_in = CompilerIntArena(max(1, matrix_size))
     live_out = CompilerIntArena(max(1, matrix_size))
     uses.append_zeros(matrix_size)
     definitions.append_zeros(matrix_size)
-    live_in.append_zeros(matrix_size)
     live_out.append_zeros(matrix_size)
     scratch = CompilerIntArena(max(1, word_count))
     scratch.append_zeros(word_count)
@@ -4190,45 +4638,235 @@ def _native_managed_liveness(
                 set_bit(uses, block_id, tracked_id)
         block_id += 1
 
+    def cfg_arena_is_plain(arena: CompilerIntArena) -> bool:
+        # This proof must not call custom arena/list/int behavior. It runs
+        # after seed construction, whose callbacks could have changed CFG
+        # tables. Missing or nonordinary storage retains the original loop.
+        if type(arena) is not CompilerIntArena:
+            return False
+        try:
+            if type(arena._address) is not int or type(arena._length) is not int:
+                return False
+            if type(arena._capacity) is not int or arena._closed is not False:
+                return False
+            if arena._length < 0:
+                return False
+            if arena._address != 0:
+                # Raw arena payloads are already machine integers. This
+                # branch, including the new scratch, needs native CI proof.
+                return arena._length <= arena._capacity
+            if type(arena._values) is not list:
+                return False
+            if len(arena._values) != arena._length:
+                return False
+            scalar_index = 0
+            while scalar_index < arena._length:
+                if type(arena._values[scalar_index]) is not int:
+                    return False
+                scalar_index += 1
+            return True
+        except AttributeError:
+            return False
+
+    dirty_rows_enabled = False
+    if word_count > 0 and type(kernel) is IndexedFunctionKernel:
+        try:
+            dirty_rows_enabled = (
+                cfg_arena_is_plain(kernel.terminator_scalars)
+                and cfg_arena_is_plain(kernel.terminator_case_scalars)
+                and cfg_arena_is_plain(kernel.error_edge_spans)
+                and cfg_arena_is_plain(kernel.error_edge_scalars)
+            )
+        except AttributeError:
+            dirty_rows_enabled = False
+
+    # On a stable CFG the transfer is monotone. Seed live-in with uses,
+    # then retain those seeds by unioning each old live-in row with its
+    # successor contribution. This shares one dense plane instead of keeping
+    # an immutable uses copy for the entire fixed point. The fallback retains
+    # its original zero-initialized plane and callback behavior.
+    if dirty_rows_enabled:
+        live_in = uses
+    else:
+        live_in = CompilerIntArena(max(1, matrix_size))
+        live_in.append_zeros(matrix_size)
+
     changed = True
     word_mask = (1 << 30) - 1
-    while changed:
-        changed = False
-        block_id = block_count - 1
-        while block_id >= 0:
-            # This backward union analysis is monotone: live-in/live-out can
-            # only grow from their initial seeds. Carrying the previous row
-            # preserves the PHI seeds and has the same least fixed point as
-            # rebuilding an empty row, with no extra dense matrix.
-            scratch.copy_prefix_from_unchecked(
-                live_out, block_id * word_count, word_count,
-            )
-            successor_position = 0
-            successor_count = kernel.cfg_successor_count(block_id)
-            while successor_position < successor_count:
-                successor = kernel.cfg_successor_id(
-                    block_id,
-                    successor_position,
+    if dirty_rows_enabled:
+        # Two scalar slots per block: reverse-edge head and dirty flags.
+        # Reverse links are (predecessor, previous head), with heads stored
+        # as link offsets plus one so zero is the empty-list sentinel.
+        row_head_offset = 0
+        row_dirty_offset = 1
+        row_width = 2
+        predecessor_offset = 0
+        predecessor_next_offset = 1
+        row_state = CompilerIntArena(max(1, block_count * row_width))
+        # A successfully constructed scheduler arena is owned immediately.
+        # Nested handlers preserve an in-flight business exception even if
+        # close itself fails, and still attempt the other arena's release.
+        try:
+            row_state.append_zeros(block_count * row_width)
+            reverse_edges = CompilerIntArena(1)
+            try:
+                first_sweep = True
+                while changed:
+                    changed = False
+                    block_id = block_count - 1
+                    while block_id >= 0:
+                        row_offset = block_id * row_width
+                        if not first_sweep:
+                            if row_state.get_unchecked(row_offset + row_dirty_offset) == 0:
+                                block_id -= 1
+                                continue
+                            # Clear before transfer: a self-edge must be able to redirty.
+                            row_state.set_unchecked(row_offset + row_dirty_offset, 0)
+                        # This backward union analysis is monotone: live-in/live-out can
+                        # only grow from their initial seeds. Carrying the previous row
+                        # preserves the PHI seeds and has the same least fixed point as
+                        # rebuilding an empty row, with no extra dense matrix.
+                        scratch.copy_prefix_from_unchecked(
+                            live_out, block_id * word_count, word_count,
+                        )
+                        successor_position = 0
+                        successor_count = kernel.cfg_successor_count(block_id)
+                        while successor_position < successor_count:
+                            successor = kernel.cfg_successor_id(
+                                block_id,
+                                successor_position,
+                            )
+                            if successor < 0 or successor >= block_count:
+                                _fail(func, f"unknown CFG successor id {successor}")
+                            scratch.or_prefix_from_unchecked(
+                                live_in,
+                                successor * word_count,
+                                word_count,
+                            )
+                            if first_sweep:
+                                # Only an edge whose original read, bounds check and
+                                # union succeeded may become a reverse dependency.
+                                head_offset = successor * row_width + row_head_offset
+                                previous_head = row_state.get_unchecked(head_offset)
+                                row_state.set_unchecked(head_offset, len(reverse_edges) + 1)
+                                reverse_edges.append2(block_id, previous_head)
+                            successor_position += 1
+                        if scratch.converge_liveness_row_unchecked(
+                            uses,
+                            definitions,
+                            live_out,
+                            live_in,
+                            block_id * word_count,
+                            word_count,
+                            word_mask,
+                        ):
+                            changed = True
+                            if first_sweep:
+                                row_state.set_unchecked(row_offset + row_dirty_offset, 1)
+                            else:
+                                head = row_state.get_unchecked(row_offset + row_head_offset)
+                                while head != 0:
+                                    edge_offset = head - 1
+                                    predecessor = reverse_edges.get_unchecked(
+                                        edge_offset + predecessor_offset
+                                    )
+                                    row_state.set_unchecked(
+                                        predecessor * row_width + row_dirty_offset, 1
+                                    )
+                                    head = reverse_edges.get_unchecked(
+                                        edge_offset + predecessor_next_offset
+                                    )
+                        block_id -= 1
+                    if first_sweep:
+                        # All edges are now known. Bit 1 records the original changed
+                        # rows; bit 2 seeds the next sweep without altering that set.
+                        block_id = 0
+                        while block_id < block_count:
+                            row_offset = block_id * row_width
+                            if row_state.get_unchecked(row_offset + row_dirty_offset) & 1:
+                                head = row_state.get_unchecked(row_offset + row_head_offset)
+                                while head != 0:
+                                    edge_offset = head - 1
+                                    predecessor = reverse_edges.get_unchecked(
+                                        edge_offset + predecessor_offset
+                                    )
+                                    dirty_offset = predecessor * row_width + row_dirty_offset
+                                    row_state.set_unchecked(
+                                        dirty_offset, row_state.get_unchecked(dirty_offset) | 2
+                                    )
+                                    head = reverse_edges.get_unchecked(
+                                        edge_offset + predecessor_next_offset
+                                    )
+                            block_id += 1
+                        block_id = 0
+                        while block_id < block_count:
+                            dirty_offset = block_id * row_width + row_dirty_offset
+                            row_state.set_unchecked(
+                                dirty_offset, row_state.get_unchecked(dirty_offset) >> 1
+                            )
+                            block_id += 1
+                        first_sweep = False
+            except BaseException:
+                try:
+                    reverse_edges.close()
+                except BaseException:
+                    pass
+                raise
+            else:
+                reverse_edges.close()
+        except BaseException:
+            try:
+                row_state.close()
+            except BaseException:
+                pass
+            raise
+        else:
+            row_state.close()
+    else:
+        while changed:
+            changed = False
+            block_id = block_count - 1
+            while block_id >= 0:
+                # This backward union analysis is monotone: live-in/live-out can
+                # only grow from their initial seeds. Carrying the previous row
+                # preserves the PHI seeds and has the same least fixed point as
+                # rebuilding an empty row, with no extra dense matrix.
+                scratch.copy_prefix_from_unchecked(
+                    live_out, block_id * word_count, word_count,
                 )
-                if successor < 0 or successor >= block_count:
-                    _fail(func, f"unknown CFG successor id {successor}")
-                scratch.or_prefix_from_unchecked(
+                successor_position = 0
+                successor_count = kernel.cfg_successor_count(block_id)
+                while successor_position < successor_count:
+                    successor = kernel.cfg_successor_id(
+                        block_id,
+                        successor_position,
+                    )
+                    if successor < 0 or successor >= block_count:
+                        _fail(func, f"unknown CFG successor id {successor}")
+                    scratch.or_prefix_from_unchecked(
+                        live_in,
+                        successor * word_count,
+                        word_count,
+                    )
+                    successor_position += 1
+                if scratch.converge_liveness_row_unchecked(
+                    uses,
+                    definitions,
+                    live_out,
                     live_in,
-                    successor * word_count,
+                    block_id * word_count,
                     word_count,
-                )
-                successor_position += 1
-            if scratch.converge_liveness_row_unchecked(
-                uses,
-                definitions,
-                live_out,
-                live_in,
-                block_id * word_count,
-                word_count,
-                word_mask,
-            ):
-                changed = True
-            block_id -= 1
+                    word_mask,
+                ):
+                    changed = True
+                block_id -= 1
+
+    # The fixed point has consumed these matrices. The backward scan retains
+    # live_in, tracked_values, tracked_index and scratch until its own end.
+    if not dirty_rows_enabled:
+        uses.close()
+    definitions.close()
+    live_out.close()
 
     result: PackedManagedLiveness = PackedManagedLiveness()
     current_live_state = CompilerIntArena(1)
@@ -4369,7 +5007,8 @@ def _native_managed_liveness(
 
     tracked_values.close()
     tracked_index.close()
-    uses.close()
+    if not dirty_rows_enabled:
+        uses.close()
     definitions.close()
     live_in.close()
     live_out.close()
@@ -4454,8 +5093,21 @@ def _native_plan_reloads(
         slot_type_id = -1 if slot_id < 0 else kernel.slot_type_id(slot_id)
         if slot_offset < 0 or slot_type_id < 0:
             _fail(func, f"managed SSA value {name!r} has no pointer spill slot")
-        slot_type: CompilerInt4 = kernel.type_header(slot_type_id)
-        if slot_type.first != TYPE_KIND_PTR:
+        slot_type_is_scalar = False
+        if type(kernel) is IndexedFunctionKernel:
+            slot_type_scalar_id = slot_type_id
+            slot_type_is_scalar = _scalar_window_is_complete(
+                kernel.type_scalars, slot_type_scalar_id, 12, 0
+            )
+            if slot_type_is_scalar:
+                slot_type_scalar = kernel.type_scalars.get_unchecked(
+                    slot_type_scalar_id * 12 + 0
+                )
+            else:
+                slot_type: CompilerInt4 = kernel.type_header(slot_type_scalar_id)
+        else:
+            slot_type: CompilerInt4 = kernel.type_header(slot_type_id)
+        if (slot_type_scalar if slot_type_is_scalar else slot_type.first) != TYPE_KIND_PTR:
             _fail(func, f"managed SSA value {name!r} has no pointer spill slot")
         destination = -slot_offset
         if (
@@ -4472,12 +5124,28 @@ def _build_function_stack_map_plan_native(
     func: ParsedFunction,
     globals_: list[GlobalDef],
     identity_name: str,
+    _globals_index: list[dict[str, GlobalDef]] | None = None,
 ) -> FunctionStackMapPlan:
     kernel = get_indexed_function_kernel(func)
-    globals_by_name = {global_.name: global_ for global_ in globals_}
+    if _globals_index is None:
+        globals_by_name = {global_.name: global_ for global_ in globals_}
+    elif _globals_index:
+        globals_by_name = _globals_index[0]
+    else:
+        globals_by_name = {global_.name: global_ for global_ in globals_}
+        _globals_index.append(globals_by_name)
     aliases = _native_pointer_aliases(kernel)
     roots = _native_root_states(func, globals_by_name, aliases, kernel)
     origins = _native_managed_origins(func, aliases, roots, kernel)
+    # Origins now own copied scalar states; aliases and convergence scratch
+    # have no later consumers. Keep origin states for liveness and reloads.
+    aliases.close()
+    origins.transfers.close()
+    origins.transfer_ids.close()
+    origins.proposal.close()
+    # Registered-root lookup ends with origins. Do not overlap its construction
+    # indexes and CFG queue with the dense liveness matrices below.
+    roots.retire_construction_state()
     live_after = _native_managed_liveness(func, origins, kernel)
     identity = identity_name or func.name
     fid = function_id(identity)
@@ -4673,6 +5341,7 @@ def build_function_stack_map_plan(
     *,
     target: str,
     identity_name: str = "",
+    _globals_index: list[dict[str, GlobalDef]] | None = None,
 ) -> FunctionStackMapPlan:
     if target not in ("aarch64-darwin", "x86_64-linux"):
         _fail(func, f"unsupported stack-map target {target!r}")
@@ -4683,7 +5352,23 @@ def build_function_stack_map_plan(
             identity_name,
         )
     kernel = get_indexed_function_kernel(func)
-    globals_by_name = {global_.name: global_ for global_ in globals_}
+    if _globals_index is None or type(globals_) is not list:
+        globals_by_name = {global_.name: global_ for global_ in globals_}
+    elif _globals_index:
+        globals_by_name = _globals_index[0]
+    else:
+        # Only the owned x86 emission loop shares this table. Preserve the
+        # original single name read and duplicate-last behavior while excluding
+        # custom records/keys whose properties, hash or equality can change.
+        globals_by_name = {}
+        shareable = True
+        for global_ in globals_:
+            name = global_.name
+            globals_by_name[name] = global_
+            if type(global_) is not GlobalDef or type(name) is not str:
+                shareable = False
+        if shareable:
+            _globals_index.append(globals_by_name)
     aliases = _pointer_aliases(func)
     entries = _block_entry_states(func, globals_by_name, aliases)
     managed_origins, ambiguous_managed = _managed_value_origins(
@@ -5101,7 +5786,31 @@ def build_stack_map_plans(
     *,
     target: str,
     function_symbol=None,
+    _share_globals_index: bool = False,
 ) -> tuple[FunctionStackMapPlan, ...]:
+    # Only the emitter's initial AArch64 batch opts in: its symbol callback is
+    # pure and globals do not change inside that batch. Public callers retain
+    # per-function indexing, including mutations made by function_symbol.
+    if _share_globals_index and target == "aarch64-darwin":
+        globals_index: list[dict[str, GlobalDef]] = []
+        plans: list[FunctionStackMapPlan] = []
+        try:
+            for func in functions:
+                identity_name = (
+                    function_symbol(func.name)
+                    if function_symbol is not None
+                    else func.name
+                )
+                plans.append(_build_function_stack_map_plan_native(
+                    func, globals_, identity_name, globals_index,
+                ))
+            return tuple(plans)
+        finally:
+            # Do not retain the name table across emission, timing callbacks,
+            # or tail-call replanning. Clear entries even on a failed plan.
+            if globals_index:
+                globals_index[0].clear()
+            globals_index.clear()
     return tuple(
         build_function_stack_map_plan(
             func,
@@ -5118,53 +5827,9 @@ def build_stack_map_plans(
 
 
 def _aarch64_text_label_offsets(lines: list[str]) -> dict[str, int]:
-    offsets: dict[str, int] = {}
-    offset = 0
-    in_text = False
-    for raw in lines:
-        # Emitter-owned ordinary instructions are always two-space indented,
-        # while labels are unindented and directives begin with a dot.  Avoid
-        # allocating/normalizing text and testing every directive shape for
-        # the overwhelmingly common fixed-width instruction line.
-        if in_text and raw.startswith("  ") and not raw.startswith("  ."):
-            offset += 4
-            continue
-        line = raw.strip()
-        if line.startswith(".section "):
-            in_text = line[len(".section ") :].startswith("__TEXT,__text,")
-            continue
-        if not in_text or not line:
-            continue
-        if line.endswith(":"):
-            label = line[:-1]
-            if label in offsets:
-                raise BackendUnavailable(
-                    f"duplicate target-final stack-map label {label!r}"
-                )
-            offsets[label] = offset
-            continue
-        if line.startswith(".p2align "):
-            power = int(line.split()[1], 0)
-            alignment = 1 << power
-            offset = _align_to(offset, alignment)
-            continue
-        if line.startswith((".data_region", ".end_data_region")):
-            continue
-        widths = ((".byte ", 1), (".short ", 2), (".long ", 4), (".quad ", 8))
-        matched = False
-        for prefix, width in widths:
-            if line.startswith(prefix):
-                offset += width * len([item for item in line[len(prefix) :].split(",") if item.strip()])
-                matched = True
-                break
-        if matched:
-            continue
-        if line.startswith(".space "):
-            offset += int(line.split()[1], 0)
-            continue
-        if line.startswith("."):
-            continue
-        offset += 4
+    from .arm64_asm_driver import measure_text_layout
+
+    offsets, _ = measure_text_layout(lines)
     return offsets
 
 
@@ -5325,14 +5990,47 @@ def _append_planned_location(
     )
 
 
+# Entry records stay: a walk never meets one (its pc is no return address),
+# and every function has exactly one.
+_ROOTLESS_PRUNABLE_KINDS = (SAFEPOINT_LOOP, SAFEPOINT_CALL)
+
+
+def _planned_record_is_rootless(record) -> bool:
+    """A call or loop safepoint with no managed location, flag or exception
+    edge: its frame has nothing to root at that pc, and a stack walk that
+    finds no record at a return address skips the frame, so the table omits it
+    (stack-map step 2). The code and its labels are unchanged."""
+    return (
+        record.kind in _ROOTLESS_PRUNABLE_KINDS
+        and record.flags == 0
+        and not record.exceptional_block
+        and not record.locations
+    )
+
+
+def _packed_record_is_rootless(records, record_index: int) -> bool:
+    """``_planned_record_is_rootless`` for a packed AArch64 record."""
+    scalar: CompilerInt4 = records.scalar(record_index)
+    if scalar.second not in _ROOTLESS_PRUNABLE_KINDS or scalar.third != 0:
+        return False
+    if records.exceptional_block(record_index):
+        return False
+    group: CompilerInt2 = records.location_group(record_index)
+    return group.second == 0
+
+
 def render_aarch64_stack_map_section(
     lines: list[str],
     plans: tuple[FunctionStackMapPlan, ...],
     *,
     function_symbol,
     block_label,
+    target_offsets: dict[str, int] | None = None,
 ) -> list[str]:
-    offsets = _aarch64_text_label_offsets(lines)
+    offsets = (
+        _aarch64_text_label_offsets(lines)
+        if target_offsets is None else target_offsets
+    )
     ordered_plans = sorted(plans, key=lambda item: item.function_id)
     section = [".section __DATA,__pcc_stackmaps,regular", ".p2align 3"]
     # v2 interns the location lists into one table emitted after every
@@ -5411,12 +6109,17 @@ def render_aarch64_stack_map_section(
             ))
             record_index += 1
         records.sort(key=lambda item: (item[0], item[1]))
+        # Every record is validated below; rootless ones are not written.
+        kept_records = 0
+        for kept_item in records:
+            if not _packed_record_is_rootless(packed_records, kept_item[2]):
+                kept_records += 1
         section.extend((
             f"  .quad {plan.function_id}",
             f"  .quad {symbol}",
             f"  .long {code_size}",
             f"  .long {plan.frame_size}",
-            f"  .long {len(records)}",
+            f"  .long {kept_records}",
             "  .long 0",
         ))
         previous_pc = -1
@@ -5488,18 +6191,19 @@ def render_aarch64_stack_map_section(
                         )
                         location_offset += 1
                 local_location_indices[location_group_id] = location_index
-            section.extend((
-                f"  .quad {record_id}",
-                f"  .long {instruction_offset}",
-                f"  .long {exceptional_offset}",
-                f"  .long {continuation_id}",
-                f"  .short {location_group.second}",
-                "  .short 0",
-                f"  .byte {record_kind}",
-                f"  .byte {record_flags}",
-                "  .short 0",
-                f"  .long {location_index}",
-            ))
+            if not _packed_record_is_rootless(packed_records, record_index):
+                section.extend((
+                    f"  .quad {record_id}",
+                    f"  .long {instruction_offset}",
+                    f"  .long {exceptional_offset}",
+                    f"  .long {continuation_id}",
+                    f"  .short {location_group.second}",
+                    "  .short 0",
+                    f"  .byte {record_kind}",
+                    f"  .byte {record_flags}",
+                    "  .short 0",
+                    f"  .long {location_index}",
+                ))
     location_count = len(global_locations) // 2
     section[location_count_line] = f"  .long {location_count}"
     if location_count:
@@ -5870,12 +6574,21 @@ def build_aarch64_stack_map_section(
             pcrel=False,
             length=3,
         ))
+        # Every record is validated below; rootless ones are not written.
+        kept_records = 0
+        kept_scan = 0
+        while kept_scan < len(final_records) // 4:
+            if not _packed_record_is_rootless(
+                packed_records, final_records.get_unchecked(kept_scan * 4 + 2)
+            ):
+                kept_records += 1
+            kept_scan += 1
         function_chunk = _STACK_MAP_FUNCTION_CODEC.pack(
             plan.function_id,
             0,
             code_size,
             plan.frame_size,
-            len(packed_records),
+            kept_records,
             0,
         )
         chunks.append(function_chunk)
@@ -5957,34 +6670,35 @@ def build_aarch64_stack_map_section(
                         )
                         location_offset += 1
                 local_location_indices[location_group_id] = location_index
-            if packed_record_path:
-                packed_record_scalars.append4(
-                    record_id,
-                    instruction_offset,
-                    exceptional_offset,
-                    continuation_id,
-                )
-                packed_record_scalars.append4(
-                    location_group.second,
-                    0,
-                    record_kind,
-                    record_flags,
-                )
-                packed_record_scalars.append2(0, location_index)
-            else:
-                chunks.append(_STACK_MAP_RECORD_CODEC.pack(
-                    record_id,
-                    instruction_offset,
-                    exceptional_offset,
-                    continuation_id,
-                    location_group.second,
-                    0,
-                    record_kind,
-                    record_flags,
-                    0,
-                    location_index,
-                ))
-            payload_size += _STACK_MAP_RECORD_CODEC.size
+            if not _packed_record_is_rootless(packed_records, record_index):
+                if packed_record_path:
+                    packed_record_scalars.append4(
+                        record_id,
+                        instruction_offset,
+                        exceptional_offset,
+                        continuation_id,
+                    )
+                    packed_record_scalars.append4(
+                        location_group.second,
+                        0,
+                        record_kind,
+                        record_flags,
+                    )
+                    packed_record_scalars.append2(0, location_index)
+                else:
+                    chunks.append(_STACK_MAP_RECORD_CODEC.pack(
+                        record_id,
+                        instruction_offset,
+                        exceptional_offset,
+                        continuation_id,
+                        location_group.second,
+                        0,
+                        record_kind,
+                        record_flags,
+                        0,
+                        location_index,
+                    ))
+                payload_size += _STACK_MAP_RECORD_CODEC.size
             final_record_index += 1
         if packed_record_path and len(packed_record_scalars):
             chunks.append(_pack_stack_map_record_arena(packed_record_scalars))
@@ -6045,14 +6759,28 @@ def _validate_symbolic_plans(
     plans: tuple[FunctionStackMapPlan, ...], *, arch: int
 ) -> None:
     functions: list[FunctionStackMap] = []
+    # Plans already share immutable root-location tuples across safepoints.
+    # Preserve that sharing in the validation view: reconstructing every root
+    # for every record expands one large function into millions of objects.
+    # Retain the source tuple alongside its identity to prevent address reuse.
+    location_identities: dict[int, tuple] = {}
     for plan in sorted(plans, key=lambda item: item.function_id):
         records: list[SafepointRecord] = []
         for index, record in enumerate(plan.records):
+            identity = id(record.locations)
+            cached = None
+            if identity in location_identities:
+                cached = location_identities[identity]
+            if cached is not None and cached[0] is record.locations:
+                locations = cached[1]
+            else:
+                locations = _stack_locations(record.locations, arch=arch)
+                location_identities[identity] = (record.locations, locations)
             records.append(SafepointRecord(
                 safepoint_id=record.safepoint_id,
                 instruction_offset=index,
                 kind=record.kind,
-                locations=_stack_locations(record.locations, arch=arch),
+                locations=locations,
                 flags=record.flags,
                 exceptional_offset=0 if record.exceptional_block else NO_OFFSET,
                 continuation_id=record.continuation_id,
@@ -6064,7 +6792,177 @@ def _validate_symbolic_plans(
             frame_size=plan.frame_size,
             records=tuple(records),
         ))
-    validate_stack_map(PreciseStackMap(arch=arch, functions=tuple(functions)))
+    validate_stack_map(
+        PreciseStackMap(arch=arch, functions=tuple(functions)),
+        shared_locations=True,
+    )
+
+
+def build_x86_64_stack_map_payload(
+    plans: tuple[FunctionStackMapPlan, ...],
+    target_offsets: dict[str, int],
+    *,
+    function_symbol,
+    block_label,
+) -> tuple[bytes, tuple[tuple[int, str], ...]]:
+    """Pack Linux metadata at the owned assembler's final code offsets.
+
+    The text renderer remains the assembly-export/differential oracle.  Object
+    emission instead retains the existing plans (which own no IR), resolves
+    their labels after variable-length instruction measurement, and publishes
+    the same bytes plus named absolute function relocations.  ElfObject owns
+    full packed semantic validation before these bytes can be published.
+    """
+
+    chunks: list[bytes] = [b""]
+    location_chunks: list[bytes] = []
+    location_indices: dict[bytes, int] = {}
+    # Retain the keyed tuple: a recycled id must never select another root set.
+    location_identities: dict[int, tuple] = {}
+    relocations: list[tuple[int, str]] = []
+    location_count = 0
+    payload_size = _STACK_MAP_HEADER_CODEC.size
+    ordered_plans = sorted(plans, key=lambda item: item.function_id)
+    _check_uint(len(ordered_plans), 32, "function count")
+    packed_scalars = CompilerIntArena()
+    native_pack = packed_scalars.uses_native_storage
+    try:
+        for plan in ordered_plans:
+            record_chunks: list[bytes] = []
+            symbol = function_symbol(plan.function_name)
+            start = target_offsets.get(symbol)
+            end = target_offsets.get(plan.end_label)
+            if start is None or end is None:
+                raise BackendUnavailable(
+                    "target-final x86 stack-map range missing for " + repr(symbol)
+                )
+            code_size = end - start
+            _check_uint(plan.function_id, 64, "function id", nonzero=True)
+            _check_uint(code_size, 32, "function code size", nonzero=True)
+            _check_uint(plan.frame_size, 32, "function frame size")
+            _check_uint(len(plan.records), 32, "record count")
+            records = sorted(
+                plan.records,
+                key=lambda record: (
+                    target_offsets.get(record.label, 1 << 60),
+                    record.safepoint_id,
+                ),
+            )
+            # Every record is validated below; rootless ones are not written.
+            kept_records = 0
+            for kept_record in records:
+                if not _planned_record_is_rootless(kept_record):
+                    kept_records += 1
+            relocations.append((payload_size + 8, symbol))
+            chunks.append(_STACK_MAP_FUNCTION_CODEC.pack(
+                plan.function_id, 0, code_size, plan.frame_size, kept_records, 0,
+            ))
+            payload_size += _STACK_MAP_FUNCTION_CODEC.size
+            for record in records:
+                pc = target_offsets.get(record.label)
+                if pc is None:
+                    raise BackendUnavailable(
+                        "target-final x86 stack-map label missing: "
+                        + repr(record.label)
+                    )
+                instruction_offset = pc - start
+                exceptional_offset = NO_OFFSET
+                if record.exceptional_block:
+                    target = block_label(plan.function_name, record.exceptional_block)
+                    exceptional_pc = target_offsets.get(target)
+                    if exceptional_pc is None:
+                        raise BackendUnavailable(
+                            "target-final x86 exception label missing: " + repr(target)
+                        )
+                    exceptional_offset = exceptional_pc - start
+                # Validate before native fixed-width stores: truncation must
+                # never turn an invalid plan into a valid wire record.
+                _check_uint(record.safepoint_id, 64, "safepoint id", nonzero=True)
+                _check_uint(instruction_offset, 32, "instruction offset")
+                _check_uint(exceptional_offset, 32, "exceptional offset")
+                _check_uint(record.continuation_id, 32, "continuation id")
+                _check_uint(len(record.locations), 16, "location count")
+                _check_uint(record.kind, 8, "safepoint kind")
+                _check_uint(record.flags, 8, "record flags")
+                identity = id(record.locations)
+                cached = None
+                if identity in location_identities:
+                    cached = location_identities[identity]
+                if cached is not None and cached[0] is record.locations:
+                    location_index = cached[1]
+                else:
+                    parts: list[bytes] = []
+                    for location in record.locations:
+                        offset = location.offset
+                        if (
+                            not isinstance(offset, int)
+                            or isinstance(offset, bool)
+                            or not -(1 << 31) <= offset < (1 << 31)
+                        ):
+                            raise PreciseStackMapError("location offset is outside int32")
+                        parts.append(_STACK_MAP_LOCATION_CODEC.pack(
+                            LOCATION_STACK_INDIRECT,
+                            LOCATION_MANAGED | (LOCATION_OWNED if location.owned else 0),
+                            POINTER_SIZE, 6, NO_BASE, offset, POINTER_SIZE,
+                        ))
+                    content = b"".join(parts)
+                    del parts
+                    if content in location_indices:
+                        location_index = location_indices[content]
+                    else:
+                        location_index = location_count
+                        location_indices[content] = location_index
+                        location_chunks.append(content)
+                        location_count += len(record.locations)
+                    location_identities[identity] = (record.locations, location_index)
+                _check_uint(location_index, 32, "location index")
+                if _planned_record_is_rootless(record):
+                    continue
+                if native_pack:
+                    # The arena stores signed i64, but the ABI permits all
+                    # uint64 IDs. Convert the checked value to its exact bits.
+                    record_id = record.safepoint_id
+                    if record_id > 0x7FFFFFFFFFFFFFFF:
+                        record_id -= 0x10000000000000000
+                    packed_scalars.append4(
+                        record_id, instruction_offset, exceptional_offset,
+                        record.continuation_id,
+                    )
+                    packed_scalars.append4(
+                        len(record.locations), 0, record.kind, record.flags,
+                    )
+                    packed_scalars.append2(0, location_index)
+                else:
+                    record_chunks.append(_STACK_MAP_RECORD_CODEC.pack(
+                        record.safepoint_id, instruction_offset, exceptional_offset,
+                        record.continuation_id, len(record.locations), 0,
+                        record.kind, record.flags, 0, location_index,
+                    ))
+                payload_size += _STACK_MAP_RECORD_CODEC.size
+            if native_pack and len(packed_scalars):
+                chunks.append(_pack_stack_map_record_arena(packed_scalars))
+                packed_scalars.clear()
+            elif record_chunks:
+                # Retain final bytes per function, rather than one Python
+                # object per safepoint across the entire module.
+                chunks.append(b"".join(record_chunks))
+            record_chunks.clear()
+            del records
+        # All records now own their encoded location indices.  These lookup
+        # caches have no further reader and need not overlap final payloads.
+        location_identities.clear()
+        location_indices.clear()
+        packed_scalars.close()
+        _check_uint(location_count, 32, "location table count")
+        chunks[0] = _STACK_MAP_HEADER_CODEC.pack(
+            MAGIC, VERSION, ARCH_X86_64, POINTER_SIZE,
+            len(ordered_plans), location_count, 0,
+        )
+        chunks.extend(location_chunks)
+        location_chunks.clear()
+        return b"".join(chunks), tuple(relocations)
+    finally:
+        packed_scalars.close()
 
 
 def render_x86_64_stack_map_section(
@@ -6083,6 +6981,7 @@ def render_x86_64_stack_map_section(
     ordered_plans = sorted(plans, key=lambda item: item.function_id)
     location_lines: list[str] = []
     location_indices: dict[str, int] = {}
+    location_identities: dict[int, tuple] = {}
     location_count = 0
     lines = ['.section .pcc_stackmaps,"a",@progbits', ".p2align 3"]
     _append_bytes(lines, MAGIC)
@@ -6109,29 +7008,42 @@ def render_x86_64_stack_map_section(
                 raise BackendUnavailable(
                     f"target-final x86 stack-map label missing: {required!r}"
                 )
+        # Every record is validated below; rootless ones are not written.
+        kept_records = 0
+        for kept_record in records:
+            if not _planned_record_is_rootless(kept_record):
+                kept_records += 1
         lines.extend((
             f"  .quad {plan.function_id}",
             f"  .quad {symbol}",
             f"  .long {plan.end_label} - {symbol}",
             f"  .long {plan.frame_size}",
-            f"  .long {len(records)}",
+            f"  .long {kept_records}",
             "  .long 0",
         ))
         for record in records:
-            packed_locations = _stack_locations(record.locations, arch=ARCH_X86_64)
-            key = ";".join(
-                ",".join(str(field) for field in (
-                    loc.kind, loc.flags, loc.size, loc.register,
-                    loc.base_index, loc.offset, loc.extent,
-                )) for loc in packed_locations
-            )
-            if key in location_indices:
-                location_index = location_indices[key]
+            identity = id(record.locations)
+            cached = None
+            if identity in location_identities:
+                cached = location_identities[identity]
+            if cached is not None and cached[0] is record.locations:
+                location_index = cached[1]
             else:
-                location_index = location_count
-                location_indices[key] = location_index
-                location_count += len(packed_locations)
-                _append_packed_location_lines(location_lines, packed_locations, arch=ARCH_X86_64)
+                packed_locations = _stack_locations(record.locations, arch=ARCH_X86_64)
+                key = ";".join(
+                    ",".join(str(field) for field in (
+                        loc.kind, loc.flags, loc.size, loc.register,
+                        loc.base_index, loc.offset, loc.extent,
+                    )) for loc in packed_locations
+                )
+                if key in location_indices:
+                    location_index = location_indices[key]
+                else:
+                    location_index = location_count
+                    location_indices[key] = location_index
+                    location_count += len(packed_locations)
+                    _append_packed_location_lines(location_lines, packed_locations, arch=ARCH_X86_64)
+                location_identities[identity] = (record.locations, location_index)
             exceptional = str(NO_OFFSET)
             if record.exceptional_block:
                 target = block_label(plan.function_name, record.exceptional_block)
@@ -6140,6 +7052,8 @@ def render_x86_64_stack_map_section(
                         f"target-final x86 exception label missing: {target!r}"
                     )
                 exceptional = f"{target} - {symbol}"
+            if _planned_record_is_rootless(record):
+                continue
             lines.extend((
                 f"  .quad {record.safepoint_id}",
                 f"  .long {record.label} - {symbol}",
@@ -6165,6 +7079,7 @@ __all__ = [
     "build_function_stack_map_plan",
     "build_stack_map_plans",
     "build_aarch64_stack_map_section",
+    "build_x86_64_stack_map_payload",
     "render_aarch64_stack_map_section",
     "render_x86_64_stack_map_section",
 ]

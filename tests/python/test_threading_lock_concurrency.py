@@ -46,7 +46,7 @@ def _compile_threaded(
     """Compile against an isolated ``PCC_WITH_THREADS=1`` archive."""
     monkeypatch.setenv("PCC_WITH_THREADS", "1")
     monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(runtime_archive))
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     compile_python(
         str(src_path),
@@ -57,7 +57,7 @@ def _compile_threaded(
 
 
 def test_pthread_lock_disjoint_slot_writes_succeed(
-    tmp_path, monkeypatch, threaded_pcc_py_runtime_archive
+    tmp_path, monkeypatch, threaded_pcc_runtime_archive
 ):
     """Control: 4 threads each write to their own slot under one Lock.
 
@@ -96,7 +96,7 @@ def test_pthread_lock_disjoint_slot_writes_succeed(
             main()
         """).lstrip(), encoding="utf-8")
 
-    _compile_threaded(monkeypatch, threaded_pcc_py_runtime_archive, src, exe)
+    _compile_threaded(monkeypatch, threaded_pcc_runtime_archive, src, exe)
 
     for _ in range(3):
         result = subprocess.run(
@@ -111,7 +111,7 @@ def test_pthread_lock_disjoint_slot_writes_succeed(
 
 
 def test_pthread_lock_low_iter_count_succeeds(
-    tmp_path, monkeypatch, threaded_pcc_py_runtime_archive
+    tmp_path, monkeypatch, threaded_pcc_runtime_archive
 ):
     """Control: 8 threads × 1 iter each. Contention window is too
     small to trigger the lost-update bug; the canonical case at
@@ -154,7 +154,7 @@ def test_pthread_lock_low_iter_count_succeeds(
             main()
         """).lstrip(), encoding="utf-8")
 
-    _compile_threaded(monkeypatch, threaded_pcc_py_runtime_archive, src, exe)
+    _compile_threaded(monkeypatch, threaded_pcc_runtime_archive, src, exe)
 
     for _ in range(3):
         result = subprocess.run(
@@ -170,7 +170,7 @@ def test_pthread_lock_low_iter_count_succeeds(
 
 
 def test_pthread_lock_list_append_under_contention(
-    tmp_path, monkeypatch, threaded_pcc_py_runtime_archive
+    tmp_path, monkeypatch, threaded_pcc_runtime_archive
 ):
     """4 threads × 1000 iters of ``shared.append(1)`` under one Lock.
 
@@ -178,7 +178,7 @@ def test_pthread_lock_list_append_under_contention(
 
     History: in the 2026-05-07 investigation this case SIGABRT'd
     reliably under contention. After the in-progress codegen edits
-    on the local branch (``pcc/py_frontend/codegen/layer1.py``,
+    on the local branch (``pcc/frontends/python/codegen/layer1.py``,
     locally modified), the case stopped crashing. This test asserts
     correctness directly so a future regression flips it back to
     failing.
@@ -212,7 +212,7 @@ def test_pthread_lock_list_append_under_contention(
             main()
         """).lstrip(), encoding="utf-8")
 
-    _compile_threaded(monkeypatch, threaded_pcc_py_runtime_archive, src, exe)
+    _compile_threaded(monkeypatch, threaded_pcc_runtime_archive, src, exe)
 
     for _ in range(3):
         result = subprocess.run(

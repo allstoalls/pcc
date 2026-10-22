@@ -8,7 +8,7 @@ plan.
 
 When G1 lands for a backend, the marker should be disabled for that backend
 so its verdict command passes green. The acceptance gate "pcc2 / pcc3 still
-byte-equal across stages" is verified separately by ``scripts/bootstrap.sh``,
+byte-equal across stages" is verified separately by ``scripts/bootstrap.py``,
 not here.
 
 Container shapes covered (each must support a ``traverse`` callback
@@ -30,7 +30,7 @@ import textwrap
 
 
 def _compile_and_run(tmp_path, source: str) -> subprocess.CompletedProcess[str]:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"

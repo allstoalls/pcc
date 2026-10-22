@@ -152,6 +152,126 @@ entry:
     )
 
 
+def _indexed_cfg_function(blocks, inline_targets=()):
+    from pcc.backend.self_backend_ir import (
+        ParsedBlock,
+        ParsedFunction,
+        ParsedInstr,
+        TypeDesc,
+    )
+    from pcc.backend.self_backend_kernel import (
+        INLINE_ERROR_EDGE_WIDTH,
+        get_indexed_function_kernel,
+    )
+
+    func = ParsedFunction(
+        name="cfg_adjacency",
+        ret_type=TypeDesc("void"),
+        args=[],
+        is_global=True,
+        is_vararg=False,
+        blocks=[
+            ParsedBlock(name, terminator=ParsedInstr(kind, data))
+            for name, kind, data in blocks
+        ],
+    )
+    kernel = get_indexed_function_kernel(func)
+    # These graph-only fixtures populate the real indexed edge plane; CFG
+    # construction reads its target IDs independently of instruction checks.
+    for source, targets in inline_targets:
+        start = len(kernel.error_edge_scalars) // INLINE_ERROR_EDGE_WIDTH
+        kernel.error_edge_spans.set2_unchecked(source * 2, start, len(targets))
+        for target in targets:
+            kernel.error_edge_scalars.append4(source, 0, -1, target)
+            kernel.error_edge_scalars.append4(0, 0, -1, 0)
+    return func, kernel
+
+
+def test_cfg_preserves_order_and_deduplicates_all_edge_kinds():
+    from pcc.backend.self_backend_ir import TypeDesc
+    from pcc.backend.self_backend_verify import _build_cfg
+
+    func, kernel = _indexed_cfg_function(
+        [
+            ("entry", "switch", (
+                TypeDesc("int", 64), "0", "right",
+                ((0, "left"), (1, "right"), (2, "merge"), (3, "left")),
+            )),
+            ("left", "br_cond", ("true", "merge", "merge")),
+            ("right", "br", ("merge",)),
+            ("merge", "ret_void", ()),
+            ("error", "br", ("error",)),
+        ],
+        [(0, [4, 1, 4, 3]), (1, [4, 4, 3]), (2, [0, 4]), (4, [4])],
+    )
+
+    _buckets, predecessors, successors = _build_cfg(func, kernel)
+
+    assert successors == [[2, 1, 3, 4], [3, 4], [3, 0, 4], [], [4]]
+    assert predecessors == [[2], [0], [0], [0, 1, 2], [0, 1, 2, 4]]
+
+
+def test_cfg_high_fan_in_does_not_rescan_predecessors(monkeypatch):
+    from pcc.backend import self_backend_verify
+
+    source_count = 512
+    func, kernel = _indexed_cfg_function(
+        [
+            (f"source.{index}", "br_cond", ("true", "merge", "merge"))
+            for index in range(source_count)
+        ] + [("merge", "ret_void", ())],
+        [(index, [source_count, source_count]) for index in range(source_count)],
+    )
+    assert kernel.cfg_successor_count(0) == 4
+
+    class CountedSourceIndex(int):
+        comparisons = 0
+
+        def __eq__(self, other):
+            CountedSourceIndex.comparisons += 1
+            return int.__eq__(self, other)
+
+        __hash__ = int.__hash__
+
+    def counted_enumerate(values):
+        for index, value in enumerate(values):
+            yield CountedSourceIndex(index), value
+
+    # Count source-ID equality operations instead of imposing a wall-time
+    # threshold. Scanning the growing join predecessor list is quadratic.
+    monkeypatch.setattr(
+        self_backend_verify, "enumerate", counted_enumerate, raising=False,
+    )
+    _buckets, predecessors, successors = self_backend_verify._build_cfg(func, kernel)
+
+    assert CountedSourceIndex.comparisons == 0
+    assert predecessors == (
+        [[] for _ in range(source_count)] + [list(range(source_count))]
+    )
+    assert successors == [[source_count] for _ in range(source_count)] + [[]]
+
+
+@pytest.mark.parametrize("edge_kind", ["terminator", "inline"])
+def test_cfg_preserves_missing_target_diagnostic(edge_kind):
+    from pcc.backend.self_backend_verify import _build_cfg
+
+    blocks = [("entry", "br", ("missing",))]
+    inline_targets = []
+    if edge_kind == "inline":
+        blocks = [("entry", "ret_void", ())]
+        inline_targets = [(0, [-1])]
+    func, kernel = _indexed_cfg_function(blocks, inline_targets)
+
+    with pytest.raises(BackendUnavailable) as error:
+        _build_cfg(func, kernel)
+
+    assert str(error.value) == (
+        "self IR verifier [terminator] in 'cfg_adjacency': "
+        "block 'entry' branches to missing block "
+        "'<invalid-inline-or-terminator-target>'"
+    )
+
+
 def test_self_ir_verifier_rejects_return_type_disagreement():
     _rejects(
         """

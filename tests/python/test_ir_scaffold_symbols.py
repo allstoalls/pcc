@@ -5,7 +5,7 @@ ON mode. Helpers intentionally encode the real constructor ABI instead
 of pretending every Python ``__init__`` is a C-style constructor.
 
 Note: testing OFF mode for these constructors is not meaningful —
-``pcc.llvm_capi`` is a scaffold module, so OFF treats imported ``ir``
+``pcc.ir`` is a scaffold module, so OFF treats imported ``ir``
 as compile-time-only and rejects runtime references with
 L1CodegenError "unbound name 'ir'". The detection / dispatch tests
 already cover that ON mode raises cleanly when a symbol isn't
@@ -26,7 +26,7 @@ _BUILD.mkdir(parents=True, exist_ok=True)
 
 
 def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -80,7 +80,7 @@ _SPECIAL_SYMBOL_SUFFIXES = {
 
 def _expected_scaffold_symbol(symbol: str) -> str:
     suffix = _SPECIAL_SYMBOL_SUFFIXES.get(symbol, f"{symbol}___init__")
-    return f"@user_pcc_llvm_capi_ir_{suffix}"
+    return f"@user_pcc_ir_ir_{suffix}"
 
 
 def _gen_simple_program(symbol: str, arity: int) -> str:
@@ -90,7 +90,7 @@ def _gen_simple_program(symbol: str, arity: int) -> str:
     body_args = "()" if arity == 0 else "(" + args + ")"
     return textwrap.dedent(
         f"""
-        from pcc.llvm_capi import ir
+        from pcc.ir import ir
 
         def use_sym{sig}:
             return ir.{symbol}{body_args}
@@ -124,7 +124,7 @@ def test_simple_symbol_body_clean(symbol, arity):
 def test_constant_dynamic_int_uses_i64_scaffold_not_object_handle():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi import ir
+        from pcc.ir import ir
 
         def use_const(ty, value: int):
             return ir.Constant(ty, value)
@@ -133,15 +133,15 @@ def test_constant_dynamic_int_uses_i64_scaffold_not_object_handle():
     ir_text = _compile_to_ll(program, "sym_constant_dynamic_int", mode="on")
     body = _function_body(ir_text, "use_const")
     assert body is not None
-    assert "@user_pcc_llvm_capi_ir_scaffold_Constant_i64" in body, body
-    assert "@user_pcc_llvm_capi_ir_scaffold_Constant_obj" not in body, body
+    assert "@user_pcc_ir_ir_scaffold_Constant_i64" in body, body
+    assert "@user_pcc_ir_ir_scaffold_Constant_obj" not in body, body
     assert "inttoptr i64 %value" not in body, body
 
 
 def test_values_constant_alias_reuses_constructor_and_class_lowering():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi import ir
+        from pcc.ir import ir
 
         def use_alias(ty, value: int):
             constant = ir.values.Constant(ty, value)
@@ -151,15 +151,15 @@ def test_values_constant_alias_reuses_constructor_and_class_lowering():
     ir_text = _compile_to_ll(program, "sym_values_constant", mode="on")
     body = _function_body(ir_text, "use_alias")
     assert body is not None
-    assert "@user_pcc_llvm_capi_ir_scaffold_Constant_i64" in body
-    assert "@.class.pcc_llvm_capi_ir.Constant" in body
+    assert "@user_pcc_ir_ir_scaffold_Constant_i64" in body
+    assert "@.class.pcc_ir_ir.Constant" in body
     assert "@py_cpy_" not in body
 
 
 def test_constant_runtime_int_value_uses_i64_scaffold_not_object_handle():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi import ir
+        from pcc.ir import ir
 
         def use_const(ty, xs):
             for i, _x in enumerate(xs):
@@ -170,22 +170,22 @@ def test_constant_runtime_int_value_uses_i64_scaffold_not_object_handle():
     ir_text = _compile_to_ll(program, "sym_constant_runtime_int", mode="on")
     body = _function_body(ir_text, "use_const")
     assert body is not None
-    assert "@user_pcc_llvm_capi_ir_scaffold_Constant_i64" in body, body
-    assert "@user_pcc_llvm_capi_ir_scaffold_Constant_obj" not in body, body
+    assert "@user_pcc_ir_ir_scaffold_Constant_i64" in body, body
+    assert "@user_pcc_ir_ir_scaffold_Constant_obj" not in body, body
     assert "inttoptr i64 %i" not in body, body
 
 
 def test_value_ctor_dispatches_to_native_scaffold_symbol():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi import ir
+        from pcc.ir import ir
 
         def use_value(ty, ref):
             return ir.Value(ty, ref)
         """
     )
     ir_text = _compile_to_ll(program, "sym_value_ctor", mode="on")
-    assert "@user_pcc_llvm_capi_ir_scaffold_Value" in ir_text
+    assert "@user_pcc_ir_ir_scaffold_Value" in ir_text
     body = _function_body(ir_text, "use_value")
     assert body is not None
     assert "py_cpy_" not in body, body
@@ -194,20 +194,20 @@ def test_value_ctor_dispatches_to_native_scaffold_symbol():
 def test_module_named_kwarg_uses_named_extern():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi import ir
+        from pcc.ir import ir
 
         def use_module(name):
             return ir.Module(name=name)
         """
     )
     ir_text = _compile_to_ll(program, "sym_module_named", mode="on")
-    assert "@user_pcc_llvm_capi_ir_Module___init___named" in ir_text
+    assert "@user_pcc_ir_ir_Module___init___named" in ir_text
 
 
 def test_global_variable_named_kwarg_uses_named_extern():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi import ir
+        from pcc.ir import ir
 
         def use_gv(module, ty, name):
             return ir.GlobalVariable(module, ty, name=name)
@@ -215,50 +215,50 @@ def test_global_variable_named_kwarg_uses_named_extern():
     )
     ir_text = _compile_to_ll(program, "sym_gv_named", mode="on")
     assert (
-        "@user_pcc_llvm_capi_ir_GlobalVariable___init___named" in ir_text
+        "@user_pcc_ir_ir_GlobalVariable___init___named" in ir_text
     )
 
 
 def test_function_ctor_no_name_kwarg():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi import ir
+        from pcc.ir import ir
 
         def use_fn(module, fn_ty):
             return ir.Function(module, fn_ty)
         """
     )
     ir_text = _compile_to_ll(program, "sym_function_no_name", mode="on")
-    assert "@user_pcc_llvm_capi_ir_Function___init__" in ir_text
+    assert "@user_pcc_ir_ir_Function___init__" in ir_text
     assert (
-        "@user_pcc_llvm_capi_ir_Function___init___named" not in ir_text
+        "@user_pcc_ir_ir_Function___init___named" not in ir_text
     )
 
 
 def test_function_ctor_with_name_kwarg():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi import ir
+        from pcc.ir import ir
 
         def use_fn(module, fn_ty, name):
             return ir.Function(module, fn_ty, name=name)
         """
     )
     ir_text = _compile_to_ll(program, "sym_function_named", mode="on")
-    assert "@user_pcc_llvm_capi_ir_Function___init___named" in ir_text
+    assert "@user_pcc_ir_ir_Function___init___named" in ir_text
 
 
 def test_function_type_ctor():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi import ir
+        from pcc.ir import ir
 
         def use_fnty(ret_ty, p1, p2):
             return ir.FunctionType(ret_ty, [p1, p2])
         """
     )
     ir_text = _compile_to_ll(program, "sym_fnty", mode="on")
-    assert "@user_pcc_llvm_capi_ir_FunctionType___init__2" in ir_text
+    assert "@user_pcc_ir_ir_FunctionType___init__2" in ir_text
     body = _function_body(ir_text, "use_fnty")
     assert body is not None
     assert "py_cpy_" not in body, body
@@ -267,52 +267,52 @@ def test_function_type_ctor():
 def test_function_type_ctor_zero_params():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi import ir
+        from pcc.ir import ir
 
         def use_fnty0(ret_ty):
             return ir.FunctionType(ret_ty, [])
         """
     )
     ir_text = _compile_to_ll(program, "sym_fnty0", mode="on")
-    assert "@user_pcc_llvm_capi_ir_FunctionType___init__0" in ir_text
+    assert "@user_pcc_ir_ir_FunctionType___init__0" in ir_text
 
 
 def test_function_type_ctor_three_params_has_runtime_bridge():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi import ir
+        from pcc.ir import ir
 
         def use_fnty3(ret_ty, p1, p2, p3):
             return ir.FunctionType(ret_ty, [p1, p2, p3])
         """
     )
     ir_text = _compile_to_ll(program, "sym_fnty3", mode="on")
-    assert "@user_pcc_llvm_capi_ir_FunctionType___init__3" in ir_text
+    assert "@user_pcc_ir_ir_FunctionType___init__3" in ir_text
     assert "def FunctionType___init__3(" in (
-        _REPO_ROOT / "pcc" / "llvm_capi" / "ir.py"
+        _REPO_ROOT / "pcc" / "ir" / "ir.py"
     ).read_text(encoding="utf-8")
 
 
 def test_function_type_ctor_eight_params_has_runtime_bridge():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi import ir
+        from pcc.ir import ir
 
         def use_fnty8(ret_ty, p1, p2, p3, p4, p5, p6, p7, p8):
             return ir.FunctionType(ret_ty, [p1, p2, p3, p4, p5, p6, p7, p8])
         """
     )
     ir_text = _compile_to_ll(program, "sym_fnty8", mode="on")
-    assert "@user_pcc_llvm_capi_ir_FunctionType___init__8" in ir_text
+    assert "@user_pcc_ir_ir_FunctionType___init__8" in ir_text
     assert "def FunctionType___init__8(" in (
-        _REPO_ROOT / "pcc" / "llvm_capi" / "ir.py"
+        _REPO_ROOT / "pcc" / "ir" / "ir.py"
     ).read_text(encoding="utf-8")
 
 
 def test_function_type_ctor_dynamic_variadic_flag_boxes_bool_handle():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi import ir
+        from pcc.ir import ir
 
         def use_fnty_dyn(ret_ty, param_types, is_variadic: bool):
             return ir.FunctionType(
@@ -325,7 +325,7 @@ def test_function_type_ctor_dynamic_variadic_flag_boxes_bool_handle():
     ir_text = _compile_to_ll(program, "sym_fnty_dyn_va", mode="on")
     body = _function_body(ir_text, "use_fnty_dyn")
     assert body is not None
-    assert "@user_pcc_llvm_capi_ir_FunctionType___init___dyn" in body
+    assert "@user_pcc_ir_ir_FunctionType___init___dyn" in body
     assert "@py_bool_from_bit" in body
     assert "inttoptr i1" not in body
     assert "py_cpy_" not in body, body
@@ -334,7 +334,7 @@ def test_function_type_ctor_dynamic_variadic_flag_boxes_bool_handle():
 def test_literal_struct_three_elems():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi import ir
+        from pcc.ir import ir
 
         def use_struct(t1, t2, t3):
             return ir.LiteralStructType([t1, t2, t3])
@@ -342,7 +342,7 @@ def test_literal_struct_three_elems():
     )
     ir_text = _compile_to_ll(program, "sym_literal_struct", mode="on")
     assert (
-        "@user_pcc_llvm_capi_ir_LiteralStructType___init__3" in ir_text
+        "@user_pcc_ir_ir_LiteralStructType___init__3" in ir_text
     )
     body = _function_body(ir_text, "use_struct")
     assert body is not None
@@ -352,7 +352,7 @@ def test_literal_struct_three_elems():
 def test_literal_struct_one_and_two_elems_have_runtime_providers():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi import ir
+        from pcc.ir import ir
 
         def use_struct1(t1):
             return ir.LiteralStructType([t1])
@@ -362,8 +362,8 @@ def test_literal_struct_one_and_two_elems_have_runtime_providers():
         """
     )
     ir_text = _compile_to_ll(program, "sym_literal_struct_small", mode="on")
-    assert "@user_pcc_llvm_capi_ir_LiteralStructType___init__1" in ir_text
-    assert "@user_pcc_llvm_capi_ir_LiteralStructType___init__2" in ir_text
+    assert "@user_pcc_ir_ir_LiteralStructType___init__1" in ir_text
+    assert "@user_pcc_ir_ir_LiteralStructType___init__2" in ir_text
     body1 = _function_body(ir_text, "use_struct1")
     body2 = _function_body(ir_text, "use_struct2")
     assert body1 is not None

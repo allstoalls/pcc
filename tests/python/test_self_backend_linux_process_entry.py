@@ -44,7 +44,9 @@ done:
     ]
     positions = [start_body.index(line) for line in prologue]
     assert positions == sorted(positions)
-    assert re.search(r"mov QWORD PTR \[rbp - \d+\], r11", start_body)
+    # The initial stack pointer becomes the argument's home: its frame slot or
+    # the callee-saved register x86_64_frame_registers keeps it in.
+    assert re.search(r"mov (QWORD PTR \[rbp - \d+\]|rbx|r1[2-5]), r11", start_body)
     assert "rdi" not in start_body[: start_body.index(".L_start_entry:")]
     assert "ud2" in start_body
     assert "  ret" not in start_body
@@ -84,6 +86,6 @@ entry:
     )
 
     body = asm.split("identity:", 1)[1].split(".size identity", 1)[0]
-    assert re.search(r"mov QWORD PTR \[rbp - \d+\], rdi", body)
+    assert re.search(r"mov (QWORD PTR \[rbp - \d+\]|rbx|r1[2-5]), rdi", body)
     assert "and rsp, -16" not in body
     assert "  ret" in body

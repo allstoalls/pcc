@@ -6,8 +6,8 @@ import textwrap
 
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_SRC = REPO_ROOT / "pcc" / "py_runtime" / "src"
-RUNTIME_PY = REPO_ROOT / "pcc" / "py_runtime" / "py"
+RUNTIME_SRC = REPO_ROOT / "pcc" / "runtime" / "src"
+RUNTIME_PY = REPO_ROOT / "pcc" / "runtime" / "py"
 
 
 def _read(path: Path) -> str:
@@ -317,7 +317,7 @@ def test_list_capacity_growth_retargets_raw_slots_and_preserves_backend0_fast_pa
     strict_grow = strict_src.split("def _grow_if_needed(l, want: int):", 1)[
         1
     ].split("def _normalize_index", 1)[0]
-    strict_fast = strict_grow.split("if initial_backend == 0:", 1)[1].split(
+    strict_fast = strict_grow.split("if initial_backend == 0 and threads == 0:", 1)[1].split(
         "owner_slot = stack_alloc(8)", 1
     )[0]
     assert "realloc(" in strict_fast
@@ -367,15 +367,19 @@ def test_list_growth_callers_root_and_reload_retained_managed_inputs():
     strict_append = strict_src.split("def py_list_append(lst, item) -> None:", 1)[
         1
     ].split('@c_abi_export("py_list_append_fresh_native_instance")', 1)[0]
-    strict_append_fast = strict_append.split("if pcc_gc_backend() == 0:", 1)[
+    strict_append_fast = strict_append.split("if pcc_gc_backend() == 0 and pcc_threads_enabled() == 0:", 1)[
         1
-    ].split("list_slot = stack_alloc(8)", 1)[0]
+    ].split("if _append_rooted", 1)[0]
     for forbidden in (
         "_prepare_moving_root",
         "pcc_py_gc_minor_graph_lock",
         "pcc_gc_scheduler_root_register_handle",
     ):
         assert forbidden not in strict_append_fast
+    assert "_append_rooted(lst, item, 0)" in strict_append
+    strict_append = strict_src.split("def _append_rooted(lst, item, fresh: int) -> int:", 1)[1].split(
+        '@c_abi_export("py_list_append")', 1
+    )[0]
     strict_list_prepare = strict_append.index(
         "_prepare_moving_root(list_slot, list_handle_slot)"
     )
@@ -385,9 +389,7 @@ def test_list_growth_callers_root_and_reload_retained_managed_inputs():
     strict_grow_call = strict_append.index(
         "_grow_if_needed(", strict_item_prepare
     )
-    strict_lock = strict_append.index(
-        "pcc_py_gc_minor_graph_lock()", strict_grow_call
-    )
+    strict_lock = strict_append.index("pcc_py_gc_minor_graph_lock()")
     strict_reload = strict_append.index(
         "item = _reload_moving_root(item_slot, item_handle_slot)", strict_lock
     )
@@ -397,11 +399,16 @@ def test_list_growth_callers_root_and_reload_retained_managed_inputs():
     strict_unlock = strict_append.index(
         "pcc_py_gc_minor_graph_unlock()", strict_store
     )
-    assert strict_list_prepare < strict_item_prepare < strict_grow_call < (
-        strict_lock
-    ) < strict_reload < strict_store < strict_unlock < strict_append.index(
+    assert strict_list_prepare < strict_item_prepare < strict_lock < (
+        strict_reload
+    ) < strict_store < strict_unlock < strict_append.index(
         "pcc_gc_store_ptr_plan_finish(store_plan)", strict_unlock
     ) < strict_append.rindex("_finish_moving_root(")
+    assert strict_grow_call > strict_append.rindex(
+        "pcc_py_gc_minor_graph_unlock()", 0, strict_grow_call
+    )
+    assert strict_append.index("length: int = load_i64(") > strict_lock
+    assert strict_append.index("capacity: int = load_i64(") > strict_lock
 
     strict_extend = strict_src.split("def py_list_extend(a, b) -> None:", 1)[
         1
@@ -698,7 +705,7 @@ def test_generated_heap_stores_increment_barrier_counter_only_for_tracing_backen
     stays at zero.  backend 1 must route the same generated list/dict/instance
     stores through the GC store path and increment the counter.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "barrier_prog.py"
     exe = tmp_path / "barrier_prog.out"

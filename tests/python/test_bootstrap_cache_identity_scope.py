@@ -14,14 +14,16 @@ documentation change." These tests hold the frontend identity to the same rule.
 
 from __future__ import annotations
 
-import pcc.bootstrap_cache_identity as identity
+import pcc.driver.bootstrap_cache_identity as identity
 
 
 def _identity_with(tmp_path, rel_writes):
     root = tmp_path
     (root / "pcc").mkdir(parents=True, exist_ok=True)
     (root / "scripts").mkdir(parents=True, exist_ok=True)
-    (root / "scripts" / "bootstrap.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    (root / "scripts" / "bootstrap.py").write_text(
+        "# bootstrap driver\n", encoding="utf-8"
+    )
     for rel, text in rel_writes.items():
         path = root / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -31,12 +33,12 @@ def _identity_with(tmp_path, rel_writes):
 
 def test_frontend_sources_change_the_identity(tmp_path):
     base = {
-        "pcc/py_frontend/type_infer.py": "x = 1\n",
+        "pcc/frontends/python/type_infer.py": "x = 1\n",
         "pcc/gui/window.py": "gui = 1\n",
     }
     before = _identity_with(tmp_path, base)
     after = _identity_with(
-        tmp_path, {**base, "pcc/py_frontend/type_infer.py": "x = 2\n"}
+        tmp_path, {**base, "pcc/frontends/python/type_infer.py": "x = 2\n"}
     )
     assert before != after, "a frontend edit must change the namespace"
 
@@ -45,14 +47,14 @@ def test_unrelated_subtrees_do_not_change_the_identity(tmp_path):
     """A GUI or runtime-C edit cannot change frontend IR, so it must not
     invalidate every cached frontend module."""
     base = {
-        "pcc/py_frontend/type_infer.py": "x = 1\n",
+        "pcc/frontends/python/type_infer.py": "x = 1\n",
         "pcc/gui/window.py": "gui = 1\n",
-        "pcc/py_runtime/src/py_obj.c": "int a;\n",
+        "pcc/runtime/src/py_obj.c": "int a;\n",
     }
     before = _identity_with(tmp_path, base)
     for rel, changed in (
         ("pcc/gui/window.py", "gui = 2\n"),
-        ("pcc/py_runtime/src/py_obj.c", "int a; int b;\n"),
+        ("pcc/runtime/src/py_obj.c", "int a; int b;\n"),
     ):
         after = _identity_with(tmp_path, {**base, rel: changed})
         assert before == after, f"{rel} must not invalidate frontend IR cache"
@@ -69,7 +71,7 @@ def test_macho_object_and_link_surface_does_not_change_the_identity(tmp_path):
     every cached frontend IR module, about 9.5 minutes.
     """
     base = {
-        "pcc/py_frontend/type_infer.py": "x = 1\n",
+        "pcc/frontends/python/type_infer.py": "x = 1\n",
         "pcc/backend/native_object.py": "native = 1\n",
         "pcc/backend/macho_exec.py": "link = 1\n",
         "pcc/backend/arm64_asm_driver.py": "asm = 1\n",
@@ -85,10 +87,10 @@ def test_macho_object_and_link_surface_does_not_change_the_identity(tmp_path):
 
 
 def test_self_backend_emitter_sources_still_change_the_identity(tmp_path):
-    """The IR->asm emitters are not excluded: `pcc/py_frontend/codegen`
+    """The IR->asm emitters are not excluded: `pcc/frontends/python/codegen`
     imports from them, so they can reach IR shape."""
     base = {
-        "pcc/py_frontend/type_infer.py": "x = 1\n",
+        "pcc/frontends/python/type_infer.py": "x = 1\n",
         "pcc/backend/self_backend_aarch64_darwin.py": "emit = 1\n",
     }
     before = _identity_with(tmp_path, base)
@@ -110,8 +112,8 @@ def test_excluded_files_are_exactly_the_macho_link_surface():
 
 
 def test_c_toolchain_does_not_change_the_identity(tmp_path):
-    """`pcc/codegen` (C code generator) and `pcc/evaluater` (C driver) are not
-    imported by `pcc/py_frontend`, so they cannot change the IR a *Python*
+    """`pcc/frontends/c/codegen` (C code generator) and `pcc/frontends/c/evaluator` (C driver) are not
+    imported by `pcc/frontends/python`, so they cannot change the IR a *Python*
     module compiles to.
 
     Editing the C driver used to invalidate every cached frontend IR module
@@ -119,28 +121,28 @@ def test_c_toolchain_does_not_change_the_identity(tmp_path):
     9.5 minutes of runtime-module recompilation.
     """
     base = {
-        "pcc/py_frontend/type_infer.py": "x = 1\n",
-        "pcc/codegen/c_codegen.py": "cgen = 1\n",
-        "pcc/evaluater/c_evaluator.py": "drive = 1\n",
+        "pcc/frontends/python/type_infer.py": "x = 1\n",
+        "pcc/frontends/c/codegen/c_codegen.py": "cgen = 1\n",
+        "pcc/frontends/c/evaluator/c_evaluator.py": "drive = 1\n",
     }
     before = _identity_with(tmp_path, base)
     for rel, changed in (
-        ("pcc/codegen/c_codegen.py", "cgen = 2\n"),
-        ("pcc/evaluater/c_evaluator.py", "drive = 2\n"),
+        ("pcc/frontends/c/codegen/c_codegen.py", "cgen = 2\n"),
+        ("pcc/frontends/c/evaluator/c_evaluator.py", "drive = 2\n"),
     ):
         after = _identity_with(tmp_path, {**base, rel: changed})
         assert before == after, f"{rel} must not invalidate frontend IR cache"
 
 
 def test_python_parser_still_changes_the_identity(tmp_path):
-    """`pcc/parse` holds the *Python* front door (`py_lift`, `py_parse`), not
+    """`pcc/frontends/c/parse` holds the *Python* front door (`py_lift`, `py_parse`), not
     only the C parser, so it must stay bound."""
     base = {
-        "pcc/py_frontend/type_infer.py": "x = 1\n",
-        "pcc/parse/py_lift.py": "lift = 1\n",
+        "pcc/frontends/python/type_infer.py": "x = 1\n",
+        "pcc/frontends/python/py_lift.py": "lift = 1\n",
     }
     before = _identity_with(tmp_path, base)
     after = _identity_with(
-        tmp_path, {**base, "pcc/parse/py_lift.py": "lift = 2\n"}
+        tmp_path, {**base, "pcc/frontends/python/py_lift.py": "lift = 2\n"}
     )
     assert before != after

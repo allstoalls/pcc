@@ -2,8 +2,8 @@ from __future__ import annotations
 
 
 def test_public_pcc_launcher_uses_shared_bootstrap_dispatch(monkeypatch):
-    import pcc.cli_bootstrap as cli_bootstrap
-    import pcc.cli_launcher as launcher
+    import pcc.driver.cli_bootstrap as cli_bootstrap
+    import pcc.driver.cli_launcher as launcher
 
     calls = []
 

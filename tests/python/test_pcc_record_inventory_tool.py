@@ -43,6 +43,94 @@ def test_data_plane_class_contract_is_fail_closed_for_new_backend_classes() -> N
     assert site_report["stale_sites"] == []
     assert site_report["count_mismatches"] == []
     assert site_report["invalid_policies"] == []
+    assert site_report["sites"][
+        "self_backend_precise_stackmaps.py:_frame_protocol_enter_group:_RootGroup"
+    ] == {"count": 1, "policy": "legacy_or_unsupported"}
+
+
+def test_legalization_phase_shells_remain_visible_to_record_inventory() -> None:
+    from pcc.backend.self_backend_half import _HalfFunction, _HalfModule
+    from pcc.backend.self_backend_wide_int import _WideFunction, _WideModule
+
+    tool = _load_tool()
+    for filename, module_type, function_type in (
+        ("self_backend_half.py", _HalfModule, _HalfFunction),
+        ("self_backend_wide_int.py", _WideModule, _WideFunction),
+    ):
+        module = module_type("")
+        function = function_type(module, ".inventory")
+        function.emit("ret void")
+        payload = tool._graph_inventory((function,))
+
+        for family in (module_type, function_type):
+            assert tool.DATA_PLANE_CLASS_CONTRACT[
+                f"{filename}:{family.__name__}"
+            ] == "phase_shell"
+            assert payload["families"][family.__name__]["unique_objects"] == 1
+
+        list_owners = {
+            row["owner"] for row in payload["container_primary_owners"]["list"]
+        }
+        dict_owners = {
+            row["owner"] for row in payload["container_primary_owners"]["dict"]
+        }
+        assert f"{function_type.__name__}.out" in list_owners
+        assert f"{module_type.__name__}.lines" in list_owners
+        assert f"{module_type.__name__}.named_types" in dict_owners
+
+
+def test_source_debug_sidecars_remain_visible_to_record_inventory() -> None:
+    from pcc.backend.self_backend_debug import (
+        DebugBlock,
+        DebugLocation,
+        DebugMetadata,
+        DebugNode,
+        DebugSource,
+        FunctionDebugInfo,
+    )
+    from pcc.backend.self_backend_dwarf import DebugFunctionPlan
+
+    # Construct the actual sidecar owners without invoking the IR parser,
+    # unsafe arenas, codec or emitter. Shared coordinates must remain counted
+    # once by identity, along with every retained metadata/row container.
+    source = DebugSource("example.py", "/fixture")
+    location = DebugLocation(source, 7, 3, 0, 2, 3)
+    block = DebugBlock("entry", [location], location)
+    function = FunctionDebugInfo("sample", "sample", source, 6, 2, 1, [block])
+    node = DebugNode("DILocation", {"line": "7", "column": "3", "scope": "!2"})
+    metadata = DebugMetadata({3: node})
+    metadata.functions[function.symbol] = function
+    metadata.locations[3] = location
+    metadata.location_owners[3] = function.scope
+    metadata.sources[0] = source
+    plan = DebugFunctionPlan(metadata, function, "sample", "sample_end")
+    assert plan.mark(0, 0) == "L_pcc_dbg_sample_0:"
+    assert plan.rows == [("L_pcc_dbg_sample_0", location)]
+
+    tool = _load_tool()
+    payload = tool._graph_inventory((plan,))
+    for family, category in (
+        (DebugNode, "semantic_record"),
+        (DebugSource, "semantic_record"),
+        (DebugLocation, "semantic_record"),
+        (DebugBlock, "phase_shell"),
+        (FunctionDebugInfo, "phase_shell"),
+        (DebugMetadata, "phase_shell"),
+        (DebugFunctionPlan, "phase_shell"),
+    ):
+        filename = family.__module__.rsplit(".", 1)[1] + ".py"
+        assert tool.DATA_PLANE_CLASS_CONTRACT[filename + ":" + family.__name__] == category
+        assert payload["families"][family.__name__]["unique_objects"] == 1
+        assert payload["families"][family.__name__]["references"] >= 1
+
+    assert payload["containers"] == {"dict": 6, "list": 3, "tuple": 1}
+    assert {row["owner"] for row in payload["container_primary_owners"]["list"]} == {
+        "DebugBlock.instructions", "FunctionDebugInfo.blocks", "DebugFunctionPlan.rows",
+    }
+    assert {row["owner"] for row in payload["container_primary_owners"]["dict"]} == {
+        "DebugNode.fields", "DebugMetadata.nodes", "DebugMetadata.functions",
+        "DebugMetadata.locations", "DebugMetadata.location_owners", "DebugMetadata.sources",
+    }
 
 
 def test_data_plane_class_contract_reports_an_unclassified_new_class(

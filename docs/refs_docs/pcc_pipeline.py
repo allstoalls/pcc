@@ -43,14 +43,14 @@ def _runtime_dir_has_runtime_files(path: str) -> bool:
     return include_h or makefile or maybe_lib
 
 
-_PY_RUNTIME_DIR_CANDIDATE_1 = str(os.path.join(_PCC_DIR, "pcc", "py_runtime"))
+_PY_RUNTIME_DIR_CANDIDATE_1 = str(os.path.join(_PCC_DIR, "pcc", "runtime"))
 _PY_RUNTIME_DIR_CANDIDATE_2 = str(os.path.join(_PCC_DIR, "py_runtime"))
 _PY_RUNTIME_DIR_CANDIDATE_3 = str(os.path.join(_PIPELINE_DIR, "py_runtime"))
 _PY_RUNTIME_DIR_CANDIDATE_4 = str(os.path.join(
-    _PIPELINE_DIR, "pcc", "py_runtime",
+    _PIPELINE_DIR, "pcc", "runtime",
 ))
 _PY_RUNTIME_DIR_CANDIDATE_5 = str(os.path.join(
-    os.getcwd(), "pcc", "py_runtime",
+    os.getcwd(), "pcc", "runtime",
 ))
 _PY_RUNTIME_DIR = str(
     _PY_RUNTIME_DIR_CANDIDATE_1

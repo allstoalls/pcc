@@ -1,0 +1,79 @@
+{
+  "assertion_or_source_changes_after_failure": "None",
+  "base_after": "Full retained baseline manifest remains unchanged",
+  "base_full_source_relation": "Retained cold-slot compiler snapshot; complete pcc tree matches published02b9. Full source is not a02b9 checkout: older unrelated native test f391 and docs/bootstrap remain.",
+  "base_pcc_git_tree": "d234174fbac80575ea822f6100f65fe914dd4498",
+  "candidate_pcc_git_tree": "5882f6f16ccfd1d9cbe55c06426e8888f51e9ab7",
+  "classification": "Actual host assertion failure preserved. Read-only source review identifies an invalid new test snapshot taken before unchanged public preparation replaces block_map; no production defect is established by this failure.",
+  "codegen_checksum": "610f289ab84407149dbe231ac35e1b190079366bf852ccbafd0bdcc5ec85ddab",
+  "counts": {
+    "collected": 109,
+    "errors": 0,
+    "failed": 1,
+    "passed": 0,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  },
+  "denied_audit_events": 0,
+  "failed_node": "tests/python/test_x86_64_indexed_instruction_bridge.py::test_lazy_instruction_input_matches_eager_assembly_and_complete_object[phi-calls-x86_64-unknown-linux-gnu-False]",
+  "failure": "assert function.block_map is block_map and not block_map; both dictionaries empty but distinct identities",
+  "guard": {
+    "cleanup": "CLEAN",
+    "continuous_minimum_free_bytes": 4294967296,
+    "echild": true,
+    "elapsed_seconds": 5.20353077999971,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "outer_timeout_seconds": 300.0,
+    "peak_sampled_root_rss_bytes": 99598336,
+    "returncode": 1,
+    "root_reaped": true,
+    "status": "COMPLETE"
+  },
+  "guard_sha256": "03fff56451613de7f286d83fe20e183001c17e1d1a171c939f6b160d91d6be1e",
+  "imported_source_closure": "PASS",
+  "native_deselected": [
+    "tests/python/test_x86_64_emission_lifetime.py::test_retired_indexed_functions_link_and_execute_owned_elf"
+  ],
+  "packet_manifest_sha256": "871eadf0bf54042154dc05e38c7a9564e8abf0f0a0e015cd4c812adada2bd723",
+  "preservation_commit": "a0152288bbca4212eabb3583cb26c0036460544d",
+  "qualification_sha256": "ee3cdf9b81857869c7f9eb1102cace0bd91809e8b76fc1ecf15dfa8e7990d53e",
+  "real_module_and_native": "UNRUN",
+  "result_sha256": "b637801f2055ee0abadbb57847dd8c44d792a05cd7e257dc57ff449604d38225",
+  "retries": 0,
+  "schema": "pcc.x86_bridge_public_host_qualification.v1",
+  "scope": "One independently materialized three-path x86 bridge candidate; exact reviewed109 host/object cases, stopped on first assertion failure",
+  "selected_unrun": 108,
+  "source_after": {
+    "bytes": 390478949,
+    "files": 30025,
+    "status": "PASS"
+  },
+  "source_before": {
+    "bytes": 390478949,
+    "files": 30025,
+    "status": "PASS"
+  },
+  "source_manifest_sha256": "cc627fd40172d1dc28e3c3eb65a02e905b11fdaf5a311b48b12f96bdb7410999",
+  "source_only_diagnosis": {
+    "behavior": "Assigns a new block_map before emission in both baseline and candidate",
+    "old_failure_relation": "Original source/test bytes, failed assertion and receipt remain unchanged",
+    "preparation_owner": "pcc/backend/self_backend_prepare.py::prepare_parsed_function",
+    "preparation_source_sha256": "1b042b1297c67713513a764f8f47dea08b6afaed6b83f0f963034a90cca77837",
+    "proposed_correction": "Test-only successor capturing identity at the actual emitter entry; no corrected execution has occurred",
+    "restoration_contract": "Both versions restore the map captured at their own entry; the existing lifetime test captures that owner boundary",
+    "restoration_owner": "self_backend_x86_64_linux._emit_function"
+  },
+  "status": "FAIL",
+  "supersedes_unpublished_public_draft_sha256": "2a709a0d0b5e1e016b9b77e44ff130020efecb1b6b3a0d74502bb1669eabab53",
+  "unrun": [
+    "Remaining108 selected host cases",
+    "Excluded native ELF testcase",
+    "Real c_ast object comparison",
+    "Native compiler callback/ABI",
+    "Windows device execution",
+    "Full Stage1",
+    "Performance qualification"
+  ]
+}

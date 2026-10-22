@@ -7,7 +7,10 @@ from pathlib import Path
 
 
 def _compile_and_run(tmp_path: Path, source: str, *, backend: str = "0") -> list[str]:
-    from pcc.py_frontend.pipeline import compile_python
+    from tests.native_provisioning import native_test_runtime_options
+
+    runtime_options = native_test_runtime_options()
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "probe.py"
     exe = tmp_path / "probe.out"
@@ -17,6 +20,7 @@ def _compile_and_run(tmp_path: Path, source: str, *, backend: str = "0") -> list
         str(exe),
         ir_scaffold_mode="on",
         libpython_mode="off",
+        **runtime_options,
     )
     env = os.environ.copy()
     env["PCC_GC_BACKEND"] = backend
@@ -55,9 +59,9 @@ def test_d2_generator_yield_send_return_value_compiled(tmp_path):
 
 
 def test_d3_async_await_minimum_compiled(tmp_path):
-    lines = _compile_and_run(
-        tmp_path,
-        '''
+    import sys
+
+    source = textwrap.dedent('''
         async def value():
             return 41
 
@@ -67,10 +71,23 @@ def test_d3_async_await_minimum_compiled(tmp_path):
 
         c = main()
         print(c.__class__.__name__)
-        print(c.send(None))
-        ''',
+        try:
+            c.send(None)
+        except StopIteration as error:
+            print(type(error).__name__, error.value)
+        else:
+            print("coroutine returned without StopIteration")
+        ''').lstrip()
+    oracle = subprocess.run(
+        [sys.executable, "-c", source],
+        text=True,
+        capture_output=True,
+        timeout=30,
     )
-    assert lines == ["coroutine", "42"]
+    assert oracle.returncode == 0, oracle.stdout + oracle.stderr
+    expected = ["coroutine", "StopIteration 42"]
+    assert oracle.stdout.strip().splitlines() == expected
+    assert _compile_and_run(tmp_path, source) == expected
 
 
 def test_d4_context_manager_enter_exit_and_suppression_compiled(tmp_path):

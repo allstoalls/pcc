@@ -1,0 +1,53 @@
+{
+  "application_status": "UNAPPLIED",
+  "candidate_scope": "On-demand tuple decoding through unchanged x86 selectors; no eager instruction arena/interning for direct indexed input; legacy block shells retained.",
+  "diagnostic_limit": "For multiply-invalid indexed input, delayed operand decode may change first-error priority. Full diagnostic-order equivalence is not claimed.",
+  "execution_status": "UNRUN",
+  "files": [
+    {
+      "mode": "100644",
+      "path": "pcc/backend/self_backend_x86_64_linux.py",
+      "postimage_bytes": 135747,
+      "postimage_sha256": "145713c125d1d4e4e72c8d499646cd5c85874f4b6a83d3fd3c23dde934cea1ca",
+      "preimage_sha256": "9c515249d01aa01a0baa6913f7e51c28d80555c90685160b9e5590a755677ec5"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/python/test_x86_64_emission_lifetime.py",
+      "postimage_bytes": 15017,
+      "postimage_sha256": "6278b108275414f591156eeca57ee3cd8e2911df1e643a7a004f9ed6fff48c65",
+      "preimage_sha256": "ec941873b0a2c57b7fb4540c3325ba1941a604550de4228ac57c3ff857fe3cfe"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/python/test_x86_64_indexed_instruction_bridge.py",
+      "postimage_bytes": 13537,
+      "postimage_sha256": "9f25e751406d5cdc9e9c361b31a8c8f18c2d4e9093a4a047ae67ee01c90822b7",
+      "preimage_sha256": null
+    }
+  ],
+  "limits": {
+    "address_space_bytes": 4294967296,
+    "exclusive_shared_lock": true,
+    "free_reserve_bytes": 4294967296,
+    "hard_nproc": 0,
+    "host_group_seconds": 300
+  },
+  "open_scope": [
+    "focused host tests",
+    "ELF/COFF exact object equality",
+    "real module counter comparison",
+    "emitted native callback/ABI",
+    "GC behavior",
+    "full Stage1",
+    "self-host fixed point",
+    "performance"
+  ],
+  "patch_sha256": "9132e8d5be54a4429d90350005f6021d6ce93d6a1126f761c42e9ac837f4cf29",
+  "production_base_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "production_pcc_subtree": "d234174f",
+  "readme_sha256": "050c0c39d5fc3cf4a57b3a588190e55ad6873e2d5352b7461b03f53babd03abb",
+  "retained_validation": "Canonical arithmetic flags read once per instruction before block shell and before selectors.",
+  "schema": "pcc.x86-indexed-instruction-bridge.v2",
+  "source_review": "Independent source review complete for all three postimages: admitted for a scoped host equality gate, with multiply-invalid diagnostic precedence and native proof explicitly open."
+}

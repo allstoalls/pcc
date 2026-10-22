@@ -1,7 +1,7 @@
 """CPU-only oracle for a scalable virtual-thread timer structure.
 
 This module is an ORACLE, not the runtime. It exists to design and validate
-the *algorithm* that a later C slice under ``pcc/py_runtime/src/pcc_threads.c``
+the *algorithm* that a later C slice under ``pcc/runtime/src/pcc_threads.c``
 will mirror, replacing the current O(n)-insert sorted singly-linked timer
 queue (``pcc_vthread_timer_add_locked`` / ``py_virtual_thread_poll_timers``).
 

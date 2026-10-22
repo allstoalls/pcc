@@ -29,7 +29,7 @@ def emit_self_asm(ir_text: str, triple: str | None = None) -> str:
             # A module that declares no target is emitted for the host: the
             # rule pcc.tools.ir_to_obj applies, and the one the AArch64
             # emitter already assumes for an unpinned module.
-            from pcc.py_frontend.pipeline_targets import host_target_triple
+            from pcc.frontends.python.pipeline_targets import host_target_triple
 
             triple = host_target_triple()
     target_id, emitter = resolve_self_asm_emitter(triple)

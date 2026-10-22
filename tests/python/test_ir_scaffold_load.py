@@ -1,7 +1,7 @@
 """Phase 3 Task 8: scaffold lowering for ``builder.load``.
 
 ``self.builder.load(ptr)`` becomes
-``call ptr @user_pcc_llvm_capi_ir_IRBuilder_load(ptr, ptr, ptr, ptr)``
+``call ptr @user_pcc_ir_ir_IRBuilder_load(ptr, ptr, ptr, ptr)``
 in ON mode (no py_cpy_*). The last two pointer operands are the
 explicit Python defaults for ``name`` and ``align``.
 
@@ -24,7 +24,7 @@ _PTR = r"(?:ptr|i8\s*\*)"
 
 
 def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -50,7 +50,7 @@ def _function_body(ir_text: str, fn_name_suffix: str) -> str | None:
 
 _USE_LOAD_PROGRAM = textwrap.dedent(
     """
-    from pcc.llvm_capi.compat import ir
+    from pcc.ir.compat import ir
 
     def use_load(ptr):
         builder = ir.IRBuilder()
@@ -61,11 +61,11 @@ _USE_LOAD_PROGRAM = textwrap.dedent(
 
 def test_on_mode_emits_load_extern():
     ir_text = _compile_to_ll(_USE_LOAD_PROGRAM, "load_on", mode="on")
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_load" in ir_text, (
-        "ON mode must emit user_pcc_llvm_capi_ir_IRBuilder_load extern; got:\n" + ir_text
+    assert "@user_pcc_ir_ir_IRBuilder_load" in ir_text, (
+        "ON mode must emit user_pcc_ir_ir_IRBuilder_load extern; got:\n" + ir_text
     )
     decl = re.compile(
-        r"declare[^\n]+" + _PTR + r"\s+@user_pcc_llvm_capi_ir_IRBuilder_load\s*\(\s*"
+        r"declare[^\n]+" + _PTR + r"\s+@user_pcc_ir_ir_IRBuilder_load\s*\(\s*"
         + _PTR + r"\s*,\s*" + _PTR + r"\s*,\s*"
         + _PTR + r"\s*,\s*" + _PTR + r"\s*\)"
     )
@@ -81,7 +81,7 @@ def test_on_mode_use_load_body_has_no_py_cpy():
     )
     body = _function_body(ir_text, "use_load")
     assert body is not None, ir_text
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_load" in body, body
+    assert "@user_pcc_ir_ir_IRBuilder_load" in body, body
     assert "py_cpy_" not in body, (
         "ON mode use_load body must have ZERO py_cpy_*; got:\n" + body
     )
@@ -98,7 +98,7 @@ def test_off_mode_still_uses_py_cpy_for_load():
     ir_text = _compile_to_ll(
         _USE_LOAD_PROGRAM, "load_off", mode="off",
     )
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_load" not in ir_text
+    assert "@user_pcc_ir_ir_IRBuilder_load" not in ir_text
     body = _function_body(ir_text, "use_load")
     assert body is not None
     # No regression: OFF mode must not *re-introduce* libpython
@@ -119,13 +119,13 @@ def test_off_mode_still_uses_py_cpy_for_load():
 def test_load_arity_check():
     """builder.load requires the pointer and accepts name/align defaults."""
     # ``ScaffoldUnsupportedError`` lives in
-    # ``pcc.py_frontend.codegen.ir_scaffold_lowering`` since the layer1
+    # ``pcc.frontends.python.codegen.ir_scaffold_lowering`` since the layer1
     # split; the historical import path
-    # ``pcc.py_frontend.codegen.layer1`` is gone.
-    from pcc.py_frontend.codegen.ir_scaffold_lowering import (
+    # ``pcc.frontends.python.codegen.layer1`` is gone.
+    from pcc.frontends.python.codegen.ir_scaffold_lowering import (
         ScaffoldUnsupportedError,
     )
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         PyPipelineError,
         compile_python,
     )
@@ -134,7 +134,7 @@ def test_load_arity_check():
     out = _BUILD / "load_bad_arity.ll"
     src.write_text(textwrap.dedent(
         """
-        from pcc.llvm_capi.compat import ir
+        from pcc.ir.compat import ir
 
         def f(a, b):
             builder = ir.IRBuilder()

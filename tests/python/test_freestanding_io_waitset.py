@@ -6,11 +6,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 REPO = Path(__file__).resolve().parents[2]
-RUNTIME = REPO / "pcc" / "py_runtime"
+RUNTIME = REPO / "pcc" / "runtime"
 WAITSET_SOURCE = RUNTIME / "py" / "freestanding_io_waitset.py"
 
 
@@ -27,7 +27,7 @@ def _compile_waitset_ir(tmp_path: Path) -> Path:
 
 
 def test_production_pcc_python_waitset_poll_and_kqueue(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ) -> None:
     source = tmp_path / "io_waitset_probe.c"
     executable = tmp_path / "io_waitset_probe"
@@ -154,7 +154,7 @@ int main(void) {
             "-pthread",
             f"-I{RUNTIME / 'src'}",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(executable),
@@ -198,6 +198,16 @@ def test_waitset_port_executes_after_self_backend_emission(tmp_path: Path) -> No
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
+
+/* The thread kernel is not linked: like an unregistered thread in the real
+ * kernel, the live wait never enters the exited state here. */
+int64_t pcc_thread_blocking_enter(void *frame) {
+    (void)frame;
+    return 0;
+}
+void pcc_thread_blocking_leave(int64_t entered) {
+    (void)entered;
+}
 
 static int live_prepare_failure_preserves_readiness(void) {
     int64_t backend = pcc_io_waitset_default_backend();
@@ -274,7 +284,7 @@ int main(void) {
 
 def test_linux_waitset_ir_has_no_kqueue_imports(tmp_path: Path, monkeypatch) -> None:
     from pcc.backend.self_backend_dispatch import emit_self_asm
-    from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+    from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
     monkeypatch.setattr(
         UnsafeIntrinsicMixin,

@@ -3,8 +3,8 @@ self-contained IR (every scaffold extern is satisfied by a definition
 in the same combined IR).
 
 This is the key integration check for Path A: prove that the
-``@user_pcc_llvm_capi_ir_IRBuilder_*`` symbols my codegen references
-are *actually provided* by the natively-compiled ``pcc.llvm_capi.ir``
+``@user_pcc_ir_ir_IRBuilder_*`` symbols my codegen references
+are *actually provided* by the natively-compiled ``pcc.ir.ir``
 when both files are passed to ``compile_python_multi``. Without that
 match, ON-mode binaries would fail to link.
 """
@@ -20,11 +20,11 @@ _REPO_ROOT = Path(__file__).absolute().parents[2]
 _BUILD = _REPO_ROOT / "build"
 _BUILD.mkdir(parents=True, exist_ok=True)
 
-_LAYER1_IR_PATH = _REPO_ROOT / "pcc" / "llvm_capi" / "ir.py"
+_LAYER1_IR_PATH = _REPO_ROOT / "pcc" / "ir" / "ir.py"
 
 
 def _multi_compile_ll(src_paths, module_names, name: str, *, mode: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     out = _BUILD / f"{name}.ll"
     compile_python_multi(
@@ -39,22 +39,22 @@ def _multi_compile_ll(src_paths, module_names, name: str, *, mode: str) -> str:
 
 
 def _externs_called(ir_text: str) -> set[str]:
-    """Return the set of @user_pcc_llvm_capi_ir_IRBuilder_* names
+    """Return the set of @user_pcc_ir_ir_IRBuilder_* names
     that appear as call targets."""
     return set(
         re.findall(
-            r"\bcall[^\n]*@(user_pcc_llvm_capi_ir_IRBuilder_[A-Za-z0-9_]+)",
+            r"\bcall[^\n]*@(user_pcc_ir_ir_IRBuilder_[A-Za-z0-9_]+)",
             ir_text,
         )
     )
 
 
 def _externs_defined(ir_text: str) -> set[str]:
-    """Return the set of @user_pcc_llvm_capi_ir_IRBuilder_* names
+    """Return the set of @user_pcc_ir_ir_IRBuilder_* names
     that appear as definitions."""
     return set(
         re.findall(
-            r"^\s*define[^\n]+@(user_pcc_llvm_capi_ir_IRBuilder_[A-Za-z0-9_]+)\(",
+            r"^\s*define[^\n]+@(user_pcc_ir_ir_IRBuilder_[A-Za-z0-9_]+)\(",
             ir_text,
             re.MULTILINE,
         )
@@ -81,23 +81,23 @@ def fakelayer1_path():
 
 
 def test_combined_ir_contains_both_calls_and_definitions(fakelayer1_path):
-    """When fakelayer1 + pcc.llvm_capi.ir are compiled together in ON
+    """When fakelayer1 + pcc.ir.ir are compiled together in ON
     mode, the combined IR should contain BOTH the call sites and the
     matching function definitions for the same scaffold symbols."""
     ir_text = _multi_compile_ll(
         [fakelayer1_path, _LAYER1_IR_PATH],
-        ["fakelayer1", "pcc.llvm_capi.ir"],
+        ["fakelayer1", "pcc.ir.ir"],
         "linkres_combined",
         mode="on",
     )
     called = _externs_called(ir_text)
     defined = _externs_defined(ir_text)
     expected = {
-        "user_pcc_llvm_capi_ir_IRBuilder_add",
-        "user_pcc_llvm_capi_ir_IRBuilder_mul",
-        "user_pcc_llvm_capi_ir_IRBuilder_store",
-        "user_pcc_llvm_capi_ir_IRBuilder_icmp_signed",
-        "user_pcc_llvm_capi_ir_IRBuilder_cbranch",
+        "user_pcc_ir_ir_IRBuilder_add",
+        "user_pcc_ir_ir_IRBuilder_mul",
+        "user_pcc_ir_ir_IRBuilder_store",
+        "user_pcc_ir_ir_IRBuilder_icmp_signed",
+        "user_pcc_ir_ir_IRBuilder_cbranch",
     }
     assert expected.issubset(called), (
         f"missing expected calls. got={called - expected}; "
@@ -116,7 +116,7 @@ def test_no_unresolved_scaffold_symbols(fakelayer1_path):
     """
     ir_text = _multi_compile_ll(
         [fakelayer1_path, _LAYER1_IR_PATH],
-        ["fakelayer1", "pcc.llvm_capi.ir"],
+        ["fakelayer1", "pcc.ir.ir"],
         "linkres_unresolved",
         mode="on",
     )
@@ -130,8 +130,8 @@ def test_no_unresolved_scaffold_symbols(fakelayer1_path):
 
 
 def test_off_mode_does_not_pull_real_symbols(fakelayer1_path):
-    """OFF mode should NOT emit @user_pcc_llvm_capi_ir_IRBuilder_*
-    references — it routes through py_cpy_*. Pulling pcc.llvm_capi.ir
+    """OFF mode should NOT emit @user_pcc_ir_ir_IRBuilder_*
+    references — it routes through py_cpy_*. Pulling pcc.ir.ir
     into the closure in OFF mode is a separate question; here we just
     confirm the scaffold extern isn't accidentally emitted.
     """

@@ -9,7 +9,7 @@ from . import BackendUnavailable
 from .self_backend_aarch64_darwin_regs import align_pow2
 from .self_backend_aarch64_darwin_symbols import asm_symbol
 from .self_backend_ir import GlobalDef, TypeDesc, _align_to
-from .self_backend_literals import fp_bitcast_initializer_bits
+from .self_backend_literals import fp_bitcast_initializer_bits, wide_int_quad_lines
 from .self_backend_float_bits import bits_to_float64, float32_to_bits
 from .self_backend_module_symbols import PreparedModuleSymbols
 from .self_backend_parse import (
@@ -46,7 +46,7 @@ def global_ctor_entries(
             "[N x { i32, ptr, ptr }]"
         )
 
-    initializer = strip_typed_initializer(global_.initializer)
+    initializer = strip_typed_initializer(global_.initializer, type_context=global_.type_context)
     if initializer == "zeroinitializer":
         return []
     if not (initializer.startswith("[") and initializer.endswith("]")):
@@ -62,7 +62,7 @@ def global_ctor_entries(
 
     entries: list[tuple[int, int, str]] = []
     for ordinal, raw_entry in enumerate(raw_entries):
-        record = strip_typed_initializer(raw_entry)
+        record = strip_typed_initializer(raw_entry, type_context=global_.type_context)
         if not (record.startswith("{") and record.endswith("}")):
             raise BackendUnavailable(
                 f"bad llvm.global_ctors record {raw_entry!r}"
@@ -72,9 +72,9 @@ def global_ctor_entries(
             raise BackendUnavailable(
                 f"bad llvm.global_ctors record {raw_entry!r}"
             )
-        priority_text = decode_value_token(strip_typed_initializer(fields[0]))
-        target = decode_value_token(strip_typed_initializer(fields[1]))
-        associated = decode_value_token(strip_typed_initializer(fields[2]))
+        priority_text = decode_value_token(strip_typed_initializer(fields[0], type_context=global_.type_context), type_context=global_.type_context)
+        target = decode_value_token(strip_typed_initializer(fields[1], type_context=global_.type_context), type_context=global_.type_context)
+        associated = decode_value_token(strip_typed_initializer(fields[2], type_context=global_.type_context), type_context=global_.type_context)
         try:
             priority = int(priority_text, 0)
         except ValueError as exc:
@@ -152,6 +152,10 @@ def emit_globals(
             lines.append(f".globl {asm_symbol(global_.name, module_symbols)}")
         lines.append(f"{asm_symbol(global_.name, module_symbols)}:")
         lines.append(emit_global_initializer(global_, module_symbols))
+        if global_.type.slot_size == 0:
+            # An empty struct/union object still needs a distinct address,
+            # and a Mach-O section must not be empty.
+            lines.append("  .space 1")
         lines.append("")
     return lines
 
@@ -213,6 +217,7 @@ def emit_zero_fill(size: int) -> list[str]:
     return [f"  .space {size}"]
 
 
+
 def _initializer_symbol(name: str, module_symbols: PreparedModuleSymbols) -> str:
     if name in module_symbols.thread_local_symbols:
         raise BackendUnavailable("self-aarch64-darwin cannot store a TLS address in a global initializer")
@@ -238,11 +243,11 @@ def emit_scalar_initializer(
             suffix = "" if offset == 0 else f"+{offset}"
             return [f"  .quad {_initializer_symbol(base, module_symbols)}{suffix}"]
         if init.startswith("getelementptr"):
-            base, offset = parse_constant_gep(init)
+            base, offset = parse_constant_gep(init, type_context=module_symbols.type_context)
             suffix = "" if offset == 0 else f"+{offset}"
             return [f"  .quad {_initializer_symbol(base, module_symbols)}{suffix}"]
         if init.startswith("inttoptr"):
-            decoded = decode_value_token(init)
+            decoded = decode_value_token(init, type_context=module_symbols.type_context)
             if decoded.startswith("inttoptrconst:"):
                 return [f"  .quad {int(decoded.split(':', 1)[1])}"]
             raise BackendUnavailable(
@@ -258,7 +263,7 @@ def emit_scalar_initializer(
             # the inttoptr case above does; otherwise the token fell through
             # to `int(init)` and the whole translation unit failed with
             # "invalid literal for int()".
-            decoded = decode_value_token(init)
+            decoded = decode_value_token(init, type_context=module_symbols.type_context)
             if decoded.startswith("@"):
                 return [f"  .quad {_initializer_symbol(decoded[1:], module_symbols)}"]
             if decoded.startswith("gep0:"):
@@ -288,6 +293,8 @@ def emit_scalar_initializer(
             return [f"  .short {int(init)}"]
         if ty.width <= 32:
             return [f"  .long {int(init)}"]
+        if ty.width > 64:
+            return wide_int_quad_lines(init, ty.slot_size)
         return [f"  .quad {int(init)}"]
     if ty.is_fp:
         if is_hex_literal(init):
@@ -347,7 +354,7 @@ def emit_typed_initializer(
         for item in items:
             lines.extend(
                 emit_typed_initializer(
-                    ty.elem, strip_typed_initializer(item), global_name, module_symbols
+                    ty.elem, strip_typed_initializer(item, type_context=module_symbols.type_context), global_name, module_symbols
                 )
             )
             lines.extend(emit_zero_fill(stride - ty.elem.slot_size))
@@ -370,7 +377,7 @@ def emit_typed_initializer(
             lines.extend(emit_zero_fill(field_offset - offset))
             lines.extend(
                 emit_typed_initializer(
-                    field_ty, strip_typed_initializer(item), global_name, module_symbols
+                    field_ty, strip_typed_initializer(item, type_context=module_symbols.type_context), global_name, module_symbols
                 )
             )
             offset = field_offset + field_ty.slot_size

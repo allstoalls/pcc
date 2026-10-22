@@ -16,7 +16,7 @@ import os
 import time
 from pathlib import Path
 
-from pcc import cli_bootstrap
+from pcc.driver import cli_bootstrap
 
 _KEY_ARGS = {
     "python_libpython": "off",

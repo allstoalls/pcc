@@ -87,7 +87,7 @@ def _function(ir_text, name):
 @pytest.mark.parametrize("reverse", (False, True), ids=("left-first", "right-first"))
 @pytest.mark.parametrize("scaffold", ("on", "off"))
 def test_alias_classinfo_real_ir_keeps_owning_module(tmp_path, monkeypatch, reverse, scaffold):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     _environment(monkeypatch, tmp_path)
     paths, names = _modules(tmp_path, reverse)
@@ -111,7 +111,7 @@ def explicit_runtime():
     requested = os.environ.get("PCC_RUNTIME_ARCHIVE", "")
     assert requested, "set explicit matching PCC_RUNTIME_ARCHIVE; no implicit runtime build"
     archive = Path(requested).resolve(strict=True)
-    verify_runtime_archive_manifest(archive, runtime_root=_ROOT / "pcc/py_runtime")
+    verify_runtime_archive_manifest(archive, runtime_root=_ROOT / "pcc/runtime")
     return archive
 
 
@@ -119,7 +119,7 @@ def explicit_runtime():
 @pytest.mark.parametrize("reverse", (False, True), ids=("left-first", "right-first"))
 @pytest.mark.parametrize("scaffold", ("on", "off"))
 def test_host_compiled_module_alias_checks_execute(tmp_path, monkeypatch, explicit_runtime, reverse, scaffold):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     environment = _environment(monkeypatch, tmp_path, runtime=explicit_runtime)
     paths, names = _modules(tmp_path, reverse)

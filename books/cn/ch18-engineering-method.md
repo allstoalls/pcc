@@ -92,11 +92,11 @@ def _isolate_env_and_caches(tmp_path_factory):
 
 **§6 用替换验证假设,不只用目视。** 把嫌疑函数拷进临时 harness,一次换回一个真实 helper、逐步恢复分支。比盯五百行 IR 快。
 
-**§7 排除 harness 自身的错误。** 这一条全是血泪清单:zsh 里 pytest 节点 id 的 `[ ]` 必须引号;macOS 上 `multiprocessing` spawn 与 `<<'PY'` 标准输入不相容;清单文件会过期,先用**当前** harness 重跑再怀疑编译器;改了语法/词法之后必须升 [pcc/parse/c_parser.py](../../pcc/parse/c_parser.py) 里的 PLY 缓存版本,否则旧 `yacctab` 让修好的解析器表观上还坏着;长任务没出最终摘要不算"跑完"。这些错误的共同点是症状酷似编译器 bug。
+**§7 排除 harness 自身的错误。** 这一条全是血泪清单:zsh 里 pytest 节点 id 的 `[ ]` 必须引号;macOS 上 `multiprocessing` spawn 与 `<<'PY'` 标准输入不相容;清单文件会过期,先用**当前** harness 重跑再怀疑编译器;改了语法/词法之后必须升 [pcc/frontends/c/parse/c_parser.py](../../pcc/frontends/c/parse/c_parser.py) 里的 PLY 缓存版本,否则旧 `yacctab` 让修好的解析器表观上还坏着;长任务没出最终摘要不算"跑完"。这些错误的共同点是症状酷似编译器 bug。
 
 **§8 原生崩溃用 LLDB,不用猜。** 回答两个问题:哪个生成/项目函数最先收到非法数据;坏指针实际指向什么运行时对象。批处理模式、硬超时、不停在最顶层运行时帧(`py_str_strip` 里崩溃通常意味着调用者传了坏对象),用 `memory read` 对照 `py_runtime.h` 的对象头偏移解码**对象**而非地址。LLDB 负责定位;修复仍然需要最小化回归测试。
 
-**§9 共享 codegen 不堆叠未验证编辑。** [pcc/codegen/c_codegen.py](../../pcc/codegen/c_codegen.py) 与 [pcc/py_frontend/codegen/](../../pcc/py_frontend/codegen) 的低层化 mixin 被几乎所有路径共享,一次"小清理"可以同时打碎 Lua、SQLite 与 GC 后端。规则:无最小重现支撑的改动留在草稿探针里;每次共享路径编辑后、下一次编辑前,先跑聚焦回归;第一次修复若没有明确改善最小重现,停止扩大补丁,回去继续缩小。
+**§9 共享 codegen 不堆叠未验证编辑。** [pcc/frontends/c/codegen/c_codegen.py](../../pcc/frontends/c/codegen/c_codegen.py) 与 [pcc/frontends/python/codegen/](../../pcc/frontends/python/codegen) 的低层化 mixin 被几乎所有路径共享,一次"小清理"可以同时打碎 Lua、SQLite 与 GC 后端。规则:无最小重现支撑的改动留在草稿探针里;每次共享路径编辑后、下一次编辑前,先跑聚焦回归;第一次修复若没有明确改善最小重现,停止扩大补丁,回去继续缩小。
 
 **§10 区分数据布局 bug 与表达式语义 bug。** 布局怀疑用 `sizeof`/`offsetof` 探针对照原生编译器,匹配即排除整类假设;剩下的才是符号性、提升、比较、移位这些语义问题。先证伪大类,再深入小类。
 
@@ -167,7 +167,7 @@ microbenchmark win     != whole-program performance win
 
 调查的每一步都能映射回十二技法。第一步确定化(§1):固定 `math.randomseed(15)`、构造确定性失败的数组形状,把"有时失败"压成"反转输入 + 自定义比较器 + 最小失败规模约 1921"。第二步换小 harness 保真实现(§5):`#define main pcc_onelua_main` 后 `#include "onelua.c"`,直接调真实的内部 `auxsort`——原生通过、pcc 确定性失败。第三步快速证伪大类(§10):`sizeof`/`offsetof` 探针证明 `TValue`、`lua_State` 等关键结构布局与原生一致,排除布局假设;栈形状探针排除 `luaL_makeseed`;逐件替换(§6)证明 `sort_comp` 与 `partition` 本身无辜——它们只是在更早的错误破坏快排不变式之后才表现异常。第四步替换二分锁定随机轴元路径:去随机化的 `auxsort` 通过、小 `rnd` 通过、大 `rnd` 失败。第五步降到纯 C(§5 的终点):`choosePivot` 公式 `(rnd ^ lo ^ up) % (r4 * 2) + (lo + r4)`,在 `lo=1, up=1921, rnd=3426782842u` 下,原生得 731,pcc 得 475。
 
-475 这个错值本身就是证据:它比合法下界 481 恰好低 6,正是有符号取余的签名——无符号解释给出合法轴元,按 32 位有符号解释余数为 -6。根因落在 [pcc/codegen/c_codegen.py](../../pcc/codegen/c_codegen.py):pcc 把有符号与无符号 32 位整数都低层化为 LLVM `i32`,符号性靠 `_tag_unsigned`/`_is_unsigned_val` 这套元数据单独携带,而 `^` 返回 `builder.xor(...)` 时没有按 C 结果类型重新打无符号标——比特全对,语义已丢,下一个 `%` 用了 `srem`。修复后按 §10 的精神审计邻近算子,又抓到同族的第二个真 bug:无符号前缀 `++`/`--` 的表达式结果同样没有重新打标。
+475 这个错值本身就是证据:它比合法下界 481 恰好低 6,正是有符号取余的签名——无符号解释给出合法轴元,按 32 位有符号解释余数为 -6。根因落在 [pcc/frontends/c/codegen/c_codegen.py](../../pcc/frontends/c/codegen/c_codegen.py):pcc 把有符号与无符号 32 位整数都低层化为 LLVM `i32`,符号性靠 `_tag_unsigned`/`_is_unsigned_val` 这套元数据单独携带,而 `^` 返回 `builder.xor(...)` 时没有按 C 结果类型重新打无符号标——比特全对,语义已丢,下一个 `%` 用了 `srem`。修复后按 §10 的精神审计邻近算子,又抓到同族的第二个真 bug:无符号前缀 `++`/`--` 的表达式结果同样没有重新打标。
 
 留下的不变式有两层。机制层:`^`、无符号 `>>`、整数复合赋值、无符号前缀自增减四类结果保持无符号标记,回归测试进 `tests/test_unsigned_loads.py`,而且刻意全部采用"无符号结果紧跟 `%` 有符号常量"的下游敏感形状(§11)——此前仓库不缺无符号测试,缺的正是这种形状,所以一类 bug 长期隐形。流程层:这份调查的模板("先原生对照、去随机、最小集成 harness、布局与语义分家、降到纯 C、查元数据传播而非算术指令")被沉淀进 [AGENTS.md](../../AGENTS.md) 的 C Codegen Invariants 小节与调试手册本身——方法论文档的内容,相当一部分就是这样从案例研究里蒸馏出来的。
 

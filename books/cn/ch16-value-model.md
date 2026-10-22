@@ -42,7 +42,7 @@ pcc.i64 / pcc.u64  语义 = 显式机器整数(契约,尚未实现,见 16.4)
 
 ### 16.2.1 编码:一个低位换一个对象头
 
-值投影的运行时编码在 [pcc/py_runtime/src/py_internal.h](../../pcc/py_runtime/src/py_internal.h)。`PY_IS_TAGGED_INT(p)` 检查指针低位:低位为 1 是值,为 0 是真正的 `PyObject*`——`malloc` 在所有目标平台上至少 8 字节对齐,真实指针的 bit 0 恒为 0,这一位是白捡的。编码与解码各一行:`py_tag_int()` 左移一位再置低位;`py_untag_int()` 经 `intptr_t` 做算术右移,保符号。于是标记整数的载荷是 63 位:
+值投影的运行时编码在 [pcc/runtime/src/py_internal.h](../../pcc/runtime/src/py_internal.h)。`PY_IS_TAGGED_INT(p)` 检查指针低位:低位为 1 是值,为 0 是真正的 `PyObject*`——`malloc` 在所有目标平台上至少 8 字节对齐,真实指针的 bit 0 恒为 0,这一位是白捡的。编码与解码各一行:`py_tag_int()` 左移一位再置低位;`py_untag_int()` 经 `intptr_t` 做算术右移,保符号。于是标记整数的载荷是 63 位:
 
 ```c
 #define PY_TAGGED_INT_MIN  ((int64_t)INT64_MIN >> 1)   /* -2^62 */
@@ -53,11 +53,11 @@ pcc.i64 / pcc.u64  语义 = 显式机器整数(契约,尚未实现,见 16.4)
 
 对象投影是 `PyIntObject`,同文件定义:符号-数值(sign-magnitude)表示的 bignum,基 2^32 的数字数组按小端存储,`sign` 取 -1/0/+1,柔性数组 `digits[]` 长 `ndigits`。注释写明两条规范不变式:`sign == 0` 当且仅当 `ndigits == 0`(零没有数字);`sign != 0` 时最高位数字非零。第三条不变式更关键,直接写在结构体注释里:**落在标记范围内的值应当存为标记整数,不该存为 `PyIntObject`**。表示是规范化的——同一个数学值只有一种合法编码,等值比较与哈希因此不必处理双表示。
 
-规范化由两个函数执行,都在 [pcc/py_runtime/src/py_int_core.c](../../pcc/py_runtime/src/py_int_core.c)。`py_int_from_i64()` 是构造侧的选择器:在标记范围内就 `py_tag_int`,否则 `py_bigint_from_i64`(最坏两个数字,`INT64_MIN` 经无符号路径安全取负)。`py_bigint_to_pyobject()` 是计算侧的坍缩器:bignum 算出来的结果若能放回标记范围,就释放 bignum、返回标记值。提升与坍缩双向都有,值不会单向漂去对象投影。
+规范化由两个函数执行,都在 [pcc/runtime/src/py_int_core.c](../../pcc/runtime/src/py_int_core.c)。`py_int_from_i64()` 是构造侧的选择器:在标记范围内就 `py_tag_int`,否则 `py_bigint_from_i64`(最坏两个数字,`INT64_MIN` 经无符号路径安全取负)。`py_bigint_to_pyobject()` 是计算侧的坍缩器:bignum 算出来的结果若能放回标记范围,就释放 bignum、返回标记值。提升与坍缩双向都有,值不会单向漂去对象投影。
 
 ### 16.2.2 运行时算术:溢出即提升
 
-[pcc/py_runtime/src/py_int_ops.c](../../pcc/py_runtime/src/py_int_ops.c) 是对象层算术分派,每个操作都是同一个形状——快路径试值投影,失败就提升到对象投影:
+[pcc/runtime/src/py_int_ops.c](../../pcc/runtime/src/py_int_ops.c) 是对象层算术分派,每个操作都是同一个形状——快路径试值投影,失败就提升到对象投影:
 
 ```c
 PyObject *py_int_add(PyObject *a, PyObject *b) {
@@ -78,15 +78,15 @@ PyObject *py_int_add(PyObject *a, PyObject *b) {
 }
 ```
 
-逐行就是投影模型:两操作数都是标记值时用 `__builtin_add_overflow` 做带检查的 i64 加法——注意检查的是 i64 溢出,而结果经 `py_int_from_i64` 还会再做标记范围判定,所以 i63 与 i64 之间的"夹层"值也正确落到堆上;任一检查失败,`promote_any()`(即 `py_bigint_from_any`)把两边都提升为 bignum,`py_bigint_add`([pcc/py_runtime/src/py_int_addsub.c](../../pcc/py_runtime/src/py_int_addsub.c) 的符号-数值加减)算出精确结果,`wrap_bigint()` 经 `py_bigint_to_pyobject` 坍缩回去。`py_int_sub`/`py_int_mul` 同构;`py_int_neg` 单独防 `INT64_MIN`(它的相反数恰好放不进 i64)。
+逐行就是投影模型:两操作数都是标记值时用 `__builtin_add_overflow` 做带检查的 i64 加法——注意检查的是 i64 溢出,而结果经 `py_int_from_i64` 还会再做标记范围判定,所以 i63 与 i64 之间的"夹层"值也正确落到堆上;任一检查失败,`promote_any()`(即 `py_bigint_from_any`)把两边都提升为 bignum,`py_bigint_add`([pcc/runtime/src/py_int_addsub.c](../../pcc/runtime/src/py_int_addsub.c) 的符号-数值加减)算出精确结果,`wrap_bigint()` 经 `py_bigint_to_pyobject` 坍缩回去。`py_int_sub`/`py_int_mul` 同构;`py_int_neg` 单独防 `INT64_MIN`(它的相反数恰好放不进 i64)。
 
 几个操作的快路径里藏着语义修正,值得点名。`py_int_floordiv`/`py_int_mod`:C 除法向零截断而 Python 向下取整,余号随除数,快路径里有显式的商减一/余加除数修正——操作数已知在标记范围内,修正本身不会再溢出,注释证明了这一点。`py_int_shl`:左移用"乘 2^n 带溢出检查"实现,溢出则走 `py_bigint_shl`——16.3 会回头看它的未装箱镜像是怎么把这条语义丢掉的。`py_int_truediv` 返回 `PyFloatObject`,除零返回 NULL 留给调用方升 `ZeroDivisionError`。
 
-文件群的划分本身是个设计决定。`py_int_core.c`、`py_int_ops.c`、`py_int_addsub.c`、`py_int_mul.c`、`py_int_convert.c`、`py_int_bigint_convert.c`、`py_int_parse.c`、`py_int_decimal.c` 各自的文件头注释都写着同一句话的变体:"split from py_int.c so the pcc-Python runtime can replace it independently"。每个 C 文件在 [pcc/py_runtime/py/](../../pcc/py_runtime/py) 下有同名 pcc-Python 端口(`py_int_core.py`、`py_int_ops.py`……),这是第 14 章讲的"C 语义运行时收缩、pcc-Python 运行时增长"迁移在整数子系统上的切片:拆得越细,可独立替换、独立验证的单元就越小。`py_int_mul.c` 的头注释还留下一条诚实的边界记录:教科书乘法的 `uint32*uint32` 中间值需要完整的无符号 64 位行为,这是当时 pcc-Python 表面不易表达的,所以乘法比加减晚拆出去。
+文件群的划分本身是个设计决定。`py_int_core.c`、`py_int_ops.c`、`py_int_addsub.c`、`py_int_mul.c`、`py_int_convert.c`、`py_int_bigint_convert.c`、`py_int_parse.c`、`py_int_decimal.c` 各自的文件头注释都写着同一句话的变体:"split from py_int.c so the pcc-Python runtime can replace it independently"。每个 C 文件在 [pcc/runtime/py/](../../pcc/runtime/py) 下有同名 pcc-Python 端口(`py_int_core.py`、`py_int_ops.py`……),这是第 14 章讲的"C 语义运行时收缩、pcc-Python 运行时增长"迁移在整数子系统上的切片:拆得越细,可独立替换、独立验证的单元就越小。`py_int_mul.c` 的头注释还留下一条诚实的边界记录:教科书乘法的 `uint32*uint32` 中间值需要完整的无符号 64 位行为,这是当时 pcc-Python 表面不易表达的,所以乘法比加减晚拆出去。
 
 ### 16.2.3 生成代码里的值通道:内联标记快路径
 
-运行时层的双投影解决了正确性;性能要求把值投影内联进生成代码,省掉函数调用。这一步在 [pcc/py_frontend/codegen/binary_op_lowering.py](../../pcc/py_frontend/codegen/binary_op_lowering.py) 的 `_emit_inline_tagged_int_binop_or_call()`:当 `int` 表达式按装箱表示流动时(`_int_exprs_are_boxed()` 为真,此时 `IntType` 的存储类型是 `PyObject*`),`+`/`-`/`&`/`|`/`^` 不直接发射运行时调用,而是发射一段内联 CFG:
+运行时层的双投影解决了正确性;性能要求把值投影内联进生成代码,省掉函数调用。这一步在 [pcc/frontends/python/codegen/binary_op_lowering.py](../../pcc/frontends/python/codegen/binary_op_lowering.py) 的 `_emit_inline_tagged_int_binop_or_call()`:当 `int` 表达式按装箱表示流动时(`_int_exprs_are_boxed()` 为真,此时 `IntType` 的存储类型是 `PyObject*`),`+`/`-`/`&`/`|`/`^` 不直接发射运行时调用,而是发射一段内联 CFG:
 
 ```text
 ptrtoint 两操作数 → 各测低位 → and → cbranch
@@ -128,7 +128,7 @@ pcc 打印 0——2^80 mod 2^64。同样确认回绕的还有 `+`(`addf(2**63 - 
 
 因果链在源码里是三段,全部确认:
 
-1. [pcc/py_frontend/codegen/typed_int_abi.py](../../pcc/py_frontend/codegen/typed_int_abi.py) 的 `_type_is_typed_int_abi_param()` 对 `IntType` 无条件返回真——`a: int` 注解使参数获得 i64 原生 ABI,函数签名定型为 `define external i64 @user_..._mul(i64 %a, i64 %b)`。
+1. [pcc/frontends/python/codegen/typed_int_abi.py](../../pcc/frontends/python/codegen/typed_int_abi.py) 的 `_type_is_typed_int_abi_param()` 对 `IntType` 无条件返回真——`a: int` 注解使参数获得 i64 原生 ABI,函数签名定型为 `define external i64 @user_..._mul(i64 %a, i64 %b)`。
 2. `binary_op_lowering.py` 的 `_emit_binop_value()` 整数尾部:`lv = _to_int64(lhs); rv = _to_int64(rhs); return self._emit_binop_int(op, lv, rv)`。
 3. `_emit_binop_int()` 对 `+`/`-`/`*` 直接发射 `builder.add`/`builder.sub`/`builder.mul`——裸 i64 指令,无溢出检查,无慢路径。
 
@@ -150,10 +150,10 @@ pcc 打印 0——2^80 mod 2^64。同样确认回绕的还有 `+`(`addf(2**63 - 
 
 三样东西先于修复落地并持久化。第一,**类型语义规则**(2026-05-31 用户裁定,现为约束契约):Python 注解 `int` 意指任意精度整数;裸机器整数需要显式的 pcc 自有类型(如 `pcc.i64`);未装箱 i64 是优化,永远不是 `int` 的用户可见含义。第二,**5 个 xfail 回归**:[tests/python/test_native_typed_int_overflow.py](../../tests/python/test_native_typed_int_overflow.py) 以 `xfail(strict=False)` 固定了 `+`/`*` 参数溢出、链式 `a*b+c`、返回 ABI 携带、局部槽位携带、`<<` 提升五个验收判据——它们以 XFAIL 形态记录缺陷,等待修复之日翻绿摘标。第三,**优先级裁定**:P0 正确性 > 性能 > 包扩展;`def f(a: int, b: int)` 静默算错在 strict-native 可信度上打的洞,排在包回退收缩工作之前。
 
-修复于 2026-06-17 落地,五个验收判据全部翻绿、xfail 标记摘除。在 [pcc/py_frontend/codegen/typed_int_abi.py](../../pcc/py_frontend/codegen/typed_int_abi.py) 中,`int` 参数的默认 ABI 规则被修正:
+修复于 2026-06-17 落地,五个验收判据全部翻绿、xfail 标记摘除。在 [pcc/frontends/python/codegen/typed_int_abi.py](../../pcc/frontends/python/codegen/typed_int_abi.py) 中,`int` 参数的默认 ABI 规则被修正:
 
 ```python
-# pcc/py_frontend/codegen/typed_int_abi.py
+# pcc/frontends/python/codegen/typed_int_abi.py
 def _type_is_typed_int_abi_param(self, type_obj: Type) -> bool:
     # int defaults to boxed/tagged PyObject* ABI; raw i64 is opt-in only
     if isinstance(type_obj, IntType):
@@ -177,7 +177,7 @@ def _type_is_typed_int_abi_param(self, type_obj: Type) -> bool:
 
 ### 16.5.1 标记与宿主助手:[pcc/value_model.py](../../pcc/value_model.py) 是什么、不是什么
 
-`@pcc.valueclass` 装饰器定义在 [pcc/value_model.py](../../pcc/value_model.py)(经 [pcc/__init__.py](../../pcc/__init__.py) 惰性导出)。宿主 Python 端它做三件事:把类变成 `frozen=True` 的 dataclass(不可变性的宿主近似)、打上 `__pcc_valueclass__` 标记、经 `value_payload_layout()` 记录字段布局描述符。编译时,[pcc/py_frontend/type_infer.py](../../pcc/py_frontend/type_infer.py) 识别这个装饰器并生成 `ValueClassType`(定义于 [pcc/py_frontend/py_ast.py](../../pcc/py_frontend/py_ast.py))。
+`@pcc.valueclass` 装饰器定义在 [pcc/value_model.py](../../pcc/value_model.py)(经 [pcc/__init__.py](../../pcc/__init__.py) 惰性导出)。宿主 Python 端它做三件事:把类变成 `frozen=True` 的 dataclass(不可变性的宿主近似)、打上 `__pcc_valueclass__` 标记、经 `value_payload_layout()` 记录字段布局描述符。编译时,[pcc/frontends/python/type_infer.py](../../pcc/frontends/python/type_infer.py) 识别这个装饰器并生成 `ValueClassType`(定义于 [pcc/frontends/python/py_ast.py](../../pcc/frontends/python/py_ast.py))。
 
 必须先把这个文件的边界说清楚,因为它曾经被夸大,而纠偏本身成了一份调查([docs/investigations/python-valhalla-value-model-actual-state.md](../../docs/investigations/python-valhalla-value-model-actual-state.md)):文件里的 `ValuePayload`、`ValueBox`、`SpecializedArray`、`GenericSpecialization` 这些 dataclass 是**宿主侧投影助手,供规划测试使用,不是生产 C 运行时**。文件 docstring 与 `value_model_status()` 都写明了这一点——后者维护三张诚实清单:`implemented`(V1 标量载荷、V2 选定指针字段边界等)、`not_implemented`(完整 marshal 覆盖、扁平化布局元数据、`pcc.array[ValueClass]` 连续存储、单态化等)、以及 `production_runtime: False`。状态曾声称"实现到 V6",代码审视证明 V1–V6 多数只是元数据脚手架,状态面随即被改写为区分 implemented 与 scaffolding。一个把声明卫生(claim hygiene)当架构组件的项目,连自己的状态函数都要接受审计。
 
@@ -189,7 +189,7 @@ def _type_is_typed_int_abi_param(self, type_obj: Type) -> bool:
 
 ### 16.5.3 装箱桥:ValueBox 与对象边界
 
-载荷一旦流向动态上下文(`Any` 参数、容器、`print`),就跨过对象投影的接缝。运行时侧的桥是 `py_valuebox_new()`([pcc/py_runtime/src/py_class.c](../../pcc/py_runtime/src/py_class.c)):按类的字段数分配 `PyValueBoxObject`,类型标签 `PY_TYPE_VALUEBOX = 200`([pcc/py_runtime/include/py_runtime.h](../../pcc/py_runtime/include/py_runtime.h) 的公开枚举)。设计上它刻意复用实例兼容的布局——`py_valuebox_get_field`/`py_valuebox_set_field` 直接委托给 `py_instance_get_field`/`py_instance_set_field`,后者经 `pcc_gc_load_ptr()`/`pcc_gc_store_ptr()` 读写槽位。这一行委托买到的是第 10 章的全部基础设施:ValueBox 的指针载荷自动落入五后端共用的槽位追踪/更新契约,`py_gc_track` 注册、写屏障、重定位更新一个都不缺。**指针载荷的 GC 追踪不是值类的附加特性,是它寄生在统一对象图规则上的自然结果。**等值与哈希同样跨过桥:`py_obj_eq`/`py_obj_hash` 各有 `PY_TYPE_VALUEBOX` 分支(C 与 pcc-Python 两个运行时层都有),先比类、再经 GC 感知的槽位读取逐字段比较/混合,使分别装箱的等值载荷在字典里命中同一个键。
+载荷一旦流向动态上下文(`Any` 参数、容器、`print`),就跨过对象投影的接缝。运行时侧的桥是 `py_valuebox_new()`([pcc/runtime/src/py_class.c](../../pcc/runtime/src/py_class.c)):按类的字段数分配 `PyValueBoxObject`,类型标签 `PY_TYPE_VALUEBOX = 200`([pcc/runtime/include/py_runtime.h](../../pcc/runtime/include/py_runtime.h) 的公开枚举)。设计上它刻意复用实例兼容的布局——`py_valuebox_get_field`/`py_valuebox_set_field` 直接委托给 `py_instance_get_field`/`py_instance_set_field`,后者经 `pcc_gc_load_ptr()`/`pcc_gc_store_ptr()` 读写槽位。这一行委托买到的是第 10 章的全部基础设施:ValueBox 的指针载荷自动落入五后端共用的槽位追踪/更新契约,`py_gc_track` 注册、写屏障、重定位更新一个都不缺。**指针载荷的 GC 追踪不是值类的附加特性,是它寄生在统一对象图规则上的自然结果。**等值与哈希同样跨过桥:`py_obj_eq`/`py_obj_hash` 各有 `PY_TYPE_VALUEBOX` 分支(C 与 pcc-Python 两个运行时层都有),先比类、再经 GC 感知的槽位读取逐字段比较/混合,使分别装箱的等值载荷在字典里命中同一个键。
 
 接缝的另一半是诚实声明:每次装箱产生**新的** box。两次把同一个 `Point(1, 2)` 递给 `Any` 边界,得到两个不同的堆对象。这正是身份观察必须被拒绝的原因——下一小节的对照表与 16.7 的第一个案例研究都从这里出发。
 
@@ -254,8 +254,8 @@ V2 边界工作里一个普通的程序形状——装箱的 `Point` 从元组/�
 
 ## 练习
 
-1. **读源码验证。** [pcc/py_runtime/src/py_int_ops.c](../../pcc/py_runtime/src/py_int_ops.c) 的 `py_int_add()` 在双标记快路径里用 `__builtin_add_overflow` 检查 i64 溢出,而标记载荷只有 63 位。解释为什么这不是错误:追踪一个和落在 `[2^62, 2^63)` 区间的加法,说明它经过哪些函数、最终以什么表示返回。再对照 `py_int_neg()`,解释为什么它单独防 `INT64_MIN`。
+1. **读源码验证。** [pcc/runtime/src/py_int_ops.c](../../pcc/runtime/src/py_int_ops.c) 的 `py_int_add()` 在双标记快路径里用 `__builtin_add_overflow` 检查 i64 溢出,而标记载荷只有 63 位。解释为什么这不是错误:追踪一个和落在 `[2^62, 2^63)` 区间的加法,说明它经过哪些函数、最终以什么表示返回。再对照 `py_int_neg()`,解释为什么它单独防 `INT64_MIN`。
 2. **读 IR 形状。** `binary_op_lowering.py` 的 `_emit_inline_tagged_int_binop_or_call()` 只内联 `+`/`-`/`&`/`|`/`^`。论证为什么 `&`/`|`/`^` 的快路径不需要范围检查而 `+`/`-` 需要;再论证把 `*` 加入内联名单需要哪些额外的 IR(提示:126 位中间值、`llvm.smul.with.overflow` 与两次范围判定的关系)。
 3. **复现因果链(纸上)。** 不运行任何命令,仅凭 `typed_int_abi.py` 的 `_type_is_typed_int_abi_param()`、`binary_op_lowering.py` 的 `_emit_binop_value()` 整数尾部与 `_emit_binop_int()`,写出 `def mul(a: int, b: int) -> int: return a * b` 的函数签名与乘法指令的 IR 形状,并解释为什么调查中两次"分析层收紧"实验注定无效。
 4. **设计权衡论证。** 基于 16.3.3 的代价数据(方案二将反转 `test_py_typed_int_unboxed.py` 的 14 个未装箱断言、拆掉累加器快通道;方案一保住快通道但要求 typed-int 结果表示改为标记值并波及返回 ABI 与槽位存储),为两个方案各写一段最强辩护,然后给出你的裁定,并明确说明你的方案落地后义务 7 的 IR 形状闸门应当断言什么。
-5. **对照表审计。** 16.6 的表声称值类的每条身份能力都有源码可指的拒绝点。逐行核对:在 [pcc/py_frontend/type_infer.py](../../pcc/py_frontend/type_infer.py) 中找到 `id()`、`is`、`weakref.ref`、子类化、`__del__`、`__dict__`(含 `__slots__` 形态)各自的诊断;在 [pcc/py_runtime/src/py_weakref.c](../../pcc/py_runtime/src/py_weakref.c) 中找到运行时层的拒绝。哪一条防线只有编译期一层?构造一个绕过它的程序形状(提示:案例研究一的 from-import 记录),并说明仓库为什么选择记录而非封堵。
+5. **对照表审计。** 16.6 的表声称值类的每条身份能力都有源码可指的拒绝点。逐行核对:在 [pcc/frontends/python/type_infer.py](../../pcc/frontends/python/type_infer.py) 中找到 `id()`、`is`、`weakref.ref`、子类化、`__del__`、`__dict__`(含 `__slots__` 形态)各自的诊断;在 [pcc/runtime/src/py_weakref.c](../../pcc/runtime/src/py_weakref.c) 中找到运行时层的拒绝。哪一条防线只有编译期一层?构造一个绕过它的程序形状(提示:案例研究一的 from-import 记录),并说明仓库为什么选择记录而非封堵。

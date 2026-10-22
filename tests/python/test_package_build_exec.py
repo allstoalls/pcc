@@ -1,3 +1,8 @@
+"""Explicit external-tool compatibility regressions.
+
+Owned default execution is tested in test_package_owned_build_exec.py; these
+fixtures intentionally exercise host cc/Cython/Fortran/ninja compatibility.
+"""
 from __future__ import annotations
 
 import json
@@ -18,7 +23,7 @@ from pcc.package.build_exec import (
     execute_build_actions,
 )
 from pcc.package.metadata import current_platform_tag
-from pcc.package_schema import pcc_native_extension_suffix
+from pcc.package.schema import pcc_native_extension_suffix
 
 REPO = repo_root()
 
@@ -326,7 +331,7 @@ def test_execute_build_actions_invokes_fake_generic_toolchain(tmp_path, monkeypa
         execute=True,
         regenerate_cython=True,
         enforce_generated_c=True,
-        run_f2py=True,
+        run_f2py=True, build_mode="host",
     )
     assert report["ok"] is True
     actions = report["actions"]
@@ -382,7 +387,7 @@ def test_pcc_native_redirects_cpython_includes_to_pcc_capi(tmp_path):
         "demo-pkg",
         project,
         abi_mode="pcc-native",
-        from_meson_introspection=True,
+        from_meson_introspection=True, build_mode="host",
     )
     c_actions = [
         action
@@ -437,7 +442,7 @@ def test_pcc_native_redirect_absent_in_cpython_compat_mode(tmp_path):
         "demo-pkg",
         project,
         abi_mode="cpython-compat",
-        from_meson_introspection=True,
+        from_meson_introspection=True, build_mode="host",
     )
     c_actions = [
         action
@@ -460,7 +465,7 @@ def test_single_c_source_build_gets_pcc_headers_suffix_and_no_libpython(tmp_path
         project,
         execute=True,
         link_output=output,
-        abi_mode="pcc-native",
+        abi_mode="pcc-native", build_mode="host",
     )
 
     assert report["ok"] is True, report
@@ -485,7 +490,7 @@ def test_generated_c_policy_blocks_missing_artifact(tmp_path):
         "demo-pkg",
         project,
         execute=False,
-        enforce_generated_c=True,
+        enforce_generated_c=True, build_mode="host",
     )
     assert report["ok"] is False
     assert report["generated_c_provenance"][0]["status"] == "missing"
@@ -524,7 +529,7 @@ def test_build_exec_excludes_non_build_tree_surfaces(tmp_path):
         "demo-pkg",
         project,
         execute=False,
-        enforce_generated_c=True,
+        enforce_generated_c=True, build_mode="host",
     )
     assert report["ok"] is False
     assert len(report["generated_c_provenance"]) == 1
@@ -555,7 +560,7 @@ def test_build_exec_does_not_require_vendor_libs_when_meson_allows_fallback(tmp_
         encoding="utf-8",
     )
 
-    report = execute_build_actions("demo-pkg", project, execute=False)
+    report = execute_build_actions("demo-pkg", project, execute=False, build_mode="host")
     assert report["toolchain"]["requirements"]["blas"] is False
     assert report["toolchain"]["requirements"]["lapack"] is False
     assert not any(
@@ -593,7 +598,7 @@ def test_build_exec_applies_cython_version_from_pyproject(tmp_path):
         search_paths=[str(bin_dir)],
         execute=False,
         from_meson_introspection=True,
-        configure_meson=True,
+        configure_meson=True, build_mode="host",
     )
     assert any(
         diag.get("code") == "PCC-PKG-CYTHON-VERSION-TOO-OLD"
@@ -617,7 +622,7 @@ def test_execute_build_actions_links_with_vendor_binding(tmp_path, monkeypatch):
         regenerate_cython=True,
         run_f2py=True,
         link_output="demo_pkg/native.so",
-        libraries=["blas", "lapack"],
+        libraries=["blas", "lapack"], build_mode="host",
     )
     assert report["ok"] is True
     assert {binding["link_name"] for binding in report["vendor_bindings"]} == {
@@ -634,15 +639,15 @@ def test_execute_build_actions_links_with_vendor_binding(tmp_path, monkeypatch):
 
 
 def test_execute_build_actions_builds_reusable_numpy_capi_provider_with_include_dirs(
-    tmp_path, pcc_py_runtime_archive,
+    tmp_path, pcc_runtime_archive,
 ):
     if shutil.which("cc") is None:
         pytest.fail("C compiler is required for native provider build smoke")
     provider_dir = Path("utils/pcc_numpy_capi_provider").resolve()
     provider_source = provider_dir / "pccnpapi.c"
     fake_include = Path("utils/fake_libc_include").resolve()
-    runtime_include = Path("pcc/py_runtime/include").resolve()
-    runtime_lib = Path(pcc_py_runtime_archive).parent
+    runtime_include = Path("pcc/runtime/include").resolve()
+    runtime_lib = Path(pcc_runtime_archive).parent
     if not provider_source.exists():
         pytest.fail("reusable NumPy C-API provider source is not present")
     project = tmp_path / "pccnpapi-src"
@@ -655,7 +660,7 @@ def test_execute_build_actions_builds_reusable_numpy_capi_provider_with_include_
         library_dirs=[str(runtime_lib)],
         libraries=["py_runtime_pcc_py"],
         execute=True,
-        link_output="pccnpapi.so",
+        link_output="pccnpapi.so", build_mode="host",
     )
 
     assert report["ok"] is True
@@ -688,7 +693,7 @@ def test_execute_build_actions_uses_compile_commands_as_action_graph(
         execute=True,
         from_compile_commands=True,
         link_output="demo_pkg/from_ccdb.so",
-        libraries=["blas"],
+        libraries=["blas"], build_mode="host",
     )
     assert report["ok"] is True
     assert report["from_compile_commands"] is True
@@ -741,7 +746,7 @@ def test_eager_meson_extension_selection_excludes_lazy_function_imports(tmp_path
     assert [row["module"] for row in selected] == ["demo_pkg._native"]
     assert selected[0]["target"] == "demo_pkg/_native.cpython-313-darwin.so"
     assert selected[0]["output"].endswith(
-        "demo_pkg/_native.pcc3-pcc_native-macosx_14_0_arm64.so"
+        "demo_pkg/_native" + pcc_native_extension_suffix(current_platform_tag())
     )
 
 
@@ -761,7 +766,7 @@ def test_execute_build_actions_replays_one_meson_target_into_fresh_objects(
         from_compile_commands=True,
         meson_target=target,
         link_output="demo_pkg/_native.pcc3-pcc_native-macosx_14_0_arm64.so",
-        jobs=2,
+        jobs=2, build_mode="host",
     )
 
     assert report["ok"] is True
@@ -822,7 +827,7 @@ def test_execute_build_actions_uses_meson_introspection_as_action_graph(
         execute=True,
         from_meson_introspection=True,
         link_output="demo_pkg/from_meson.so",
-        libraries=["blas"],
+        libraries=["blas"], build_mode="host",
     )
     assert report["ok"] is True
     assert report["from_meson_introspection"] is True
@@ -858,7 +863,7 @@ def test_execute_build_actions_can_configure_meson_before_introspection(
         execute=True,
         from_meson_introspection=True,
         configure_meson=True,
-        link_output="demo_pkg/from_configured_meson.so",
+        link_output="demo_pkg/from_configured_meson.so", build_mode="host",
     )
     assert report["ok"] is True
     assert report["configure_meson"] is True
@@ -900,7 +905,7 @@ def test_execute_build_actions_materializes_meson_generated_targets(
         search_paths=[str(bin_dir)],
         execute=True,
         from_meson_introspection=True,
-        link_output="demo_pkg/from_generated_meson.so",
+        link_output="demo_pkg/from_generated_meson.so", build_mode="host",
     )
     assert report["ok"] is True
     assert [action["kind"] for action in report["actions"][:3]] == [
@@ -940,7 +945,7 @@ def test_execute_build_actions_blocks_libpython_linkage(tmp_path, monkeypatch):
         project,
         search_paths=[str(bin_dir)],
         execute=True,
-        link_output="demo_pkg/bad.so",
+        link_output="demo_pkg/bad.so", build_mode="host",
     )
     assert report["ok"] is False
     assert report["linkage"]["ok"] is False
@@ -965,6 +970,7 @@ def test_pcc_package_build_exec_cli(tmp_path):
             "-m",
             "pcc.package",
             "build-exec",
+            "--build-mode=host",
             "demo-pkg",
             "--path",
             str(project),
@@ -1019,6 +1025,7 @@ def test_pcc1_build_exec_does_not_need_host_python(tmp_path):
             "-m",
             "pcc.package",
             "build-exec",
+            "--build-mode=host",
             "demo-pkg",
             "--path",
             str(project),
@@ -1056,7 +1063,7 @@ def test_pcc1_build_exec_does_not_need_host_python(tmp_path):
 
 
 def test_pcc1_build_exec_builds_reusable_numpy_capi_provider_without_host_python(
-    tmp_path, pcc_py_runtime_archive,
+    tmp_path, pcc_runtime_archive,
 ):
     pcc1 = _find_current_pcc1()
     if pcc1 is None:
@@ -1069,8 +1076,8 @@ def test_pcc1_build_exec_builds_reusable_numpy_capi_provider_without_host_python
     provider_dir = Path("utils/pcc_numpy_capi_provider").resolve()
     provider_source = provider_dir / "pccnpapi.c"
     fake_include = Path("utils/fake_libc_include").resolve()
-    runtime_include = Path("pcc/py_runtime/include").resolve()
-    runtime_lib = Path(pcc_py_runtime_archive).parent
+    runtime_include = Path("pcc/runtime/include").resolve()
+    runtime_lib = Path(pcc_runtime_archive).parent
     if not provider_source.exists():
         pytest.fail("reusable NumPy C-API provider source is not present")
     project = tmp_path / "pccnpapi-src"
@@ -1085,6 +1092,7 @@ def test_pcc1_build_exec_builds_reusable_numpy_capi_provider_without_host_python
             "-m",
             "pcc.package",
             "build-exec",
+            "--build-mode=host",
             "pccnpapi",
             "--path",
             str(project),
@@ -1138,6 +1146,7 @@ def test_pcc1_generated_c_policy_blocks_missing_artifact(tmp_path):
             "-m",
             "pcc.package",
             "build-exec",
+            "--build-mode=host",
             "demo-pkg",
             "--path",
             str(project),
@@ -1152,7 +1161,9 @@ def test_pcc1_generated_c_policy_blocks_missing_artifact(tmp_path):
     assert proc.returncode == 2
     report = json.loads(proc.stdout)
     assert report["ok"] is False
-    assert "PCC-PKG-GENERATED-C-MISSING" in report["diagnostics"]
+    assert any(
+        diag["code"] == "PCC-PKG-GENERATED-C-MISSING" for diag in report["diagnostics"]
+    )
 
 
 def test_pcc1_build_exec_compile_commands_does_not_need_host_python(tmp_path):
@@ -1174,6 +1185,7 @@ def test_pcc1_build_exec_compile_commands_does_not_need_host_python(tmp_path):
             "-m",
             "pcc.package",
             "build-exec",
+            "--build-mode=host",
             "demo-pkg",
             "--path",
             str(project),
@@ -1194,7 +1206,11 @@ def test_pcc1_build_exec_compile_commands_does_not_need_host_python(tmp_path):
     report = json.loads(proc.stdout)
     assert report["ok"] is True
     assert report["from_compile_commands"] is True
-    assert any(action["kind"] == "compile_command" for action in report["actions"])
+    assert [
+        action["kind"]
+        for action in report["actions"]
+        if action["kind"].startswith("compile_command")
+    ] == ["compile_command_c", "compile_command_fortran"]
     assert any(action["kind"] == "native_link" for action in report["actions"])
 
 
@@ -1217,6 +1233,7 @@ def test_pcc1_build_exec_meson_introspection_does_not_need_host_python(tmp_path)
             "-m",
             "pcc.package",
             "build-exec",
+            "--build-mode=host",
             "demo-pkg",
             "--path",
             str(project),
@@ -1265,6 +1282,7 @@ def test_pcc1_build_exec_can_configure_meson_without_host_python(tmp_path):
             "-m",
             "pcc.package",
             "build-exec",
+            "--build-mode=host",
             "demo-pkg",
             "--path",
             str(project),
@@ -1322,6 +1340,7 @@ def test_pcc1_build_exec_materializes_meson_generated_targets_without_host_pytho
             "-m",
             "pcc.package",
             "build-exec",
+            "--build-mode=host",
             "demo-pkg",
             "--path",
             str(project),

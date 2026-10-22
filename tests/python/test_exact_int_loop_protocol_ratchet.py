@@ -167,7 +167,7 @@ def test_exact_int_loop_and_promotion_match_cpython_on_every_backend(tmp_path):
 def test_promotion_matches_cpython_with_the_c_runtime_mirror(tmp_path, monkeypatch):
     """The ownership-transferring root store has a C mirror (py_obj.c); the
     cc-mode link exercises it on the same tagged -> bignum replacement."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "promote_cc.py"
     exe = tmp_path / "promote_cc.out"

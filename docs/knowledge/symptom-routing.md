@@ -7,7 +7,7 @@ Search for the error text or symbol after locating its current code path.
 Read the matching experiment and later corrections, expanding as needed.
 Titles, snippets and status are historical locators, not current diagnosis.
 
-589 investigations.
+593 investigations.
 
 - [`2**52` does not round-trip through pcc1's float formatting or parsing](../investigations/pcc1-float-repr-strtod-17-digit-defect.md) — **Root cause identified, minimised to a two-line probe, bisected per stage, and**
   - `stage2 -> stage3` · `verify: cmp pcc2 pcc3` · `0x...004` · `0x...000` · `1000.0` · `123456789012345.0`
@@ -403,6 +403,8 @@ Titles, snippets and status are historical locators, not current diagnosis.
   - `PCC_GC_BACKEND=0..4` · `gc.collect()` · `9.526s` · `11.037s` · `/usr/lib/libSystem.B.dylib` · `compile_rc=0`
 - [Investigation: cycle GC clears referents before resurrection finalizers](../investigations/gc-transitive-resurrection-clear-order.md) — **resolved**
   - `__del__` · `, objects reachable from` · `self.cargo` · `test_resurrection_is_transitive` · `AttributeError: cargo` · `test_resurrection_does_not_block_other_cleanup`
+- [Investigation: dataclass factory defaults corrupt section data](../investigations/dataclass-factory-default-capture-corrupts-section-data.md) — **Active — 2026-10-01. Source12 fixes independent container factories and the**
+  - `compact-unwind local function relocation resolves outside __TEXT,__text` · `field(default_factory=F)` · `build/remediation-20261001/frozen-current-v10-identity.json` · `PCC_PYTHON_IR_PASSES=off` · `PCC_GC_REFCOUNT_PROVENANCE_PROBE=2` · `runtime-v10/libpy_runtime_pcc_py.a`
 - [Investigation: deep dotted package attribute access `a.b.c.X` raises AttributeError (no-libpython)](../investigations/python-deep-dotted-package-attr-no-libpython.md) — **resolved 2026-05-31 — fix landed in `_native_module_expr_export_info`**
   - `a.b.c.X` · `_native_module_expr_export_info` · `tests/python/test_native_package_deep_dotted_attr.py` · `import a.b.c; a.b.c.X` · `AttributeError: b` · `--backend self --python-libpython=off`
 - [Investigation: default GC should collect closure capture cycles](../investigations/gc-default-closure-cycle-capture.md) — **resolved**
@@ -559,6 +561,8 @@ Titles, snippets and status are historical locators, not current diagnosis.
   - `py_decref` · `PCC_BOOTSTRAP_FULL_REBUILD=1 ... test_pcc_bootstrap_full_gc1.py` · `PCC_BOOTSTRAP_FULL_REBUILD=1 ... test_pcc_bootstrap_full_gc2.py` · `PCC_BOOTSTRAP_FULL_REBUILD=1 ... gc0/gc3/gc4` · `tests/python/gc_production_contract` · `pcc1 -> pcc2`
 - [Investigation: GC4 bootstrap pcc-Python GC config fast path](../investigations/gc4-bootstrap-config-fastpath-2026-06-05.md) — **resolved for the focused backend #4 full bootstrap gate; five-GC matrix still**
   - `pcc1 -> pcc2 -> pcc3` · `pcc2 == pcc3` · `compile_python_total` · `multi_frontend_codegen_parallel` · `parse_and_lift` · `cli_bootstrap.py`
+- [Investigation: GC4 frees walk the whole relocation set](../investigations/gc-backend4-relocation-set-free-walk.md) — **active — 2026-10-14. The free-path walk is fixed by a member filter; the**
+  - `PCC_GC_BACKEND=4` · `pcc.unsafe` · `PCC_PYTHON_IR_PASSES=off` · `Node(kind, value, children)` · `live_heap_bench*.py` · `pcc_gc_relocation_set_size()`
 - [Investigation: GC4-only stack overflow — trashcan fails to defer the `__del__`-chain dealloc cascade (test_gc_trashcan segfaults under PCC_GC_BACKEND=4)](../investigations/gc4-trashcan-del-chain-dealloc-recursion-overflow.md) — **resolved (crash) — root cause found and fixed 2026-08-07 late session: the**
   - `__del__` · `(header.flags & 0x10000) != 0` · `_trash_enqueue` · `py_obj_dealloc.pcc_dealloc_with_trash` · `tests/python/test_gc_trashcan.py` · `PCC_GC_BACKEND=4`
 - [Investigation: generated type-tag alias loads crash current pcc1 during frontend module initialization](../investigations/pcc1-generated-type-tag-alias-module-init-pin.md) — **active**
@@ -659,7 +663,7 @@ Titles, snippets and status are historical locators, not current diagnosis.
   - `user_pcc_cli_bootstrap__native_requires_from_tree` · `@.cpy.modref.package_metadata_paths` · `pcc.package_metadata_paths`
 - [Investigation: method ABI rejects distinct equal literal aggregates](../investigations/method-literal-aggregate-abi-equality.md) — **active**
   - `{ i64, i64 }` · `CompilerRecordSpanArena.append` · `LiteralStructType([i64, i64])` · `_method_abi_type_matches` · `CoreHelperMixin._ir_type_matches`
-- [Investigation: migrate pcc's default host to CPython 3.15.0rc1](../investigations/cpython-315rc1-host-migration.md) — **resolved**
+- [Investigation: migrate pcc's default host to CPython 3.15 (rc1, then 3.15.0)](../investigations/cpython-315rc1-host-migration.md) — **resolved**
   - `pyproject.toml` · `llvmlite==0.46.0` · `uv run` · `uv run python` · `.venv/bin/python` · `.python-version`
 - [Investigation: migrate pcc1's compiler hot path to an Indexed Function Kernel](../investigations/pcc1-indexed-function-kernel-native-data-plane.md) — **active**
   - `pcc_gc_granule_is_object_start` · `pcc_gc_load_ptr` · `pcc1-stage2-emit-throughput-and-memory.md` · `pcc1-native-vs-cpython-per-operation-cost.md` · `granule-span-lookup-radix.md` · `legacy_used_values`
@@ -820,6 +824,8 @@ Titles, snippets and status are historical locators, not current diagnosis.
   - `pcc.py_frontend.codegen.ownership_lowering` · `or ptr null, i1` · `isinstance(ty, (NoneType, BoolType, IntType, FloatType, DynType))` · `or i1 0, i1` · `_emit_if_expr` · `ct if acc is None else builder.or_(acc, ct)`
 - [Investigation: pcc1 loses the C-ABI variadic decorator bit](../investigations/pcc1-c-abi-variadic-decorator-bit-lost.md) — **resolved**
   - `freestanding_stdio.py` · `va_start` · `@c_abi_variadic_export` · `i1 true` · `inttoptr i1 true` · `FunctionType___init___dyn`
+- [Investigation: pcc1 misses the 300 s prior-gate compile on ARM CI](../investigations/pcc1-prior-gate-compile-time.md) — **active — 2026-10-19. Breakdown and two admission causes measured; the**
+  - `tests/fixtures/native/worker_size_priors.py` · `--auto-tree-rss-ceiling-bytes 4294967296` · `measure_prior.py` · `ci_worker_size_prior_gate.environment()` · `PCC_RUNTIME_CC/PCC_HOST_PYTHON/PCC_HOST_PCC=/usr/bin/false` · `compile.stderr`
 - [Investigation: pcc1 native JSON string escapes](../investigations/pcc1-native-json-string-escapes.md) — **resolved locally 2026-06-05.**
   - `json.loads` · `json.dumps` · `python3 -c` · `gc0-bootstrap-runtime-hotpaths-2026-06-05.md` · `py_json.c` · `pcc/py_runtime/src/py_json.c::json_parse_string()`
 - [Investigation: pcc1 native json.dumps serializes tuples as null](../investigations/pcc1-native-json-tuple-serializes-null.md) — **active**
@@ -995,6 +1001,8 @@ Titles, snippets and status are historical locators, not current diagnosis.
   - `_l1_codegen_static_methods` · `_PyEval_EvalFrameDefault` · `_platform_memcmp` · `FunctionStackMapPlan.instruction_suffix_lines(block, index)` · `instruction_suffix_labels` · `self_backend_emit.emit_function_blocks`
 - [Investigation: stage1 lazy-import discovery spawns host probes that execute the pcc package](../investigations/stage1-lazy-import-host-probe-spawn.md) — **Resolved locally on 2026-09-17. Red→green regression landed; the 420-second**
   - `_expand_recursive_stdlib` · `_host_find_spec_origin` · `importlib.util.find_spec` · `pcc/__init__.py` · `roadmap_deepwire._install_pipeline_profile` · `subprocess.check_output`
+- [Investigation: Stage1 links exceed the compact stack-map memory budget](../investigations/stage1-link-memory-budget.md) — **active — 2026-10-14. Measured on CI run 38584467472 (`9cbcb1e9`); the Mach-O**
+  - `pe_x86_64.py` · `platform-qualification/shared/stage1.log:21236` · `macho_link.py` · `worker-prior-gate/stage1.log:20020` · `profile/stage1.result.json` · `. The process-tree samples (`
 - [Investigation: Stage1 receipt validator rejects current producer metric labels](../investigations/stage1-receipt-metric-contract-rejected.md) — **resolved**
   - `test_build_receipt_validates_current_producer_metric_contract[producer]`
 - [Investigation: stage1 self-backend ir-scaffold segfault](../investigations/stage1-self-backend-ir-scaffold-segfault.md) — **active**

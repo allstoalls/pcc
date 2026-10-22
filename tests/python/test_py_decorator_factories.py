@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def test_recursive_guard_decorator_factory_compiles_no_libpython_self_backend(tmp_path):

@@ -90,7 +90,7 @@ def gray_count_native_toolchain(request):
     assert archive.is_file(), archive
     # Validate the supplied production archive against this source tree through
     # the shared fixture. Requiring the environment above prevents auto-build.
-    checked_archive = request.getfixturevalue("pcc_py_runtime_archive")
+    checked_archive = request.getfixturevalue("pcc_runtime_archive")
     assert Path(checked_archive).resolve() == archive
     return compiler, archive
 

@@ -1,11 +1,12 @@
-import pcc.evaluater.c_evaluator as c_evaluator
+import pcc.frontends.c.evaluator.c_evaluator as c_evaluator
 
-from click.testing import CliRunner
 from pathlib import Path
 
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.pcc import main
-from pcc.project import TranslationUnit
+import pytest
+
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.driver.cli_core import cli_main
+from pcc.driver.project import TranslationUnit
 
 
 def test_default_compile_cache_dir_prefers_xdg_cache_home(monkeypatch, tmp_path):
@@ -35,7 +36,11 @@ def test_evaluate_uses_disk_compile_cache_by_default(tmp_path, monkeypatch):
 
     assert CEvaluator().evaluate(source, optimize=False, use_system_cpp=False) == 7
 
-    def unexpected_cache_miss(unit_name, codestr):
+    original_compile = c_evaluator._compile_preprocessed_translation_unit_artifact
+
+    def unexpected_cache_miss(unit_name, codestr, **kwargs):
+        if unit_name == "__pcc_result.c":
+            return original_compile(unit_name, codestr, **kwargs)
         raise AssertionError(f"unexpected cache miss for {unit_name}")
 
     monkeypatch.setattr(
@@ -99,18 +104,20 @@ def test_compile_translation_units_recompiles_only_dirty_units(tmp_path, monkeyp
     assert compiled_names == ["b.c"]
 
 
-def test_cli_uses_disk_compile_cache_by_default(tmp_path, monkeypatch):
+def test_cli_uses_disk_compile_cache_by_default(tmp_path, monkeypatch, capfd):
     cache_dir = tmp_path / "compile-cache"
     main_path = tmp_path / "main.c"
     main_path.write_text("int main(void) { return 0; }\n", encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
-        ["--cache-dir", str(cache_dir), str(main_path)],
-    )
-    assert result.exit_code == 0, result.output
+    result = cli_main(["--cache-dir", str(cache_dir), str(main_path)])
+    captured = capfd.readouterr()
+    assert result == 0, captured.out + captured.err
 
-    def unexpected_cache_miss(unit_name, codestr):
+    original_compile = c_evaluator._compile_preprocessed_translation_unit_artifact
+
+    def unexpected_cache_miss(unit_name, codestr, **kwargs):
+        if unit_name == "__pcc_result.c":
+            return original_compile(unit_name, codestr, **kwargs)
         raise AssertionError(f"unexpected cache miss for {unit_name}")
 
     monkeypatch.setattr(
@@ -119,14 +126,12 @@ def test_cli_uses_disk_compile_cache_by_default(tmp_path, monkeypatch):
         unexpected_cache_miss,
     )
 
-    result = CliRunner().invoke(
-        main,
-        ["--cache-dir", str(cache_dir), str(main_path)],
-    )
-    assert result.exit_code == 0, result.output
+    result = cli_main(["--cache-dir", str(cache_dir), str(main_path)])
+    captured = capfd.readouterr()
+    assert result == 0, captured.out + captured.err
 
 
-def test_cli_no_cache_bypasses_disk_compile_cache(tmp_path, monkeypatch):
+def test_cli_no_cache_bypasses_disk_compile_cache(tmp_path, monkeypatch, capfd):
     cache_dir = tmp_path / "compile-cache"
     main_path = tmp_path / "main.c"
     main_path.write_text("int main(void) { return 0; }\n", encoding="utf-8")
@@ -135,7 +140,8 @@ def test_cli_no_cache_bypasses_disk_compile_cache(tmp_path, monkeypatch):
     original_compile = c_evaluator._compile_preprocessed_translation_unit_artifact
 
     def tracking_compile(unit_name, codestr, **kwargs):
-        compiled_names.append(unit_name)
+        if unit_name != "__pcc_result.c":
+            compiled_names.append(unit_name)
         return original_compile(unit_name, codestr, **kwargs)
 
     monkeypatch.setattr(
@@ -144,32 +150,29 @@ def test_cli_no_cache_bypasses_disk_compile_cache(tmp_path, monkeypatch):
         tracking_compile,
     )
 
-    result = CliRunner().invoke(
-        main,
-        ["--cache-dir", str(cache_dir), "--no-cache", str(main_path)],
-    )
-    assert result.exit_code == 0, result.output
+    result = cli_main(["--cache-dir", str(cache_dir), "--no-cache", str(main_path)])
+    captured = capfd.readouterr()
+    assert result == 0, captured.out + captured.err
     assert compiled_names == ["__pcc_eval__.c"]
 
 
 def test_compiler_cache_fingerprint_tracks_c_codegen_and_ir_analysis_package_files():
     tracked_files = {
         Path(path)
-        .relative_to(Path(c_evaluator.__file__).resolve().parents[1])
+        .relative_to(Path(c_evaluator.__file__).resolve().parents[3])
         .as_posix()
         for path in c_evaluator._compiler_cache_tracked_files()
     }
 
-    assert "codegen/__init__.py" in tracked_files
-    assert "codegen/c_codegen.py" in tracked_files
-    assert "codegen/c_varargs.py" in tracked_files
-    assert "ir_passes/__init__.py" in tracked_files
-    assert "ir_passes/instcombine.py" in tracked_files
-    assert "ir_passes/parity.py" in tracked_files
-    assert "ssa/__init__.py" in tracked_files
-    assert "ssa/builder.py" in tracked_files
-    assert "ssa/sccp.py" in tracked_files
-    assert "parse/c_parse_driver.py" in tracked_files
+    assert "frontends/c/codegen/__init__.py" in tracked_files
+    assert "frontends/c/codegen/c_codegen.py" in tracked_files
+    assert "frontends/c/codegen/c_varargs.py" in tracked_files
+    assert "ir/optimization/instcombine.py" in tracked_files
+    assert "ir/optimization/mem2reg.py" in tracked_files
+    assert "frontends/c/ssa/__init__.py" in tracked_files
+    assert "frontends/c/ssa/builder.py" in tracked_files
+    assert "frontends/c/ssa/sccp.py" in tracked_files
+    assert "frontends/c/parse/c_parse_driver.py" in tracked_files
 
 
 def test_compiler_cache_fingerprint_tracks_bytes_when_metadata_is_unchanged(tmp_path, monkeypatch):
@@ -210,21 +213,21 @@ def test_compile_cache_key_tracks_disabled_pass_selection(monkeypatch):
     assert disabled_key != default_key
 
 
-def test_compile_cache_key_tracks_backend_selection():
+def test_compile_cache_key_tracks_owned_backend_identity():
     source = "int main(void) { return 0; }\n"
 
-    llvm_key = c_evaluator._compile_cache_key(
+    current_key = c_evaluator._compile_cache_key(
         "probe.c",
         source,
-        backend_sig="llvm:llvmlite-default:support",
+        backend_sig="self:self-aarch64-asm-v0:support",
     )
-    llvm_capi_key = c_evaluator._compile_cache_key(
+    changed_emitter_key = c_evaluator._compile_cache_key(
         "probe.c",
         source,
-        backend_sig="llvm_capi:llvm-capi-wip:support",
+        backend_sig="self:self-aarch64-asm-v1:support",
     )
 
-    assert llvm_capi_key != llvm_key
+    assert changed_emitter_key != current_key
 
 
 def test_evaluate_cache_misses_when_disabled_pass_selection_changes(
@@ -243,7 +246,8 @@ def test_evaluate_cache_misses_when_disabled_pass_selection_changes(
     compiled_names = []
 
     def tracking_compile(*args, **kwargs):
-        compiled_names.append(args[0].name)
+        if args[0].name != "__pcc_result.c":
+            compiled_names.append(args[0].name)
         return original_compile(*args, **kwargs)
 
     monkeypatch.setattr(
@@ -257,7 +261,8 @@ def test_evaluate_cache_misses_when_disabled_pass_selection_changes(
     assert compiled_names == ["__pcc_eval__.c"]
 
 
-def test_evaluate_cache_misses_when_backend_changes(tmp_path, monkeypatch):
+@pytest.mark.parametrize("backend", ["llvm", "llvm_capi", "ir", "llvmlite", "llvm-capi"])
+def test_evaluate_cache_rejects_removed_backend_before_compilation(tmp_path, monkeypatch, backend):
     cache_dir = tmp_path / "compile-cache"
     monkeypatch.setenv("PCC_COMPILE_CACHE_DIR", str(cache_dir))
 
@@ -278,12 +283,9 @@ def test_evaluate_cache_misses_when_backend_changes(tmp_path, monkeypatch):
         tracking_compile,
     )
 
-    assert CEvaluator(backend="llvm_capi").evaluate(
-        source,
-        optimize=False,
-        use_system_cpp=False,
-    ) == 0
-    assert compiled_names == ["__pcc_eval__.c"]
+    with pytest.raises(ValueError, match="expected one of: self"):
+        CEvaluator(backend=backend).evaluate(source, optimize=False, use_system_cpp=False)
+    assert compiled_names == []
 
 
 def test_evaluator_backend_self_env_can_run_simple_program(monkeypatch):

@@ -3,14 +3,14 @@
 Each file under ``tests/python/gc/test_pcc_bootstrap_full_gc*.py`` runs one GC
 backend's real self-host chain. One backend-agnostic ``pcc1`` is built once per
 pytest session and shared, then that GC file runs ``pcc1 -> pcc2 -> pcc3`` via
-``bootstrap.sh --reuse-stage1`` and checks stages present, no libpython linkage,
-and ``pcc2 == pcc3`` after normalization.
+``bootstrap.py --reuse-stage1`` and checks stages present, no libpython linkage,
+and ``pcc2 == pcc3`` in their original bytes.
 
 Speed comes from sharing stage1 and content-addressed completed backend
 results, never from accepting partial evidence. ``pcc1`` does not depend on
 ``PCC_GC_BACKEND`` because the collector is selected at stage2+ runtime. A
 backend success manifest is written only after its real ``pcc1 -> pcc2 ->
-pcc3`` chain, no-libpython checks, publish barriers, and normalized fixed-point
+pcc3`` chain, no-libpython checks, publish barriers, and raw-byte fixed-point
 comparison pass. Interrupted runs can validate and resume those complete
 same-source results; stale, partial, or mismatched results rebuild.
 
@@ -29,8 +29,8 @@ import os
 import signal
 import subprocess
 
-from pcc.dependency_verdict import probe_platform_capability
-from pcc.bootstrap_cache_identity import (
+from pcc.diagnostics.dependency_verdict import probe_platform_capability
+from pcc.driver.bootstrap_cache_identity import (
     bootstrap_object_cache_identity,
     bootstrap_source_files,
     bootstrap_source_sha256,
@@ -43,10 +43,10 @@ from pathlib import Path
 
 import pytest
 
-from pcc.bootstrap_profile_report import build_bootstrap_profile_report
+from pcc.diagnostics.bootstrap_profile_report import build_bootstrap_profile_report
 from tests.python.test_bootstrap_gate_baseline import (
     _REPO_ROOT,
-    _byte_identical_after_normalize,
+    _byte_identical,
     _is_macos_arm64,
     _links_libpython,
 )
@@ -55,7 +55,7 @@ from tests.python.process_timeout import (
     run_process_group_timeout,
 )
 
-_BOOTSTRAP_SH = _REPO_ROOT / "scripts" / "bootstrap.sh"
+_BOOTSTRAP_PY = _REPO_ROOT / "scripts" / "bootstrap.py"
 _PROCESS_TREE_SAMPLER = _REPO_ROOT / "scripts" / "run_process_tree_sample.py"
 _SHARED_STAGE1_DIR = _REPO_ROOT / "build" / "bootstrap-pytest-shared-stage1"
 _SHARED_STAGE1_LOCK = _REPO_ROOT / "build" / "bootstrap-pytest-shared-stage1.lock"
@@ -247,10 +247,10 @@ def _completed_backend_output_records(
         pcc1_record["size"] == shared_pcc1_record["size"]
         and pcc1_record["sha256"] == shared_pcc1_record["sha256"]
     ), f"backend GC {gc_backend} pcc1 does not match the shared stage1 input"
-    assert _byte_identical_after_normalize(pcc2, pcc3), (
+    assert _byte_identical(pcc2, pcc3), (
         "Self-host determinism failed under "
         f"PCC_GC_BACKEND={gc_backend}: pcc2 and pcc3 are not "
-        "byte-identical after normalization"
+        "byte-identical in their original bytes"
     )
     profile_dir = _bootstrap_profile_dir(gc_backend)
     return {
@@ -259,6 +259,7 @@ def _completed_backend_output_records(
         "pcc3": _path_record(pcc3),
         "stage2_result": _successful_stage_result_record(profile_dir, 2, pcc2),
         "stage3_result": _successful_stage_result_record(profile_dir, 3, pcc3),
+        # Historical schema key; the check above requires strict raw-byte equality.
         "normalized_pcc2_pcc3_equal": True,
         "links_libpython": False,
     }
@@ -512,8 +513,8 @@ def _build_shared_stage1(runtime_archive: Path) -> Path:
         if _shared_pcc1_needs_rebuild(pcc1):
             _SHARED_STAGE1_DIR.mkdir(parents=True, exist_ok=True)
             cmd = [
-                "bash",
-                str(_BOOTSTRAP_SH),
+                sys.executable,
+                str(_BOOTSTRAP_PY),
                 "--backend",
                 "self",
                 "--out-dir",
@@ -546,7 +547,7 @@ def _build_shared_stage1(runtime_archive: Path) -> Path:
 
 
 @pytest.fixture(scope="session")
-def shared_stage1_pcc1(pcc_py_runtime_archive) -> Path:
+def shared_stage1_pcc1(pcc_runtime_archive) -> Path:
     # The stage-1 publish barrier asks the freshly built standalone pcc1 to
     # compile a smoke program.  That binary cannot rebuild its own runtime
     # archive, so make the host-built archive an explicit fixture dependency
@@ -555,7 +556,7 @@ def shared_stage1_pcc1(pcc_py_runtime_archive) -> Path:
         pytest.fail(
             "Full self-backend bootstrap is currently verified on macOS arm64 only"
         )
-    return _build_shared_stage1(pcc_py_runtime_archive)
+    return _build_shared_stage1(pcc_runtime_archive)
 
 
 def _pid_alive(pid: int) -> bool:
@@ -1258,8 +1259,8 @@ def _run_bootstrap_stage(
 ) -> BootstrapBackendResult:
     """Run one bootstrap stage under ``PCC_GC_BACKEND=gc_backend``."""
     bootstrap_cmd = [
-        "bash",
-        str(_BOOTSTRAP_SH),
+        sys.executable,
+        str(_BOOTSTRAP_PY),
         "--backend",
         "self",
         "--out-dir",
@@ -1793,10 +1794,24 @@ def _fake_completed_backend_tree(
     monkeypatch.setattr(module, "_bootstrap_source_sha256", lambda: "source-a")
     monkeypatch.setattr(module, "_links_libpython", lambda _path: False)
     monkeypatch.setattr(
-        module, "_byte_identical_after_normalize", lambda _left, _right: True
+        module, "_byte_identical", lambda _left, _right: True
     )
     monkeypatch.delenv("PCC_BOOTSTRAP_FULL_REBUILD", raising=False)
     return out_dir, shared_pcc1, runtime_archive
+
+
+def test_bootstrap_success_manifest_rejects_raw_byte_drift(tmp_path, monkeypatch):
+    from tests.python import test_bootstrap_gate_baseline as baseline
+
+    out_dir, shared_pcc1, runtime_archive = _fake_completed_backend_tree(
+        tmp_path, monkeypatch
+    )
+    monkeypatch.setattr(sys.modules[__name__], "_byte_identical", baseline._byte_identical)
+    (out_dir / "pcc3").write_bytes(b"different-fixed-point")
+
+    with pytest.raises(AssertionError, match="byte-identical in their original bytes"):
+        _write_bootstrap_success_manifest("0", shared_pcc1, runtime_archive)
+    assert not (out_dir / _BOOTSTRAP_SUCCESS_MANIFEST).exists()
 
 
 def test_bootstrap_success_manifest_reuses_only_complete_content_addressed_result(

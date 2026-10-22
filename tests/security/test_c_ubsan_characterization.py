@@ -17,7 +17,7 @@ lowering so that:
   1. the exact gap ("no UBSan trap is emitted today") is documented in an
      executable, greppable form; and
   2. when the later SEC-P1-UBSAN slice adds an opt-in ``-fsanitize=undefined``
-     pass to ``pcc/codegen/c_codegen.py``, these ``_assert_no_ubsan_guard``
+     pass to ``pcc/frontends/c/codegen/c_codegen.py``, these ``_assert_no_ubsan_guard``
      checks *fail* precisely for the instrumented cases — that flip is the
      measurable "trap now emitted" gate described in ``docs/design/pcc-ubsan.md``.
 
@@ -72,7 +72,7 @@ repo_root = os.path.dirname(os.path.dirname(this_dir))
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
-from pcc.evaluater.c_evaluator import CEvaluator
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
 
 _IS_AARCH64 = platform.machine().lower() in ("arm64", "aarch64")
 _aarch64_only = pytest.mark.pcc_gate(

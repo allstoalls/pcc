@@ -8,7 +8,7 @@ from pathlib import Path
 from tests.runtime_build_cache import cached_pcc_python_runtime, cached_threaded_pcc_python_runtime
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 
 
 def _cc() -> str:
@@ -759,7 +759,7 @@ def test_coroutine_root_public_symbols_are_wired():
     mapped_src = (
         RUNTIME_DIR / "py" / "freestanding_gc_mapped_roots.py"
     ).read_text(encoding="utf-8")
-    abi = (REPO_ROOT / "pcc" / "py_frontend" / "codegen" / "runtime_abi.py").read_text(
+    abi = (REPO_ROOT / "pcc" / "frontends" / "python" / "codegen" / "runtime_abi.py").read_text(
         encoding="utf-8"
     )
 

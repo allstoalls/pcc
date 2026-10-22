@@ -9,11 +9,10 @@ low-level hazard apply to both frontends.
 The Python helpers compile a program through the strict no-libpython path
 (``libpython_mode="off"``, ``ir_scaffold_mode="on"``) and run the produced
 native binary, then compare against a CPython oracle. The ``backend`` argument
-selects the LLVM path (default) or pcc's own LLVM-free ``self`` backend.
+selects pcc's owned ``self`` backend, which is also the default.
 
 Each pcc compile runs in a FRESH child process. ``compile_python`` keeps
-process-level codegen/LLVM state that is not safe to reuse across different
-backends in one interpreter, so isolating every compile keeps the suite
+process-level codegen state, so isolating every compile keeps the suite
 deterministic regardless of fixture ordering.
 """
 from __future__ import annotations
@@ -33,7 +32,7 @@ if _REPO_ROOT not in sys.path:
 # Child program: compile one .py to a native binary via pcc, no-libpython.
 _COMPILE_CHILD = (
     "import sys\n"
-    "from pcc.py_frontend.pipeline import compile_python\n"
+    "from pcc.frontends.python.pipeline import compile_python\n"
     "compile_python(sys.argv[1], sys.argv[2], libpython_mode='off',\n"
     "               ir_scaffold_mode='on', backend=sys.argv[3])\n"
 )
@@ -48,14 +47,14 @@ def compile_and_run():
     child's stderr so it surfaces as a clear test error.
     """
 
-    def _run(program: str, backend: str = "llvm", timeout: float = 240.0):
+    def _run(program: str, backend: str = "self", timeout: float = 240.0):
         d = tempfile.mkdtemp(prefix="pcc_sec_")
         src = os.path.join(d, "prog.py")
         with open(src, "w") as f:
             f.write(program)
         exe = os.path.join(d, "prog")
-        # Each compile runs in a fresh child interpreter so per-backend process
-        # state never leaks between the `llvm` and `self` runs in one session.
+        # Each compile runs in a fresh child interpreter so codegen state
+        # never leaks between programs in one session.
         comp = subprocess.run(
             [sys.executable, "-c", _COMPILE_CHILD, src, exe, backend],
             capture_output=True,

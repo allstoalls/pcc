@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from pcc.native_ir.mem2reg import mem2reg_text
+from pcc.ir.optimization.mem2reg import mem2reg_text
 
 
 _OVERWRITTEN = """define i64 @pick(i1 %condition) {
@@ -89,8 +89,8 @@ def test_unread_stores_do_not_create_a_dead_phi_cycle():
     assert result.count(" = phi i64 ") == 1
 
 
-@pytest.mark.skipif(sys.platform != "darwin" or platform.machine() != "arm64",
-                    reason="executes owned Mach-O/AArch64 output")
+# executes owned Mach-O/AArch64 output
+@pytest.mark.pcc_gate(probe=lambda: not (sys.platform != "darwin" or platform.machine() != "arm64"))
 def test_pruned_overwrite_and_loop_paths_execute(tmp_path):
     from pcc.backend.self_backend_aarch64_darwin import emit_aarch64_darwin_asm
 

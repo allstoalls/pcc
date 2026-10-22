@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from pcc.evaluater.c_evaluator import (
+from pcc.frontends.c.evaluator.c_evaluator import (
     _compile_preprocessed_translation_unit_artifact,
     _preprocess_translation_unit_source,
 )

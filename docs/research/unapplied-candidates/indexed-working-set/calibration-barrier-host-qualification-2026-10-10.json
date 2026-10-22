@@ -1,0 +1,148 @@
+{
+  "base_pcc_git_tree": "e0fe5ee61793cc74d4b1564d4cb6787c13d884a4",
+  "by_selector": {
+    "tests/python/test_host_indexed_process_split.py": 20,
+    "tests/python/test_split_calibration_barrier.py": 40,
+    "tests/python/test_worker_codegen_cohorts.py": 41,
+    "tests/test_ci_macos_regression_gate.py": 39
+  },
+  "candidate_pcc_git_tree": "f21adc4d2e6b84e9feb82e100c0046ed27c7963b",
+  "changed_paths": [
+    {
+      "bytes": 8400,
+      "mode": "100644",
+      "path": "pcc/frontends/python/pipeline_frontend_indexed_stage.py",
+      "post_sha256": "a6e65c25cfcca92eca06965e0ad6cb2d8b55ac2c81479902da7f11c882edffad",
+      "pre_sha256": "3322891f7857e64c262f5cda2e1aa0460be2c1cd9eafee6074ca12dc4c712c40"
+    },
+    {
+      "bytes": 14204,
+      "mode": "100644",
+      "path": "pcc/frontends/python/worker_resource_plan.py",
+      "post_sha256": "4254e1a926b967a3fb9d5645b2dd64a8d16efa2cba6c8e4ef1b9a89270ca0866",
+      "pre_sha256": "4dc69c18568b54c2096e092b843e6ecd16c9a021291bc0fa528b69a93889a149"
+    },
+    {
+      "bytes": 14557,
+      "mode": "100644",
+      "path": "scripts/ci_macos_regression_gate.py",
+      "post_sha256": "8e0edd3e9ce7b0983e716720754a2999d461d759fe7b6c120741a04eb50a0622",
+      "pre_sha256": "440936e23482c012200b19fa0aef2fb508e4c1da9a95fae93bfaeb22b88cf7ae"
+    },
+    {
+      "bytes": 19271,
+      "mode": "100644",
+      "path": "tests/python/test_host_indexed_process_split.py",
+      "post_sha256": "cf78134a107a0ee9ac773ee0cdd9ef6e825cc859f5b654470f1447bd5e7a292e",
+      "pre_sha256": "5094c460524058c9426053bae1f643c6b2465eebdfb779fbeeb82162147d70e0"
+    },
+    {
+      "bytes": 17072,
+      "mode": "100644",
+      "path": "tests/python/test_split_calibration_barrier.py",
+      "post_sha256": "a8f992dc2ed3ef151a50510eb4ebc4da1fce5ba666f357ec9187905c207384ef",
+      "pre_sha256": null
+    },
+    {
+      "bytes": 48221,
+      "mode": "100644",
+      "path": "tests/python/test_worker_resource_plan.py",
+      "post_sha256": "46ff2353bd5e71253e59988b0f6518dcd634c4b51845a118253be31b5524739e",
+      "pre_sha256": "d7e37a898367da8c1529c41e7f17c7e39b16c28d067c1ec544ce6b51fe017827"
+    },
+    {
+      "bytes": 25511,
+      "mode": "100644",
+      "path": "tests/test_ci_macos_regression_gate.py",
+      "post_sha256": "db9aa45f087cfc41c4884e677cfd761654e0b1da1d6cc59c8ef1e05cfe7bb496",
+      "pre_sha256": "7638dbb8ce85e0e1e5ee994e4364bd08646e7b381af6e79cb57ddc77baa4ce1f"
+    }
+  ],
+  "codegen_checksum": "cda0cddf6e1f52dc1a5981527c053c57100c20a0a7e382616a5b7b15be9aa9c1",
+  "collected_before_deselection": 141,
+  "counts": {
+    "collected": 140,
+    "errors": 0,
+    "failed": 0,
+    "passed": 140,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  },
+  "deselected": [
+    "tests/python/test_worker_codegen_cohorts.py::test_small_real_children_keep_cohort_barrier_and_original_outputs"
+  ],
+  "deselected_status": "UNRUN real-child node; outside the strict local process boundary",
+  "enforcement": {
+    "cleanup": "CLEAN with root reaped and ECHILD",
+    "complete_base_postseal": "PASS",
+    "denied_audit_events": 0,
+    "hard_host_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "junit_identity": "140 unique nodes exactly match collection",
+    "shared_lock_released": true,
+    "source_before_after_and_external_postseal": "PASS",
+    "source_imports_including_CI_runner": "PASS"
+  },
+  "guards": {
+    "host": {
+      "bootstrap_sha256": "6d5c7dc6a120b619db1ee3a80b40e4779668d22ce69d96d78aaae10a398a9860",
+      "elapsed_s": 2.935993145001703,
+      "guard_sha256": "53e11f98833aaa3676af346d5c5d58ea7d61d24d768ae54cd88c44f1ff35b14a",
+      "max_disk_growth_bytes": 536870912,
+      "min_free_bytes": 4294967296,
+      "peak_sampled_tree_rss_bytes": 70488064,
+      "returncode": 0,
+      "rss_threshold_bytes": 4294967296,
+      "status": "COMPLETE",
+      "timeout_s": 300.0
+    },
+    "materialization": {
+      "bootstrap_sha256": "bd35e3b75f943c69a98f638556a2eea116d77558038ce448591d4e0f6af01659",
+      "elapsed_s": 1.2246646999992663,
+      "guard_sha256": "358006a7548b3a9faba35fee67cc6e030ed082ef2ed8471035b9311162c7cc23",
+      "max_disk_growth_bytes": 536870912,
+      "min_free_bytes": 4294967296,
+      "peak_sampled_tree_rss_bytes": 36909056,
+      "returncode": 0,
+      "rss_threshold_bytes": 1073741824,
+      "status": "COMPLETE",
+      "timeout_s": 60.0
+    }
+  },
+  "limits": [
+    "Pure/mock host controls and mocked CI runner only; the new real scheduling witness is not selected locally.",
+    "The five-node real indexed-split CI profile and new full Stage1 behavior remain UNRUN for this source.",
+    "No native compiler, source-matched runtime build, actual GC, full async/gateway or installed-wheel qualification follows.",
+    "The scheduling policy changes independent-task launch order; no measured speedup or changed-error-order equivalence is claimed."
+  ],
+  "payload_sha256": "7e5cad8fe1f0588942d34a82915049b77f0edff8d714e89ebbe6efc02b015d98",
+  "preservation_parent": "2874172cfb668c2cf921a474f06a71c5f5fc7a44",
+  "production_baseline_commit": "cc5eaa9118399c3ef63e3c2423b7fbfb403dc651",
+  "qualification_sha256": "bc383174ba774e7ab25eeb9948288118b0e9222b2f6c58cf506d098f0556bde8",
+  "schema": "pcc.host-qualification.v1",
+  "scope": "140 exact pure/mock host nodes: 40 new calibration controls, 20 existing split, 41 cohort and 39 CI runner; one exact real-child node deselected/UNRUN; zero subreports. No actual child, PCC compilation, native execution, runtime build or performance measurement.",
+  "source_closure": {
+    "bytes": 44747618,
+    "files": 3882,
+    "full_repository_checkout": false,
+    "included_complete_trees": [
+      ".github",
+      "pcc",
+      "scripts",
+      "tests"
+    ],
+    "note": "Exact cc5 compiler/testing closure plus seven manifest-bound paths; current two witness corrections retained. No timing candidate or import overlay."
+  },
+  "source_manifest_sha256": "b085b68be787cd3cec501bd415996b6803fdc17ffe9775b3933e62caa8fa8fb9",
+  "status": "PASS",
+  "subtest_counts": {
+    "collected": 0,
+    "errors": 0,
+    "failed": 0,
+    "passed": 0,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  }
+}

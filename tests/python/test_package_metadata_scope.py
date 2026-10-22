@@ -1,6 +1,6 @@
 """Package requirements must come from the artifact, not development environments."""
 
-from pcc import cli_bootstrap
+from pcc.driver import cli_bootstrap
 from pcc.package.install import (
     artifact_requires_dist,
     artifact_requires_dist_diagnostics,

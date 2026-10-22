@@ -1,0 +1,932 @@
+{
+  "base_commit": "1afe9b092071f807b5055f0c80ed7b978cc0b707",
+  "functions": {
+    "pcc/backend/self_backend_aarch64_darwin_calls.py:emit_call_instruction_indexed": {
+      "lineno": 2053,
+      "name": "emit_call_instruction_indexed",
+      "path": "pcc/backend/self_backend_aarch64_darwin_calls.py",
+      "source": "def emit_call_instruction_indexed(\n    func: ParsedFunction,\n    kernel: IndexedFunctionKernel,\n    call_id: int,\n    module_symbols: PreparedModuleSymbols,\n) -> list[str]:\n    header: CompilerInt4 = kernel.call_header(call_id)\n    span: CompilerInt4 = kernel.call_span(call_id)\n    ret_type_id = header.first\n    ret_kind_id = kernel.type_kind_id(ret_type_id)\n    ret_is_aggregate = (\n        ret_kind_id == TYPE_KIND_ARRAY\n        or ret_kind_id == TYPE_KIND_STRUCT\n    )\n    ret_is_indirect = bool(\n        ret_is_aggregate\n        and aggregate_returned_indirect_indexed(kernel, ret_type_id)\n    )\n    callee = kernel.call_texts[header.second]\n    is_indirect = bool(header.third & 1)\n    is_vararg_call = bool(header.third & 2)\n    arg_count = span.first\n    fixed_arg_count = span.second\n    dest_value_id = span.third\n    dest = None if dest_value_id < 0 else kernel.value_name(dest_value_id)\n    if not is_indirect and callee.startswith(\"llvm.\"):\n        raise BackendUnavailable(\n            \"indexed regular-call lowering received an LLVM intrinsic\"\n        )\n    if is_vararg_call and fixed_arg_count > arg_count:\n        raise BackendUnavailable(\n            f\"self backend saw malformed variadic call in {func.name!r}: fixed args exceed actual args\"\n        )\n\n    fixed_count = fixed_arg_count if is_vararg_call and not is_aarch64_linux_triple(module_symbols.target_triple) else arg_count\n    stack_arg_entries: list[tuple[int, int]] = []\n    indirect_stack_ptr_entries: list[tuple[int, int]] = []\n    pending_indirect_stack_literals: list[tuple[int, int]] = []\n    pending_indirect_reg_literals: list[tuple[int, str]] = []\n    lines: list[str] = []\n    stack_offset = 0\n    gpr_index = 0\n    fpr_index = 0\n    arg_index = 0\n    while arg_index < fixed_count:\n        raw: CompilerInt4 = kernel.call_arg(header.fourth + arg_index)\n        arg_type_id = raw.first\n        arg_kind_id = kernel.type_kind_id(arg_type_id)\n        arg_is_aggregate = (\n            arg_kind_id == TYPE_KIND_ARRAY\n            or arg_kind_id == TYPE_KIND_STRUCT\n        )\n        arg_is_indirect = bool(\n            arg_is_aggregate\n            and aggregate_passed_indirect_indexed(kernel, arg_type_id)\n        )\n        value = (\n            kernel.value_name(raw.second)\n            if raw.second >= 0\n            else kernel.call_texts[raw.third]\n        )\n        if arg_kind_id == TYPE_KIND_VOID:\n            register_code = 0\n        elif arg_kind_id == TYPE_KIND_FP:\n            register_code = 17\n        elif not arg_is_aggregate:\n            register_code = 9\n        else:\n            register_code = abi_register_code_indexed(kernel, arg_type_id)\n        register_class = register_code // 8\n        register_count = register_code % 8\n        first_register_index = -1\n        if register_class == 2:\n            if fpr_index + register_count > 8:\n                if arg_is_aggregate:\n                    fpr_index = 8\n                register_count = 0\n            else:\n                first_register_index = fpr_index\n                fpr_index += register_count\n        elif register_class == 1:\n            if is_aarch64_linux_triple(module_symbols.target_triple) and not arg_is_indirect:\n                argument_span: CompilerInt4 = kernel.type_span(arg_type_id)\n                if argument_span.fourth >= 16:\n                    gpr_index = _align_to(gpr_index, 2)\n            if gpr_index + register_count > 8:\n                register_count = 0\n                if is_aarch64_linux_triple(module_symbols.target_triple):\n                    gpr_index = 8\n            else:\n                first_register_index = gpr_index\n                gpr_index += register_count\n        if register_count == 0:\n            if is_aarch64_linux_triple(module_symbols.target_triple):\n                stack_offset = _align_to(stack_offset, stack_arg_alignment_indexed(kernel, arg_type_id))\n            if arg_is_indirect:\n                ptr_offset = stack_offset\n                stack_offset += 8\n                if _can_spill_aggregate_constant(value):\n                    pending_indirect_stack_literals.append(\n                        (ptr_offset, arg_index)\n                    )\n                else:\n                    indirect_stack_ptr_entries.append(\n                        (ptr_offset, arg_index)\n                    )\n            else:\n                stack_arg_entries.append((stack_offset, arg_index))\n                stack_offset += (\n                    stack_arg_storage_size_indexed(kernel, arg_type_id)\n                )\n            arg_index += 1\n            continue\n        if arg_is_indirect:\n            first_register = \"x\" + str(first_register_index)\n            if _can_spill_aggregate_constant(value):\n                pending_indirect_reg_literals.append(\n                    (arg_index, first_register)\n                )\n            else:\n                arg_type = kernel.type_desc(arg_type_id)\n                lines.extend(\n                    materialize_indirect_aggregate_arg_pointer(\n                        func,\n                        value,\n                        arg_type,\n                        first_register,\n                        value_id=raw.second,\n                    )\n                )\n            arg_index += 1\n            continue\n        if arg_is_aggregate:\n            lines.extend(\n                materialize_value(\n                    func,\n                    value,\n                    kernel.type_desc(arg_type_id),\n                    first_register_index,\n                    module_symbols,\n                    value_id=raw.second,\n                )\n            )\n        else:\n            lines.extend(\n                materialize_scalar_value_indexed(\n                    func,\n                    kernel,\n                    value,\n                    arg_type_id,\n                    first_register_index,\n                    module_symbols,\n                    value_id=raw.second,\n                )\n            )\n        arg_index += 1\n\n    while arg_index < arg_count:\n        raw: CompilerInt4 = kernel.call_arg(header.fourth + arg_index)\n        stack_arg_entries.append((stack_offset, arg_index))\n        variadic_kind_id = kernel.type_kind_id(raw.first)\n        stack_offset += (\n            variadic_stack_arg_storage_size_indexed(kernel, raw.first)\n        )\n        arg_index += 1\n\n    indirect_reg_literal_entries: list[tuple[int, int, str]] = []\n    for indexed_arg, reg in pending_indirect_reg_literals:\n        raw: CompilerInt4 = kernel.call_arg(header.fourth + indexed_arg)\n        arg_span: CompilerInt4 = kernel.type_span(raw.first)\n        stack_offset = _align_to(stack_offset, arg_span.fourth)\n        temp_offset = stack_offset\n        stack_offset += arg_span.third\n        indirect_reg_literal_entries.append((temp_offset, indexed_arg, reg))\n    indirect_stack_literal_entries: list[tuple[int, int, int]] = []\n    for ptr_offset, indexed_arg in pending_indirect_stack_literals:\n        raw: CompilerInt4 = kernel.call_arg(header.fourth + indexed_arg)\n        arg_span: CompilerInt4 = kernel.type_span(raw.first)\n        stack_offset = _align_to(stack_offset, arg_span.fourth)\n        temp_offset = stack_offset\n        stack_offset += arg_span.third\n        indirect_stack_literal_entries.append(\n            (ptr_offset, temp_offset, indexed_arg)\n        )\n    stack_size = _align_to(stack_offset, 16) if stack_offset else 0\n    if ret_is_indirect:\n        dest_offset = (\n            -1\n            if dest_value_id < 0\n            else kernel.value_slot_offset(dest_value_id)\n        )\n        if dest_offset < 0:\n            raise BackendUnavailable(\n                f\"self backend needs a materialized destination slot for large aggregate return in {func.name!r}\"\n            )\n        lines.extend(emit_slot_base_address_parts(dest_offset, \"x8\"))\n    if stack_size:\n        lines.extend(emit_add_offset(\"sp\", \"sp\", -stack_size, scratch_reg=\"x15\"))\n        for temp_offset, indexed_arg, reg in indirect_reg_literal_entries:\n            raw: CompilerInt4 = kernel.call_arg(header.fourth + indexed_arg)\n            arg_type = kernel.type_desc(raw.first)\n            value = (\n                kernel.value_name(raw.second)\n                if raw.second >= 0\n                else kernel.call_texts[raw.third]\n            )\n            lines.extend(emit_add_offset(reg, \"sp\", temp_offset, scratch_reg=\"x15\"))\n            lines.extend(\n                store_large_aggregate_literal_to_address(\n                    arg_type,\n                    value,\n                    reg,\n                    data_reg_64=\"x12\",\n                    data_reg_32=\"w12\",\n                    module_symbols=module_symbols,\n                )\n            )\n        for ptr_offset, temp_offset, indexed_arg in indirect_stack_literal_entries:\n            raw: CompilerInt4 = kernel.call_arg(header.fourth + indexed_arg)\n            arg_type = kernel.type_desc(raw.first)\n            value = (\n                kernel.value_name(raw.second)\n                if raw.second >= 0\n                else kernel.call_texts[raw.third]\n            )\n            lines.extend(emit_add_offset(\"x12\", \"sp\", temp_offset, scratch_reg=\"x15\"))\n            lines.extend(\n                store_large_aggregate_literal_to_address(\n                    arg_type,\n                    value,\n                    \"x12\",\n                    data_reg_64=\"x13\",\n                    data_reg_32=\"w13\",\n                    module_symbols=module_symbols,\n                )\n            )\n            if ptr_offset:\n                lines.extend(emit_add_offset(\"x14\", \"sp\", ptr_offset, scratch_reg=\"x15\"))\n                lines.append(emitted_memory_instruction_line(\"str\", \"x12\", \"x14\"))\n            else:\n                lines.append(emitted_memory_instruction_line(\"str\", \"x12\", \"sp\"))\n        for ptr_offset, indexed_arg in indirect_stack_ptr_entries:\n            raw: CompilerInt4 = kernel.call_arg(header.fourth + indexed_arg)\n            arg_type = kernel.type_desc(raw.first)\n            value = (\n                kernel.value_name(raw.second)\n                if raw.second >= 0\n                else kernel.call_texts[raw.third]\n            )\n            lines.extend(\n                materialize_indirect_aggregate_arg_pointer(\n                    func,\n                    value,\n                    arg_type,\n                    \"x12\",\n                    value_id=raw.second,\n                )\n            )\n            if ptr_offset:\n                lines.extend(emit_add_offset(\"x14\", \"sp\", ptr_offset, scratch_reg=\"x15\"))\n                lines.append(emitted_memory_instruction_line(\"str\", \"x12\", \"x14\"))\n            else:\n                lines.append(emitted_memory_instruction_line(\"str\", \"x12\", \"sp\"))\n        for offset, indexed_arg in stack_arg_entries:\n            raw: CompilerInt4 = kernel.call_arg(header.fourth + indexed_arg)\n            emit_kind_id = kernel.type_kind_id(raw.first)\n            emit_value = (\n                kernel.value_name(raw.second)\n                if raw.second >= 0\n                else kernel.call_texts[raw.third]\n            )\n            if (\n                emit_kind_id == TYPE_KIND_ARRAY\n                or emit_kind_id == TYPE_KIND_STRUCT\n            ):\n                lines.extend(\n                    emit_vararg_stack_arg(\n                        func,\n                        kernel.type_desc(raw.first),\n                        emit_value,\n                        offset,\n                        module_symbols,\n                        value_id=raw.second,\n                    )\n                )\n            else:\n                lines.extend(\n                    _emit_indexed_scalar_stack_arg(\n                        func,\n                        kernel,\n                        emit_value,\n                        raw.second,\n                        raw.first,\n                        offset,\n                        module_symbols,\n                    )\n                )\n    if call_id in func.aarch64_tail_call_ids:\n        if is_indirect or is_vararg_call or stack_size or ret_is_aggregate:\n            raise BackendUnavailable(\"invalid ABI in planned AArch64 scalar tail call\")\n        # The return terminator owns the frame restore and sibling transfer.\n        # This jump has no ordinary post-call return PC in the current frame.\n        return lines\n    if is_indirect:\n        callee_value_id = kernel.value_id(callee)\n        lines.extend(\n            materialize_pointer(\n                func,\n                callee,\n                12,\n                module_symbols,\n                value_id=callee_value_id,\n            )\n        )\n        lines.append(\"  blr x12\")\n    else:\n        lines.append(\n            emitted_direct_call_line(\n                asm_symbol_prevalidated(callee, module_symbols)\n            )\n        )\n    if stack_size:\n        lines.extend(emit_add_offset(\"sp\", \"sp\", stack_size, scratch_reg=\"x15\"))\n    dest_offset = (\n        -1 if dest_value_id < 0 else kernel.value_slot_offset(dest_value_id)\n    )\n    if dest_offset >= 0 and not ret_is_indirect:\n        slot_id = kernel.value_slot_id(dest_value_id)\n        if slot_id < 0:\n            raise BackendUnavailable(\n                f\"indexed call result slot is missing for {dest!r}\"\n            )\n        slot_type_id = kernel.slot_type_id(slot_id)\n        slot_header: CompilerInt4 = kernel.type_header(slot_type_id)\n        if (\n            slot_header.first == TYPE_KIND_ARRAY\n            or slot_header.first == TYPE_KIND_STRUCT\n        ):\n            lines.extend(\n                store_value_regs_to_slot_parts(\n                    kernel.slot_offset(slot_id),\n                    kernel.type_desc(slot_type_id),\n                    0,\n                )\n            )\n        else:\n            # PCC_SELF_CALL_RESULT_REGISTERS: a result the allocator placed in\n            # a pool register is committed with one move and its slot is left\n            # unwritten, exactly like any other register-projected scalar.\n            allocated_lines = commit_allocated_scalar_result_indexed(\n                func,\n                dest_value_id,\n                ret_type_id,\n                reg_name_indexed(kernel, ret_type_id, 0),\n            )\n            if allocated_lines is not None:\n                lines.extend(allocated_lines)\n            else:\n                lines.extend(\n                    _store_indexed_scalar_result(\n                        kernel,\n                        slot_id,\n                        slot_type_id,\n                    )\n                )\n    return lines"
+    },
+    "pcc/backend/self_backend_aarch64_darwin_flow.py:_emit_phi_assignments_indexed": {
+      "lineno": 498,
+      "name": "_emit_phi_assignments_indexed",
+      "path": "pcc/backend/self_backend_aarch64_darwin_flow.py",
+      "source": "def _emit_phi_assignments_indexed(\n    func: ParsedFunction,\n    *,\n    source_block_id: int,\n    target_block_id: int,\n    module_symbols: PreparedModuleSymbols,\n) -> list[str]:\n    \"\"\"Emit the parallel copy for the edge into ``target_block_id``.\n\n    A phi lives in its allocated register or its slot; an incoming value in\n    its register, its slot, or is a constant.  A copy is emitted once no other\n    pending copy still reads the location it writes, so every source is read\n    before it is overwritten.  A cycle parks one integer source in x10; a\n    cycle through a floating-point copy takes the stack-buffer path, which\n    reads every source before writing any destination.\n    \"\"\"\n    kernel = get_indexed_function_kernel(func)\n    phi_fact: CompilerInt2 = kernel.block_phi_fact(target_block_id)\n    phi_ids: list[int] = []\n    incoming_refs: list[int] = []\n    temp_offsets: list[int] = []\n    dest_slot_ids: list[int] = []\n    dest_regs: list[int] = []\n    src_regs: list[int] = []\n    dest_keys: list[int] = []\n    src_keys: list[int] = []\n    temp_offset = 0\n    phi_index = 0\n    while phi_index < phi_fact.second:\n        phi_id = phi_fact.first + phi_index\n        phi: CompilerInt4 = kernel.phi_record(phi_id)\n        dest_slot_id = kernel.value_slot_id(phi.first)\n        if dest_slot_id >= 0:\n            incoming_ref = -1\n            incoming_found = False\n            incoming_index = 0\n            while incoming_index < phi.fourth:\n                incoming: CompilerInt2 = kernel.phi_incoming(\n                    phi.third + incoming_index\n                )\n                if incoming.second == source_block_id:\n                    incoming_ref = incoming.first\n                    incoming_found = True\n                    break\n                incoming_index += 1\n            if not incoming_found:\n                raise BackendUnavailable(\n                    \"self backend could not resolve indexed phi incoming\"\n                )\n            layout: CompilerInt4 = kernel.type_layout(phi.second)\n            temp_align = max(1, min(layout.second, 8))\n            temp_offset = _align_to(temp_offset, temp_align)\n            dest_reg = allocated_scalar_register_indexed(kernel, phi.first, phi.second)\n            src_reg = -1\n            src_key = -1\n            if incoming_ref >= 0:\n                src_reg = allocated_scalar_register_indexed(\n                    kernel, incoming_ref, phi.second\n                )\n                if src_reg >= 0:\n                    src_key = _PHI_REGISTER_KEY_BASE + src_reg\n                else:\n                    src_key = kernel.value_slot_id(incoming_ref)\n            phi_ids.append(phi_id)\n            incoming_refs.append(incoming_ref)\n            temp_offsets.append(temp_offset)\n            dest_slot_ids.append(dest_slot_id)\n            dest_regs.append(dest_reg)\n            src_regs.append(src_reg)\n            dest_keys.append(\n                _PHI_REGISTER_KEY_BASE + dest_reg if dest_reg >= 0 else dest_slot_id\n            )\n            src_keys.append(src_key)\n            phi_span: CompilerInt4 = kernel.type_span(phi.second)\n            temp_offset += phi_span.third\n        phi_index += 1\n\n    if not phi_ids:\n        return []\n\n    pending: list[int] = []\n    index = 0\n    while index < len(phi_ids):\n        if src_keys[index] != dest_keys[index]:\n            pending.append(index)\n        index += 1\n    lines: list[str] = []\n    while pending:\n        ready: list[int] = []\n        for candidate in pending:\n            blocked = False\n            for other in pending:\n                if other != candidate and src_keys[other] == dest_keys[candidate]:\n                    blocked = True\n                    break\n            if not blocked:\n                ready.append(candidate)\n        if not ready:\n            victim = pending[0]\n            victim_phi: CompilerInt4 = kernel.phi_record(phi_ids[victim])\n            victim_header: CompilerInt4 = kernel.type_header(victim_phi.second)\n            if victim_header.first == TYPE_KIND_FP:\n                return _emit_phi_assignments_buffered(\n                    func,\n                    kernel,\n                    phi_ids,\n                    incoming_refs,\n                    temp_offsets,\n                    temp_offset,\n                    dest_slot_ids,\n                    dest_regs,\n                    module_symbols,\n                )\n            lines.extend(\n                _phi_copy_to_register(\n                    func,\n                    kernel,\n                    victim_phi.second,\n                    _PHI_CYCLE_REGISTER,\n                    src_regs[victim],\n                    incoming_refs[victim],\n                    module_symbols,\n                )\n            )\n            src_regs[victim] = _PHI_CYCLE_REGISTER\n            src_keys[victim] = _PHI_REGISTER_KEY_BASE + _PHI_CYCLE_REGISTER\n            continue\n        for candidate in ready:\n            phi = kernel.phi_record(phi_ids[candidate])\n            if dest_regs[candidate] >= 0:\n                lines.extend(\n                    _phi_copy_to_register(\n                        func,\n                        kernel,\n                        phi.second,\n                        dest_regs[candidate],\n                        src_regs[candidate],\n                        incoming_refs[candidate],\n                        module_symbols,\n                    )\n                )\n            else:\n                lines.extend(\n                    _phi_copy_to_slot(\n                        func,\n                        kernel,\n                        phi.second,\n                        dest_slot_ids[candidate],\n                        src_regs[candidate],\n                        incoming_refs[candidate],\n                        module_symbols,\n                    )\n                )\n            pending.remove(candidate)\n    return lines"
+    },
+    "pcc/backend/self_backend_aarch64_darwin_flow.py:emit_phi_assignments": {
+      "lineno": 716,
+      "name": "emit_phi_assignments",
+      "path": "pcc/backend/self_backend_aarch64_darwin_flow.py",
+      "source": "def emit_phi_assignments(\n    func: ParsedFunction,\n    *,\n    source_block: str,\n    target_block: str,\n    module_symbols: PreparedModuleSymbols,\n) -> list[str]:\n    kernel = get_indexed_function_kernel(func)\n    source_block_id = kernel.block_id(source_block)\n    target_block_id = kernel.block_id(target_block)\n    if source_block_id >= 0 and target_block_id >= 0:\n        phi_fact: CompilerInt2 = kernel.block_phi_fact(target_block_id)\n        all_scalar = True\n        phi_index = 0\n        while phi_index < phi_fact.second:\n            indexed_phi: CompilerInt4 = kernel.phi_record(\n                phi_fact.first + phi_index\n            )\n            indexed_phi_type: CompilerInt4 = kernel.type_header(\n                indexed_phi.second\n            )\n            kind_id = indexed_phi_type.first\n            if kind_id == TYPE_KIND_ARRAY or kind_id == TYPE_KIND_STRUCT:\n                all_scalar = False\n                break\n            phi_index += 1\n        if all_scalar:\n            return _emit_phi_assignments_indexed(\n                func,\n                source_block_id=source_block_id,\n                target_block_id=target_block_id,\n                module_symbols=module_symbols,\n            )\n    target = text_key_mapping_get(func.block_map, target_block)\n    if target is None and target_block_id >= 0:\n        target = kernel.diagnostic_block(\n            target_block_id,\n            include_instructions=False,\n        )\n        func.block_map[target_block] = target\n    if target is None:\n        for block in func.blocks:\n            if block.name == target_block:\n                target = block\n                break\n    if target is None:\n        raise BackendUnavailable(\n            f\"self backend branch targets unknown block {target_block!r} in {func.name!r}\"\n        )\n    if not target.phis and target_block_id >= 0:\n        phi_fact = kernel.block_phi_fact(target_block_id)\n        projected = []\n        phi_index = 0\n        while phi_index < phi_fact.second:\n            projected.append(kernel.diagnostic_phi(target_block_id, phi_index))\n            phi_index += 1\n        target.phis = tuple(projected)\n\n    assignments = []\n    temp_offset = 0\n    for phi in target.phis:\n        if not parsed_function_has_value_slot(func, phi.dest):\n            continue\n        match = None\n        for incoming in phi.incoming:\n            if incoming.label == source_block:\n                match = incoming\n                break\n        if match is None:\n            raise BackendUnavailable(\n                f\"self backend could not resolve phi incoming for {phi.dest!r} from {source_block!r}\"\n            )\n        temp_align = max(1, min(phi.type.align, 8))\n        temp_offset = _align_to(temp_offset, temp_align)\n        assignments.append((phi, match, temp_offset))\n        temp_offset += phi.type.slot_size\n\n    if not assignments:\n        return []\n\n    # Scalar phi copies can be lowered as direct slot-to-slot stores when they\n    # can be *ordered* so that no copy overwrites a slot another copy still\n    # needs to read. Slot coalescing can put a phi source in the same physical\n    # slot as a *different* phi's destination, so the safe order is computed\n    # from slot offsets, not SSA names. When the copies form a cycle (a true\n    # swap), no ordering is safe and we fall through to the temp-buffered path\n    # below, which stages every source before writing any destination.\n    if all(\n        not phi.type.is_array and not phi.type.is_struct\n        for phi, _match, _offset in assignments\n    ):\n        ordered = _order_scalar_phi_copies(func, assignments)\n        if ordered is not None:\n            lines: list[str] = []\n            for phi, match in ordered:\n                lines.extend(\n                    materialize_value(func, match.value, phi.type, 9, module_symbols)\n                )\n                lines.extend(store_value_regs_to_value_slot(func, phi.dest, 9))\n            return lines\n\n    total_temp = _align_to(temp_offset, 16)\n    lines: list[str] = []\n    if total_temp:\n        lines.extend(emit_stack_adjust(-total_temp))\n\n    temp_addr_reg = \"x13\"\n\n    def _emit_temp_addr(offset: int) -> list[str]:\n        return emit_add_offset(temp_addr_reg, \"sp\", offset)\n\n    for phi, match, offset in assignments:\n        lines.extend(_emit_temp_addr(offset))\n        if (phi.type.is_array or phi.type.is_struct) and not aggregate_fits_reg_abi(\n            phi.type\n        ):\n            if match.value == \"zeroinitializer\":\n                lines.extend(zero_address(temp_addr_reg, phi.type.slot_size))\n            elif is_aggregate_literal_value(match.value):\n                lines.extend(\n                    store_large_aggregate_literal_to_address(\n                        phi.type,\n                        match.value,\n                        temp_addr_reg,\n                        module_symbols=module_symbols,\n                    )\n                )\n            else:\n                lines.extend(\n                    materialize_aggregate_storage_address(\n                        func, match.value, phi.type, \"x14\"\n                    )\n                )\n                lines.extend(\n                    copy_address_to_address(\"x14\", temp_addr_reg, phi.type.slot_size)\n                )\n            continue\n        lines.extend(materialize_value(func, match.value, phi.type, 9, module_symbols))\n        lines.extend(store_value_to_address(temp_addr_reg, phi.type, 9))\n\n    for phi, _match, offset in assignments:\n        if (phi.type.is_array or phi.type.is_struct) and not aggregate_fits_reg_abi(\n            phi.type\n        ):\n            lines.extend(_emit_temp_addr(offset))\n            lines.extend(\n                copy_address_to_value_slot(temp_addr_reg, func, phi.dest)\n            )\n            continue\n        lines.extend(_emit_temp_addr(offset))\n        lines.extend(load_value_from_address(temp_addr_reg, phi.type, 9))\n        lines.extend(store_value_regs_to_value_slot(func, phi.dest, 9))\n\n    if total_temp:\n        lines.extend(emit_stack_adjust(total_temp))\n    return lines"
+    },
+    "pcc/backend/self_backend_aarch64_darwin_memory.py:emit_memory_instruction_by_id": {
+      "lineno": 241,
+      "name": "emit_memory_instruction_by_id",
+      "path": "pcc/backend/self_backend_aarch64_darwin_memory.py",
+      "source": "def emit_memory_instruction_by_id(\n    func: ParsedFunction,\n    kind_id: int,\n    data: int | tuple,\n    module_symbols: PreparedModuleSymbols,\n    *,\n    indexed_kernel: IndexedFunctionKernel | None = None,\n    block_id: int = -1,\n    instruction_index: int = -1,\n    indexed_dest_id: int = -1,\n    pointer_override_ref: int = -1,\n    pointer_override_type: int = -1,\n    memory_offset: int = 0,\n) -> list[str] | None:\n    if kind_id == _PARSED_INSTRUCTION_KIND_IDS[\"syscall6\"]:\n        from .self_backend_target_match import is_aarch64_linux_triple\n        if not is_aarch64_linux_triple(module_symbols.target_triple):\n            raise BackendUnavailable(\"raw AArch64 syscall6 requires Linux\")\n        dest, values = data\n        lines = []\n        for value, index in zip(values, (8, 0, 1, 2, 3, 4, 5)):\n            lines.extend(materialize_value(func, value, TypeDesc(\"int\", 64), index, module_symbols))\n        lines.append(emitted_fixed_instruction_line(\"svc #0\"))\n        if parsed_function_has_value_slot(func, dest):\n            lines.extend(store_value_regs_to_value_slot(func, dest, 0))\n        return lines\n    indexed_dest_has_slot = bool(\n        indexed_kernel is not None\n        and indexed_dest_id >= 0\n        and indexed_kernel.value_slot_id(indexed_dest_id) >= 0\n    )\n    if kind_id == PARSED_INSTRUCTION_KIND_ALLOCA:\n        return []\n\n    if kind_id == PARSED_INSTRUCTION_KIND_STORE:\n        if indexed_kernel is not None:\n            store_record: CompilerInt4 = indexed_kernel.instruction_record(data)\n            value_type_id = store_record.first\n            value_type_header: CompilerInt4 = indexed_kernel.type_header(\n                value_type_id\n            )\n            value = (\n                indexed_kernel.value_name(store_record.second)\n                if store_record.second >= 0\n                else indexed_kernel.call_texts[-store_record.second - 1]\n            )\n            pointer_ref = store_record.fourth\n            pointer_type = store_record.third\n            if pointer_override_type >= 0:\n                pointer_ref = pointer_override_ref\n                pointer_type = pointer_override_type\n            ptr_name = (\n                indexed_kernel.value_name(pointer_ref)\n                if pointer_ref >= 0\n                else indexed_kernel.call_texts[-pointer_ref - 1]\n            )\n            if _indexed_scalar_type(value_type_header):\n                alloca_type_id = (\n                    indexed_kernel.alloca_type_id(store_record.fourth)\n                    if store_record.fourth >= 0 and pointer_override_type < 0\n                    else -1\n                )\n                storage_matches = alloca_type_id == value_type_id\n                if alloca_type_id >= 0 and not storage_matches:\n                    alloca_type_header: CompilerInt4 = (\n                        indexed_kernel.type_header(alloca_type_id)\n                    )\n                    storage_matches = (\n                        alloca_type_header.first == TYPE_KIND_PTR\n                        and value_type_header.first == TYPE_KIND_PTR\n                    )\n                if storage_matches:\n                    lines = materialize_scalar_value_indexed(\n                        func,\n                        indexed_kernel,\n                        value,\n                        value_type_id,\n                        9,\n                        module_symbols,\n                        value_id=store_record.second,\n                    )\n                    lines.extend(\n                        _indexed_scalar_slot_access(\n                            indexed_kernel,\n                            value_type_id,\n                            indexed_kernel.alloca_offset(store_record.fourth),\n                            9,\n                            store=True,\n                        )\n                    )\n                    return lines\n                value_register = allocated_scalar_register_indexed(\n                    indexed_kernel, store_record.second, value_type_id,\n                )\n                zero_value = store_record.second < 0 and _scalar_access_bytes(value_type_header) > 0 and value_type_header.first in (TYPE_KIND_INT, TYPE_KIND_PTR) and value in (\n                    \"0\", \"null\", \"false\", \"zeroinitializer\",\n                )\n                base_register = -1\n                if store_record.second >= 0 or zero_value:\n                    base_register = allocated_scalar_register_indexed(\n                        indexed_kernel, pointer_ref, pointer_type,\n                    )\n                lines = []\n                base_name = \"x9\"\n                if base_register >= 0:\n                    base_name = reg_name_indexed(indexed_kernel, pointer_type, base_register)\n                else:\n                    lines.extend(materialize_scalar_value_indexed(\n                        func, indexed_kernel, ptr_name, pointer_type, 9,\n                        module_symbols, value_id=pointer_ref,\n                    ))\n                value_name = reg_name_indexed(indexed_kernel, value_type_id, 10)\n                if zero_value:\n                    value_name = \"xzr\" if value_type_header.first == TYPE_KIND_PTR or value_type_header.second > 32 else \"wzr\"\n                elif value_register >= 0:\n                    value_name = reg_name_indexed(indexed_kernel, value_type_id, value_register)\n                else:\n                    lines.extend(materialize_scalar_value_indexed(\n                        func, indexed_kernel, value, value_type_id, 10,\n                        module_symbols, value_id=store_record.second,\n                    ))\n                memory_op = _indexed_scalar_mem_store_op(value_type_header)\n                access_bytes = _scalar_access_bytes(value_type_header)\n                if memory_offset < 0 or (access_bytes and memory_offset % access_bytes):\n                    memory_op = _indexed_scalar_stack_store_op(value_type_header)\n                lines.append(\n                    emitted_memory_instruction_line(\n                        memory_op,\n                        value_name,\n                        base_name,\n                        memory_offset,\n                    )\n                )\n                return lines\n            value_type = indexed_kernel.type_desc(value_type_id)\n        else:\n            value_type, value, _ptr_type, ptr_name = data\n        if value == \"zeroinitializer\" and (value_type.is_array or value_type.is_struct):\n            if (\n                parsed_function_has_alloca_slot(func, ptr_name)\n                and parsed_function_alloca_slot_type(func, ptr_name).describe()\n                == value_type.describe()\n            ):\n                return zero_slot_parts(\n                    parsed_function_alloca_slot_offset(func, ptr_name), value_type\n                )\n            lines = materialize_pointer(func, ptr_name, 9, module_symbols)\n            lines.extend(zero_address(\"x9\", value_type.slot_size))\n            return lines\n        if (value_type.is_array or value_type.is_struct) and not aggregate_fits_reg_abi(value_type):\n            if is_aggregate_literal_value(value):\n                if (\n                    parsed_function_has_alloca_slot(func, ptr_name)\n                    and parsed_function_alloca_slot_type(func, ptr_name).describe()\n                    == value_type.describe()\n                ):\n                    lines = emit_slot_base_address_parts(\n                        parsed_function_alloca_slot_offset(func, ptr_name), \"x15\"\n                    )\n                    lines.extend(\n                        store_large_aggregate_literal_to_address(\n                            value_type,\n                            value,\n                            \"x15\",\n                            module_symbols=module_symbols,\n                        )\n                    )\n                    return lines\n                lines = materialize_pointer(func, ptr_name, 9, module_symbols)\n                lines.extend(\n                    store_large_aggregate_literal_to_address(\n                        value_type,\n                        value,\n                        \"x9\",\n                        module_symbols=module_symbols,\n                    )\n                )\n                return lines\n            if not parsed_function_has_value_slot(func, value):\n                raise BackendUnavailable(\n                    f\"self backend can only store aggregate SSA values from stack slots right now in {func.name!r}: {value}\"\n                )\n            if (\n                parsed_function_has_alloca_slot(func, ptr_name)\n                and parsed_function_alloca_slot_type(func, ptr_name).describe()\n                == value_type.describe()\n            ):\n                return copy_slot_to_slot_parts(\n                    parsed_function_value_slot_offset(func, value),\n                    parsed_function_value_slot_type(func, value),\n                    parsed_function_alloca_slot_offset(func, ptr_name),\n                    value_type,\n                )\n            lines = materialize_pointer(func, ptr_name, 9, module_symbols)\n            lines.extend(\n                copy_slot_to_address_parts(\n                    parsed_function_value_slot_offset(func, value),\n                    parsed_function_value_slot_type(func, value),\n                    \"x9\",\n                )\n            )\n            return lines\n        if (\n            parsed_function_has_alloca_slot(func, ptr_name)\n            and parsed_function_alloca_slot_type(func, ptr_name).describe()\n            == value_type.describe()\n        ):\n            lines = materialize_value(func, value, value_type, 9, module_symbols)\n            lines.extend(\n                store_value_regs_to_slot_parts(\n                    parsed_function_alloca_slot_offset(func, ptr_name),\n                    value_type,\n                    9,\n                )\n            )\n            return lines\n        lines = materialize_pointer(func, ptr_name, 9, module_symbols)\n        lines.extend(materialize_value(func, value, value_type, 10, module_symbols))\n        lines.extend(store_value_to_address(\"x9\", value_type, 10))\n        return lines\n\n    if kind_id == PARSED_INSTRUCTION_KIND_LOAD_ATOMIC:\n        if indexed_kernel is not None and isinstance(data, int):\n            record: CompilerInt4 = indexed_kernel.instruction_record(data)\n            atomic: CompilerInt4 = indexed_kernel.instruction_record(data + 1)\n            value_type = indexed_kernel.type_desc(record.first)\n            ordering = indexed_kernel.call_texts[atomic.first]\n            dest = indexed_kernel.value_name(indexed_dest_id)\n            ptr_name = indexed_kernel.value_name(record.third) if record.third >= 0 else indexed_kernel.call_texts[-record.third - 1]\n        else:\n            dest, value_type, _ptr_type, ptr_name, ordering = data[:5]\n        if not (indexed_dest_has_slot if indexed_kernel is not None else parsed_function_has_value_slot(func, dest)):\n            return []\n        _atomic_width_check(func, \"load_atomic\", value_type)\n        if indexed_kernel is not None and isinstance(data, int):\n            lines = materialize_scalar_value_indexed(\n                func, indexed_kernel, ptr_name, record.second, 9, module_symbols,\n                value_id=record.third,\n            )\n        else:\n            lines = materialize_pointer(func, ptr_name, 9, module_symbols)\n        load_op = (\n            \"ldar\" + _atomic_size_suffix(value_type)\n            if ordering in (\"acquire\", \"seq_cst\") else mem_load_op(value_type)\n        )\n        lines.append(\n            emitted_memory_instruction_line(\n                load_op,\n                reg_name(value_type, 10),\n                \"x9\",\n            )\n        )\n        lines.extend(store_value_regs_to_value_slot(func, dest, 10))\n        return lines\n\n    if kind_id == PARSED_INSTRUCTION_KIND_STORE_ATOMIC:\n        if indexed_kernel is not None and isinstance(data, int):\n            record: CompilerInt4 = indexed_kernel.instruction_record(data)\n            atomic: CompilerInt4 = indexed_kernel.instruction_record(data + 1)\n            value_type = indexed_kernel.type_desc(record.first)\n            ordering = indexed_kernel.call_texts[atomic.first]\n            ptr_name = indexed_kernel.value_name(record.fourth) if record.fourth >= 0 else indexed_kernel.call_texts[-record.fourth - 1]\n            value = indexed_kernel.value_name(record.second) if record.second >= 0 else indexed_kernel.call_texts[-record.second - 1]\n        else:\n            value_type, value, _ptr_type, ptr_name, ordering = data[:5]\n        _atomic_width_check(func, \"store_atomic\", value_type)\n        if indexed_kernel is not None and isinstance(data, int):\n            lines = materialize_scalar_value_indexed(\n                func, indexed_kernel, ptr_name, record.third, 9, module_symbols,\n                value_id=record.fourth,\n            )\n            lines.extend(materialize_scalar_value_indexed(\n                func, indexed_kernel, value, record.first, 10, module_symbols,\n                value_id=record.second,\n            ))\n        else:\n            lines = materialize_pointer(func, ptr_name, 9, module_symbols)\n            lines.extend(materialize_value(func, value, value_type, 10, module_symbols))\n        store_op = (\n            \"stlr\" + _atomic_size_suffix(value_type)\n            if ordering in (\"release\", \"seq_cst\") else mem_store_op(value_type)\n        )\n        lines.append(\n            emitted_memory_instruction_line(\n                store_op,\n                reg_name(value_type, 10),\n                \"x9\",\n            )\n        )\n        return lines\n\n    if kind_id == PARSED_INSTRUCTION_KIND_ATOMICRMW:\n        dest, op, _ptr_type, ptr_name, value_type, value, _ordering = data\n        _atomic_width_check(func, \"atomicrmw\", value_type, allow_pointer=op == \"xchg\")\n        # ldaxr/stlxr is acquire+release on every iteration \u2014 always at least\n        # as strong as the requested ordering, and it is what LLVM itself\n        # emits for atomicrmw at -O0 on AArch64 without LSE.\n        lines = materialize_pointer(func, ptr_name, 9, module_symbols)\n        lines.extend(materialize_value(func, value, value_type, 10, module_symbols))\n        r_val = reg_name(value_type, 10)\n        r_old = reg_name(value_type, 11)\n        r_new = reg_name(value_type, 12)\n        ex_suffix = _atomic_size_suffix(value_type)\n        label = \"Lat_\" + sanitize_label(func.name) + \"_\" + sanitize_label(dest)\n        lines.append(f\"{label}:\")\n        lines.append(f\"  ldaxr{ex_suffix} {r_old}, [x9]\")\n        if op == \"xchg\":\n            lines.append(emitted_move_register_line(r_new, r_val))\n        else:\n            lines.append(f\"  {_ATOMIC_RMW_COMPUTE[op]} {r_new}, {r_old}, {r_val}\")\n        lines.append(f\"  stlxr{ex_suffix} w13, {r_new}, [x9]\")\n        lines.append(emitted_branch_line(\"cbnz\", label, \"w13\"))\n        if (indexed_dest_has_slot if indexed_kernel is not None else parsed_function_has_value_slot(func, dest)):\n            lines.extend(store_value_regs_to_value_slot(func, dest, 11))\n        return lines\n\n    if kind_id == PARSED_INSTRUCTION_KIND_CMPXCHG:\n        (\n            dest,\n            pair_type,\n            _ptr_type,\n            ptr_name,\n            value_type,\n            expected,\n            desired,\n            _success,\n            _failure,\n        ) = data\n        _atomic_width_check(func, \"cmpxchg\", value_type)\n        lines = materialize_pointer(func, ptr_name, 9, module_symbols)\n        lines.extend(materialize_value(func, expected, value_type, 10, module_symbols))\n        lines.extend(materialize_value(func, desired, value_type, 11, module_symbols))\n        r_exp = reg_name(value_type, 10)\n        r_des = reg_name(value_type, 11)\n        r_old = reg_name(value_type, 12)\n        ex_suffix = _atomic_size_suffix(value_type)\n        base = \"Lat_\" + sanitize_label(func.name) + \"_\" + sanitize_label(dest)\n        lines.append(f\"{base}_retry:\")\n        lines.append(f\"  ldaxr{ex_suffix} {r_old}, [x9]\")\n        lines.append(emitted_compare_register_line(r_old, r_exp))\n        lines.append(emitted_branch_line(\"b.ne\", base + \"_fail\"))\n        lines.append(f\"  stlxr{ex_suffix} w13, {r_des}, [x9]\")\n        lines.append(emitted_branch_line(\"cbnz\", base + \"_retry\", \"w13\"))\n        lines.append(emitted_branch_line(\"b\", base + \"_done\"))\n        lines.append(f\"{base}_fail:\")\n        lines.append(\"  clrex\")\n        lines.append(f\"{base}_done:\")\n        lines.append(emitted_cset_line(\"w14\", \"eq\"))\n        if (indexed_dest_has_slot if indexed_kernel is not None else parsed_function_has_value_slot(func, dest)):\n            lines.extend(emit_value_slot_base_address(func, dest, \"x15\"))\n            lines.append(emitted_memory_instruction_line(mem_store_op(value_type), r_old, \"x15\"))\n            _flag_type, flag_offset = aggregate_member_info(pair_type, (1,))\n            lines.append(\n                emitted_memory_instruction_line(\n                    \"strb\",\n                    \"w14\",\n                    \"x15\",\n                    flag_offset,\n                )\n            )\n        return lines\n\n    if kind_id == PARSED_INSTRUCTION_KIND_FENCE:\n        return [\"  dmb ish\"]\n\n    if kind_id == PARSED_INSTRUCTION_KIND_LOAD:\n        if indexed_kernel is not None:\n            load_record: CompilerInt4 = indexed_kernel.instruction_record(data)\n            dest = indexed_kernel.value_name(indexed_dest_id)\n            value_type_id = load_record.first\n            value_type_header: CompilerInt4 = indexed_kernel.type_header(\n                value_type_id\n            )\n            pointer_ref = load_record.third\n            pointer_type = load_record.second\n            if pointer_override_type >= 0:\n                pointer_ref = pointer_override_ref\n                pointer_type = pointer_override_type\n            ptr_name = (\n                indexed_kernel.value_name(pointer_ref)\n                if pointer_ref >= 0\n                else indexed_kernel.call_texts[-pointer_ref - 1]\n            )\n            if not indexed_dest_has_slot:\n                return []\n            if _indexed_scalar_type(value_type_header):\n                result_register = allocated_scalar_register_indexed(\n                    indexed_kernel, indexed_dest_id, value_type_id,\n                )\n                load_register = result_register if result_register >= 0 else 10\n                alloca_type_id = (\n                    indexed_kernel.alloca_type_id(load_record.third)\n                    if load_record.third >= 0 and pointer_override_type < 0\n                    else -1\n                )\n                storage_matches = alloca_type_id == value_type_id\n                if alloca_type_id >= 0 and not storage_matches:\n                    alloca_type_header: CompilerInt4 = (\n                        indexed_kernel.type_header(alloca_type_id)\n                    )\n                    storage_matches = (\n                        alloca_type_header.first == TYPE_KIND_PTR\n                        and value_type_header.first == TYPE_KIND_PTR\n                    )\n                if storage_matches:\n                    lines = _indexed_scalar_slot_access(\n                        indexed_kernel,\n                        value_type_id,\n                        indexed_kernel.alloca_offset(load_record.third),\n                        load_register,\n                        store=False,\n                    )\n                else:\n                    base_register = allocated_scalar_register_indexed(\n                        indexed_kernel, pointer_ref, pointer_type,\n                    )\n                    lines = []\n                    base_name = \"x9\"\n                    if base_register >= 0:\n                        base_name = reg_name_indexed(indexed_kernel, pointer_type, base_register)\n                    else:\n                        lines.extend(materialize_scalar_value_indexed(\n                            func, indexed_kernel, ptr_name, pointer_type, 9,\n                            module_symbols, value_id=pointer_ref,\n                        ))\n                    memory_op = _indexed_scalar_mem_load_op(value_type_header)\n                    access_bytes = _scalar_access_bytes(value_type_header)\n                    if memory_offset < 0 or (access_bytes and memory_offset % access_bytes):\n                        memory_op = _indexed_scalar_stack_load_op(value_type_header)\n                    lines.append(\n                        emitted_memory_instruction_line(\n                            memory_op,\n                            reg_name_indexed(indexed_kernel, value_type_id, load_register),\n                            base_name,\n                            memory_offset,\n                        )\n                    )\n                if result_register >= 0:\n                    # LDRB/LDRH already perform the narrow zero extension;\n                    # the allocated value is ready without a move/mask chain.\n                    return lines\n                allocated_lines = commit_allocated_scalar_result_indexed(\n                    func,\n                    indexed_dest_id,\n                    value_type_id,\n                    reg_name_indexed(indexed_kernel, value_type_id, 10),\n                )\n                if allocated_lines is not None:\n                    lines.extend(allocated_lines)\n                else:\n                    slot_id = indexed_kernel.value_slot_id(indexed_dest_id)\n                    lines.extend(\n                        _indexed_scalar_slot_access(\n                            indexed_kernel,\n                            value_type_id,\n                            indexed_kernel.slot_offset(slot_id),\n                            10,\n                            store=True,\n                        )\n                    )\n                return lines\n            value_type = indexed_kernel.type_desc(value_type_id)\n        else:\n            dest, value_type, _ptr_type, ptr_name = data\n        if not (indexed_dest_has_slot if indexed_kernel is not None else parsed_function_has_value_slot(func, dest)):\n            return []\n        if (value_type.is_array or value_type.is_struct) and not value_has_uses(func, dest):\n            return []\n        if (value_type.is_array or value_type.is_struct) and not aggregate_fits_reg_abi(value_type):\n            if (\n                parsed_function_has_alloca_slot(func, ptr_name)\n                and parsed_function_alloca_slot_type(func, ptr_name).describe()\n                == value_type.describe()\n            ):\n                return copy_slot_to_slot_parts(\n                    parsed_function_alloca_slot_offset(func, ptr_name),\n                    value_type,\n                    parsed_function_value_slot_offset(func, dest),\n                    parsed_function_value_slot_type(func, dest),\n                )\n            lines = materialize_pointer(func, ptr_name, 9, module_symbols)\n            lines.extend(copy_address_to_value_slot(\"x9\", func, dest))\n            return lines\n        lines: list[str] = []\n        if (\n            parsed_function_has_alloca_slot(func, ptr_name)\n            and parsed_function_alloca_slot_type(func, ptr_name).describe()\n            == value_type.describe()\n        ):\n            lines.extend(\n                load_slot_to_value_regs_parts(\n                    parsed_function_alloca_slot_offset(func, ptr_name),\n                    value_type,\n                    10,\n                )\n            )\n        else:\n            lines.extend(materialize_pointer(func, ptr_name, 9, module_symbols))\n            lines.extend(load_value_from_address(\"x9\", value_type, 10))\n        allocated_lines = None\n        if value_type.is_int or value_type.is_ptr:\n            allocated_lines = commit_allocated_scalar_result(\n                func, dest, value_type, reg_name(value_type, 10)\n            )\n        if allocated_lines is not None:\n            lines.extend(allocated_lines)\n        else:\n            lines.extend(store_value_regs_to_value_slot(func, dest, 10))\n        return lines\n\n    return None"
+    },
+    "pcc/backend/self_backend_aarch64_darwin_ops.py:emit_binop_indexed": {
+      "lineno": 61,
+      "name": "emit_binop_indexed",
+      "path": "pcc/backend/self_backend_aarch64_darwin_ops.py",
+      "source": "def emit_binop_indexed(\n    kernel: IndexedFunctionKernel, op: str, type_id: int,\n    lhs_register: int = 9, rhs_register: int = 10, result_register: int = 11,\n) -> list[str]:\n    header: CompilerInt4 = kernel.type_header(type_id)\n    if header.first != TYPE_KIND_INT:\n        raise BackendUnavailable(\n            f\"self backend only supports integer binops, got type_id={type_id}\"\n        )\n    r9 = reg_name_indexed(kernel, type_id, lhs_register)\n    r10 = reg_name_indexed(kernel, type_id, rhs_register)\n    r11 = reg_name_indexed(kernel, type_id, result_register)\n    if op == \"add\" or op == \"sub\":\n        return [emitted_addsub_register_line(op, r11, r9, r10)]\n    mapping = {\n        \"mul\": f\"  mul {r11}, {r9}, {r10}\",\n        \"sdiv\": f\"  sdiv {r11}, {r9}, {r10}\",\n        \"udiv\": f\"  udiv {r11}, {r9}, {r10}\",\n        \"and\": f\"  and {r11}, {r9}, {r10}\",\n        \"or\": f\"  orr {r11}, {r9}, {r10}\",\n        \"xor\": f\"  eor {r11}, {r9}, {r10}\",\n        \"shl\": f\"  lslv {r11}, {r9}, {r10}\",\n        \"lshr\": f\"  lsrv {r11}, {r9}, {r10}\",\n        \"ashr\": f\"  asrv {r11}, {r9}, {r10}\",\n    }\n    # The quotient cannot overwrite either input before MSUB consumes it.\n    quotient = reg_name_indexed(kernel, type_id, 11)\n    if op == \"srem\":\n        return [\n            f\"  sdiv {quotient}, {r9}, {r10}\",\n            f\"  msub {r11}, {quotient}, {r10}, {r9}\",\n        ]\n    if op == \"urem\":\n        return [\n            f\"  udiv {quotient}, {r9}, {r10}\",\n            f\"  msub {r11}, {quotient}, {r10}, {r9}\",\n        ]\n    if op not in mapping:\n        raise BackendUnavailable(f\"self backend does not support binop {op!r}\")\n    return [mapping[op]]"
+    },
+    "pcc/backend/self_backend_aarch64_darwin_prologue.py:emit_function_prologue": {
+      "lineno": 63,
+      "name": "emit_function_prologue",
+      "path": "pcc/backend/self_backend_aarch64_darwin_prologue.py",
+      "source": "def emit_function_prologue(\n    func: ParsedFunction,\n    module_symbols: PreparedModuleSymbols,\n) -> list[str]:\n    # Target-specific preparation belongs immediately before target emission.\n    # The allocator is conservative and leaves every preassigned stack slot in\n    # place, so an unsupported shape remains byte-for-byte on the spill path.\n    allocate_aarch64_block_registers(func)\n    symbol = asm_symbol(func.name, module_symbols)\n    lines = [\"\", \".p2align 2\"]\n    if func.is_global:\n        lines.append(f\".globl {symbol}\")\n    lines.append(f\"{symbol}:\")\n    linux = is_aarch64_linux_triple(module_symbols.target_triple)\n    func.platform_frame_extra = 192 if linux and func.is_vararg else 0\n    if linux and func.name == \"_start\":\n        if len(func.args) != 1 or not func.args[0].type.is_ptr or not func.ret_type.is_void:\n            raise ValueError(\"Linux _start requires void (ptr initial_stack)\")\n        lines.append(\"  mov x0, sp\")\n    if func.platform_frame_extra:\n        func.aarch64_frameless = False\n    func.aarch64_dynamic_stack = function_uses_dynamic_alloca(func)\n    if func.aarch64_dynamic_stack:\n        func.aarch64_frameless = False\n        if func.platform_frame_extra:\n            # The va_list register save area is addressed from SP.\n            raise BackendUnavailable(\n                f\"self backend cannot combine a dynamic alloca with the Linux \"\n                f\"variadic register save area in {func.name!r}\"\n            )\n    # AArch64 branch protection (pac-ret + BTI). ``paciasp`` signs LR (x30) with\n    # SP as the modifier *before* the frame save stores it, and doubles as a BTI\n    # ``c`` landing pad for ``bl``/``blr`` callers. The matching ``autiasp`` is\n    # emitted in the epilogue after LR is reloaded. See\n    # ``self_backend_aarch64_darwin_branch_protection`` for the S-track rationale\n    # (self backend must not depend on the LLVM path for CFI hardening).\n    if func.aarch64_frameless:\n        # No frame record and no stack: LR never leaves x30, so there is\n        # nothing to sign; ``bti c`` keeps the indirect-call landing pad that\n        # ``paciasp`` otherwise provides.\n        if branch_protection_enabled():\n            lines.append(emitted_fixed_instruction_line(\"bti c\"))\n    else:\n        if branch_protection_enabled():\n            lines.extend(prologue_sign_return_address(func))\n        lines.extend(\n            [\n                emitted_frame_pair_line(False),\n                emitted_move_register_line(\"x29\", \"sp\"),\n            ]\n        )\n        total_frame = func.frame_size + callee_saved_area_size(func) + func.platform_frame_extra\n        if total_frame:\n            lines.extend(emit_stack_adjust(-total_frame))\n        # Save before any argument is committed into a callee-saved register.\n        lines.extend(emit_callee_saved_stores(func))\n    if func.platform_frame_extra:\n        # Preserve incoming variadic registers before normal argument lowering.\n        for index in range(8):\n            lines.append(f\"  str x{index}, [sp, #{index * 8}]\")\n            lines.append(f\"  str q{index}, [sp, #{64 + index * 16}]\")\n    kernel = get_indexed_function_kernel(func)\n    if func.indexed_slot_projection and kernel.hidden_sret_slot_id >= 0:\n        hidden_slot_id = kernel.hidden_sret_slot_id\n        lines.extend(\n            store_reg_to_slot_parts(\n                \"x8\",\n                kernel.slot_offset(hidden_slot_id),\n                kernel.type_desc(kernel.slot_type_id(hidden_slot_id)),\n            )\n        )\n    elif func.hidden_sret_slot is not None:\n        lines.extend(store_reg_to_slot(\"x8\", func.hidden_sret_slot))\n\n    arg_types = [arg.type for arg in func.args]\n    arg_regs = assign_abi_arg_regs(arg_types, linux=linux)\n    stack_offsets = stack_arg_offsets(arg_types, arg_regs, linux=linux)\n    for arg, regs, stack_offset in zip(func.args, arg_regs, stack_offsets):\n        if not parsed_function_has_value_slot(func, arg.name):\n            continue\n        if not regs:\n            assert stack_offset is not None\n            lines.extend(emit_fixed_stack_arg_load(func, arg, stack_offset))\n            continue\n        if aggregate_passed_indirect(arg.type):\n            lines.extend(copy_address_to_value_slot(regs[0], func, arg.name))\n            continue\n        if func.indexed_slot_projection:\n            arg_value_id = kernel.value_id(arg.name)\n            arg_type_id = kernel.value_type_id(arg_value_id)\n            arg_header = kernel.type_header(arg_type_id)\n            if arg_header.first in (\n                TYPE_KIND_INT,\n                TYPE_KIND_FP,\n                TYPE_KIND_PTR,\n            ):\n                allocated_lines = commit_allocated_scalar_result_indexed(\n                    func,\n                    arg_value_id,\n                    arg_type_id,\n                    reg_name_indexed(kernel, arg_type_id, int(regs[0][1:])),\n                )\n                if allocated_lines is not None:\n                    lines.extend(allocated_lines)\n                    continue\n                lines.extend(\n                    store_scalar_reg_to_value_slot_indexed(\n                        func,\n                        arg_value_id,\n                        arg_type_id,\n                        int(regs[0][1:]),\n                    )\n                )\n                continue\n        lines.extend(\n            store_value_regs_to_value_slot(func, arg.name, int(regs[0][1:]))\n        )\n    return lines"
+    },
+    "pcc/backend/self_backend_aarch64_darwin_regalloc.py:_append_phi_intervals": {
+      "lineno": 1008,
+      "name": "_append_phi_intervals",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "source": "def _append_phi_intervals(\n    kernel,\n    block_id: int,\n    block_base: list[int],\n    global_last_use: dict[int, int],\n    first_live: dict[int, int],\n    hard_barriers: list[int],\n    call_barriers: list[int],\n    reload_offsets: list[int],\n    intervals: list[tuple[int, int, int, bool]],\n) -> None:\n    \"\"\"Add a block's scalar phi results as candidates.\n\n    A phi is written by the edge copies at the end of each predecessor, so\n    its interval starts one position before its block.  Every value live\n    into the block is defined earlier and so overlaps it; a value whose last\n    use is a predecessor's final position may donate its register, which\n    makes that edge copy a no-op.  Clobbers are scanned from the block on:\n    the copies run after the predecessor's last call.\n    \"\"\"\n\n    phi_fact = kernel.block_phi_fact(block_id)\n    phi_index = 0\n    while phi_index < phi_fact.second:\n        phi: CompilerInt4 = kernel.phi_record(phi_fact.first + phi_index)\n        header: CompilerInt4 = kernel.type_header(phi.second)\n        if header.first == TYPE_KIND_ARRAY or header.first == TYPE_KIND_STRUCT:\n            # An aggregate phi sends the whole edge down the slot-only path.\n            return\n        phi_index += 1\n    base = block_base[block_id]\n    start = base - 1\n    phi_index = 0\n    while phi_index < phi_fact.second:\n        phi = kernel.phi_record(phi_fact.first + phi_index)\n        phi_index += 1\n        value_id = phi.first\n        if value_id < 0:\n            continue\n        header = kernel.type_header(phi.second)\n        if header.first != TYPE_KIND_PTR and not (\n            header.first == TYPE_KIND_INT and header.second in (1, 8, 16, 32, 64)\n        ):\n            continue\n        recorded_type_id = kernel.value_type_id(value_id)\n        if recorded_type_id < 0 or not _register_type_ids_match(\n            kernel, recorded_type_id, phi.second\n        ):\n            continue\n        slot_offset = kernel.value_slot_offset(value_id)\n        if slot_offset < 0 or slot_offset in reload_offsets:\n            continue\n        last_use = global_last_use.get(value_id)\n        if last_use is None or last_use < base:\n            continue\n        if first_live.get(value_id, start) < start:\n            continue\n        if _interval_touches_call(base, last_use, hard_barriers):\n            continue\n        intervals.append(\n            (\n                start,\n                last_use,\n                value_id,\n                _interval_touches_call(base, last_use, call_barriers),\n            )\n        )"
+    },
+    "pcc/backend/self_backend_aarch64_darwin_regalloc.py:_candidate_indexed_definition_type_id": {
+      "lineno": 186,
+      "name": "_candidate_indexed_definition_type_id",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "source": "def _candidate_indexed_definition_type_id(\n    kernel: IndexedFunctionKernel,\n    kind_id: int,\n    record_id: int,\n    dest_id: int,\n) -> int:\n    raw: CompilerInt4 = kernel.instruction_record(record_id)\n    if kind_id == PARSED_INSTRUCTION_KIND_LOAD:\n        header: CompilerInt4 = kernel.type_header(raw.first)\n        return (\n            raw.first\n            if header.first == TYPE_KIND_INT or header.first == TYPE_KIND_PTR\n            else -1\n        )\n    if kind_id == PARSED_INSTRUCTION_KIND_BINOP:\n        binop_type: CompilerInt4 = kernel.type_header(raw.second)\n        return (\n            raw.second\n            if binop_type.first == TYPE_KIND_INT\n            else -1\n        )\n    if kind_id == PARSED_INSTRUCTION_KIND_ICMP:\n        compared: CompilerInt4 = kernel.type_header(raw.second)\n        if compared.first != TYPE_KIND_INT and compared.first != TYPE_KIND_PTR:\n            return -1\n        return -1 if dest_id < 0 else kernel.value_type_id(dest_id)\n    if kind_id == PARSED_INSTRUCTION_KIND_CAST:\n        src_header: CompilerInt4 = kernel.type_header(raw.second)\n        dst_header: CompilerInt4 = kernel.type_header(raw.fourth)\n        src_kind = src_header.first\n        dst_kind = dst_header.first\n        if (\n            (src_kind == TYPE_KIND_INT or src_kind == TYPE_KIND_PTR)\n            and (dst_kind == TYPE_KIND_INT or dst_kind == TYPE_KIND_PTR)\n        ):\n            return raw.fourth\n        return -1\n    result_header: CompilerInt4 = kernel.type_header(raw.first)\n    result_kind = result_header.first\n    return (\n        raw.first\n        if result_kind == TYPE_KIND_INT or result_kind == TYPE_KIND_PTR\n        else -1\n    )"
+    },
+    "pcc/backend/self_backend_aarch64_darwin_regalloc.py:_function_level_facts": {
+      "lineno": 455,
+      "name": "_function_level_facts",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "source": "def _function_level_facts(\n    kernel,\n) -> tuple[\n    list[int], dict[int, int], list[int], list[bool], list[int], list[int],\n    dict[int, int],\n]:\n    \"\"\"Global positions, function-wide last uses and barriers.\n\n    Each block owns ``count + 1`` positions: its instructions, then its\n    terminator.  A block the block-local scan would skip (an unclassified or\n    rejected instruction kind) contributes every one of its positions as a\n    barrier, so no interval may span it.  Besides the merged barrier list, the\n    call positions and those unsafe-block (\"hard\") positions are returned\n    separately: a callee-saved register survives a call but not an\n    unclassified instruction.\n\n    The last use is *not* the last textual use.  A value defined before a loop\n    and used inside it is live at every point of the loop, including positions\n    after its last textual use, because the back edge will bring control to\n    that use again; a layout-order range ended there, let another value take\n    the register in the tail of the loop, and left the value's stack slot\n    unwritten at a safepoint the stack map believed it was live at -- the\n    collector then read garbage (SIGBUS in ``freestanding_allocator``).  So the\n    range end is the maximum of the last textual use and the end of every block\n    the value is live-out of, from the standard backward dataflow\n    ``live_in = upward_exposed | (live_out - defs)``; ``live_out = union of\n    successors' live_in``.  This is what LLVM's ``liveintervals`` computes.\n    \"\"\"\n\n    block_base: list[int] = []\n    block_end: list[int] = []\n    last_use: dict[int, int] = {}\n    barriers: list[int] = []\n    call_positions: list[int] = []\n    hard_barriers: list[int] = []\n    block_safe: list[bool] = []\n    # SSA: each value has one defining block, so liveness is computed per\n    # value by walking back from its uses (below) rather than as per-block\n    # live sets.  Per-block sets held every value live across every block --\n    # O(blocks x values) -- which pushed a Stage2 emit worker past its memory\n    # share on the module initializers, the largest functions pcc emits.\n    def_block: dict[int, int] = {}\n    use_blocks: dict[int, list[int]] = {}\n    position = 0\n    block_id = 0\n    while block_id < len(kernel.block_names):\n        block_fact: CompilerInt4 = kernel.block_fact(block_id)\n        block_base.append(position)\n        safe = True\n        instruction_index = 0\n        while instruction_index < block_fact.second:\n            metadata: CompilerInt4 = kernel.instruction_metadata_by_id(\n                block_fact.first + instruction_index\n            )\n            if (\n                not 0 <= metadata.first < len(PARSED_INSTRUCTION_KINDS)\n                or metadata.first in _POOL_REJECTED_INSTRUCTION_KIND_IDS\n            ):\n                safe = False\n            instruction_index += 1\n        block_safe.append(safe)\n        instruction_index = 0\n        while instruction_index < block_fact.second:\n            metadata = kernel.instruction_metadata_by_id(\n                block_fact.first + instruction_index\n            )\n            if not safe or metadata.first == PARSED_INSTRUCTION_KIND_CALL:\n                barriers.append(position)\n                if not safe:\n                    hard_barriers.append(position)\n                else:\n                    call_positions.append(position)\n            instruction_fact: CompilerInt4 = kernel.instruction_fact_by_id(\n                block_fact.first + instruction_index\n            )\n            destination = instruction_fact.first\n            if destination >= 0:\n                def_block[destination] = block_id\n            use_index = 0\n            use_count = kernel.instruction_use_count(block_id, instruction_index)\n            while use_index < use_count:\n                used = kernel.instruction_use_id(block_id, instruction_index, use_index)\n                last_use[used] = position\n                _note_use_block(use_blocks, used, block_id)\n                use_index += 1\n            position += 1\n            instruction_index += 1\n        if not safe:\n            barriers.append(position)\n            hard_barriers.append(position)\n        try:\n            used = kernel.terminator_use_id(block_id, 0)\n            last_use[used] = position\n            _note_use_block(use_blocks, used, block_id)\n        except IndexError:\n            pass\n        block_end.append(position)\n        position += 1\n        block_id += 1\n\n    # A phi is defined on entry to its block, and each incoming value is read\n    # by the edge copy emitted with its predecessor's terminator, so that\n    # value is used at the predecessor's last position.\n    block_id = 0\n    while block_id < len(kernel.block_names):\n        phi_fact = kernel.block_phi_fact(block_id)\n        phi_index = 0\n        while phi_index < phi_fact.second:\n            phi: CompilerInt4 = kernel.phi_record(phi_fact.first + phi_index)\n            if phi.first >= 0:\n                def_block[phi.first] = block_id\n            incoming_index = 0\n            while incoming_index < phi.fourth:\n                incoming = kernel.phi_incoming(phi.third + incoming_index)\n                if incoming.first >= 0 and 0 <= incoming.second < len(block_end):\n                    end = block_end[incoming.second]\n                    if last_use.get(incoming.first, -1) < end:\n                        last_use[incoming.first] = end\n                    _note_use_block(use_blocks, incoming.first, incoming.second)\n                incoming_index += 1\n            phi_index += 1\n        block_id += 1\n\n    # Successors from the indexed terminators: br/br_cond targets and the\n    # switch default plus its cases.\n    successors: list[list[int]] = []\n    block_id = 0\n    while block_id < len(kernel.block_names):\n        header: CompilerInt4 = kernel.terminator_header(block_id)\n        span: CompilerInt4 = kernel.terminator_span(block_id)\n        targets: list[int] = []\n        if header.fourth >= 0:\n            targets.append(header.fourth)\n        if span.first >= 0:\n            targets.append(span.first)\n        case_index = 0\n        while case_index < span.third:\n            case = kernel.terminator_case(span.second + case_index)\n            if case.second >= 0:\n                targets.append(case.second)\n            case_index += 1\n        # An inline error edge leaves the block mid-way to its error target.\n        # Treating the target as a block successor over-approximates the\n        # values live at the edge, which can only lengthen intervals.\n        error_span = kernel.inline_error_edge_span(block_id)\n        error_index = 0\n        while error_index < error_span.second:\n            error_target = kernel.inline_error_edge_target(\n                error_span.first + error_index\n            )\n            if error_target >= 0:\n                targets.append(error_target)\n            error_index += 1\n        successors.append(targets)\n        block_id += 1\n\n    predecessors: list[list[int]] = [[] for _ in successors]\n    block_id = 0\n    while block_id < len(successors):\n        for target in successors[block_id]:\n            if 0 <= target < len(predecessors):\n                predecessors[target].append(block_id)\n        block_id += 1\n\n    # Backward liveness per value.  A use outside the defining block makes the\n    # value live into that block (SSA: a use in the defining block follows the\n    # definition); a block the value is live into makes it live out of every\n    # predecessor, and live into each predecessor that is not the defining\n    # block.  This is the fixpoint ``live_in = upward_exposed |\n    # (live_out - defs)``, ``live_out = union of successors' live_in``, solved\n    # one value at a time.  A value live out of a block is live through that\n    # block's last position (for a loop latch that extends the range across\n    # the back edge); a value live into a block is live from its first\n    # position -- layout order need not follow dominance, so such a block may\n    # precede the definition.\n    # The -1 value ID aliases the unvisited stamp and depends on previous\n    # values' walks.  Custom IDs/seeds can expose hash, equality or indexing\n    # calls.  In either case retain the original traversal for every value.\n    cache_enabled = len(use_blocks) > 1\n    if cache_enabled:\n        for value_id in def_block:\n            if type(value_id) is not int:\n                cache_enabled = False\n                break\n        for value_id in use_blocks:\n            if type(value_id) is not int or value_id == -1:\n                cache_enabled = False\n                break\n    if cache_enabled:\n        for value_id in use_blocks:\n            for seed in use_blocks[value_id]:\n                if type(seed) is not int:\n                    cache_enabled = False\n                    break\n    # Home is -1 or a block index, so this pair has a collision-free integer\n    # key: (home + 1) * block_count + seed.  Keep at most block_count entries;\n    # once full, new keys take the old walk without evicting useful summaries.\n    graph_low: dict[int, int] = {}\n    graph_high: dict[int, int] = {}\n    first_live: dict[int, int] = {}\n    visited: list[int] = [-1] * len(successors)\n    pending: list[int] = []\n    for value_id in use_blocks:\n        home = def_block.get(value_id, -1)\n        lowest = -1\n        textual_highest = last_use[value_id]\n        highest = textual_highest\n        if cache_enabled:\n            highest = -1\n        for block_id in use_blocks[value_id]:\n            if block_id != home and visited[block_id] != value_id:\n                visited[block_id] = value_id\n                pending.append(block_id)\n        cache_key = -1\n        cache_miss = False\n        if cache_enabled and len(pending) == 1:\n            seed = pending[0]\n            cache_key = (home + 1) * len(successors) + seed\n            cached_low = graph_low.get(cache_key, -1)\n            if cached_low >= 0:\n                lowest = cached_low\n                highest = graph_high[cache_key]\n                pending.pop()\n            elif len(graph_low) < len(successors):\n                cache_miss = True\n        while pending:\n            block_id = pending.pop()\n            base = block_base[block_id]\n            if lowest < 0 or base < lowest:\n                lowest = base\n            for predecessor in predecessors[block_id]:\n                end = block_end[predecessor]\n                if end > highest:\n                    highest = end\n                if predecessor != home and visited[predecessor] != value_id:\n                    visited[predecessor] = value_id\n                    pending.append(predecessor)\n        if cache_miss:\n            # Cache only graph extrema: different values at this same seed\n            # can have different textual or PHI last-use positions.\n            graph_low[cache_key] = lowest\n            graph_high[cache_key] = highest\n        if cache_enabled and textual_highest > highest:\n            highest = textual_highest\n        last_use[value_id] = highest\n        if lowest >= 0:\n            first_live[value_id] = lowest\n    return (\n        block_base,\n        last_use,\n        barriers,\n        block_safe,\n        call_positions,\n        hard_barriers,\n        first_live,\n    )"
+    },
+    "pcc/backend/self_backend_aarch64_darwin_regalloc.py:_register_type_ids_match": {
+      "lineno": 232,
+      "name": "_register_type_ids_match",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "source": "def _register_type_ids_match(\n    kernel: IndexedFunctionKernel, left_id: int, right_id: int\n) -> bool:\n    if left_id == right_id:\n        return True\n    left: CompilerInt4 = kernel.type_header(left_id)\n    right: CompilerInt4 = kernel.type_header(right_id)\n    return left.first == TYPE_KIND_PTR and right.first == TYPE_KIND_PTR"
+    },
+    "pcc/backend/self_backend_aarch64_darwin_regalloc.py:allocate_aarch64_block_registers": {
+      "lineno": 1287,
+      "name": "allocate_aarch64_block_registers",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "source": "def allocate_aarch64_block_registers(func: ParsedFunction) -> None:\n    \"\"\"Populate the indexed kernel with conservative linear-scan picks.\"\"\"\n\n    kernel = get_indexed_function_kernel(func)\n    kernel.clear_value_registers()\n    func.aarch64_callee_saved = []\n    func.aarch64_fused_branch_values = {}\n    func.aarch64_frameless = False\n    if func.is_vararg:\n        return\n    function_level = function_live_intervals_enabled()\n    call_results = call_result_registers_enabled() and bool(\n        getattr(func, \"indexed_slot_projection\", False)\n    )\n    # The callee-saved mode needs whole-function intervals (a value that\n    # survives a call almost always spans blocks) and call results.\n    callee_saved = callee_saved_registers_enabled() and bool(\n        getattr(func, \"indexed_slot_projection\", False)\n    )\n    if callee_saved:\n        function_level = True\n        call_results = True\n        func.aarch64_fused_branch_values = _fusable_branch_conditions(kernel)\n    pool_intervals: list[tuple[int, int, int, bool]] = []\n    alias_pairs: list[tuple[int, int]] = []\n    call_barriers: list[int] = []\n    hard_barriers: list[int] = []\n    first_live: dict[int, int] = {}\n    # The callee-saved mode allocates phis and their inputs (the edge copies\n    # move between registers and slots); the block-local modes keep both in\n    # their slots.\n    phi_input_ids: set[int] = set()\n    reload_offsets: list[int] = (\n        func.aarch64_reload_slot_offsets if callee_saved else []\n    )\n    block_id = 0\n    while not callee_saved and block_id < len(kernel.block_names):\n        phi_fact = kernel.block_phi_fact(block_id)\n        phi_index = 0\n        while phi_index < phi_fact.second:\n            phi = kernel.phi_record(phi_fact.first + phi_index)\n            incoming_index = 0\n            while incoming_index < phi.fourth:\n                incoming = kernel.phi_incoming(phi.third + incoming_index)\n                if incoming.first >= 0:\n                    phi_input_ids.add(incoming.first)\n                incoming_index += 1\n            phi_index += 1\n        block_id += 1\n\n    block_base: list[int] = []\n    global_last_use: dict[int, int] = {}\n    global_barriers: list[int] = []\n    block_safe: list[bool] = []\n    function_intervals: list[tuple[int, int, int]] = []\n    if function_level:\n        (\n            block_base,\n            global_last_use,\n            global_barriers,\n            block_safe,\n            call_barriers,\n            hard_barriers,\n            first_live,\n        ) = _function_level_facts(kernel)\n        # A fused multiply reads its inputs at the consumer, not at the mul.\n        # The per-block overrides below cover instruction results; arguments\n        # and phis take their intervals straight from these last uses.\n        for fusion in func.aarch64_madd_fusions:\n            fusion_block_id = kernel.block_id(fusion.block_name)\n            if fusion_block_id < 0:\n                continue\n            consumer_position = block_base[fusion_block_id] + fusion.consumer_index\n            for operand in (fusion.mul_lhs, fusion.mul_rhs):\n                operand_id = kernel.value_id(operand)\n                if operand_id < 0:\n                    continue\n                known = global_last_use.get(operand_id)\n                if known is None or known < consumer_position:\n                    global_last_use[operand_id] = consumer_position\n\n    for block_id in range(len(kernel.block_names)):\n        block_name = kernel.block_names[block_id]\n        block_fact: CompilerInt4 = kernel.block_fact(block_id)\n        instruction_count = block_fact.second\n        if function_level:\n            block_is_safe = block_safe[block_id]\n        else:\n            block_is_safe = True\n            instruction_index = 0\n            while instruction_index < instruction_count:\n                metadata: CompilerInt4 = kernel.instruction_metadata_by_id(\n                    block_fact.first + instruction_index\n                )\n                if (\n                    not 0 <= metadata.first < len(PARSED_INSTRUCTION_KINDS)\n                    or metadata.first in _POOL_REJECTED_INSTRUCTION_KIND_IDS\n                ):\n                    block_is_safe = False\n                    break\n                instruction_index += 1\n        if not block_is_safe:\n            continue\n        if callee_saved:\n            _append_phi_intervals(\n                kernel,\n                block_id,\n                block_base,\n                global_last_use,\n                first_live,\n                hard_barriers,\n                call_barriers,\n                reload_offsets,\n                pool_intervals,\n            )\n\n        call_positions: list[int] = []\n        if not function_level:\n            instruction_index = 0\n            while instruction_index < instruction_count:\n                metadata: CompilerInt4 = kernel.instruction_metadata_by_id(\n                    block_fact.first + instruction_index\n                )\n                if metadata.first == PARSED_INSTRUCTION_KIND_CALL:\n                    call_positions.append(instruction_index)\n                instruction_index += 1\n\n        last_use_override_ids: list[int] = []\n        last_use_override_positions: list[int] = []\n        _extend_aarch64_madd_operand_liveness(\n            func,\n            block_id,\n            block_name,\n            last_use_override_ids,\n            last_use_override_positions,\n        )\n        base = block_base[block_id] if function_level else 0\n        intervals: list[tuple[int, int, int]] = []\n        position = 0\n        while position < instruction_count:\n            instruction_id = block_fact.first + position\n            instruction_fact: CompilerInt4 = kernel.instruction_fact_by_id(\n                instruction_id\n            )\n            dest_id = instruction_fact.first\n            if dest_id < 0 or dest_id in phi_input_ids:\n                position += 1\n                continue\n            dest = kernel.value_name(dest_id)\n            if aarch64_madd_fusion_for_product(func, dest) is not None:\n                # The product is never materialized separately, so assigning\n                # it a register would only steal capacity from real values.\n                position += 1\n                continue\n            metadata: CompilerInt4 = kernel.instruction_metadata_by_id(\n                instruction_id\n            )\n            kind_id = metadata.first\n            is_call_result = False\n            if kind_id == PARSED_INSTRUCTION_KIND_CALL:\n                if not call_results:\n                    position += 1\n                    continue\n                call_id = metadata.second\n                if call_id in func.aarch64_tail_call_ids:\n                    # The return terminator consumes x0 directly; there is no\n                    # post-call point at which to commit the result.\n                    position += 1\n                    continue\n                call_header: CompilerInt4 = kernel.call_header(call_id)\n                if not (call_header.third & 1) and kernel.call_texts[\n                    call_header.second\n                ].startswith(\"llvm.\"):\n                    # Intrinsics are lowered inline by emitters that store\n                    # their result to its slot themselves; only the generic\n                    # call path commits through the allocator.\n                    position += 1\n                    continue\n                ret_header: CompilerInt4 = kernel.type_header(call_header.first)\n                if not (\n                    ret_header.first == TYPE_KIND_PTR\n                    or (\n                        ret_header.first == TYPE_KIND_INT\n                        and ret_header.second in (1, 8, 16, 32, 64)\n                    )\n                ):\n                    position += 1\n                    continue\n                value_type_id = call_header.first\n                is_call_result = True\n            if is_call_result:\n                pass\n            elif kind_id == PARSED_INSTRUCTION_KIND_LOAD_ATOMIC:\n                # Atomic loads remain outside this allocator's existing\n                # candidate set. Their fixed record needs no diagnostic row.\n                value_type_id = -1\n            elif (\n                kind_id == PARSED_INSTRUCTION_KIND_LOAD\n                or kind_id == PARSED_INSTRUCTION_KIND_BINOP\n                or kind_id == PARSED_INSTRUCTION_KIND_ICMP\n                or kind_id == PARSED_INSTRUCTION_KIND_CAST\n                or kind_id == PARSED_INSTRUCTION_KIND_SELECT\n            ):\n                value_type_id = _candidate_indexed_definition_type_id(\n                    kernel,\n                    kind_id,\n                    metadata.second,\n                    dest_id,\n                )\n            elif kind_id == PARSED_INSTRUCTION_KIND_ALLOCA:\n                value_type_id = -1\n            elif kind_id == PARSED_INSTRUCTION_KIND_GEP:\n                gep_span: CompilerInt4 = kernel.gep_span(\n                    kernel.instruction_payload_id_by_id(instruction_id)\n                )\n                gep_type: CompilerInt4 = kernel.type_header(gep_span.second)\n                value_type_id = (\n                    gep_span.second\n                    if gep_type.first == TYPE_KIND_PTR\n                    else -1\n                )\n            else:\n                data = kernel.instruction_data(block_id, position)\n                value_type = _candidate_definition_type(func, kind_id, data)\n                value_type_id = (\n                    -1 if value_type is None else kernel.intern_type(value_type)\n                )\n            if value_type_id < 0:\n                position += 1\n                continue\n            recorded_type_id = kernel.value_type_id(dest_id)\n            if recorded_type_id < 0 or not _register_type_ids_match(\n                kernel,\n                recorded_type_id,\n                value_type_id,\n            ):\n                position += 1\n                continue\n            if kernel.value_slot_offset(dest_id) < 0:\n                # Allocation is only an optional projection.  Never create a\n                # register-only value: every candidate must retain the\n                # preassigned slot needed by pressure/type fallback paths.\n                position += 1\n                continue\n            if kernel.value_slot_offset(dest_id) in reload_offsets:\n                # A safepoint reload rewrites this slot; see\n                # ``note_aarch64_reload_destinations``.\n                position += 1\n                continue\n            # Preserve the established compare/cset/byte-slot/branch peephole\n            # for a boolean consumed directly by br_cond.  Other integer SSA\n            # values, including booleans used by scalar instructions, remain\n            # eligible for this block-local slice.\n            value_type_header: CompilerInt4 = kernel.type_header(value_type_id)\n            term_header: CompilerInt4 = kernel.terminator_header(block_id)\n            if (\n                value_type_header.first == TYPE_KIND_INT\n                and value_type_header.second == 1\n                and term_header.first == PARSED_INSTRUCTION_KIND_BR_COND\n                and term_header.third == dest_id\n            ):\n                position += 1\n                continue\n            if function_level:\n                last_use = global_last_use.get(dest_id)\n            else:\n                last_use = kernel.last_use(block_id, dest_id)\n            override_index = 0\n            while override_index < len(last_use_override_ids):\n                if last_use_override_ids[override_index] == dest_id:\n                    override_last_use = last_use_override_positions[override_index] + base\n                    if last_use is None or override_last_use > last_use:\n                        last_use = override_last_use\n                    break\n                override_index += 1\n            start = position + base\n            if last_use is None or last_use < start:\n                position += 1\n                continue\n            # A call result is defined by the call itself: the clobber it\n            # represents happens before the value exists, so its barrier scan\n            # starts one position later.  The interval still begins at the\n            # call so no other value may hold the register across it.\n            barrier_start = start + 1 if is_call_result else start\n            live_start = start\n            if function_level and first_live.get(dest_id, start) < start:\n                # A block the value is live into is laid out before its\n                # definition.  Such a value is live *before* the position its\n                # interval would start at, which the scan's register donation\n                # at an interval boundary does not model; keep it in its slot.\n                position += 1\n                continue\n            if callee_saved:\n                # Nothing survives an unclassified instruction.  A call (or a\n                # use as a call operand, which ends at the call) only rules\n                # out the caller-saved pool.\n                if _interval_touches_call(barrier_start, last_use, hard_barriers):\n                    position += 1\n                    continue\n                pool_intervals.append(\n                    (\n                        live_start,\n                        last_use,\n                        dest_id,\n                        _interval_touches_call(\n                            barrier_start, last_use, call_barriers\n                        ),\n                    )\n                )\n                if kind_id == PARSED_INSTRUCTION_KIND_CAST:\n                    cast_record: CompilerInt4 = kernel.instruction_record(\n                        metadata.second\n                    )\n                    if cast_record.third >= 0 and _is_noop_word_cast(\n                        kernel, cast_record\n                    ):\n                        alias_pairs.append((dest_id, cast_record.third))\n            elif function_level:\n                if _interval_touches_call(barrier_start, last_use, global_barriers):\n                    position += 1\n                    continue\n                function_intervals.append((live_start, last_use, dest_id))\n            else:\n                if _interval_touches_call(\n                    position + 1 if is_call_result else position,\n                    last_use,\n                    call_positions,\n                ):\n                    position += 1\n                    continue\n                intervals.append((position, last_use, dest_id))\n            position += 1\n\n        if not function_level:\n            _linear_scan_assign(kernel, intervals)\n\n    if callee_saved:\n        fixed_registers: dict[int, int] = {}\n        _append_argument_intervals(\n            func, kernel, phi_input_ids, global_last_use, hard_barriers,\n            call_barriers, reload_offsets, pool_intervals, fixed_registers,\n        )\n        group_intervals, group_members = _merge_alias_groups(\n            pool_intervals, alias_pairs\n        )\n        # A group that must survive a call keeps x19-x28 for all members.\n        fixed_roots: dict[int, int] = {}\n        for _start, _end, root, needs in group_intervals:\n            if needs:\n                continue\n            for member in group_members[root]:\n                if member in fixed_registers:\n                    fixed_roots[root] = fixed_registers[member]\n        _linear_scan_assign_pools(kernel, group_intervals, fixed_roots)\n        func.aarch64_callee_saved = _publish_group_registers(\n            kernel, group_intervals, group_members\n        )\n    elif function_level:\n        _linear_scan_assign(kernel, function_intervals)\n\n    # Stack slots were assigned before this target combine was planned.  When\n    # an extended operand did not win a register, retain the plan only if no\n    # intervening definition reuses/overlaps that operand's spill slot.\n    func.aarch64_madd_fusions = [\n        fusion\n        for fusion in func.aarch64_madd_fusions\n        if _aarch64_madd_fusion_storage_is_safe(func, fusion)\n    ]\n    if callee_saved:\n        # Decided last: a dropped madd plan above materialises its product.\n        func.aarch64_frameless = _is_frameless_leaf(func, kernel)"
+    },
+    "pcc/backend/self_backend_aarch64_darwin_returns.py:emit_return_terminator_indexed": {
+      "lineno": 91,
+      "name": "emit_return_terminator_indexed",
+      "path": "pcc/backend/self_backend_aarch64_darwin_returns.py",
+      "source": "def emit_return_terminator_indexed(\n    func: ParsedFunction,\n    *,\n    kernel: IndexedFunctionKernel,\n    type_id: int,\n    value_ref: int,\n    module_symbols: PreparedModuleSymbols,\n) -> list[str]:\n    value = kernel.terminator_value(value_ref)\n    header: CompilerInt4 = kernel.type_header(type_id)\n    if aggregate_returned_indirect_indexed(kernel, type_id):\n        return emit_return_terminator(\n            func,\n            ret_type=kernel.type_desc(type_id),\n            value=value,\n            module_symbols=module_symbols,\n            value_id=value_ref,\n        )\n    if header.first in (TYPE_KIND_INT, TYPE_KIND_FP, TYPE_KIND_PTR):\n        lines = materialize_scalar_value_indexed(\n            func,\n            kernel,\n            value,\n            type_id,\n            0,\n            module_symbols,\n            value_id=value_ref,\n        )\n        lines.extend(emit_epilogue(func))\n        return lines\n    return emit_return_terminator(\n        func,\n        ret_type=kernel.type_desc(type_id),\n        value=value,\n        module_symbols=module_symbols,\n        value_id=value_ref,\n    )"
+    },
+    "pcc/backend/self_backend_kernel.py:_freeze_phi_records": {
+      "lineno": 1802,
+      "name": "_freeze_phi_records",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "source": "def _freeze_phi_records(self, func: ParsedFunction) -> None:\n        text_ids: dict[str, int] = {}\n        text_id = 0\n        while text_id < len(self.call_texts):\n            text_ids[self.call_texts[text_id]] = text_id\n            text_id += 1\n\n        def intern_text(text: str) -> int:\n            existing = text_ids.get(text)\n            if existing is not None:\n                return existing\n            result = len(self.call_texts)\n            self.call_texts.append(text)\n            text_ids[text] = result\n            return result\n\n        def operand_ref(text: str) -> int:\n            value_id = self.value_id(text)\n            if value_id >= 0:\n                return value_id\n            return -intern_text(text) - 1\n\n        block_id = 0\n        while block_id < len(func.blocks):\n            block = func.blocks[block_id]\n            phi_start = len(self.phi_scalars) // 4\n            phi_count = 0\n            all_scalar = True\n            for phi in block.phis:\n                incoming_start = len(self.phi_incoming_scalars) // 2\n                incoming_count = 0\n                for incoming in phi.incoming:\n                    self.phi_incoming_scalars.append2(\n                        operand_ref(incoming.value),\n                        self.block_id(incoming.label),\n                    )\n                    incoming_count += 1\n                phi_type_id = self.intern_type(phi.type)\n                phi_type_header: CompilerInt4 = self.type_header(phi_type_id)\n                phi_kind = phi_type_header.first\n                if phi_kind == TYPE_KIND_ARRAY or phi_kind == TYPE_KIND_STRUCT:\n                    all_scalar = False\n                self.phi_scalars.append4(\n                    self.value_id(phi.dest),\n                    phi_type_id,\n                    incoming_start,\n                    incoming_count,\n                )\n                phi_count += 1\n            self.block_phi_facts.append2(phi_start, phi_count)\n            block_id += 1"
+    },
+    "pcc/backend/self_backend_kernel.py:alloca_offset": {
+      "lineno": 3244,
+      "name": "alloca_offset",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "source": "def alloca_offset(self, value_id: int) -> int:\n        if len(self.value_scalars) == 0:\n            return self.alloca_offsets[value_id]\n        header: CompilerInt4 = self.value_header(value_id)\n        return header.fourth"
+    },
+    "pcc/backend/self_backend_kernel.py:alloca_type_id": {
+      "lineno": 3250,
+      "name": "alloca_type_id",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "source": "def alloca_type_id(self, value_id: int) -> int:\n        if len(self.value_scalars) == 0:\n            return self.alloca_type_ids[value_id]\n        state: CompilerInt4 = self.value_state(value_id)\n        return state.first"
+    },
+    "pcc/backend/self_backend_kernel.py:instruction_payload_id_by_id": {
+      "lineno": 2262,
+      "name": "instruction_payload_id_by_id",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "source": "def instruction_payload_id_by_id(self, instruction_id: int) -> int:\n        metadata: CompilerInt4 = self.instruction_metadata_by_id(instruction_id)\n        return metadata.second"
+    },
+    "pcc/backend/self_backend_kernel.py:legacy_value_registers": {
+      "lineno": 3273,
+      "name": "legacy_value_registers",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "source": "def legacy_value_registers(self) -> dict[str, int]:\n        result: dict[str, int] = {}\n        value_id = 0\n        while value_id < len(self.value_names):\n            state: CompilerInt4 = self.value_state(value_id)\n            register_index = state.second\n            if register_index >= 0:\n                result[self.value_names[value_id]] = register_index\n            value_id += 1\n        return result"
+    },
+    "pcc/backend/self_backend_kernel.py:release_scalar_phi_projections": {
+      "lineno": 1854,
+      "name": "release_scalar_phi_projections",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "source": "def release_scalar_phi_projections(self, func: ParsedFunction) -> None:\n        block_id = 0\n        while block_id < len(func.blocks):\n            phi_fact: CompilerInt2 = self.block_phi_fact(block_id)\n            all_scalar = True\n            phi_index = 0\n            while phi_index < phi_fact.second:\n                phi: CompilerInt4 = self.phi_record(\n                    phi_fact.first + phi_index\n                )\n                phi_type_header: CompilerInt4 = self.type_header(phi.second)\n                kind_id = phi_type_header.first\n                if kind_id == TYPE_KIND_ARRAY or kind_id == TYPE_KIND_STRUCT:\n                    all_scalar = False\n                    break\n                phi_index += 1\n            if all_scalar:\n                func.blocks[block_id].phis = ()\n            block_id += 1"
+    },
+    "pcc/backend/self_backend_kernel.py:supported_object_projection_is_closed": {
+      "lineno": 2156,
+      "name": "supported_object_projection_is_closed",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "source": "def supported_object_projection_is_closed(\n        self,\n        func: ParsedFunction,\n    ) -> bool:\n        scalar_kinds = (TYPE_KIND_VOID, TYPE_KIND_INT, TYPE_KIND_FP, TYPE_KIND_PTR)\n        return_type_id = -1\n        type_id = 0\n        while type_id < len(self.types):\n            if self.types[type_id] == func.ret_type:\n                return_type_id = type_id\n                break\n            type_id += 1\n        if return_type_id < 0:\n            return False\n        return_type_header: CompilerInt4 = self.type_header(return_type_id)\n        if return_type_header.first not in scalar_kinds:\n            return False\n        for arg in func.args:\n            value_id = self.value_id(arg.name)\n            arg_type_id = -1 if value_id < 0 else self.value_type_id(value_id)\n            if arg_type_id < 0:\n                return False\n            arg_type_header: CompilerInt4 = self.type_header(arg_type_id)\n            if arg_type_header.first not in scalar_kinds:\n                return False\n        block_id = 0\n        while block_id < len(self.block_names):\n            block_fact: CompilerInt4 = self.block_fact(block_id)\n            phi_fact: CompilerInt2 = self.block_phi_fact(block_id)\n            phi_index = 0\n            while phi_index < phi_fact.second:\n                phi: CompilerInt4 = self.phi_record(\n                    phi_fact.first + phi_index\n                )\n                phi_type_header: CompilerInt4 = self.type_header(phi.second)\n                if phi_type_header.first not in scalar_kinds:\n                    return False\n                phi_index += 1\n            term_header: CompilerInt4 = self.terminator_header(block_id)\n            if term_header.first not in _SUPPORTED_SCALAR_TERMINATOR_KIND_IDS:\n                return False\n            instruction_index = 0\n            while instruction_index < block_fact.second:\n                metadata: CompilerInt4 = self.instruction_metadata_by_id(\n                    block_fact.first + instruction_index\n                )\n                if metadata.first not in _SUPPORTED_SCALAR_INSTRUCTION_KIND_IDS:\n                    return False\n                if metadata.first in (PARSED_INSTRUCTION_KIND_LOAD_ATOMIC, PARSED_INSTRUCTION_KIND_STORE_ATOMIC) and metadata.second < 0:\n                    return False\n                instruction_index += 1\n            block_id += 1\n        return True"
+    },
+    "pcc/backend/self_backend_kernel.py:terminator_successor_count": {
+      "lineno": 2067,
+      "name": "terminator_successor_count",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "source": "def terminator_successor_count(self, block_id: int) -> int:\n        header: CompilerInt4 = self.terminator_header(block_id)\n        if header.first == PARSED_INSTRUCTION_KIND_BR:\n            return 1\n        if header.first == PARSED_INSTRUCTION_KIND_BR_COND:\n            return 2\n        if header.first == PARSED_INSTRUCTION_KIND_SWITCH:\n            span: CompilerInt4 = self.terminator_span(block_id)\n            return 1 + span.third\n        return 0"
+    },
+    "pcc/backend/self_backend_kernel.py:value_register": {
+      "lineno": 3268,
+      "name": "value_register",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "source": "def value_register(self, value_id: int) -> int | None:\n        state: CompilerInt4 = self.value_state(value_id)\n        register_index = state.second\n        return None if register_index < 0 else register_index"
+    },
+    "pcc/backend/self_backend_kernel.py:value_slot_id": {
+      "lineno": 3207,
+      "name": "value_slot_id",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "source": "def value_slot_id(self, value_id: int) -> int:\n        header: CompilerInt4 = self.value_header(value_id)\n        return header.third"
+    },
+    "pcc/backend/self_backend_kernel.py:value_slot_offset": {
+      "lineno": 3211,
+      "name": "value_slot_offset",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "source": "def value_slot_offset(self, value_id: int) -> int:\n        header: CompilerInt4 = self.value_header(value_id)\n        slot_id = header.third\n        if slot_id < 0:\n            return -1\n        slot: CompilerInt2 = self.slot_record(slot_id)\n        return slot.first"
+    },
+    "pcc/backend/self_backend_kernel.py:value_slot_type_id": {
+      "lineno": 3219,
+      "name": "value_slot_type_id",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "source": "def value_slot_type_id(self, value_id: int) -> int:\n        header: CompilerInt4 = self.value_header(value_id)\n        slot_id = header.third\n        if slot_id < 0:\n            return -1\n        slot: CompilerInt2 = self.slot_record(slot_id)\n        return slot.second"
+    },
+    "pcc/backend/self_backend_precise_stackmaps.py:_native_managed_origins": {
+      "lineno": 4063,
+      "name": "_native_managed_origins",
+      "path": "pcc/backend/self_backend_precise_stackmaps.py",
+      "source": "def _native_managed_origins(\n    func: ParsedFunction,\n    aliases: PackedPointerAliases,\n    roots: PackedRootStatePlane,\n    kernel: IndexedFunctionKernel,\n) -> PackedManagedOrigins:\n    origins = PackedManagedOrigins(len(kernel.value_names))\n    join_values = CompilerIntArena()\n    for arg in func.args:\n        if arg.type.is_ptr:\n            value_id = kernel.value_id(arg.name)\n            if value_id >= 0:\n                origins.set_state(value_id, _ORIGIN_RAW)\n    block_id = 0\n    while block_id < len(kernel.block_names):\n        block: CompilerInt4 = kernel.block_fact(block_id)\n        phi_fact: CompilerInt2 = kernel.block_phi_fact(block_id)\n        phi_index = 0\n        while phi_index < phi_fact.second:\n            phi: CompilerInt4 = kernel.phi_record(phi_fact.first + phi_index)\n            phi_type: CompilerInt4 = kernel.type_header(phi.second)\n            if phi_type.first == TYPE_KIND_PTR:\n                join_values.clear()\n                incoming_index = 0\n                while incoming_index < phi.fourth:\n                    incoming: CompilerInt2 = kernel.phi_incoming(\n                        phi.third + incoming_index\n                    )\n                    join_values.append(incoming.first)\n                    incoming_index += 1\n                origins.set_join(phi.first, join_values)\n            phi_index += 1\n        instruction_index = 0\n        while instruction_index < block.second:\n            instruction_id = block.first + instruction_index\n            fact: CompilerInt4 = kernel.instruction_fact_by_id(instruction_id)\n            dest_id = fact.first\n            if dest_id < 0:\n                instruction_index += 1\n                continue\n            type_id = kernel.value_type_id(dest_id)\n            if type_id < 0:\n                instruction_index += 1\n                continue\n            value_type_header: CompilerInt4 = kernel.type_header(type_id)\n            if value_type_header.first != TYPE_KIND_PTR:\n                instruction_index += 1\n                continue\n            metadata: CompilerInt4 = kernel.instruction_metadata_by_id(\n                instruction_id\n            )\n            kind_id = metadata.first\n            payload_id = metadata.second\n            if kind_id == PARSED_INSTRUCTION_KIND_LOAD:\n                load_record: CompilerInt4 = kernel.instruction_record(payload_id)\n                aliases.resolve(load_record.third)\n                pointer_base = aliases.result.get_unchecked(0)\n                pointer_offset = aliases.result.get_unchecked(1)\n                root_offset = roots.registered_root_offset(\n                    pointer_base,\n                    pointer_offset,\n                )\n                if root_offset == NO_OFFSET:\n                    origins.set_state(dest_id, _ORIGIN_RAW)\n                else:\n                    origins.set_state(\n                        dest_id,\n                        _ORIGIN_MANAGED,\n                        root_offset,\n                        0,\n                    )\n            elif kind_id == PARSED_INSTRUCTION_KIND_CAST:\n                cast_record: CompilerInt4 = kernel.instruction_record(payload_id)\n                cast_source_type: CompilerInt4 = kernel.type_header(\n                    cast_record.second\n                )\n                if cast_source_type.first == TYPE_KIND_PTR:\n                    origins.set_transfer(\n                        dest_id,\n                        _TRANSFER_COPY,\n                        cast_record.third,\n                    )\n                else:\n                    origins.set_state(dest_id, _ORIGIN_RAW)\n            elif kind_id == PARSED_INSTRUCTION_KIND_GEP:\n                header: CompilerInt4 = kernel.gep_header(payload_id)\n                offset = _constant_gep_offset_indexed(kernel, payload_id)\n                origins.set_transfer(\n                    dest_id,\n                    _TRANSFER_GEP,\n                    header.third,\n                    NO_OFFSET if offset is None else offset,\n                )\n            elif kind_id == PARSED_INSTRUCTION_KIND_SELECT:\n                select_record: CompilerInt4 = kernel.instruction_record(payload_id)\n                join_values.clear()\n                join_values.append(select_record.third)\n                join_values.append(select_record.fourth)\n                origins.set_join(dest_id, join_values)\n            else:\n                # Cold/unsupported pointer-producing shapes stay raw; they do\n                # not gain managed provenance merely from LLVM's opaque ptr.\n                origins.set_state(dest_id, _ORIGIN_RAW)\n            instruction_index += 1\n        block_id += 1\n    join_values.close()\n    origins.converge()\n    return origins"
+    },
+    "pcc/backend/self_backend_precise_stackmaps.py:_native_plan_reloads": {
+      "lineno": 4507,
+      "name": "_native_plan_reloads",
+      "path": "pcc/backend/self_backend_precise_stackmaps.py",
+      "source": "def _native_plan_reloads(\n    func: ParsedFunction,\n    kernel: IndexedFunctionKernel,\n    roots: PackedRootStatePlane,\n    root_state_id: int,\n    live_after: PackedManagedLiveness,\n    live_state_id: int,\n    origins: PackedManagedOrigins,\n    reloads: PackedReloadScratch,\n    context: str = \"\",\n) -> None:\n    reloads.clear()\n    if live_state_id == 0:\n        return\n    live_state: CompilerInt4 = live_after.states.get4_unchecked(live_state_id)\n    live_index = 0\n    while live_index < live_state.first:\n        if live_index == 0:\n            value_id = live_state.second\n        elif live_state.first == 2:\n            value_id = live_state.third\n        else:\n            overflow_start = -live_state.third - 2\n            value_id = live_after.overflow_ids.get_unchecked(\n                overflow_start + live_index - 1\n            )\n        live_index += 1\n        name = kernel.value_name(value_id)\n        origin_offset = value_id * 3\n        origin_kind = origins.states.get_unchecked(origin_offset)\n        root_offset = origins.states.get_unchecked(origin_offset + 1)\n        derived_offset = origins.states.get_unchecked(origin_offset + 2)\n        if origin_kind == _ORIGIN_AMBIGUOUS:\n            _fail(\n                func,\n                f\"stale managed SSA value {name!r} has ambiguous root provenance\",\n            )\n        if origin_kind != _ORIGIN_MANAGED:\n            continue\n        if not roots.has_location_offset(root_state_id, root_offset):\n            _fail(\n                func,\n                f\"stale managed SSA value {name!r}{context} outlives root_offset=\"\n                f\"{root_offset}\",\n            )\n        slot_id = kernel.value_slot_id(value_id)\n        slot_offset = -1 if slot_id < 0 else kernel.slot_offset(slot_id)\n        slot_type_id = -1 if slot_id < 0 else kernel.slot_type_id(slot_id)\n        if slot_offset < 0 or slot_type_id < 0:\n            _fail(func, f\"managed SSA value {name!r} has no pointer spill slot\")\n        slot_type: CompilerInt4 = kernel.type_header(slot_type_id)\n        if slot_type.first != TYPE_KIND_PTR:\n            _fail(func, f\"managed SSA value {name!r} has no pointer spill slot\")\n        destination = -slot_offset\n        if (\n            destination >= 0\n            or -destination > func.frame_size\n            or (-destination) % POINTER_SIZE\n        ):\n            _fail(func, f\"managed SSA value {name!r} has an invalid spill slot\")\n        reloads.add(root_offset, destination, derived_offset)\n    reloads.sort()"
+    },
+    "pcc/backend/self_backend_precise_stackmaps.py:_native_pointer_aliases": {
+      "lineno": 3698,
+      "name": "_native_pointer_aliases",
+      "path": "pcc/backend/self_backend_precise_stackmaps.py",
+      "source": "def _native_pointer_aliases(\n    kernel: IndexedFunctionKernel,\n) -> PackedPointerAliases:\n    aliases = PackedPointerAliases(len(kernel.value_names))\n    block_id = 0\n    while block_id < len(kernel.block_names):\n        block: CompilerInt4 = kernel.block_fact(block_id)\n        instruction_index = 0\n        while instruction_index < block.second:\n            instruction_id = block.first + instruction_index\n            metadata: CompilerInt4 = kernel.instruction_metadata_by_id(\n                instruction_id\n            )\n            kind_id = metadata.first\n            if kind_id == PARSED_INSTRUCTION_KIND_CAST:\n                raw: CompilerInt4 = kernel.instruction_record(metadata.second)\n                fact: CompilerInt4 = kernel.instruction_fact_by_id(instruction_id)\n                src_type: CompilerInt4 = kernel.type_header(raw.second)\n                dst_type: CompilerInt4 = kernel.type_header(raw.fourth)\n                if (\n                    fact.first >= 0\n                    and src_type.first == TYPE_KIND_PTR\n                    and dst_type.first == TYPE_KIND_PTR\n                ):\n                    aliases.set_alias(fact.first, raw.third, 0)\n            elif kind_id == PARSED_INSTRUCTION_KIND_GEP:\n                header: CompilerInt4 = kernel.gep_header(metadata.second)\n                span: CompilerInt4 = kernel.gep_span(metadata.second)\n                offset = _constant_gep_offset_indexed(kernel, metadata.second)\n                if span.third >= 0 and offset is not None:\n                    aliases.set_alias(span.third, header.third, offset)\n            instruction_index += 1\n        block_id += 1\n    return aliases"
+    },
+    "pcc/backend/self_backend_verify.py:_build_definitions": {
+      "lineno": 465,
+      "name": "_build_definitions",
+      "path": "pcc/backend/self_backend_verify.py",
+      "source": "def _build_definitions(\n    func: ParsedFunction,\n    definitions: IndexedFunctionKernel,\n) -> None:\n    kernel = get_indexed_function_kernel(func)\n    duplicate_id = kernel.first_duplicate_definition_value_id\n    if duplicate_id >= 0:\n        _fail(\n            \"ssa-definition\",\n            func,\n            f\"value {kernel.value_name(duplicate_id)!r} has more than one definition\",\n        )\n    block_index = 0\n    while block_index < len(kernel.block_names):\n        block_fact: CompilerInt4 = kernel.block_fact(block_index)\n        position = 0\n        while position < block_fact.second:\n            instruction_id = block_fact.first + position\n            metadata: CompilerInt4 = kernel.instruction_metadata_by_id(\n                instruction_id\n            )\n            kind_id = metadata.first\n            instruction_fact: CompilerInt4 = kernel.instruction_fact_by_id(\n                instruction_id\n            )\n            dest_id = instruction_fact.first\n            if dest_id < 0:\n                position += 1\n                continue\n            dest = kernel.value_name(dest_id)\n            payload_id = metadata.second\n            if kind_id == PARSED_INSTRUCTION_KIND_CALL:\n                call_header: CompilerInt4 = kernel.call_header(payload_id)\n                result_type_id = call_header.first\n            elif kind_id == PARSED_INSTRUCTION_KIND_ALLOCA:\n                allocated_type_id = kernel.alloca_type_id(dest_id)\n                result_type_id = kernel.intern_type(\n                    kernel.types[allocated_type_id].ptr()\n                )\n            elif (\n                kind_id == PARSED_INSTRUCTION_KIND_LOAD\n                or (kind_id == PARSED_INSTRUCTION_KIND_LOAD_ATOMIC and payload_id >= 0)\n                or kind_id == PARSED_INSTRUCTION_KIND_BINOP\n                or kind_id == PARSED_INSTRUCTION_KIND_ICMP\n                or kind_id == PARSED_INSTRUCTION_KIND_CAST\n                or kind_id == PARSED_INSTRUCTION_KIND_SELECT\n            ):\n                record: CompilerInt4 = kernel.instruction_record(\n                    payload_id\n                )\n                if (\n                    kind_id == PARSED_INSTRUCTION_KIND_LOAD\n                    or kind_id == PARSED_INSTRUCTION_KIND_LOAD_ATOMIC\n                    or kind_id == PARSED_INSTRUCTION_KIND_SELECT\n                ):\n                    result_type_id = record.first\n                elif kind_id == PARSED_INSTRUCTION_KIND_BINOP:\n                    result_type_id = record.second\n                elif kind_id == PARSED_INSTRUCTION_KIND_ICMP:\n                    compared: CompilerInt4 = kernel.type_header(record.second)\n                    compared_kind: int = compared.first\n                    compared_count: int = compared.third\n                    compared_child_id: int = compared.fourth\n                    if (\n                        compared_kind == TYPE_KIND_ARRAY\n                        and compared_child_id >= 0\n                    ):\n                        result_type_id = kernel.intern_type(\n                            TypeDesc(\"array\", count=compared_count, elem=I1)\n                        )\n                    else:\n                        result_type_id = kernel.intern_type(I1)\n                else:\n                    result_type_id = record.fourth\n            elif kind_id == PARSED_INSTRUCTION_KIND_GEP:\n                gep_span: CompilerInt4 = kernel.gep_span(\n                    payload_id\n                )\n                result_type_id = gep_span.second\n            else:\n                data = kernel.instruction_data(block_index, position)\n                result_type = _instruction_result_type_parts(kind_id, data)\n                result_type_id = (\n                    -1 if result_type is None else kernel.intern_type(result_type)\n                )\n            if result_type_id < 0:\n                kind = PARSED_INSTRUCTION_KINDS[kind_id]\n                _fail(\n                    \"operand-type\",\n                    func,\n                    f\"instruction {kind!r} defines {dest!r} without a value type\",\n                )\n            result_type_header: CompilerInt4 = kernel.type_header(\n                result_type_id\n            )\n            if result_type_header.first == TYPE_KIND_VOID:\n                kind = PARSED_INSTRUCTION_KINDS[kind_id]\n                _fail(\n                    \"operand-type\",\n                    func,\n                    f\"instruction {kind!r} defines {dest!r} without a value type\",\n                )\n            _require_executable_type_id(func, kernel, result_type_id, \"instruction result\")\n            kernel.publish_value_type_id(dest_id, result_type_id)\n            position += 1\n        block_index += 1"
+    },
+    "pcc/backend/self_backend_verify.py:_type_id_is_fp_lane": {
+      "lineno": 180,
+      "name": "_type_id_is_fp_lane",
+      "path": "pcc/backend/self_backend_verify.py",
+      "source": "def _type_id_is_fp_lane(kernel: IndexedFunctionKernel, type_id: int) -> bool:\n    header: CompilerInt4 = kernel.type_header(type_id)\n    if header.first == TYPE_KIND_FP:\n        return True\n    if header.first != TYPE_KIND_ARRAY or header.fourth < 0:\n        return False\n    child: CompilerInt4 = kernel.type_header(header.fourth)\n    return child.first == TYPE_KIND_FP"
+    },
+    "pcc/backend/self_backend_verify.py:_type_id_is_int": {
+      "lineno": 165,
+      "name": "_type_id_is_int",
+      "path": "pcc/backend/self_backend_verify.py",
+      "source": "def _type_id_is_int(kernel: IndexedFunctionKernel, type_id: int) -> bool:\n    header: CompilerInt4 = kernel.type_header(type_id)\n    return header.first == TYPE_KIND_INT"
+    },
+    "pcc/backend/self_backend_verify.py:_type_id_is_int_lane": {
+      "lineno": 170,
+      "name": "_type_id_is_int_lane",
+      "path": "pcc/backend/self_backend_verify.py",
+      "source": "def _type_id_is_int_lane(kernel: IndexedFunctionKernel, type_id: int) -> bool:\n    header: CompilerInt4 = kernel.type_header(type_id)\n    if header.first == TYPE_KIND_INT:\n        return True\n    if header.first != TYPE_KIND_ARRAY or header.fourth < 0:\n        return False\n    child: CompilerInt4 = kernel.type_header(header.fourth)\n    return child.first == TYPE_KIND_INT"
+    },
+    "pcc/backend/self_backend_verify.py:_type_ids_match": {
+      "lineno": 155,
+      "name": "_type_ids_match",
+      "path": "pcc/backend/self_backend_verify.py",
+      "source": "def _type_ids_match(\n    kernel: IndexedFunctionKernel, left_id: int, right_id: int\n) -> bool:\n    if left_id == right_id:\n        return True\n    left: CompilerInt4 = kernel.type_header(left_id)\n    right: CompilerInt4 = kernel.type_header(right_id)\n    return left.first == TYPE_KIND_PTR and right.first == TYPE_KIND_PTR"
+    },
+    "pcc/backend/self_backend_verify.py:_verify_call_instruction_types_indexed": {
+      "lineno": 893,
+      "name": "_verify_call_instruction_types_indexed",
+      "path": "pcc/backend/self_backend_verify.py",
+      "source": "def _verify_call_instruction_types_indexed(\n    func: ParsedFunction,\n    definitions: IndexedFunctionKernel,\n    block_name: str,\n    kernel: IndexedFunctionKernel,\n    call_id: int,\n) -> None:\n    context = f\"{block_name!r}/call\"\n    header: CompilerInt4 = kernel.call_header(call_id)\n    _require_executable_type_id(func, kernel, header.first, context + \" return\")\n    span: CompilerInt4 = kernel.call_span(call_id)\n    arg_count = span.first\n    fixed_arg_count = span.second\n    is_indirect = bool(header.third & 1)\n    is_vararg = bool(header.third & 2)\n    if is_indirect:\n        callee = kernel.call_texts[header.second]\n        definition = _definition_get(kernel, definitions, callee)\n        if definition.fourth == 0:\n            _fail(\n                \"ssa-dominance\",\n                func,\n                f\"{context} uses undefined value {callee!r}\",\n            )\n        definition_type: CompilerInt4 = kernel.type_header(\n            definition.first\n        )\n        if definition_type.first != TYPE_KIND_PTR:\n            _fail(\n                \"operand-type\",\n                func,\n                f\"{context} expects a pointer for {callee!r}\",\n            )\n    if is_vararg and arg_count < fixed_arg_count:\n        _fail(\"operand-type\", func, f\"{context} has too few fixed arguments\")\n    if fixed_arg_count and not is_vararg and arg_count != fixed_arg_count:\n        _fail(\n            \"operand-type\",\n            func,\n            f\"{context} argument count disagrees with signature\",\n        )\n    arg_index = 0\n    while arg_index < arg_count:\n        raw: CompilerInt4 = kernel.call_arg(header.fourth + arg_index)\n        alignment = raw.fourth\n        if alignment < 0 or (alignment and alignment & (alignment - 1)):\n            _fail(\n                \"operand-type\",\n                func,\n                f\"{context} call argument has invalid alignment {alignment}\",\n            )\n        _require_local_type_ref(\n            func,\n            definitions,\n            kernel,\n            raw.second,\n            raw.first,\n            context=context,\n        )\n        arg_index += 1"
+    },
+    "pcc/backend/self_backend_verify.py:_verify_fixed_instruction_types_indexed": {
+      "lineno": 955,
+      "name": "_verify_fixed_instruction_types_indexed",
+      "path": "pcc/backend/self_backend_verify.py",
+      "source": "def _verify_fixed_instruction_types_indexed(\n    func: ParsedFunction,\n    definitions: IndexedFunctionKernel,\n    block_name: str,\n    kernel: IndexedFunctionKernel,\n    kind_id: int,\n    record_id: int,\n) -> None:\n    if kind_id in (PARSED_INSTRUCTION_KIND_LOAD, PARSED_INSTRUCTION_KIND_LOAD_ATOMIC):\n        kind_name = \"load_atomic\" if kind_id == PARSED_INSTRUCTION_KIND_LOAD_ATOMIC else \"load\"\n    elif kind_id in (PARSED_INSTRUCTION_KIND_STORE, PARSED_INSTRUCTION_KIND_STORE_ATOMIC):\n        kind_name = \"store_atomic\" if kind_id == PARSED_INSTRUCTION_KIND_STORE_ATOMIC else \"store\"\n    elif kind_id == PARSED_INSTRUCTION_KIND_BINOP:\n        kind_name = \"binop\"\n    elif kind_id == PARSED_INSTRUCTION_KIND_ICMP:\n        kind_name = \"icmp\"\n    elif kind_id == PARSED_INSTRUCTION_KIND_CAST:\n        kind_name = \"cast\"\n    else:\n        kind_name = \"select\"\n    context = f\"{block_name!r}/{kind_name}\"\n    raw: CompilerInt4 = kernel.instruction_record(record_id)\n    if kind_id in (PARSED_INSTRUCTION_KIND_LOAD_ATOMIC, PARSED_INSTRUCTION_KIND_STORE_ATOMIC):\n        if record_id < 0 or (record_id + 2) * 4 > len(kernel.instruction_record_scalars):\n            _fail(\"atomic-metadata\", func, f\"{context} atomic memory metadata is missing\")\n        atomic: CompilerInt4 = kernel.instruction_record(record_id + 1)\n        if atomic.first < 0 or atomic.first >= len(kernel.call_texts):\n            _fail(\"atomic-metadata\", func, f\"{context} atomic ordering is invalid\")\n        ordering = kernel.call_texts[atomic.first]\n        allowed = (\"unordered\", \"monotonic\", \"acquire\", \"seq_cst\") if kind_id == PARSED_INSTRUCTION_KIND_LOAD_ATOMIC else (\"unordered\", \"monotonic\", \"release\", \"seq_cst\")\n        if ordering not in allowed or atomic.second < 0 or atomic.second & (atomic.second - 1):\n            _fail(\"atomic-metadata\", func, f\"{context} atomic ordering/alignment is invalid\")\n\n    if kind_id in (PARSED_INSTRUCTION_KIND_LOAD, PARSED_INSTRUCTION_KIND_LOAD_ATOMIC):\n        ptr_type_id = raw.second\n        ptr_type: CompilerInt4 = kernel.type_header(ptr_type_id)\n        if ptr_type.first != TYPE_KIND_PTR:\n            _fail(\"operand-type\", func, f\"{context} address type is not a pointer\")\n        _require_local_type_ref(\n            func,\n            definitions,\n            kernel,\n            raw.third,\n            ptr_type_id,\n            context=context,\n        )\n        return\n\n    if kind_id in (PARSED_INSTRUCTION_KIND_STORE, PARSED_INSTRUCTION_KIND_STORE_ATOMIC):\n        value_type_id = raw.first\n        ptr_type_id = raw.third\n        ptr_type: CompilerInt4 = kernel.type_header(ptr_type_id)\n        if ptr_type.first != TYPE_KIND_PTR:\n            _fail(\"operand-type\", func, f\"{context} address type is not a pointer\")\n        _require_local_type_ref(\n            func, definitions, kernel, raw.second, value_type_id, context=context\n        )\n        _require_local_type_ref(\n            func, definitions, kernel, raw.fourth, ptr_type_id, context=context\n        )\n        return\n\n    if (\n        kind_id == PARSED_INSTRUCTION_KIND_BINOP\n        or kind_id == PARSED_INSTRUCTION_KIND_ICMP\n    ):\n        value_type_id = raw.second\n        if kind_id == PARSED_INSTRUCTION_KIND_BINOP and not _type_id_is_int_lane(\n            kernel, value_type_id\n        ):\n            _fail(\"operand-type\", func, f\"{context} expects integer operands\")\n        value_type_header: CompilerInt4 = kernel.type_header(value_type_id)\n        if kind_id == PARSED_INSTRUCTION_KIND_ICMP and not (\n            _type_id_is_int_lane(kernel, value_type_id)\n            or value_type_header.first == TYPE_KIND_PTR\n        ):\n            _fail(\"operand-type\", func, f\"{context} expects integer/pointer operands\")\n        _require_local_type_ref(\n            func, definitions, kernel, raw.third, value_type_id, context=context\n        )\n        _require_local_type_ref(\n            func, definitions, kernel, raw.fourth, value_type_id, context=context\n        )\n        return\n\n    if kind_id == PARSED_INSTRUCTION_KIND_CAST:\n        src_type_id = raw.second\n        _require_local_type_ref(\n            func, definitions, kernel, raw.third, src_type_id, context=context\n        )\n        return\n\n    value_type_id = raw.first\n    value_type: CompilerInt4 = kernel.type_header(value_type_id)\n    if raw.second >= 0:\n        cond = kernel.value_name(raw.second)\n        cond_def = _definition_by_id(kernel, definitions, raw.second)\n        if cond_def.fourth == 0:\n            _fail(\"ssa-dominance\", func, f\"{context} uses undefined value {cond!r}\")\n        cond_type: CompilerInt4 = kernel.type_header(cond_def.first)\n        vector_i1 = (\n            cond_type.first == TYPE_KIND_ARRAY\n            and cond_type.fourth >= 0\n            and _type_id_is_i1(kernel, cond_type.fourth)\n            and value_type.first == TYPE_KIND_ARRAY\n            and cond_type.third == value_type.third\n        )\n        if not (_type_id_is_i1(kernel, cond_def.first) or vector_i1):\n            _fail(\n                \"operand-type\",\n                func,\n                f\"{context} condition {cond!r} is not i1/vector-i1\",\n            )\n    _require_local_type_ref(\n        func, definitions, kernel, raw.third, value_type_id, context=context\n    )\n    _require_local_type_ref(\n        func, definitions, kernel, raw.fourth, value_type_id, context=context\n    )"
+    },
+    "pcc/backend/self_backend_verify.py:_verify_gep_instruction_types_indexed": {
+      "lineno": 1076,
+      "name": "_verify_gep_instruction_types_indexed",
+      "path": "pcc/backend/self_backend_verify.py",
+      "source": "def _verify_gep_instruction_types_indexed(\n    func: ParsedFunction,\n    definitions: IndexedFunctionKernel,\n    block_name: str,\n    kernel: IndexedFunctionKernel,\n    record_id: int,\n) -> None:\n    context = f\"{block_name!r}/gep\"\n    header: CompilerInt4 = kernel.gep_header(record_id)\n    span: CompilerInt4 = kernel.gep_span(record_id)\n    ptr_type_id = header.second\n    ptr_type: CompilerInt4 = kernel.type_header(ptr_type_id)\n    if ptr_type.first != TYPE_KIND_PTR:\n        _fail(\"operand-type\", func, f\"{context} base type is not a pointer\")\n    _require_local_type_ref(\n        func, definitions, kernel, header.third, ptr_type_id, context=context\n    )\n    index = 0\n    while index < span.first:\n        raw: CompilerInt2 = kernel.gep_index(header.fourth + index)\n        _require_local_type_ref(\n            func,\n            definitions,\n            kernel,\n            raw.second,\n            raw.first,\n            context=context,\n        )\n        index += 1"
+    }
+  },
+  "sites": [
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 2,
+      "group": "B",
+      "line": 194,
+      "original_accessor": "type_header",
+      "owner": "_candidate_indexed_definition_type_id",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 201,
+      "original_accessor": "type_header",
+      "owner": "_candidate_indexed_definition_type_id",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 2,
+      "group": "B",
+      "line": 208,
+      "original_accessor": "type_header",
+      "owner": "_candidate_indexed_definition_type_id",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 213,
+      "original_accessor": "type_header",
+      "owner": "_candidate_indexed_definition_type_id",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 214,
+      "original_accessor": "type_header",
+      "owner": "_candidate_indexed_definition_type_id",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 223,
+      "original_accessor": "type_header",
+      "owner": "_candidate_indexed_definition_type_id",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 237,
+      "original_accessor": "type_header",
+      "owner": "_register_type_ids_match",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 238,
+      "original_accessor": "type_header",
+      "owner": "_register_type_ids_match",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 2,
+      "group": "B",
+      "line": 1033,
+      "original_accessor": "type_header",
+      "owner": "_append_phi_intervals",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 1502,
+      "original_accessor": "type_header",
+      "owner": "allocate_aarch64_block_registers",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "instruction_metadata",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 2,
+      "group": "A",
+      "line": 506,
+      "original_accessor": "instruction_metadata_by_id",
+      "owner": "_function_level_facts",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "stride": 4,
+      "window_offset": 0
+    },
+    {
+      "arena": "instruction_metadata",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "A",
+      "line": 518,
+      "original_accessor": "instruction_metadata_by_id",
+      "owner": "_function_level_facts",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "stride": 4,
+      "window_offset": 0
+    },
+    {
+      "arena": "instruction_facts",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "A",
+      "line": 527,
+      "original_accessor": "instruction_fact_by_id",
+      "owner": "_function_level_facts",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "stride": 4,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 1840,
+      "original_accessor": "type_header",
+      "owner": "_freeze_phi_records",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 1864,
+      "original_accessor": "type_header",
+      "owner": "release_scalar_phi_projections",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 2170,
+      "original_accessor": "type_header",
+      "owner": "supported_object_projection_is_closed",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 2178,
+      "original_accessor": "type_header",
+      "owner": "supported_object_projection_is_closed",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 2190,
+      "original_accessor": "type_header",
+      "owner": "supported_object_projection_is_closed",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "instruction_metadata",
+      "cell_offset": 1,
+      "field": "second",
+      "field_uses": 1,
+      "group": "C",
+      "line": 2263,
+      "original_accessor": "instruction_metadata_by_id",
+      "owner": "instruction_payload_id_by_id",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "stride": 4,
+      "window_offset": 0
+    },
+    {
+      "arena": "value_scalars",
+      "cell_offset": 2,
+      "field": "third",
+      "field_uses": 1,
+      "group": "C",
+      "line": 3208,
+      "original_accessor": "value_header",
+      "owner": "value_slot_id",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "stride": 8,
+      "window_offset": 0
+    },
+    {
+      "arena": "value_scalars",
+      "cell_offset": 2,
+      "field": "third",
+      "field_uses": 1,
+      "group": "C",
+      "line": 3212,
+      "original_accessor": "value_header",
+      "owner": "value_slot_offset",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "stride": 8,
+      "window_offset": 0
+    },
+    {
+      "arena": "value_scalars",
+      "cell_offset": 2,
+      "field": "third",
+      "field_uses": 1,
+      "group": "C",
+      "line": 3220,
+      "original_accessor": "value_header",
+      "owner": "value_slot_type_id",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "stride": 8,
+      "window_offset": 0
+    },
+    {
+      "arena": "value_scalars",
+      "cell_offset": 3,
+      "field": "fourth",
+      "field_uses": 1,
+      "group": "C",
+      "line": 3247,
+      "original_accessor": "value_header",
+      "owner": "alloca_offset",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "stride": 8,
+      "window_offset": 0
+    },
+    {
+      "arena": "value_scalars",
+      "cell_offset": 4,
+      "field": "first",
+      "field_uses": 1,
+      "group": "C",
+      "line": 3253,
+      "original_accessor": "value_state",
+      "owner": "alloca_type_id",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "stride": 8,
+      "window_offset": 4
+    },
+    {
+      "arena": "value_scalars",
+      "cell_offset": 5,
+      "field": "second",
+      "field_uses": 1,
+      "group": "C",
+      "line": 3269,
+      "original_accessor": "value_state",
+      "owner": "value_register",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "stride": 8,
+      "window_offset": 4
+    },
+    {
+      "arena": "value_scalars",
+      "cell_offset": 5,
+      "field": "second",
+      "field_uses": 1,
+      "group": "C",
+      "line": 3277,
+      "original_accessor": "value_state",
+      "owner": "legacy_value_registers",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "stride": 8,
+      "window_offset": 4
+    },
+    {
+      "arena": "terminator_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 3,
+      "group": "C",
+      "line": 2068,
+      "original_accessor": "terminator_header",
+      "owner": "terminator_successor_count",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "stride": 8,
+      "window_offset": 0
+    },
+    {
+      "arena": "terminator_scalars",
+      "cell_offset": 6,
+      "field": "third",
+      "field_uses": 1,
+      "group": "C",
+      "line": 2074,
+      "original_accessor": "terminator_span",
+      "owner": "terminator_successor_count",
+      "path": "pcc/backend/self_backend_kernel.py",
+      "stride": 8,
+      "window_offset": 4
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 3715,
+      "original_accessor": "type_header",
+      "owner": "_native_pointer_aliases",
+      "path": "pcc/backend/self_backend_precise_stackmaps.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 3716,
+      "original_accessor": "type_header",
+      "owner": "_native_pointer_aliases",
+      "path": "pcc/backend/self_backend_precise_stackmaps.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 4083,
+      "original_accessor": "type_header",
+      "owner": "_native_managed_origins",
+      "path": "pcc/backend/self_backend_precise_stackmaps.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 4107,
+      "original_accessor": "type_header",
+      "owner": "_native_managed_origins",
+      "path": "pcc/backend/self_backend_precise_stackmaps.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 4136,
+      "original_accessor": "type_header",
+      "owner": "_native_managed_origins",
+      "path": "pcc/backend/self_backend_precise_stackmaps.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 4557,
+      "original_accessor": "type_header",
+      "owner": "_native_plan_reloads",
+      "path": "pcc/backend/self_backend_precise_stackmaps.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "instruction_facts",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "A",
+      "line": 4098,
+      "original_accessor": "instruction_fact_by_id",
+      "owner": "_native_managed_origins",
+      "path": "pcc/backend/self_backend_precise_stackmaps.py",
+      "stride": 4,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 160,
+      "original_accessor": "type_header",
+      "owner": "_type_ids_match",
+      "path": "pcc/backend/self_backend_verify.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 161,
+      "original_accessor": "type_header",
+      "owner": "_type_ids_match",
+      "path": "pcc/backend/self_backend_verify.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 166,
+      "original_accessor": "type_header",
+      "owner": "_type_id_is_int",
+      "path": "pcc/backend/self_backend_verify.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 176,
+      "original_accessor": "type_header",
+      "owner": "_type_id_is_int_lane",
+      "path": "pcc/backend/self_backend_verify.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 186,
+      "original_accessor": "type_header",
+      "owner": "_type_id_is_fp_lane",
+      "path": "pcc/backend/self_backend_verify.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 557,
+      "original_accessor": "type_header",
+      "owner": "_build_definitions",
+      "path": "pcc/backend/self_backend_verify.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 917,
+      "original_accessor": "type_header",
+      "owner": "_verify_call_instruction_types_indexed",
+      "path": "pcc/backend/self_backend_verify.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 990,
+      "original_accessor": "type_header",
+      "owner": "_verify_fixed_instruction_types_indexed",
+      "path": "pcc/backend/self_backend_verify.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 1006,
+      "original_accessor": "type_header",
+      "owner": "_verify_fixed_instruction_types_indexed",
+      "path": "pcc/backend/self_backend_verify.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 1026,
+      "original_accessor": "type_header",
+      "owner": "_verify_fixed_instruction_types_indexed",
+      "path": "pcc/backend/self_backend_verify.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 1087,
+      "original_accessor": "type_header",
+      "owner": "_verify_gep_instruction_types_indexed",
+      "path": "pcc/backend/self_backend_verify.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "instruction_facts",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "A",
+      "line": 487,
+      "original_accessor": "instruction_fact_by_id",
+      "owner": "_build_definitions",
+      "path": "pcc/backend/self_backend_verify.py",
+      "stride": 4,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 598,
+      "original_accessor": "type_header",
+      "owner": "_emit_phi_assignments_indexed",
+      "path": "pcc/backend/self_backend_aarch64_darwin_flow.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 734,
+      "original_accessor": "type_header",
+      "owner": "emit_phi_assignments",
+      "path": "pcc/backend/self_backend_aarch64_darwin_flow.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 306,
+      "original_accessor": "type_header",
+      "owner": "emit_memory_instruction_by_id",
+      "path": "pcc/backend/self_backend_aarch64_darwin_memory.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 639,
+      "original_accessor": "type_header",
+      "owner": "emit_memory_instruction_by_id",
+      "path": "pcc/backend/self_backend_aarch64_darwin_memory.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 2,
+      "group": "B",
+      "line": 2386,
+      "original_accessor": "type_header",
+      "owner": "emit_call_instruction_indexed",
+      "path": "pcc/backend/self_backend_aarch64_darwin_calls.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 65,
+      "original_accessor": "type_header",
+      "owner": "emit_binop_indexed",
+      "path": "pcc/backend/self_backend_aarch64_darwin_ops.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 153,
+      "original_accessor": "type_header",
+      "owner": "emit_function_prologue",
+      "path": "pcc/backend/self_backend_aarch64_darwin_prologue.py",
+      "stride": 12,
+      "window_offset": 0
+    },
+    {
+      "arena": "type_scalars",
+      "cell_offset": 0,
+      "field": "first",
+      "field_uses": 1,
+      "group": "B",
+      "line": 100,
+      "original_accessor": "type_header",
+      "owner": "emit_return_terminator_indexed",
+      "path": "pcc/backend/self_backend_aarch64_darwin_returns.py",
+      "stride": 12,
+      "window_offset": 0
+    }
+  ]
+}

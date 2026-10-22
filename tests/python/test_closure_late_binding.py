@@ -360,7 +360,7 @@ comp_reads_boxed [9, 1, 1]
 
 
 def test_lambda_captures_bind_late_under_every_collector(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     source = tmp_path / "closure_late_binding.py"
     source.write_text(PROGRAM, encoding="utf-8")
@@ -372,7 +372,7 @@ def test_lambda_captures_bind_late_under_every_collector(
     output = tmp_path / "closure_late_binding"
     python_program_compiler(
         str(source), str(output), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         ran = subprocess.run(

@@ -21,9 +21,9 @@ Use all phase1 Python corpus source files:
 Add these small self-host/compiler files once D1 can parse and emit their node
 coverage without host-only shortcuts:
 
-- `pcc/parse/py_lift.py`
-- `pcc/py_frontend/py_ast.py`
-- `pcc/py_frontend/type_infer.py`
+- `pcc/frontends/python/py_lift.py`
+- `pcc/frontends/python/py_ast.py`
+- `pcc/frontends/python/type_infer.py`
 
 ## Acceptance Policy
 

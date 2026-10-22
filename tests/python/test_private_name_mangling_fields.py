@@ -71,7 +71,7 @@ def _reference(source):
 
 
 def test_private_fields_follow_the_lexical_class(
-    tmp_path, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, python_program_compiler, pcc_runtime_archive,
 ):
     source = tmp_path / "private_fields.py"
     source.write_text(PROGRAM, encoding="utf-8")
@@ -79,7 +79,7 @@ def test_private_fields_follow_the_lexical_class(
     binary = tmp_path / "private_fields"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         result = subprocess.run(
@@ -91,7 +91,7 @@ def test_private_fields_follow_the_lexical_class(
 
 
 def test_private_fields_follow_the_lexical_class_through_direct_emission(
-    tmp_path, pcc_py_runtime_archive,
+    tmp_path, pcc_runtime_archive,
 ):
     source = tmp_path / "private_fields_direct.py"
     source.write_text(PROGRAM, encoding="utf-8")
@@ -101,7 +101,7 @@ def test_private_fields_follow_the_lexical_class_through_direct_emission(
     env.pop("LC_ALL", None)
     env.update(_DIRECT_EMIT_ENV)
     env.update(
-        PCC_RUNTIME_ARCHIVE=str(pcc_py_runtime_archive),
+        PCC_RUNTIME_ARCHIVE=str(pcc_runtime_archive),
         PCC_RUNTIME_CC="/usr/bin/false",
         PCC_NO_AUTO_PCC1="1",
     )

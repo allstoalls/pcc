@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from . import BackendUnavailable
 from .self_backend_ir import TypeDesc, _align_to
+from .self_backend_value_arena import CompilerInt4
 from .self_backend_kernel import (
     IndexedFunctionKernel,
     TYPE_KIND_ARRAY,
@@ -331,7 +332,8 @@ def stack_arg_alignment(arg_type: TypeDesc) -> int:
 def stack_arg_alignment_indexed(kernel: IndexedFunctionKernel, type_id: int) -> int:
     if aggregate_passed_indirect_indexed(kernel, type_id):
         return 8
-    return max(8, min(16, kernel.type_span(type_id).fourth))
+    span: CompilerInt4 = kernel.type_span(type_id)
+    return max(8, min(16, span.fourth))
 
 
 def assign_abi_arg_layout(

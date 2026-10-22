@@ -19,12 +19,15 @@ import subprocess
 import textwrap
 
 def _compile_and_run(tmp_path, source: str) -> subprocess.CompletedProcess[str]:
-    from pcc.py_frontend.pipeline import compile_python
+    from tests.native_provisioning import native_test_runtime_options
+
+    runtime_options = native_test_runtime_options()
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
     src.write_text(textwrap.dedent(source).lstrip(), encoding="utf-8")
-    compile_python(str(src), str(exe), ir_scaffold_mode="on")
+    compile_python(str(src), str(exe), ir_scaffold_mode="on", **runtime_options)
     return subprocess.run(
         [str(exe)], capture_output=True, text=True, timeout=20,
     )

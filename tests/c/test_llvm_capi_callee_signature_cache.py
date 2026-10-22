@@ -7,7 +7,7 @@ import weakref
 
 import pytest
 
-from pcc.llvm_capi import ir
+from pcc.ir import ir
 
 
 def _append_call(module: ir.Module, callee: ir.Function, args):

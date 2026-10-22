@@ -2,8 +2,8 @@ import os
 
 import pytest
 
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.project import collect_translation_units
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.driver.project import collect_translation_units
 
 
 PROJECT_DIR = os.path.dirname(

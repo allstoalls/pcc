@@ -8,8 +8,8 @@
     "Test: tests/test_bootstrap_gate_baseline.py (skipped unless",
     "binaries already exist; never triggers a heavy bootstrap build).",
     "To re-run the bootstrap and refresh:",
-    "  scripts/bootstrap.sh --out-dir build/bootstrap-llvm --backend llvm",
-    "  scripts/bootstrap.sh --out-dir build/bootstrap-self --backend self"
+    "  scripts/bootstrap.py --out-dir build/bootstrap-llvm --backend llvm",
+    "  scripts/bootstrap.py --out-dir build/bootstrap-self --backend self"
   ],
   "current_state": {
     "llvm": {

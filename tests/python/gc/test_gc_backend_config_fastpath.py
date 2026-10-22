@@ -6,61 +6,54 @@ import ast
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_GC_BACKEND_PY = _REPO_ROOT / "pcc" / "py_runtime" / "py" / "py_gc_backend.py"
+_GC_BACKEND_PY = _REPO_ROOT / "pcc" / "runtime" / "py" / "py_gc_backend.py"
 _GC_PUBLIC_COLLECTION_PY = (
     _REPO_ROOT
-    / "pcc"
-    / "py_runtime"
+    / "pcc" / "runtime"
     / "py"
     / "freestanding_gc_public_collection.py"
 )
 _GC_FRAME_REGISTRY_PY = (
-    _REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_gc_frame_registry.py"
+    _REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_gc_frame_registry.py"
 )
 _GC_INCREMENTAL_CONCURRENT_SCHEDULER_PY = (
     _REPO_ROOT
-    / "pcc"
-    / "py_runtime"
+    / "pcc" / "runtime"
     / "py"
     / "freestanding_gc_incremental_concurrent_scheduler.py"
 )
 _GC_BARRIER_DISPATCHER_PY = (
     _REPO_ROOT
-    / "pcc"
-    / "py_runtime"
+    / "pcc" / "runtime"
     / "py"
     / "freestanding_gc_barrier_dispatcher.py"
 )
 _GC_GENERATIONAL_PROMOTION_PY = (
     _REPO_ROOT
-    / "pcc"
-    / "py_runtime"
+    / "pcc" / "runtime"
     / "py"
     / "freestanding_gc_generational_promotion.py"
 )
 _GC_RELOCATION_DRAIN_PY = (
     _REPO_ROOT
-    / "pcc"
-    / "py_runtime"
+    / "pcc" / "runtime"
     / "py"
     / "freestanding_gc_relocation_drain.py"
 )
 _GC_RELOCATION_SELECTOR_PY = (
     _REPO_ROOT
-    / "pcc"
-    / "py_runtime"
+    / "pcc" / "runtime"
     / "py"
     / "freestanding_gc_relocation_selector.py"
 )
 _GC_ZPAGE_ALLOCATION_PY = (
     _REPO_ROOT
-    / "pcc"
-    / "py_runtime"
+    / "pcc" / "runtime"
     / "py"
     / "freestanding_gc_zpage_allocation.py"
 )
-_PY_OBJ_PY = _REPO_ROOT / "pcc" / "py_runtime" / "py" / "py_obj.py"
-_PY_CLASS_PY = _REPO_ROOT / "pcc" / "py_runtime" / "py" / "py_class.py"
+_PY_OBJ_PY = _REPO_ROOT / "pcc" / "runtime" / "py" / "py_obj.py"
+_PY_CLASS_PY = _REPO_ROOT / "pcc" / "runtime" / "py" / "py_class.py"
 
 
 def _source_text(path: Path = _GC_BACKEND_PY) -> str:
@@ -236,8 +229,7 @@ def test_py_gc_track_checks_threads_before_backend_query() -> None:
         body = _function_source(
             name,
             _REPO_ROOT
-            / "pcc"
-            / "py_runtime"
+            / "pcc" / "runtime"
             / "py"
             / "freestanding_gc_tracking.py",
         )

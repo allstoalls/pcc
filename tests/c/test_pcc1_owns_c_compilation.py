@@ -109,7 +109,7 @@ def cc_reference(tmp_path_factory) -> str:
 def test_pcc1_compiles_and_links_c_without_a_host_pcc(tmp_path, cc_reference):
     assert PCC1 is not None, (
         "no pcc1 binary found; the session provisions one with "
-        "scripts/bootstrap.sh --stage 1"
+        "scripts/bootstrap.py --stage 1"
     )
     src = tmp_path / "program.c"
     src.write_text(_PROGRAM, encoding="utf-8")

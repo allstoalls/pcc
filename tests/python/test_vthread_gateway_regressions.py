@@ -5,11 +5,11 @@ import subprocess
 
 import pytest
 
-from pcc.py_frontend.codegen.vthread_effect_analysis import (
+from pcc.frontends.python.codegen.vthread_effect_analysis import (
     classify_vthread_park_boundaries,
     compute_vthread_may_park_functions,
 )
-from pcc.py_frontend.parser import parse
+from pcc.frontends.python.parser import parse
 
 
 def test_concrete_nonparking_method_does_not_inherit_another_class_effect():
@@ -44,7 +44,7 @@ def worker(resource):
 
 
 def test_parking_finally_preserves_the_return_value(tmp_path: Path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "parking_finally.py"
     executable = tmp_path / "parking_finally"
@@ -70,7 +70,7 @@ print(vt.result(thread))
 
 @pytest.mark.parametrize("binding", (" as original", ""))
 def test_parked_handler_preserves_implicit_exception_context(tmp_path: Path, binding):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "parked_context.py"
     executable = tmp_path / "parked_context"
@@ -100,7 +100,7 @@ print(vt.result(thread))
 
 
 def test_parked_conditional_argument_keeps_unambiguous_roots(tmp_path: Path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "conditional_argument.py"
     executable = tmp_path / "conditional_argument"
@@ -144,7 +144,7 @@ print(vt.result(thread))
 
 
 def test_single_carrier_run_returns_control_for_pending_timers(tmp_path: Path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "sleeping_child.py"
     executable = tmp_path / "sleeping_child"
@@ -168,7 +168,7 @@ main()
 
 
 def test_typed_lock_field_uses_native_threading_lowering(tmp_path: Path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "lock_field.py"
     executable = tmp_path / "lock_field"
@@ -202,7 +202,7 @@ print(vt.result(thread))
 
 @pytest.mark.parametrize("cleanup", (False, True))
 def test_generator_owned_local_return_survives_cleanup(tmp_path: Path, cleanup):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "owned_return.py"
     executable = tmp_path / "owned_return"
@@ -235,8 +235,8 @@ main()
 
 
 def test_generator_walk_covers_expressions_without_dataclass_reflection(monkeypatch):
-    from pcc.py_frontend.codegen.generator_lowering import _dataclass_field_names
-    from pcc.py_frontend.py_ast import Expr, UnaryOp
+    from pcc.frontends.python.codegen.generator_lowering import _dataclass_field_names
+    from pcc.frontends.python.py_ast import Expr, UnaryOp
 
     module = parse("def worker():\n    return not answer()\n", "unary.py")
     expression = module.body[0].body[0].value
@@ -246,7 +246,7 @@ def test_generator_walk_covers_expressions_without_dataclass_reflection(monkeypa
 
 
 def test_parking_call_in_negated_condition(tmp_path: Path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "negated_call.py"
     executable = tmp_path / "negated_call"

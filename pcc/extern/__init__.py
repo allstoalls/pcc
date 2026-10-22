@@ -9,7 +9,7 @@ recognizes.
 
 Runtime status (2026-05-12): **codegen has landed**. The frontend
 records ``extern()`` calls into ``L1CodeGen._extern_decls`` (see
-``pcc/py_frontend/codegen/layer1.py::_emit_extern_call``); a call
+``pcc/frontends/python/codegen/layer1.py::_emit_extern_call``); a call
 through an extern lowers to a direct LLVM ``call`` to the named
 external symbol with the declared C ABI. There is **no Python /
 ``py_obj_*`` trampoline** — the emitted asm is just ``bl <symbol>``
@@ -29,7 +29,7 @@ Known sharp edges still under P6C.1:
   ``getenv``) hand back raw ``i8*``. There is no runtime helper
   yet that wraps the result into a ``PyStrObject``; the pcc-side
   caller currently has to raise ``NotImplementedError``. See
-  ``pcc/py_stdlib/os.py::getenv`` for the canonical "blocked on
+  ``pcc/stdlib/os.py::getenv`` for the canonical "blocked on
   string-return marshalling" stub.
 * **Errno**: extern calls do not raise Python-level exceptions on
   failure; the C return contract is the only signal (``-1`` +

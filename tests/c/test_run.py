@@ -2,6 +2,7 @@ import importlib.util
 import os
 import subprocess
 import sys
+import types
 
 
 def _load_repo_module(name):
@@ -180,7 +181,6 @@ def test_pytest_sessionfinish_skips_auto_clean_when_lock_is_busy(monkeypatch):
     )
 
     calls_to_flock = {"count": 0}
-    real_flock = root_conftest.fcntl.flock
 
     def fake_flock(lockfile, op):
         calls_to_flock["count"] += 1
@@ -188,10 +188,14 @@ def test_pytest_sessionfinish_skips_auto_clean_when_lock_is_busy(monkeypatch):
             return None
         raise BlockingIOError
 
-    monkeypatch.setattr(root_conftest.fcntl, "flock", fake_flock)
-    try:
-        root_conftest.pytest_sessionfinish(FakeSession(), 0)
-    finally:
-        monkeypatch.setattr(root_conftest.fcntl, "flock", real_flock)
+    # conftest imports fcntl inside its lock helpers so Windows can load it;
+    # hand that import a fake module rather than patching a module attribute.
+    fake_fcntl = types.SimpleNamespace(
+        LOCK_SH=1, LOCK_EX=2, LOCK_NB=4, LOCK_UN=8, flock=fake_flock,
+    )
+    monkeypatch.setitem(sys.modules, "fcntl", fake_fcntl)
 
+    root_conftest.pytest_sessionfinish(FakeSession(), 0)
+
+    assert calls_to_flock["count"] == 2
     assert calls == []

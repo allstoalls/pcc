@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
 from tests.runtime_build_cache import cached_threaded_pcc_python_runtime
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 REGISTRY_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_root_registry.py"
 MANAGED_SOURCE = RUNTIME_DIR / "py" / "py_gc_backend.py"
 MAKEFILE = RUNTIME_DIR / "Makefile"
@@ -110,7 +110,7 @@ def test_root_registry_has_one_strict_source_owner_and_one_lock_contract():
 
 def test_continuation_unregister_frees_only_after_graph_unlock():
     strict = REGISTRY_SOURCE.read_text(encoding="utf-8")
-    strict_body = strict.split("def pcc_gc_unregister_continuation_root", 1)[
+    strict_body = strict.split("def pcc_gc_unregister_continuation_root(", 1)[
         1
     ].split("\n\n@", 1)[0]
     assert "dead = null()" in strict_body
@@ -288,10 +288,10 @@ REGISTRY_EXPECTED = (
 
 def test_production_archive_uniquely_owns_registry(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ):
     members_result = subprocess.run(
-        ["ar", "-t", str(pcc_py_runtime_archive)],
+        ["ar", "-t", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -300,7 +300,7 @@ def test_production_archive_uniquely_owns_registry(
     assert "freestanding_gc_root_registry.o" in members_result.stdout.splitlines()
 
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -323,7 +323,7 @@ def test_production_archive_uniquely_owns_registry(
     )
 
     implementation = _link_harness(
-        tmp_path, "gc_registry_pcc_python", pcc_py_runtime_archive
+        tmp_path, "gc_registry_pcc_python", pcc_runtime_archive
     )
     for backend in range(5):
         env = {**os.environ, "PCC_GC_BACKEND": str(backend)}

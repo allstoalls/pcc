@@ -6,13 +6,13 @@ without setting that env exercises only the default backend (#0). This
 wrapper parametrizes over the GC backends each gate originally covered and
 over the Python native backend where that environment can affect the test:
 
-* ``llvm`` is the baseline path.
-* ``self`` is the pcc-owned backend path.
+* The default self lane retains the complete target sets.
+* The explicit self lane retains the compiler-sensitive target sets.
 
 Most pure C probes select their GC algorithm through ``pcc_gc_set_backend`` and
-do not invoke the Python compiler, so the self variant normally keeps only
+do not invoke the Python compiler, so the explicit self lane keeps only
 compiler and pcc-Python-runtime nodes.  The GC4 production contract is retained
-in both frontend modes deliberately: its task-board claim requires the complete
+in both lanes deliberately: its task-board claim requires the complete
 127-probe contract at both mode boundaries.  Each independent
 file/configuration runs in a bounded subprocess.  Node ids
 that share one file and build configuration stay in one inner pytest process
@@ -138,7 +138,7 @@ _BACKEND_TEST_GROUPS = {
 }
 
 
-_FRONTEND_BACKENDS = ("llvm", "self")
+_FRONTEND_BACKENDS = (None, "self")
 _FRONTEND_INDEPENDENT_TARGETS = {
     "tests/python/test_gc_backend23_production.py",
     "tests/python/test_gc_backend_concurrent.py",
@@ -147,8 +147,8 @@ _FRONTEND_INDEPENDENT_TARGETS = {
 # (some multi-core). A distinct xdist group per GC backend allowed every group
 # to occupy a worker at once; together with the runtime oracle, that starved
 # normally-fast inner compiles past their 240s/300s subprocess timeouts. Keep
-# two frontend-shaped heavy lanes instead. The LLVM lane owns complete target
-# sets while the self lane owns reduced target sets plus the runtime oracle, so
+# two frontend-shaped heavy lanes instead. The default self lane owns complete
+# target sets while the explicit self lane owns reduced targets plus the runtime oracle, so
 # `--dist=loadgroup` retains useful overlap without launching one nested pytest
 # per GC backend concurrently.
 _SUBPROCESS_TIMEOUT_SECONDS = 240
@@ -207,7 +207,7 @@ def _iter_cases():
             for complete_target in targets:
                 selected = (
                     complete_target
-                    if frontend_backend == "llvm"
+                    if frontend_backend is None
                     else _self_frontend_target(complete_target)
                 )
                 if selected is None:
@@ -221,29 +221,35 @@ def _iter_cases():
                 # One inner pytest owns the complete frontend/GC slice. This
                 # keeps module caches alive and avoids dozens of repeated
                 # pytest startup/teardown cycles.
-                marks=pytest.mark.xdist_group(name=f"pcc_heavy_{frontend_backend}"),
+                marks=pytest.mark.xdist_group(
+                    name="pcc_heavy_self_full"
+                    if frontend_backend is None
+                    else "pcc_heavy_self"
+                ),
                 # Keep the public node id independent of batch membership so
                 # exact task-board gates cannot silently select zero tests when
                 # a target is added, removed, or consolidated.
-                id="frontend=" + frontend_backend + "-gc=" + gc_backend,
+                id="frontend=" + (frontend_backend or "default-self") + "-gc=" + gc_backend,
             )
 
 
 def _run_file_under_backends(
-    frontend_backend: str,
+    frontend_backend: str | None,
     gc_backend: str,
     test_target: str | tuple[str, ...],
 ) -> None:
     env = {
         **os.environ,
-        "PCC_BACKEND": frontend_backend,
+        "PCC_BACKEND": frontend_backend or "",
         "PCC_GC_BACKEND": gc_backend,
     }
     cmd = [
         sys.executable,
         "-m",
         "pytest",
-        "-q",
+        "-x",
+        "-vv",
+        "--tb=short",
         "-n0",
         *_target_args(test_target),
     ]
@@ -283,7 +289,7 @@ def _run_file_under_backends(
     tuple(_iter_cases()),
 )
 def test_gc_backend_subset_under_frontend_backend(
-    frontend_backend: str,
+    frontend_backend: str | None,
     gc_backend: str,
     test_target: str | tuple[str, ...],
 ) -> None:

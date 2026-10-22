@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 CONTROL_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_control.py"
 MANAGED_SOURCE = RUNTIME_DIR / "py" / "py_obj_gc.py"
 MAKEFILE = RUNTIME_DIR / "Makefile"
@@ -216,7 +216,7 @@ CONTROL_EXPECTED = (
     "enabled:1\n"
     "disabled:0\n"
     "reenabled:1\n"
-    "threshold-default:700,10,10,0\n"
+    "threshold-default:2000,10,10,0\n"
     "threshold-set:17,18,19\n"
     "threshold-negative-preserve:17,20,19\n"
     "count:0,0\n"
@@ -231,10 +231,10 @@ CONTROL_EXPECTED = (
 
 def test_production_archive_uniquely_owns_gc_control_gc0_to_gc4(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ):
     members_result = subprocess.run(
-        ["ar", "-t", str(pcc_py_runtime_archive)],
+        ["ar", "-t", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -245,7 +245,7 @@ def test_production_archive_uniquely_owns_gc_control_gc0_to_gc4(
     assert "freestanding_gc_control.o" in members_result.stdout.splitlines()
 
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -269,7 +269,7 @@ def test_production_archive_uniquely_owns_gc_control_gc0_to_gc4(
     )
 
     implementation = _link_control_harness(
-        tmp_path, "gc_control_pcc_python", pcc_py_runtime_archive
+        tmp_path, "gc_control_pcc_python", pcc_runtime_archive
     )
     for backend in range(5):
         env = {**os.environ, "PCC_GC_BACKEND": str(backend)}

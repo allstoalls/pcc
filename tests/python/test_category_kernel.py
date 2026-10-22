@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from pcc.category import (
+from pcc.diagnostics.contracts.category import (
     AdjunctionWitness,
     CategoryArrow,
     CategoryCompositionError,

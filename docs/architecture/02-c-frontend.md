@@ -12,7 +12,7 @@ flowchart TD
     CK -->|hit| LOADIR["_load_compiled_artifact()<br/>(ir_text, types...)"]
     CK -->|miss| PARSE["make_c_parser().parse()<br/>PLY → C AST"]
     PARSE --> HIGH["run_high_tier(ast, PassContext)"]
-    HIGH --> CG["LLVMCodeGenerator.generate_code(ast)<br/>→ LLVM IR"]
+    HIGH --> CG["CCodeGenerator.generate_code(ast)<br/>→ LLVM IR"]
     CG --> LOW["run_low_tier(ir_text)<br/>postprocess_ir_text (va_arg)"]
     LOW --> STORE["_store_compiled_artifact()"]
     LOADIR --> EXEC
@@ -31,9 +31,9 @@ Stage-by-stage with anchors:
 | 2 | Collect TranslationUnits | `project.py:89` `collect_translation_units()`, struct at `project.py:23` |
 | 3 | Preprocess (host `cc -E` + fake libc) | `c_evaluator.py:1135` `_preprocess_translation_unit_source()` → `:2340` `_system_cpp()` (fake libc at `utils/fake_libc_include/`) |
 | 4 | Compile-cache check | `c_evaluator.py:535` `_compile_cache_key()` (version `_COMPILE_CACHE_VERSION="v4"` at `:100`), `:660` load / `:678` store |
-| 5 | Parse (PLY) | `c_parser.py:72` `CParser`, `:191` `parse()`; AST `pcc/ast/c_ast.py` |
+| 5 | Parse (PLY) | `c_parser.py:72` `CParser`, `:191` `parse()`; AST `pcc/frontends/c/ast/c_ast.py` |
 | 6 | High-tier passes | `c_evaluator.py:1186` |
-| 7 | Codegen → IR | `c_codegen.py:921` `LLVMCodeGenerator`, invoked `c_evaluator.py:1198` |
+| 7 | Codegen → IR | `c_codegen.py:921` `CCodeGenerator`, invoked `c_evaluator.py:1198` |
 | 8 | Low-tier passes / IR text | `c_evaluator.py:1203`; `postprocess_ir_text` at `c_codegen.py:653` |
 | 9 | Execute / emit | MCJIT `c_evaluator.py:1352`; system-link `:2024`; emit `:2103` |
 
@@ -51,7 +51,7 @@ flowchart LR
 
 The TU model is a frozen `TranslationUnit{name, path, source}` (`project.py:23`), which decouples the rest of the pipeline from filesystem scanning.
 
-## The semantic core: `LLVMCodeGenerator` (`c_codegen.py`)
+## The semantic core: `CCodeGenerator` (`c_codegen.py`)
 
 This is where most real C bugs live. Two things make it more than a textbook lowerer:
 
@@ -99,9 +99,9 @@ In-memory JIT cache: `c_evaluator.py:1443`. On-disk artifact cache: `:660`/`:678
 
 | Path | Role |
 |---|---|
-| `pcc/project.py` | source collection, TU model, make-driven builds |
-| `pcc/evaluater/c_evaluator.py` | preprocess, parse orchestration, cache, optimize, execute/emit |
-| `pcc/codegen/c_codegen.py` | `LLVMCodeGenerator` — semantic lowering, signedness, const-eval |
-| `pcc/parse/c_parser.py` | PLY parser (`CParser`); bump cache version on grammar changes |
-| `pcc/lex/`, `pcc/ast/`, `pcc/ply/` | lexer, AST nodes, vendored PLY |
+| `pcc/driver/project.py` | source collection, TU model, make-driven builds |
+| `pcc/frontends/c/evaluator/c_evaluator.py` | preprocess, parse orchestration, cache, optimize, execute/emit |
+| `pcc/frontends/c/codegen/c_codegen.py` | `CCodeGenerator` — semantic lowering, signedness, const-eval |
+| `pcc/frontends/c/parse/c_parser.py` | PLY parser (`CParser`); bump cache version on grammar changes |
+| `pcc/frontends/c/lex/`, `pcc/frontends/c/ast/`, `pcc/frontends/c/ply/` | lexer, AST nodes, vendored PLY |
 | `utils/fake_libc_include/` | fake libc headers that keep the host preprocessor pycparser-friendly |

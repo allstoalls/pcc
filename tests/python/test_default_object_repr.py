@@ -57,7 +57,7 @@ print(id(w) == before, hex(id(w)) in repr(w))
 
 @pytest.mark.parametrize("gc_backend", ["0", "4"])
 def test_default_reprs_and_stable_id_match_cpython(tmp_path, monkeypatch, gc_backend):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     monkeypatch.setenv("PCC_GC_BACKEND", gc_backend)
     (tmp_path / "libm.py").write_text(textwrap.dedent(LIB).lstrip(), encoding="utf-8")

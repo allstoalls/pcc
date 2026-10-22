@@ -4,7 +4,7 @@ import textwrap
 import pytest
 
 def _run_multi(tmp_path, modules):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
     srcs = []; mods = []
     for name, content in modules.items():
         p = tmp_path / f"{name}.py"; p.write_text(textwrap.dedent(content).strip(), encoding="utf-8")

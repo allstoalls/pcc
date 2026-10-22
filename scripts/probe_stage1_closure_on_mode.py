@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Standalone OFF/ON probes for modules in the actual tightened Stage1 closure.
+"""Standalone OFF/ON probes for the production Stage1 source closure.
 
-Runs each module in the tight closure through codegen WITH
-``ir_scaffold_mode='on'`` and reports per-module fallback counts so we
-can see where Path A stands. Modules that hit
+Runs selected modules through standalone codegen in the requested scaffold
+modes and reports per-module fallback counts. Source discovery uses the
+configured production Stage1 path; standalone emissions do not reproduce
+its closed-world export context. Modules that hit
 ``ScaffoldUnsupportedError`` are reported as failed (the error itself
 names the missing method/symbol — that's the Phase-3+ migration TODO).
 
 Usage:
     env -u LC_ALL uv run python scripts/probe_stage1_closure_on_mode.py
     env -u LC_ALL uv run python scripts/probe_stage1_closure_on_mode.py \
-        --module pcc.py_frontend.type_infer --mode off --emit-ir-dir build/probe
+        --module pcc.frontends.python.type_infer --mode off --emit-ir-dir build/probe
 
 Without options, retain the all-module OFF/ON comparison and diagnostic exit
 status. Filtered/artifact runs return 1 if any requested probe fails. An output
@@ -35,9 +36,9 @@ def _tightened_closure(entry: str):
 
 
 def _compile_standalone(source: str, src: str, mod: str, mode: str) -> str:
-    from pcc.py_frontend import type_infer as _type_infer
-    from pcc.py_frontend.codegen import layer1 as _layer1
-    from pcc.parse.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer as _type_infer
+    from pcc.frontends.python.codegen import layer1 as _layer1
+    from pcc.frontends.python.py_lift import parse_and_lift
 
     ast_mod = parse_and_lift(source, src, mod)
     typed = _type_infer.infer_module(ast_mod)
@@ -102,7 +103,7 @@ def main(argv=None) -> int:
     sys.path.insert(0, str(root))
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--module", action="append", default=[],
-                        help="exact tightened-closure module name; repeat to select several")
+                        help="exact production-closure module name; repeat to select several")
     parser.add_argument("--mode", choices=("off", "on", "both"), default="both")
     parser.add_argument("--emit-ir-dir", type=Path,
                         help="write per-module/mode .ll or .error.txt and receipt.json")
@@ -110,17 +111,17 @@ def main(argv=None) -> int:
     entry = root / "pcc" / "__main__.py"
     srcs, mods = _tightened_closure(str(entry))
     if len(srcs) != len(mods) or len(set(mods)) != len(mods):
-        parser.error("tightened closure has mismatched or duplicate module entries")
+        parser.error("production closure has mismatched or duplicate module entries")
     unknown = sorted(set(args.module) - set(mods))
     if unknown:
-        parser.error("module outside tightened closure: " + ", ".join(unknown))
+        parser.error("module outside production closure: " + ", ".join(unknown))
     selected = [(src, mod) for src, mod in zip(srcs, mods)
                 if not args.module or mod in args.module]
     modes = ("off", "on") if args.mode == "both" else (args.mode,)
     artifact_dir = args.emit_ir_dir.resolve() if args.emit_ir_dir is not None else None
     if artifact_dir is not None:
         artifact_dir.mkdir(parents=True, exist_ok=True)
-    print(f"closure: {len(srcs)} files (tight)", flush=True)
+    print(f"closure: {len(srcs)} files (production discovery; standalone codegen)", flush=True)
     print()
     records = []
     results = []

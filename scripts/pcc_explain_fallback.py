@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 
-from pcc.fallback_explainer import FallbackExplainer, explain_import
+from pcc.diagnostics.fallback_explainer import FallbackExplainer, explain_import
 
 
 def main(argv=None) -> int:

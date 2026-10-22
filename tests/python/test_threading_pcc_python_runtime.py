@@ -8,7 +8,7 @@ from tests.runtime_build_cache import cached_pcc_python_runtime
 
 
 def test_threaded_pcc_python_runtime_selects_owned_pthread_kernel_source() -> None:
-    runtime = Path(__file__).absolute().parents[2] / "pcc" / "py_runtime"
+    runtime = Path(__file__).absolute().parents[2] / "pcc" / "runtime"
     makefile = (runtime / "Makefile").read_text(encoding="utf-8")
 
     assert "ifeq ($(PCC_WITH_THREADS),1)" in makefile
@@ -20,7 +20,7 @@ def test_default_pcc_python_thread_objects_remain_synchronous(
     tmp_path,
     monkeypatch,
 ) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     runtime = cached_pcc_python_runtime()
     archive = runtime / "libpy_runtime_pcc_py.a"

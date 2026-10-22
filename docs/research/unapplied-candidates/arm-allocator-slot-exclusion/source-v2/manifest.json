@@ -1,0 +1,62 @@
+{
+  "artifacts": {
+    "README.md": {
+      "bytes": 10214,
+      "sha256": "6775e0dfd054b5aeee0f6f8b7e031c12ab5854713e35b2b908bcb3045eeadfab"
+    },
+    "candidate.patch": {
+      "bytes": 20458,
+      "sha256": "b9738c9de66c014d444ae61ce4b04db4e8338c88cf6c54728cf51b38e5db4cee"
+    }
+  },
+  "base_pcc_tree": "930263bf204e578796c72dab5d4aa31fd7ab27ae",
+  "base_production_commit": "bf1bf82d8242a60a85a06322ceee97fab5346cc0",
+  "base_source_inventory_sha256": "7430a30766c11a59e7185758b725b289388ae131498ce6a8a568bdf10ff773ba",
+  "execution": "UNRUN",
+  "files": [
+    {
+      "base_bytes": 71082,
+      "base_sha256": "2c71d952927362c219c2539478fb477b7dfae51561076d27b7675b73f623d100",
+      "mode": "100644",
+      "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+      "post_bytes": 73423,
+      "post_sha256": "49403685d7beaf24b9db20a9539118fe2c5f7b56cda90bdf4960e878fa44dddb"
+    },
+    {
+      "base_bytes": null,
+      "base_sha256": null,
+      "mode": "100644",
+      "path": "tests/python/test_aarch64_allocator_slot_exclusion.py",
+      "post_bytes": 16230,
+      "post_sha256": "f216ab109ef91dea5d0e72a1f42298030164a491385b1a87c28d45f9b14371e9"
+    }
+  ],
+  "native_closed_world": "UNRUN",
+  "performance_and_real_module_coverage": "UNRUN",
+  "predecessor": {
+    "manifest_sha256": "93a626c11a624f7380a180dac64edd9978ba0f98e84808e9c167a7044123f920",
+    "observed_counts": {
+      "collected": 44,
+      "failed": 1,
+      "passed": 42,
+      "unrun": 1
+    },
+    "preservation_commit": "c3263977301823c2198fe22c2c1c09aa14519885",
+    "production_postimage_unchanged": true,
+    "result_sha256": "68287e30475e5c7eca16d24508b0645d762de8817cdf7671436fbeaf0474c137",
+    "test_delta": "Resolve the actual builder-assigned name; retain nonnegative ID and cross-check the builder-assigned ID."
+  },
+  "schema": "pcc-unapplied-arm-allocator-slot-exclusion-v2",
+  "source_proof_sha256": {
+    "pcc/backend/self_backend_aarch64_darwin.py": "fe3c14c169ab9b1af2852c7a0753c2d956826dd27d827eb1a96649ec5a759233",
+    "pcc/backend/self_backend_aarch64_darwin_prologue.py": "3da82551b03fbbfe22933f95bda5c48780a324b816d06be68d6a6f23d693e98d",
+    "pcc/backend/self_backend_aarch64_darwin_regalloc.py": "2c71d952927362c219c2539478fb477b7dfae51561076d27b7675b73f623d100",
+    "pcc/backend/self_backend_kernel.py": "021d6add950632188eefa65195338f9ab7ec6aef0b396a71b5cc170a67fc822d",
+    "pcc/backend/self_backend_stackprep.py": "fae5e2c2384caf652da26aa7f6e1dfe0fc48a1011e80c1e981ddae060df714f9",
+    "pcc/backend/self_backend_value_arena.py": "d6e98642a2c653e34ba7bf7831601187d63a3502d1773ae401850503bec41caa",
+    "pcc/ir/direct_indexed_kernel.py": "c522df0dacc0afa61f6a38aad957b8deb918bdd21a78d36b543c4c5dff33883c",
+    "pcc/ir/ir.py": "821d3c0232a8daeae7c63d927586b80f6775f6aa03c3147aa7e6b462707ed39b"
+  },
+  "static_host_case_count": 44,
+  "status": "SOURCE_ONLY_REVIEW_PENDING_ALL_EXECUTION_UNRUN"
+}

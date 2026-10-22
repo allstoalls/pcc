@@ -8,9 +8,8 @@ obligation 2 / 7 (the typed-int value/object projection: a value-lane overflow
 must promote to a bignum, never wrap — see INT-P0-PROJ).
 
 These compile a program through the strict no-libpython path and compare its
-output, line for line, against the CPython oracle, on BOTH the LLVM backend and
-pcc's own LLVM-free ``self`` backend (the most direct "compiled to machine
-instructions" path the user cares about).
+output, line for line, against the CPython oracle, across independent
+compilations with pcc's owned ``self`` backend.
 """
 from __future__ import annotations
 
@@ -54,8 +53,8 @@ _EXPECTED = {
 
 
 @pytest.fixture(scope="module")
-def llvm_out(compile_and_run):
-    r = compile_and_run(PROGRAM, backend="llvm")
+def first_self_out(compile_and_run):
+    r = compile_and_run(PROGRAM, backend="self")
     assert r.returncode == 0, r.stdout + r.stderr
     return r.stdout
 
@@ -68,8 +67,8 @@ def self_out(compile_and_run):
 
 
 @pytest.mark.parametrize("token", sorted(_EXPECTED))
-def test_int_overflow_promotes_not_wraps_llvm(llvm_out, token):
-    assert token in llvm_out.splitlines(), f"missing/incorrect line: {token}"
+def test_int_overflow_promotes_not_wraps_first_self_run(first_self_out, token):
+    assert token in first_self_out.splitlines(), f"missing/incorrect line: {token}"
 
 
 @pytest.mark.parametrize("token", sorted(_EXPECTED))
@@ -77,8 +76,8 @@ def test_int_overflow_promotes_not_wraps_self_backend(self_out, token):
     assert token in self_out.splitlines(), f"missing/incorrect line: {token}"
 
 
-def test_matches_cpython_oracle(llvm_out, cpython_run):
-    # Reuse the already-compiled LLVM output; just diff against CPython.
+def test_matches_cpython_oracle(first_self_out, cpython_run):
+    # Reuse the already-compiled owned output; diff against CPython.
     oracle = cpython_run(PROGRAM)
     assert oracle.returncode == 0, oracle.stderr
-    assert llvm_out.splitlines() == oracle.stdout.splitlines()
+    assert first_self_out.splitlines() == oracle.stdout.splitlines()

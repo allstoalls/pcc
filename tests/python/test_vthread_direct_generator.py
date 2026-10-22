@@ -6,7 +6,7 @@ import re
 
 
 def test_direct_generator_spawn_omits_only_its_redundant_continuation(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "direct_spawn_shape.py"
     source.write_text('''import pcc.virtual_thread as vt
@@ -30,8 +30,8 @@ print(vt.result(left), vt.result(right))
     assert counts == [2, 1], "ordinary callbacks still need their typed captured slots"
 
 
-def test_direct_generator_task_yield_result_cancel_and_failure(tmp_path, pcc_py_runtime_archive):
-    archive = pcc_py_runtime_archive
+def test_direct_generator_task_yield_result_cancel_and_failure(tmp_path, pcc_runtime_archive):
+    archive = pcc_runtime_archive
     root = Path(__file__).resolve().parents[2]
     source = tmp_path / "direct_generator.c"
     source.write_text('''#include "py_runtime.h"
@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
 }
 ''')
     executable = tmp_path / "direct_generator"
-    built = subprocess.run(["clang", "-I" + str(root / "pcc/py_runtime/include"),
+    built = subprocess.run(["clang", "-I" + str(root / "pcc/runtime/include"),
         str(source), str(archive), "-pthread", "-o", str(executable)],
         capture_output=True, text=True, timeout=30)
     assert built.returncode == 0, built.stdout + built.stderr

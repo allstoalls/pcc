@@ -76,8 +76,11 @@ def test_thread_no_park_source_order_and_newcomer_lock_contracts():
     assert py_current.index("while thread_id == 0") < py_current.index(
         "pcc_next_thread_id_py"
     )
+    # The admission wait holds the world lock and runs before the thread has a
+    # record, so it is the raw pthread wait: pcc_cond_wait enters the exited
+    # state, which takes that lock (22f3548f8).
     assert py_current.index("pcc_registration_waiter_count_py") < py_current.index(
-        "pcc_cond_wait(cond, lock)"
+        "pthread_cond_wait(cond, lock)"
     ) < py_current.rindex("pcc_registration_waiter_count_py") < py_current.index(
         "pcc_next_thread_id_py"
     )
@@ -147,14 +150,14 @@ def test_thread_no_park_source_order_and_newcomer_lock_contracts():
     )
 
     log_src = RUNTIME_LOG_PORT.read_text(encoding="utf-8")
-    enabled = log_src.split("def pcc_runtime_log_enabled", 1)[1].split(
+    enabled = log_src.split("def pcc_diagnostics_runtime_log_enabled", 1)[1].split(
         "def _code_enabled", 1
     )[0]
     code_enabled = log_src.split("def _code_enabled", 1)[1].split(
         "def _write_lock_acquire", 1
     )[0]
-    event = log_src.split("def pcc_runtime_log_event(", 1)[1].split(
-        '@c_abi_export("pcc_runtime_log_event_code")', 1
+    event = log_src.split("def pcc_diagnostics_runtime_log_event(", 1)[1].split(
+        '@c_abi_export("pcc_diagnostics_runtime_log_event_code")', 1
     )[0]
     assert enabled.index("pcc_current_thread_id()") < enabled.index(
         "_init_once()"
@@ -166,20 +169,11 @@ def test_thread_no_park_source_order_and_newcomer_lock_contracts():
         "_write_lock_acquire()"
     )
 
-    nonthread = THREAD_KERNEL.read_text(encoding="utf-8")
-    assert 'define_thread_local_i32("pcc_tls_no_park_depth_py", 0)' in nonthread
-    owns = nonthread.split("def pcc_thread_owns_stopped_world()", 1)[1].split(
-        '@c_abi_export("pcc_stop_the_world")', 1
-    )[0]
-    assert "return 1" in owns
-    waiters = nonthread.split(
-        "def pcc_thread_registration_waiter_count()", 1
-    )[1].split('@c_abi_export("pcc_thread_unregister_current")', 1)[0]
-    assert "return 0" in waiters
-    nonthread_stop_acquire = nonthread.split(
-        "def pcc_thread_stop_requested_acquire() -> i64:", 1
-    )[1].split('@c_abi_export("pcc_refcount_incref")', 1)[0]
-    assert "return 0" in nonthread_stop_acquire
+    # The threads-off kernel left the runtime with 560c23fdf: the pthread
+    # kernel is the only one, and a one-thread program's no-park and stop
+    # contract is the probe in the next test.
+    assert not THREAD_KERNEL.exists()
+    assert 'define_thread_local_i32("pcc_tls_no_park_depth_py", 0)' in py_src
 
 
 @pytest.mark.parametrize("kind", ["pcc_python"])
@@ -187,6 +181,10 @@ def test_thread_no_park_nonthread_depth_and_world_owner_contract(
     tmp_path: Path,
     kind: str,
 ) -> None:
+    # One thread on the threaded kernel, the only kernel since 560c23fdf (the
+    # threads-off kernel's vacuous world ownership went with it): no-park
+    # nesting survives a safepoint, the lone mutator owns the world exactly
+    # while it holds a stop, and unregistering twice is harmless.
     executable = _compile_runtime_probe(
         tmp_path,
         kind=kind,
@@ -196,9 +194,9 @@ def test_thread_no_park_nonthread_depth_and_world_owner_contract(
             #include "py_internal.h"
 
             int main(void) {
-                if (pcc_threads_enabled() != 0) return 2;
+                if (pcc_threads_enabled() == 0) return 2;
                 if (pcc_thread_no_park_depth() != 0) return 3;
-                if (pcc_thread_owns_stopped_world() != 1) return 4;
+                if (pcc_thread_owns_stopped_world() != 0) return 4;
                 if (pcc_thread_registration_waiter_count() != 0) return 5;
                 if (pcc_thread_stop_requested_acquire() != 0) return 6;
                 pcc_thread_no_park_enter();
@@ -211,9 +209,13 @@ def test_thread_no_park_nonthread_depth_and_world_owner_contract(
                 if (pcc_thread_no_park_depth() != 1) return 10;
                 pcc_thread_no_park_exit();
                 if (pcc_thread_no_park_depth() != 0) return 11;
-                if (pcc_thread_owns_stopped_world() != 1) return 12;
-                if (pcc_thread_registration_waiter_count() != 0) return 13;
-                if (pcc_thread_stop_requested_acquire() != 0) return 14;
+                if (pcc_stop_the_world() != 0) return 12;
+                if (pcc_thread_owns_stopped_world() != 1) return 13;
+                if (pcc_thread_stop_requested_acquire() == 0) return 14;
+                if (pcc_resume_world() != 0) return 15;
+                if (pcc_thread_owns_stopped_world() != 0) return 16;
+                if (pcc_thread_stop_requested_acquire() != 0) return 17;
+                if (pcc_thread_registration_waiter_count() != 0) return 18;
                 pcc_thread_unregister_current();
                 pcc_thread_unregister_current();
                 return 0;
@@ -323,7 +325,7 @@ def test_thread_no_park_and_stopped_world_newcomers_use_real_pthreads(
                     sched_yield();
                 }
                 __atomic_store_n(&raw_log_attempted, 1, __ATOMIC_RELEASE);
-                pcc_runtime_log_event("gc", "raw-newcomer", 1, 2, 0);
+                pcc_diagnostics_runtime_log_event("gc", "raw-newcomer", 1, 2, 0);
                 __atomic_store_n(&raw_log_returned, 1, __ATOMIC_RELEASE);
                 pcc_thread_unregister_current();
                 return 0;
@@ -354,7 +356,7 @@ def test_thread_no_park_and_stopped_world_newcomers_use_real_pthreads(
                     sched_yield();
                 }
                 __atomic_store_n(&raw_code_attempted, 1, __ATOMIC_RELEASE);
-                pcc_runtime_log_event_code(2, 1, 5, 6, 0);
+                pcc_diagnostics_runtime_log_event_code(2, 1, 5, 6, 0);
                 __atomic_store_n(&raw_code_returned, 1, __ATOMIC_RELEASE);
                 pcc_thread_unregister_current();
                 return 0;
@@ -448,7 +450,7 @@ def test_thread_no_park_and_stopped_world_newcomers_use_real_pthreads(
                 /* The owner may perform I/O, but no no-park region may.  If
                  * the raw logger acquired its write lock before newcomer
                  * admission, this call cannot return to resume the world. */
-                pcc_runtime_log_event("gc", "stw-owner", 3, 4, 0);
+                pcc_diagnostics_runtime_log_event("gc", "stw-owner", 3, 4, 0);
 
                 /* This proves only that pcc_thread_start's user entry does
                  * not run in the owned epoch.  Its managed opaque-argument
@@ -721,15 +723,16 @@ def test_strict_thread_unregister_cleanup_reentry_fails_stop(tmp_path: Path) -> 
 def test_threading_c_oracle_is_not_linked_into_pcc_python_archive():
     makefile = RUNTIME_MAKEFILE.read_text(encoding="utf-8")
     assert "freestanding_thread_kernel_pthread" in makefile
-    assert "freestanding_thread_kernel" in makefile
     assert "PCC_WITH_THREADS" in makefile
-    # The retired C runtime's refcount-strategy knob is gone: the linked
-    # thread kernel owns the strategy (0 non-atomic, 1 atomic).
-    assert "PCC_REFCOUNT_KIND" not in makefile
+    # The retired C runtime compiled its refcount strategy in; no compile
+    # define selects it now. PCC_REFCOUNT_KIND only names the build
+    # configuration in receipts and variant paths, and the linked thread
+    # kernel owns the strategy (0 non-atomic, 1 atomic).
+    assert "-DPCC_REFCOUNT" not in makefile
     assert "pcc_threads.c" not in makefile
     runtime_py = RUNTIME_MAKEFILE.parent / "py"
+    # The one (threaded) kernel owns the atomic strategy.
     for kernel, strategy in (
-        ("freestanding_thread_kernel.py", 0),
         ("freestanding_thread_kernel_pthread.py", 1),
     ):
         source = (runtime_py / kernel).read_text(encoding="utf-8")

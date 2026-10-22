@@ -1,8 +1,10 @@
 from itertools import combinations
+import shlex
 
 import pytest
 
-from pcc.py_frontend import deferred_frontend_schedule as scheduler
+from pcc.frontends.python import deferred_frontend_schedule as scheduler
+from pcc.frontends.python import pipeline_frontend_workers as worker_policy
 
 
 def test_call_node_score_matches_wire_marker_count():
@@ -17,7 +19,7 @@ def test_call_node_score_matches_wire_marker_count():
 
 @pytest.mark.integration
 def test_call_node_score_executes_natively_under_all_collectors(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive,
 ):
     import inspect
     import os
@@ -41,7 +43,7 @@ def test_call_node_score_executes_natively_under_all_collectors(
     binary = tmp_path / "ast_score"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         run = subprocess.run(
@@ -96,9 +98,9 @@ def test_pco_phase_uses_its_own_budget_instead_of_serial_safe_lane():
     assert scheduler.pco_groups([1000000] * 30, 6 * 1073741824, 2) == [(list(range(30)), 2)]
 
 
-@pytest.mark.parametrize("raw,budget", [("2", "8589934592"), ("", "8589934592"), ("auto", ""), ("auto", "invalid")])
+@pytest.mark.parametrize("raw,budget", [("2", ""), ("", ""), ("auto", ""), ("auto", "invalid")])
 @pytest.mark.parametrize("phase", ["frontend", "pco"])
-def test_explicit_or_unbudgeted_calls_preserve_conservative_policy(monkeypatch, raw, budget, phase):
+def test_unbudgeted_calls_preserve_conservative_policy(monkeypatch, raw, budget, phase):
     monkeypatch.setenv("PCC_PY_FRONTEND_JOBS", raw)
     monkeypatch.setenv("PCC_WORKER_TREE_BUDGET_BYTES", budget)
     calls = []
@@ -108,8 +110,78 @@ def test_explicit_or_unbudgeted_calls_preserve_conservative_policy(monkeypatch, 
     assert calls == [(["a"], 1), (["b", "c"], 2)]
 
 
+def _capture_resource_pool(monkeypatch):
+    calls = []
+
+    def capture(commands, tasks, width, budget, *, trace_path):
+        calls.append((list(commands), tasks, width, budget, trace_path))
+
+    def old_pool(*_args, **_kwargs):
+        pytest.fail("budgeted commands reached a retired static pool")
+
+    monkeypatch.setattr(scheduler, "run_resource_worker_processes", capture)
+    monkeypatch.setattr(scheduler, "run_worker_processes", old_pool)
+    monkeypatch.setattr(scheduler, "run_weighted_worker_processes", old_pool)
+    monkeypatch.setattr(scheduler, "run_chained_worker_processes", old_pool)
+    return calls
+
+
+def _frontend_commands(tmp_path, sizes, exports=None):
+    """Use the maintained command/manifest protocol at the scheduling boundary."""
+    if exports is None:
+        exports = tmp_path / "exports.json"
+        exports.write_text("{}\n", encoding="utf-8")
+    sources = []
+    names = []
+    for index, size in enumerate(sizes):
+        source = tmp_path / ("source_" + str(index) + ".py")
+        source.write_text("value = " + str(index) + "\n", encoding="utf-8")
+        sources.append(str(source))
+        names.append("pkg.module_" + str(index))
+        with (tmp_path / ("module_" + str(index) + ".json")).open("wb") as stream:
+            stream.truncate(size)
+    manifests = []
+    commands = []
+    for index in range(len(sizes)):
+        path = tmp_path / (str(index) + ".manifest")
+        worker_policy.write_worker_manifest(
+            str(path), str(tmp_path / (str(index) + ".result")),
+            str(tmp_path / "ir"), str(exports), str(tmp_path), sources, names, [index],
+            entry_module=names[0], sibling_inits=(), libpython_mode="off",
+            ir_scaffold_mode="on", verbose=False,
+        )
+        manifests.append(str(path))
+        commands.append(shlex.join(["pcc1", "--pcc-python-multi-codegen-worker", str(path)]))
+    return commands, manifests
+
+
+@pytest.mark.parametrize("raw,width", [("2", 2), ("", 12), ("auto", 12)])
+def test_explicit_budget_keeps_shared_admission_for_numeric_and_auto_widths(
+    tmp_path, monkeypatch, raw, width,
+):
+    commands, manifests = _frontend_commands(tmp_path, [30, 20, 10])
+    monkeypatch.setenv("PCC_PY_FRONTEND_JOBS", raw)
+    monkeypatch.setenv("PCC_WORKER_TREE_BUDGET_BYTES", "8589934592")
+    monkeypatch.setattr(scheduler, "parallel_cpu_budget", lambda: 12)
+    calls = _capture_resource_pool(monkeypatch)
+    scheduler.run_frontend_commands(commands, manifests, 1, 2)
+    selected_commands, tasks, selected_width, budget, trace = calls[0]
+    assert len(calls) == 1 and selected_commands == commands
+    assert selected_width == width and budget == 8 * 1073741824
+    assert trace == manifests[0] + ".admission.tsv"
+    assert len(tasks) == 3 and all(task["estimate_bytes"] == 0 for task in tasks)
+
+
+def test_budgeted_frontend_rejects_unknown_commands_before_launch(tmp_path, monkeypatch):
+    monkeypatch.setenv("PCC_WORKER_TREE_BUDGET_BYTES", "8589934592")
+    calls = _capture_resource_pool(monkeypatch)
+    with pytest.raises(ValueError, match="requires frontend worker manifests"):
+        scheduler.run_frontend_commands(["unknown-command"], ["unused"], 0, 2)
+    assert not calls
+
+
 @pytest.mark.parametrize("gc_backend", ["0", "1", "2", "3", "4", "unknown"])
-def test_auto_pco_reads_all_sidecars_before_launch_and_preserves_command_ownership(tmp_path, monkeypatch, gc_backend):
+def test_auto_pco_describes_lazy_inputs_and_preserves_command_ownership(tmp_path, monkeypatch, gc_backend):
     sizes = [1000000, 60000000, 14000000, 1000000]
     sidecars = []
     for index, size in enumerate(sizes):
@@ -117,32 +189,43 @@ def test_auto_pco_reads_all_sidecars_before_launch_and_preserves_command_ownersh
         with path.open("wb") as stream:
             stream.truncate(size)
         sidecars.append(str(path))
-    calls = []
     monkeypatch.setenv("PCC_PY_FRONTEND_JOBS", "auto")
     monkeypatch.setenv("PCC_GC_BACKEND", gc_backend)
     monkeypatch.setenv("PCC_WORKER_TREE_BUDGET_BYTES", str(6 * 1073741824))
     monkeypatch.setattr(scheduler, "parallel_cpu_budget", lambda: 12)
-    monkeypatch.setattr(
-        scheduler, "run_weighted_worker_processes",
-        lambda commands, reservations, width, budget: calls.append(
-            (commands, reservations, width, budget)
-        ),
-    )
+    calls = _capture_resource_pool(monkeypatch)
     scheduler.run_pco_commands(["a", "b", "c", "d"], sidecars, 2, 1)
-    selected_gc = 0 if gc_backend == "0" else -1
-    assert calls == [(
-        ["b", "c", "a", "d"],
-        [scheduler.indexed_pco_floor_bytes(sizes[index], selected_gc)
-         for index in (1, 2, 0, 3)],
-        12,
-        5 * 1073741824,
-    )]
+    commands, tasks, width, budget, trace = calls[0]
+    assert len(calls) == 1 and commands == ["a", "b", "c", "d"]
+    assert width == 12 and budget == 6 * 1073741824
+    assert trace == sidecars[0] + ".pco-admission.tsv"
+    assert [task["input_path"] for task in tasks] == sidecars
+    assert all(not task["input_ready"] and task["depends_on"] == -1 for task in tasks)
+    assert all(task["report_path"] == path + ".pco-rss" for task, path in zip(tasks, sidecars))
+    expected_cost = ([scheduler._PCO_BASE, scheduler._PCO_PER_SIDECAR_MB]
+                     if gc_backend == "0" else
+                     [scheduler._PCO_LEGACY_BASE, scheduler._PCO_LEGACY_PER_SIDECAR_MB])
+    assert all(task["input_cost"] == expected_cost for task in tasks)
+    assert all(task["class"].endswith("|" + gc_backend) for task in tasks)
     calls.clear()
     with pytest.raises(ValueError, match="inventory mismatch"):
         scheduler.run_pco_commands(["a"], sidecars, 0, 1)
-    with pytest.raises(OSError):
-        scheduler.run_pco_commands(["a", "b"], [sidecars[0], str(tmp_path / "missing")], 0, 1)
     assert not calls
+
+
+def test_pco_missing_input_refuses_before_any_actual_process_launch(tmp_path, monkeypatch):
+    from pcc.frontends.python import worker_process_pool
+
+    sidecar = tmp_path / "present.pidx"
+    sidecar.write_bytes(b"input")
+    monkeypatch.setenv("PCC_WORKER_TREE_BUDGET_BYTES", "8589934592")
+    monkeypatch.delenv("PCC_WORKER_TREE_STATE_PATH", raising=False)
+    monkeypatch.setattr(
+        worker_process_pool, "_start_resource_worker",
+        lambda *_args: pytest.fail("a process launched before the missing input was rejected"),
+    )
+    with pytest.raises(OSError):
+        scheduler.run_pco_commands(["a", "b"], [str(sidecar), str(tmp_path / "missing")], 0, 1)
 
 
 def test_gc0_reservations_cover_all_392_system_peak_measurements():
@@ -205,7 +288,7 @@ def test_closure_floor_applies_to_gc0_only():
 def _write_indexed_exports(path, payloads, dependencies):
     import json
 
-    from pcc.py_frontend import pipeline_exports
+    from pcc.frontends.python import pipeline_exports
 
     rows = [pipeline_exports._NATIVE_EXPORT_INDEXED_SCHEMA]
     for name, payload in payloads.items():
@@ -235,7 +318,7 @@ def test_export_closure_bytes_follow_dependency_closure(tmp_path):
 
 
 @pytest.mark.parametrize("gc_backend", ["0", "3"])
-def test_auto_uses_closure_floors_from_manifest_exports(tmp_path, monkeypatch, gc_backend):
+def test_legacy_frontend_cost_model_reads_export_closure(tmp_path, monkeypatch, gc_backend):
     exports = tmp_path / "native_exports.json"
     names = ["root", "leaf"]
     _write_indexed_exports(
@@ -250,22 +333,14 @@ def test_auto_uses_closure_floors_from_manifest_exports(tmp_path, monkeypatch, g
             stream.truncate(size)
         manifest = tmp_path / (str(index) + ".manifest")
         manifest.write_text("\n".join(
-            ["pcc.py_frontend.codegen_worker.v4", "result", "out", str(exports),
+            ["pcc.frontends.python.codegen_worker.v4", "result", "out", str(exports),
              "codegen", str(tmp_path), "root", "off", "on", "0", "0", str(len(names))]
             + [str(i) + "\t" + name + "\tsrc.py" for i, name in enumerate(names)]
             + ["1", str(index)]
         ) + "\n")
         manifests.append(str(manifest))
-    calls = []
-    monkeypatch.setenv("PCC_PY_FRONTEND_JOBS", "auto")
     monkeypatch.setenv("PCC_GC_BACKEND", gc_backend)
-    monkeypatch.setenv("PCC_WORKER_TREE_BUDGET_BYTES", "8589934592")
-    monkeypatch.setattr(scheduler, "parallel_cpu_budget", lambda: 12)
-    monkeypatch.setattr(
-        scheduler, "run_weighted_worker_processes",
-        lambda commands, reservations, width, budget: calls.append(reservations),
-    )
-    scheduler.run_frontend_commands(["a", "b"], manifests, 0, 2)
+    floors, _order = scheduler._frontend_floors_and_order(["a", "b"], manifests)
     if gc_backend == "0":
         expected = [
             scheduler.indexed_frontend_floor_bytes(sizes[0], 0, 5000000),
@@ -273,47 +348,33 @@ def test_auto_uses_closure_floors_from_manifest_exports(tmp_path, monkeypatch, g
         ]
     else:
         expected = [scheduler.indexed_frontend_floor_bytes(size, -1) for size in sizes]
-    assert sorted(calls[0]) == sorted(expected)
+    assert sorted(floors) == sorted(expected)
 
 
 @pytest.mark.parametrize("gc_backend", ["0", "1", "2", "3", "4", "unknown"])
-def test_auto_reads_assigned_ast_and_passes_selected_groups(tmp_path, monkeypatch, gc_backend):
-    sizes = [14000000, 7000000, 100000, 100000]
-    manifests = []
-    for index, size in enumerate(sizes):
-        ast = tmp_path / ("module_" + str(index) + ".json")
-        with ast.open("wb") as stream:
-            stream.truncate(size)
-        manifest = tmp_path / (str(index) + ".manifest")
-        manifest.write_text("\n".join([
-            "pcc.py_frontend.codegen_worker.v4", "result", "out", "exports", "",
-            str(tmp_path), "", "", "", "", "1", str(index),
-        ]) + "\n")
-        manifests.append(str(manifest))
-    calls = []
+def test_auto_describes_each_assigned_ast_for_measured_pool(tmp_path, monkeypatch, gc_backend):
+    sizes = [1400, 700, 10, 10]
+    commands, manifests = _frontend_commands(tmp_path, sizes)
     monkeypatch.setenv("PCC_PY_FRONTEND_JOBS", "auto")
     monkeypatch.setenv("PCC_GC_BACKEND", gc_backend)
     monkeypatch.setenv("PCC_WORKER_TREE_BUDGET_BYTES", "8589934592")
     monkeypatch.setattr(scheduler, "parallel_cpu_budget", lambda: 12)
-    monkeypatch.setattr(
-        scheduler, "run_weighted_worker_processes",
-        lambda commands, reservations, width, budget: calls.append(
-            (commands, reservations, width, budget)
-        ),
-    )
-    scheduler.run_frontend_commands(["a", "b", "c", "d"], manifests, 2, 2)
-    assert calls == [(
-        ["a", "b", "c", "d"],
-        [scheduler.indexed_frontend_floor_bytes(
-            size, 0 if gc_backend == "0" else -1,
-        ) for size in sizes],
-        12,
-        7 * 1073741824,
-    )]
+    calls = _capture_resource_pool(monkeypatch)
+    scheduler.run_frontend_commands(commands, manifests, 2, 2)
+    selected_commands, tasks, width, budget, trace = calls[0]
+    assert len(calls) == 1 and selected_commands == commands
+    assert width == 12 and budget == 8 * 1073741824
+    assert trace == manifests[0] + ".admission.tsv"
+    for index, task in enumerate(tasks):
+        assert task["inputs"][2:4] == [sizes[index], sizes[index]]
+        assert task["inputs"][-2:] == [(tmp_path / "exports.json").stat().st_size, 1]
+        assert "|module-indexed|" + gc_backend + "|" in task["class"]
+        assert task["estimate_bytes"] == 0 and task["source_identity"]
+        assert task["report_path"] == manifests[index] + ".rss"
 
 
 def test_frontend_and_pco_admission_execute_natively_under_all_collectors(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive,
 ):
     import inspect
     import os
@@ -358,7 +419,7 @@ main()
 ''')
     binary = tmp_path / "pco_admission"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run(
             [str(binary)], capture_output=True, text=True, timeout=20,
@@ -369,56 +430,36 @@ main()
 
 
 @pytest.mark.parametrize("gc_backend", ["0", "3"])
-def test_auto_chains_each_pco_job_after_its_own_frontend_job(tmp_path, monkeypatch, gc_backend):
-    """Frontend -> PCO pipelining: module i's PCO follows module i's frontend
-    in one pool, in the frontend's priority order, with the PCO floor of the
-    collector in use; nothing waits for the last frontend job."""
-    sizes = [100000, 14000000, 7000000]
-    manifests = []
-    for index, size in enumerate(sizes):
-        ast = tmp_path / ("module_" + str(index) + ".json")
-        with ast.open("wb") as stream:
-            stream.truncate(size)
-        manifest = tmp_path / (str(index) + ".manifest")
-        manifest.write_text("\n".join([
-            "pcc.py_frontend.codegen_worker.v4", "result", "out", "exports", "",
-            str(tmp_path), "", "", "", "", "1", str(index),
-        ]) + "\n")
-        manifests.append(str(manifest))
-    calls = []
-    monkeypatch.setenv("PCC_PY_FRONTEND_JOBS", "auto")
+@pytest.mark.parametrize("raw,width", [("auto", 12), ("2", 2)])
+def test_budgeted_chain_keeps_each_pco_dependent_on_its_frontend(
+    tmp_path, monkeypatch, gc_backend, raw, width,
+):
+    """A missing PCO input remains deferred until its own producer completes."""
+    commands, manifests = _frontend_commands(tmp_path, [100, 1400, 700])
+    sidecars = [str(tmp_path / ("s" + str(index) + ".pidx")) for index in range(3)]
+    monkeypatch.setenv("PCC_PY_FRONTEND_JOBS", raw)
     monkeypatch.setenv("PCC_GC_BACKEND", gc_backend)
     monkeypatch.setenv("PCC_WORKER_TREE_BUDGET_BYTES", "8589934592")
     monkeypatch.setattr(scheduler, "parallel_cpu_budget", lambda: 12)
-    monkeypatch.setattr(
-        scheduler, "run_chained_worker_processes",
-        lambda *args: calls.append(args),
-    )
+    calls = _capture_resource_pool(monkeypatch)
     scheduler.run_frontend_pco_commands(
-        ["f0", "f1", "f2"], manifests, ["p0", "p1", "p2"],
-        ["s0.pidx", "s1.pidx", "s2.pidx"], 0, 2,
+        commands, manifests, ["p0", "p1", "p2"], sidecars, 0, 2,
     )
-    floors, order = scheduler._frontend_floors_and_order(["f0", "f1", "f2"], manifests)
-    if gc_backend == "0":
-        pco_floor = (scheduler._PCO_BASE, scheduler._PCO_PER_SIDECAR_MB, scheduler._PCO_CAP)
-    else:
-        pco_floor = (
-            scheduler._PCO_LEGACY_BASE, scheduler._PCO_LEGACY_PER_SIDECAR_MB, scheduler._PCO_CAP,
-        )
-    assert calls == [(
-        ["f" + str(i) for i in order],
-        [floors[i] for i in order],
-        ["p" + str(i) for i in order],
-        ["s" + str(i) + ".pidx" for i in order],
-        pco_floor,
-        12,
-        7 * 1073741824,
-    )]
+    selected_commands, tasks, selected_width, budget, trace = calls[0]
+    assert len(calls) == 1 and selected_commands == commands + ["p0", "p1", "p2"]
+    assert selected_width == width and budget == 8 * 1073741824
+    assert trace == manifests[0] + ".chained-admission.tsv"
+    assert len(tasks) == 6
+    assert all(task.get("depends_on", -1) == -1 for task in tasks[:3])
+    assert [task["depends_on"] for task in tasks[3:]] == [0, 1, 2]
+    assert [task["input_path"] for task in tasks[3:]] == sidecars
+    assert all(not task["input_ready"] for task in tasks[3:])
+    assert all(task["class"].endswith("|" + gc_backend) for task in tasks[3:])
 
 
 def test_unbudgeted_chained_call_keeps_the_two_phases_in_order(monkeypatch):
     monkeypatch.setenv("PCC_PY_FRONTEND_JOBS", "2")
-    monkeypatch.setenv("PCC_WORKER_TREE_BUDGET_BYTES", "8589934592")
+    monkeypatch.delenv("PCC_WORKER_TREE_BUDGET_BYTES", raising=False)
     calls = []
     monkeypatch.setattr(scheduler, "run_worker_processes", lambda commands, width: calls.append((commands, width)))
     scheduler.run_frontend_pco_commands(

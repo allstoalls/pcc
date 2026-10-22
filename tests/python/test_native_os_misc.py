@@ -23,7 +23,7 @@ _BUILD.mkdir(parents=True, exist_ok=True)
 
 
 def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -102,11 +102,11 @@ def test_urandom_dispatches_to_native(mode):
 
 
 def test_urandom_runtime_no_libpython(
-    tmp_path, monkeypatch, pcc_py_runtime_archive
+    tmp_path, monkeypatch, pcc_runtime_archive
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
-    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_py_runtime_archive))
+    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_runtime_archive))
 
     src = tmp_path / "urandom_runtime.py"
     exe = tmp_path / "urandom_runtime.out"
@@ -135,7 +135,7 @@ def test_getcwd_result_stays_native_inside_os_path_join(mode):
         import os
 
         def f() -> str:
-            return str(os.path.join(os.getcwd(), "pcc", "py_runtime"))
+            return str(os.path.join(os.getcwd(), "pcc", "runtime"))
         """
     )
     ir = _compile_to_ll(program, f"getcwd_join_{mode}", mode=mode)
@@ -577,9 +577,7 @@ def test_os_path_splitdrive_lowers_without_libpython(mode):
 @pytest.mark.parametrize("const", ["F_OK", "R_OK", "W_OK", "X_OK"])
 @pytest.mark.parametrize("mode", ["off", "on"])
 def test_access_mode_constants_dispatch(mode, const):
-    """Each access(2) mode constant must go through py_int_from_i64
-    (literal) instead of py_cpy_getattr — the value is fixed by POSIX
-    so it's always known at compile time."""
+    """Native constants retain their POSIX values in either integer form."""
     program = textwrap.dedent(
         f"""
         import os
@@ -592,7 +590,78 @@ def test_access_mode_constants_dispatch(mode, const):
     body = _function_body(ir, "f")
     assert body is not None
     assert f"cpy.get.{const}" not in body, body
-    assert "@py_int_from_i64" in body, body
+    expected = {"F_OK": 0, "R_OK": 4, "W_OK": 2, "X_OK": 1}[const]
+    _assert_native_access_constant(body, expected)
+
+
+def _assert_native_access_constant(body, expected):
+    """Accept only the documented tagged or py_int_from_i64 producer."""
+    assert "@py_cpy_" not in body, body
+    assert "@.cpy." not in body, body
+    tagged = re.findall(r"= inttoptr i64 (-?\d+) to ptr\b", body)
+    boxed = re.findall(
+        r"= call ptr(?: \(i64\))? @py_int_from_i64\(i64 (-?\d+)\)", body,
+    )
+    assert len(tagged) + len(boxed) == 1, body
+    if tagged:
+        # py_runtime.h and the tag_int/untag_int intrinsics specify an odd
+        # signed pointer word whose arithmetic right shift decodes the value.
+        bits = int(tagged[0])
+        assert -(1 << 63) <= bits < (1 << 63) and bits & 1, body
+        value = bits >> 1
+    else:
+        value = int(boxed[0])
+    assert value == expected, body
+
+
+@pytest.mark.parametrize("value", (0, 1, 2, 4))
+@pytest.mark.parametrize("representation", ("tagged", "boxed"))
+def test_access_constant_assertion_accepts_documented_representations(value, representation):
+    if representation == "tagged":
+        body = "%value = inttoptr i64 " + str((value << 1) | 1) + " to ptr\nret ptr %value"
+    else:
+        body = "%value = call ptr (i64) @py_int_from_i64(i64 " + str(value) + ")\nret ptr %value"
+    _assert_native_access_constant(body, value)
+
+
+@pytest.mark.parametrize("body", (
+    "%value = inttoptr i64 3 to ptr\nret ptr %value",  # Tagged 1, not F_OK.
+    "%value = inttoptr i64 0 to ptr\nret ptr %value",  # NULL is not tagged 0.
+    "%value = inttoptr i64 2 to ptr\nret ptr %value",  # Untagged raw pointer.
+    "%value = inttoptr i64 18446744073709551617 to ptr\nret ptr %value",
+    "%value = call ptr (i64) @py_int_from_i64(i64 1)\nret ptr %value",
+    "%value = call ptr (ptr) @py_int_from_cstr(ptr %text)\nret ptr %value",
+    "%value = inttoptr i64 1 to ptr\n%other = call ptr @py_int_from_i64(i64 0)\nret ptr %value",
+    "%value = inttoptr i64 1 to ptr\ncall ptr @py_cpy_getattr(ptr %os, ptr %name)\nret ptr %value",
+    "ret ptr null",
+))
+def test_access_constant_assertion_rejects_wrong_or_unproven_values(body):
+    with pytest.raises(AssertionError):
+        _assert_native_access_constant(body, 0)
+
+
+@pytest.mark.parametrize("value", (0, 1, 2, 4))
+def test_access_constant_runtime_tagged_decode(value):
+    """Execute the production boxing and unboxing bodies with ABI primitives."""
+    from tests.python.test_foreign_address_leases import _functions
+
+    namespace = {
+        "is_tagged_int": lambda pointer: bool(pointer & 1),
+        "tag_int": lambda integer: (integer << 1) | 1,
+        "untag_int": lambda pointer: pointer >> 1,
+        "ptr_is_null": lambda pointer: pointer is None,
+        "store_i32": lambda pointer, offset, integer: pointer.__setitem__(offset, integer),
+    }
+    runtime = _REPO_ROOT / "pcc/runtime/py"
+    _functions(runtime / "py_int_core.py", {"py_int_from_i64", "py_int_value_i64"}, namespace)
+    _functions(runtime / "py_int_convert.py", {"py_int_to_i64"}, namespace)
+    encoded = namespace["py_int_from_i64"](value)
+    assert encoded == (value << 1) | 1
+    overflow = [99]
+    assert namespace["py_int_to_i64"](encoded, overflow) == value
+    assert overflow == [0]
+    assert namespace["py_int_to_i64"](encoded, None) == value
+    assert namespace["py_int_value_i64"](encoded) == value
 
 
 @pytest.mark.parametrize("mode", ["off", "on"])

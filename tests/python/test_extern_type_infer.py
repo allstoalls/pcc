@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import textwrap
 
-from pcc.parse.py_lift import parse_and_lift
-from pcc.py_frontend.py_ast import FloatType, FuncDef, FuncType, Return
-from pcc.py_frontend.type_infer import infer_module
+from pcc.frontends.python.py_lift import parse_and_lift
+from pcc.frontends.python.py_ast import FloatType, FuncDef, FuncType, Return
+from pcc.frontends.python.type_infer import infer_module
 
 
 def test_extern_double_restype_flows_to_call_expression() -> None:

@@ -1,0 +1,88 @@
+{
+  "active_changed_paths": [
+    ".github/workflows/pcc1-package-parity.yml",
+    "pcc/frontends/python/codegen/call_expression_lowering.py",
+    "pcc/frontends/python/codegen/class_gen.py",
+    "pcc/runtime/py/py_class.py",
+    "pcc/runtime/py/py_format_runtime.py",
+    "pcc/runtime/py/py_obj_ops_dispatch.py",
+    "pcc/runtime/py/py_protocol_runtime.py",
+    "scripts/ci_macos_regression_gate.py",
+    "tests/python/test_class_constructor_roots.py",
+    "tests/python/test_native_class_docstrings.py",
+    "tests/python/test_native_float_callback_movement.py",
+    "tests/python/test_native_float_protocol.py",
+    "tests/test_ci_macos_regression_gate.py"
+  ],
+  "base_and_candidate_origins_after": "PASS",
+  "base_commit": "a7282a82ef885412e90143e1cede90dcfd8c0d81",
+  "by_selector": {
+    "tests/python/test_class_constructor_roots.py::test_class_constructor_doc_write_failure_retires_unpublished_class": 1,
+    "tests/python/test_class_constructor_roots.py::test_class_constructor_movement_at_publish_keeps_self_mro_and_handoff_owner": 1,
+    "tests/python/test_class_constructor_roots.py::test_class_constructor_zero_bases_appends_object_root": 1,
+    "tests/python/test_native_float_protocol.py::test_float_protocol_result_ownership": 12,
+    "tests/test_ci_macos_regression_gate.py": 32
+  },
+  "candidate_pcc_tree": "43d0924146bb01955ea87250e30aab8bdee63f2a",
+  "codegen_checksum": "04b4499295896d4337e0cc3ec0bed197a21f1b670651f0131ac9b157c7616b5e",
+  "counts": {
+    "collected": 47,
+    "errors": 0,
+    "failed": 0,
+    "passed": 47,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  },
+  "deselected": [],
+  "evidence_categories": {
+    "mocked_CI_runner_cases": 32,
+    "native_executions": 0,
+    "ownership_models": 15
+  },
+  "external_source_postseal_sha256": "eaeeb5036bb065ad91c45765278dbd6d30dca094bd8a477d23c0301e73b05fac",
+  "guard": {
+    "bootstrap_status": "PASS",
+    "cleanup": "CLEAN",
+    "denied_events": 0,
+    "echild": true,
+    "elapsed_s": 2.529237900998851,
+    "free_floor_bytes": 4294967296,
+    "growth_limit_bytes": 536870912,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "lock_released": true,
+    "peak_sampled_root_rss_bytes": 84692992,
+    "result_sha256": "82bdeafd8775614deef5c734f63b11d27898fb278620980f4dd4c326164edbb2",
+    "returncode": 0,
+    "root_reaped": true,
+    "status": "COMPLETE",
+    "timeout_s": 300
+  },
+  "import_roots": "PASS",
+  "payload_sha256": "0f752f455a9397d9f54ac8ae94557769c52d3bd2b69fbbbfbef3728fa2296498",
+  "prior_failure": {
+    "classification": "Missing cstr model binding while evaluating the doc-name argument; the production module already imports cstr. The original failure evidence remains unchanged.",
+    "failed": 1,
+    "passed": 12,
+    "qualification_sha256": "3c9abc7e77b8494031918ab205427ed8ffcd6ef78797ecfc81a904b18aba8494",
+    "selected_but_unrun": 2
+  },
+  "qualification_sha256": "2278205faf1119aa5f83d1ed64b089a4f37b2cb1b2e03d678f1f9717c08f07ec",
+  "schema": "pcc.float_doc.combined_model_ci_qualification.v1",
+  "scope": "Exactly fifteen production-body ownership model cases plus thirty-two mocked CI runner cases on one assembled snapshot. No changed-shape IR, native compiler/runtime, reference child, FFI or real relocation witness.",
+  "source_before_after": "PASS",
+  "source_manifest_sha256": "3185fc1e4a56d5eda5723941f3bb9dcd8b26f289495620ccd84cd83a00d36153",
+  "status": "PASS",
+  "test_only_correction": {
+    "change": "Add identity cstr binding to the extracted constructor model namespace; production and all ownership/failure assertions unchanged",
+    "patch_sha256": "10936e386f8d67b872d717a83bffbd12ad33a596c244e9a492067315f4d905d1",
+    "postimage_sha256": "192928e54600f5c5e4ee07b62191059972c7509ec38fb426ec722d8ecd0e109b"
+  },
+  "unrun_coverage": [
+    "Frontend custom-float and class-doc changed-shape IR",
+    "Metaclass namespace mutation/deletion and canonical first-class float native callbacks",
+    "Source-matched runtime, native pcc0/pcc1, GC0-4 and real GC4 relocation-forward witness",
+    "Complete async/gateway, broad regression suites and full Stage1"
+  ]
+}

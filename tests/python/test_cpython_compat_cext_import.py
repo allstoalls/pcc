@@ -39,7 +39,7 @@ def _have_libpython() -> bool:
 
 @pytest.mark.pcc_gate(unavailable=None if _have_libpython() else "cpython-compat requires libpython headers/lib")
 def test_cpython_compat_imports_stdlib_c_extension(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "ud.py"
     exe = tmp_path / "ud.out"
@@ -87,7 +87,7 @@ def test_cpython_compat_imports_stdlib_c_extension(tmp_path):
 )
 def test_cpython_compat_preserves_native_runtime_semantics(tmp_path):
     """libpython mode must isolate, not delete, pcc's native C-API owners."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "mixed.py"
     exe = tmp_path / "mixed.out"
@@ -172,7 +172,7 @@ def test_cpython_compat_preserves_native_runtime_semantics(tmp_path):
 
 def test_libpython_program_main_initializes_cpython_before_module_code(tmp_path):
     """The process main thread must win CPython initialization."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "main_thread_init.py"
     out = tmp_path / "main_thread_init.ll"
@@ -222,7 +222,7 @@ def test_chained_cpython_call_method_dispatches_via_libpython(tmp_path):
     Compile-only (``emit_llvm_only``): no numpy install or libpython link needed
     - ``import numpy`` marks ``numpy`` as a CPython module at compile time.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "chain.py"
     out = tmp_path / "chain.ll"
@@ -247,7 +247,7 @@ def test_type_builtin_on_cpython_value_dispatches_via_libpython(tmp_path):
     ``__class__`` through ``py_cpy_getattr`` (and tags the result cpy). Compile-
     only; ``import numpy`` marks ``numpy`` as a CPython module at compile time.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "ty.py"
     out = tmp_path / "ty.ll"
@@ -270,7 +270,7 @@ def test_cpython_value_binary_op_dispatches_via_libpython(tmp_path):
     is in ``_cpy_values`` through ``py_cpy_binop`` (over libpython
     ``PyNumber_Add``/etc.). Compile-only; ``import numpy`` marks ``numpy`` cpy.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "ar.py"
     out = tmp_path / "ar.ll"
@@ -300,7 +300,7 @@ def test_cpython_binop_receiver_method_dispatches_via_libpython(tmp_path):
     and the method-call lowering routes such a receiver through the libpython
     method path. Compile-only; ``import numpy`` marks ``numpy`` cpy.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "br.py"
     out = tmp_path / "br.ll"
@@ -330,7 +330,7 @@ def test_cpython_value_power_op_dispatches_via_libpython(tmp_path):
     ``numpy`` cpy. The native ``py_int_pow`` path is unaffected (it runs only for
     non-cpy operands, after this top-of-function cpy branch).
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "pw.py"
     out = tmp_path / "pw.ll"
@@ -360,7 +360,7 @@ def test_cpython_subscript_receiver_method_dispatches_via_libpython(tmp_path):
     ``a.shape[0]`` which followed the failing line. Compile-only; ``import
     numpy`` marks ``numpy`` cpy.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "sr.py"
     out = tmp_path / "sr.ll"
@@ -389,7 +389,7 @@ def test_cpython_value_matmul_op_dispatches_via_libpython(tmp_path):
     ``PyNumber_MatrixMultiply``. Completes the cpy binary operator set
     ``+ - * / // % ** @``. Compile-only; ``import numpy`` marks ``numpy`` cpy.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "mm.py"
     out = tmp_path / "mm.ll"
@@ -419,7 +419,7 @@ def test_cpython_augassign_on_cpython_name_dispatches_via_libpython(tmp_path):
     routes through ``py_cpy_binop``. Compile-only; ``import numpy`` marks
     ``numpy`` cpy.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "ag.py"
     out = tmp_path / "ag.ll"
@@ -450,7 +450,7 @@ def test_cpython_deep_chain_method_dispatches_via_libpython(tmp_path):
     Call funcs), so arbitrarily deep cpy method chains route through libpython.
     Compile-only; ``import numpy`` marks ``numpy`` cpy.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "dc.py"
     out = tmp_path / "dc.ll"
@@ -478,7 +478,7 @@ def test_cpython_value_binop_is_generic_not_numpy_specific(tmp_path):
     shortcut would not satisfy it. Compile-only; ``import decimal`` marks
     ``decimal`` cpy.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "dec.py"
     out = tmp_path / "dec.ll"
@@ -512,7 +512,7 @@ def test_cpython_binop_receiver_attribute_dispatches_via_libpython(tmp_path):
     ``_expr_looks_cpython``) through libpython. Compile-only; ``import numpy``
     marks ``numpy`` cpy.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "ba.py"
     out = tmp_path / "ba.ll"
@@ -543,7 +543,7 @@ def test_cpython_type_name_inline_dispatches_via_libpython(tmp_path):
     through to the cpy Call-receiver branch and routes via ``py_cpy_getattr`` on
     the real type object. Compile-only; ``import numpy`` marks ``numpy`` cpy.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "tn.py"
     out = tmp_path / "tn.ll"
@@ -573,7 +573,7 @@ def test_cpython_list_of_cpy_values_builds_cpython_list(tmp_path):
     (builds a real CPython ``list`` and marshals each element - cpy borrowed,
     native converted). Compile-only; ``import numpy`` marks ``numpy`` cpy.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "lc.py"
     out = tmp_path / "lc.ll"

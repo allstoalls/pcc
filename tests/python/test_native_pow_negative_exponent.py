@@ -15,7 +15,7 @@ import textwrap
 
 
 def test_pow_negative_exponent_matches_cpython(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "pow.py"
     exe = tmp_path / "pow.out"
@@ -51,7 +51,7 @@ def test_pow_negative_exponent_matches_cpython(tmp_path, monkeypatch):
 
 
 def test_int_literal_pow_folds_without_runtime_pow(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "pow_literal_fold.py"
     src.write_text(
@@ -84,7 +84,7 @@ def test_int_literal_pow_folds_without_runtime_pow(tmp_path, monkeypatch):
         str(ll),
         ir_scaffold_mode="on",
         libpython_mode="off",
-        backend="llvm",
+        backend="self",
         emit_llvm_only=True,
     )
     ir_text = ll.read_text(encoding="utf-8")

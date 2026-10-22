@@ -4,7 +4,7 @@ harness over a self-contained *logical* scheduler model.
 This module is a **measurement harness**, not a scheduler, not the runtime, and
 not a 1M-readiness claim. It exercises a small, self-contained in-harness model
 of the three virtual-thread scheduler waitsets that the real C runtime
-(``pcc/py_runtime/src/pcc_threads.c``) owns:
+(``pcc/runtime/src/pcc_threads.c``) owns:
 
     * a ready queue          (enqueue / dequeue)           <- ``pcc_vthread_enqueue_locked`` / ``pcc_vthread_dequeue_locked``
     * a deadline-sorted timer (insert / expire)            <- ``pcc_vthread_timer_add_locked`` / ``py_virtual_thread_poll_timers``
@@ -147,7 +147,7 @@ def real_runtime_skip_reason() -> str:
         "harness measures only the LOGICAL scheduler model and cannot produce "
         "RSS/latency/GC-pause numbers. Use the separately gated current-machine "
         "runner scripts/run_vthread_1m_gate.py, which links py_virtual_thread_* "
-        "from pcc/py_runtime/src/pcc_threads.c and emits source-bound GC0..4 "
+        "from pcc/runtime/src/pcc_threads.c and emits source-bound GC0..4 "
         "production-runtime metrics"
     )
 

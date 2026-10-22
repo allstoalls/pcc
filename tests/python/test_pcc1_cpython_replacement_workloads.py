@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.cpython_replacement.workloads import (
+from scripts.qualification.cpython_replacement.workloads import (
     CLAIM_MODE,
     FORBIDDEN_EVIDENCE_MODES,
     ORACLE_BASELINE,

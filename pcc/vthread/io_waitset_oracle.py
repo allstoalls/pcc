@@ -2,7 +2,7 @@
 
 This module is an ORACLE, not the runtime. It designs and validates the
 readiness model that a later C slice will mirror, replacing the current
-per-poll O(n) linked-list scan in ``pcc/py_runtime/src/pcc_threads.c``
+per-poll O(n) linked-list scan in ``pcc/runtime/src/pcc_threads.c``
 (``pcc_vthread_poll_add_locked`` prepends to ``pcc_vthread_poll_queue``;
 ``py_virtual_thread_poll_io`` walks the whole list calling ``poll(2)`` per
 entry via ``pcc_vthread_fd_ready``).

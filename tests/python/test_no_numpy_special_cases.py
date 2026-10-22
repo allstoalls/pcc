@@ -93,22 +93,18 @@ FORBIDDEN_TILELANG_BRANCH_PATTERNS = (
 )
 
 SCAN_ROOTS = (
-    REPO / "pcc" / "py_frontend",
-    REPO / "pcc" / "py_runtime",
-    REPO / "pcc" / "codegen",
+    REPO / "pcc" / "frontends" / "python",
+    REPO / "pcc" / "runtime",
+    REPO / "pcc" / "frontends" / "c" / "codegen",
     REPO / "pcc" / "package",
     REPO / "pcc" / "array_core.py",
-    REPO / "pcc" / "package_compat.py",
-    REPO / "pcc" / "cli_bootstrap.py",
+    REPO / "pcc" / "package" / "compat.py",
+    REPO / "pcc" / "driver" / "cli_bootstrap.py",
 )
 
 TORCH_METADATA_MENTION_ALLOWLIST = {
-    Path("pcc/package_compat.py"),
+    Path("pcc/package/compat.py"),
     Path("pcc/package/campaign.py"),
-    # _PACKAGE_COMPAT_TARGETS row descriptions (e.g. the vllm target says
-    # "PyTorch/CUDA extension stack"); the torch branch patterns below still
-    # scan this file, only the plain metadata mention is allowed.
-    Path("pcc/cli_bootstrap.py"),
 }
 
 

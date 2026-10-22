@@ -49,7 +49,7 @@ main()
 
 
 def test_sized_bytes_constructors_match_cpython(tmp_path, pcc_diagnostic_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "bytes_count.py"
     source.write_text(_SOURCE)

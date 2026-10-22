@@ -13,7 +13,7 @@ _BUILD.mkdir(parents=True, exist_ok=True)
 
 
 def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -54,7 +54,7 @@ def test_str_split_maxsplit_uses_native_runtime():
 
 
 def test_str_split_maxsplit_runtime_matches_python(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"

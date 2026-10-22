@@ -15,7 +15,7 @@ import sys
 
 import pytest
 
-from pcc.parse.py_lift import _decode_escapes
+from pcc.frontends.python.py_lift import _decode_escapes
 
 
 STR_CASES = [
@@ -69,7 +69,7 @@ main()
 
 
 def test_compiled_program_sees_cpython_escapes(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     source = tmp_path / "escapes.py"
     source.write_text(PROGRAM, encoding="utf-8")
@@ -80,7 +80,7 @@ def test_compiled_program_sees_cpython_escapes(
     binary = tmp_path / "escapes"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     ran = subprocess.run(
         [str(binary)], capture_output=True, text=True, timeout=60,

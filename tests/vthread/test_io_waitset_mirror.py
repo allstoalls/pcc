@@ -5,7 +5,7 @@ This is the structure/mirror gate for the CPU-only IO-waitset oracle
 ``PollWaitSet`` (the level-triggered poll fallback) plus the real Darwin
 ``kqueue`` readiness backend:
 
-  * ``pcc/py_runtime/py/py_io_waitset.py`` -- the pcc-Python port, run
+  * ``pcc/runtime/py/py_io_waitset.py`` -- the pcc-Python port, run
     in-process (also valid CPython) on scripted cases + a randomized parity
     sequence (poll fallback only);
   * the production ``freestanding_io_waitset`` members of the runtime
@@ -44,7 +44,7 @@ def _load_port():
     name = "pcc_runtime_py_io_waitset_port"
     if name in sys.modules:
         return sys.modules[name]
-    path = _repo_root() / "pcc" / "py_runtime" / "py" / "py_io_waitset.py"
+    path = _repo_root() / "pcc" / "runtime" / "py" / "py_io_waitset.py"
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -258,13 +258,13 @@ def _oracle_poll_dataset(script):
     return _drive_oracle(script)
 
 
-def test_c_abi_io_waitset_poll_matches_oracle_dataset(tmp_path, pcc_py_runtime_archive):
+def test_c_abi_io_waitset_poll_matches_oracle_dataset(tmp_path, pcc_runtime_archive):
     cc = _c_compiler()
     if cc is None:
         pytest.fail("no C compiler available")
 
     root = _repo_root()
-    src_dir = root / "pcc" / "py_runtime" / "src"
+    src_dir = root / "pcc" / "runtime" / "src"
     ws_h = src_dir / "py_io_waitset.h"
     assert ws_h.is_file()
 
@@ -441,7 +441,7 @@ def test_c_abi_io_waitset_poll_matches_oracle_dataset(tmp_path, pcc_py_runtime_a
     exe = tmp_path / "io_waitset_diff.out"
     build = subprocess.run(
         [cc, "-std=c11", "-Wall", "-Wextra", f"-I{src_dir}",
-         str(harness), str(pcc_py_runtime_archive), "-lm", "-o", str(exe)],
+         str(harness), str(pcc_runtime_archive), "-lm", "-o", str(exe)],
         capture_output=True, text=True, timeout=60,
     )
     assert build.returncode == 0, build.stdout + build.stderr
@@ -450,7 +450,7 @@ def test_c_abi_io_waitset_poll_matches_oracle_dataset(tmp_path, pcc_py_runtime_a
     assert run.stdout.strip() == "dataset-ok"
 
 
-def test_c_abi_io_waitset_semantics_and_capability(tmp_path, pcc_py_runtime_archive):
+def test_c_abi_io_waitset_semantics_and_capability(tmp_path, pcc_runtime_archive):
     """Scripted C semantics for the poll fallback + capability/skip probe, and
     (on kqueue platforms) the real kevent(2) backend over live pipe fds."""
     cc = _c_compiler()
@@ -458,7 +458,7 @@ def test_c_abi_io_waitset_semantics_and_capability(tmp_path, pcc_py_runtime_arch
         pytest.fail("no C compiler available")
 
     root = _repo_root()
-    src_dir = root / "pcc" / "py_runtime" / "src"
+    src_dir = root / "pcc" / "runtime" / "src"
 
     harness = tmp_path / "io_waitset_semantics.c"
     harness.write_text(textwrap.dedent(r"""
@@ -573,7 +573,7 @@ def test_c_abi_io_waitset_semantics_and_capability(tmp_path, pcc_py_runtime_arch
     exe = tmp_path / "io_waitset_semantics.out"
     build = subprocess.run(
         [cc, "-std=c11", "-Wall", "-Wextra", f"-I{src_dir}",
-         str(harness), str(pcc_py_runtime_archive), "-lm", "-o", str(exe)],
+         str(harness), str(pcc_runtime_archive), "-lm", "-o", str(exe)],
         capture_output=True, text=True, timeout=60,
     )
     assert build.returncode == 0, build.stdout + build.stderr
@@ -584,7 +584,7 @@ def test_c_abi_io_waitset_semantics_and_capability(tmp_path, pcc_py_runtime_arch
 
 def test_io_waitset_port_is_in_the_production_archive():
     """The production archive carries the waitset the C ABI tests link."""
-    makefile = (_repo_root() / "pcc" / "py_runtime" / "Makefile").read_text(
+    makefile = (_repo_root() / "pcc" / "runtime" / "Makefile").read_text(
         encoding="utf-8"
     )
     assert "freestanding_io_waitset" in makefile.split("PY_MODULES =", 1)[1].splitlines()[0]

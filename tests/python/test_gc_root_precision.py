@@ -6,7 +6,7 @@ import textwrap
 
 
 def test_owned_object_locals_are_registered_as_gc_frame_roots(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "owned_root.py"
     out = tmp_path / "owned_root.ll"
@@ -39,7 +39,7 @@ def test_owned_object_locals_are_registered_as_gc_frame_roots(tmp_path):
 
 
 def test_borrowed_class_method_parameters_are_rooted_before_calls(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "method_parameter_roots.py"
     out = tmp_path / "method_parameter_roots.ll"
@@ -86,7 +86,7 @@ def test_borrowed_class_method_parameters_are_rooted_before_calls(tmp_path):
 
 
 def test_owned_module_global_is_rooted_before_attribute_publication(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "module_global_publish_root.py"
     out = tmp_path / "module_global_publish_root.ll"
@@ -114,7 +114,7 @@ def test_owned_module_global_is_rooted_before_attribute_publication(tmp_path):
 def test_borrowed_module_global_default_is_not_released_after_signature_store(
     tmp_path,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "borrowed_module_global_default.py"
     out = tmp_path / "borrowed_module_global_default.ll"
@@ -157,7 +157,7 @@ def test_borrowed_module_global_default_is_not_released_after_signature_store(
 
 
 def test_native_with_open_file_is_an_owned_gc_frame_root(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "native_with_file_root.py"
     out = tmp_path / "native_with_file_root.ll"
@@ -196,7 +196,7 @@ def test_native_with_open_file_is_an_owned_gc_frame_root(tmp_path):
 
 
 def test_dynamic_for_iterator_is_an_owned_gc_frame_root(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "dynamic_for_iterator_root.py"
     out = tmp_path / "dynamic_for_iterator_root.ll"
@@ -238,7 +238,7 @@ def test_dynamic_for_iterator_is_an_owned_gc_frame_root(tmp_path):
 
 
 def test_dynamic_for_target_replaces_an_owned_gc_frame_root(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "dynamic_for_target_root.py"
     out = tmp_path / "dynamic_for_target_root.ll"
@@ -281,7 +281,7 @@ def test_dynamic_for_target_replaces_an_owned_gc_frame_root(tmp_path):
 
 
 def test_temporary_gc_roots_use_lifo_frame_api(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "lifo_temp_roots.py"
     out = tmp_path / "lifo_temp_roots.ll"
@@ -325,7 +325,7 @@ def test_temporary_gc_roots_use_lifo_frame_api(tmp_path):
 
 
 def test_owned_local_cleanup_release_reads_through_gc_barrier(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "owned_cleanup_barrier.py"
     out = tmp_path / "owned_cleanup_barrier.ll"
@@ -371,7 +371,7 @@ def test_owned_local_cleanup_release_reads_through_gc_barrier(tmp_path):
 
 
 def test_string_subscript_assignment_is_owned_local_in_raw_scaffold(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "subscript_owned_root.py"
     out = tmp_path / "subscript_owned_root.ll"
@@ -416,7 +416,7 @@ def test_string_subscript_assignment_is_owned_local_in_raw_scaffold(tmp_path):
 
 
 def test_owned_object_roots_are_left_on_function_error_exit(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "owned_root_err_exit.py"
     out = tmp_path / "owned_root_err_exit.ll"
@@ -451,7 +451,7 @@ def test_owned_object_roots_are_left_on_function_error_exit(tmp_path):
 
 
 def test_owned_nested_string_binop_operand_is_pinned_across_outer_concat(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "nested_string_binop_pin.py"
     out = tmp_path / "nested_string_binop_pin.ll"
@@ -494,7 +494,7 @@ def test_owned_nested_string_binop_operand_is_pinned_across_outer_concat(tmp_pat
 
 
 def test_owned_nested_string_binop_argument_is_pinned_across_list_append(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "nested_string_binop_append_pin.py"
     out = tmp_path / "nested_string_binop_append_pin.ll"
@@ -538,7 +538,7 @@ def test_owned_nested_string_binop_argument_is_pinned_across_list_append(tmp_pat
 
 
 def test_incremental_collect_preserves_live_owned_object_local(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "owned_root_runtime.py"
     exe = tmp_path / "owned_root_runtime.out"

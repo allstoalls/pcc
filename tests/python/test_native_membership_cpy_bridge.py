@@ -21,7 +21,7 @@ _BUILD.mkdir(parents=True, exist_ok=True)
 
 
 def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -122,8 +122,8 @@ def test_os_environ_keys_membership_stays_native():
 
 @pytest.mark.parametrize("foreign_needle", [False, True])
 def test_late_cpy_container_preserves_precomputed_needle(monkeypatch, foreign_needle):
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
-    from pcc.py_frontend.py_ast import Call, Name
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_ast import Call, Name
 
     original_hint = L1CodeGen._expr_looks_cpython
     original_emit = L1CodeGen._emit_expr

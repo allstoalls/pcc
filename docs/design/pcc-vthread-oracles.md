@@ -6,7 +6,7 @@ into the production C scheduler. Linux epoll remains future work.
 
 ## Purpose
 
-The pcc virtual-thread runtime (`pcc/py_runtime/src/pcc_threads.c`, Loom-shaped
+The pcc virtual-thread runtime (`pcc/runtime/src/pcc_threads.c`, Loom-shaped
 scheduler; see `docs/investigations/virtual-threads-runtime-prerequisites.md`)
 originally backed two blocking-wait structures with O(n) data structures that
 do not scale to ~1M parked virtual threads:
@@ -32,9 +32,9 @@ retention, and done-thread skip under GC0..4.
 | `pcc/vthread/timer_oracle.py` | Scalable timer structure + naive baseline |
 | `pcc/vthread/io_waitset_oracle.py` | IO waitset abstraction (poll fallback + kqueue-sim) |
 | `tests/vthread/` | Invariant + agreement + op-count tests |
-| `pcc/py_runtime/src/py_timer_heap.[ch]` | Dependency-free production heap helper |
-| `pcc/py_runtime/src/pcc_threads.c` | Production timer ownership, roots, pooling, wake/cancel route |
-| `pcc/runtime_effects.py` | Shared production-event vocabulary and root/state contract checker |
+| `pcc/runtime/src/py_timer_heap.[ch]` | Dependency-free production heap helper |
+| `pcc/runtime/src/pcc_threads.c` | Production timer ownership, roots, pooling, wake/cancel route |
+| `pcc/diagnostics/contracts/runtime_effects.py` | Shared production-event vocabulary and root/state contract checker |
 | `tests/python/test_vthread_timer_heap_scheduler.py` | Production C + pcc-Python archive ordering gate |
 | `tests/python/gc_production_contract/test_vthread_timer_cancel.py` | Production GC0..4 cancel/root/done-skip gate |
 | `tests/python/gc_production_contract/test_vthread_runtime_effect_events.py` | Production GC0..4 transition/effect/root event gate |

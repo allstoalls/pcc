@@ -6,8 +6,8 @@ one unreviewable file.
 
 ## Rule
 
-`pcc/py_frontend/codegen/layer1.py` is a compatibility façade only. New logic
-must live in smaller `pcc/py_frontend/codegen/*.py` modules.
+`pcc/frontends/python/codegen/layer1.py` is a compatibility façade only. New logic
+must live in smaller `pcc/frontends/python/codegen/*.py` modules.
 
 ## Ownership areas
 

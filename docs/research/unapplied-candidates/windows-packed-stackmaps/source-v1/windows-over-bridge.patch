@@ -1,0 +1,51 @@
+--- a/pcc/frontends/python/pipeline_frontend_worker_execution.py
++++ b/pcc/frontends/python/pipeline_frontend_worker_execution.py
+@@ -730,7 +730,9 @@
+ 
+                     from pcc.backend.target_objects import emit_indexed_assembly, encode_assembly_object
+                     from pcc.backend.self_backend_target_match import (
+-                        is_aarch64_darwin_triple, is_x86_64_linux_triple,
++                        is_aarch64_darwin_triple,
++                        is_x86_64_linux_triple,
++                        is_x86_64_windows_triple,
+                     )
+                     from pcc.backend.self_backend_dispatch import emit_self_asm
+                     if validate_direct or emit_direct:
+@@ -856,7 +858,10 @@
+                             and native_object_output
+                             and not validate_direct
+                             and not emit_text_control
+-                            and is_x86_64_linux_triple(direct_target)
++                            and (
++                                is_x86_64_linux_triple(direct_target)
++                                or is_x86_64_windows_triple(direct_target)
++                            )
+                         )
+                         if direct_lines_output:
+                             if phase_timing is not None:
+--- a/pcc/backend/self_backend_indexed_emit.py
++++ b/pcc/backend/self_backend_indexed_emit.py
+@@ -76,7 +76,10 @@
+     _debug_phase("decode-complete")
+     if is_aarch64_linux_triple(module.triple) or is_x86_64_linux_triple(module.triple) or is_x86_64_windows_triple(module.triple):
+         stack_map_plans = []
+-        packed_stack_maps = artifact_kind == "PCO" and is_x86_64_linux_triple(module.triple)
++        packed_stack_maps = artifact_kind == "PCO" and (
++            is_x86_64_linux_triple(module.triple)
++            or is_x86_64_windows_triple(module.triple)
++        )
+         phase_started = phase_timing.start() if phase_timing is not None else 0
+         if is_aarch64_linux_triple(module.triple):
+             assembly = emit_aarch64_darwin_indexed_module(
+@@ -95,7 +98,10 @@
+             payload = assembly.encode("utf-8")
+         elif is_x86_64_windows_triple(module.triple):
+             from .coff_x86_64 import assemble_object
+-            payload = assemble_object(assembly, phase_timing=phase_timing)
++            payload = assemble_object(
++                assembly, stack_map_plans=stack_map_plans,
++                consume_stack_map_plans=True, phase_timing=phase_timing,
++            )
+         else:
+             from .target_objects import encode_assembly_object
+             payload = encode_assembly_object(

@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from pcc.bootstrap_profile_report import (
+from pcc.diagnostics.bootstrap_profile_report import (
     build_bootstrap_profile_report,
     format_bootstrap_profile_report,
 )
@@ -114,7 +114,7 @@ def test_bootstrap_profile_report_summarizes_stage_profiles_and_wall_log(tmp_pat
 
     report = build_bootstrap_profile_report(profile_dir, log_path=log, top=2)
 
-    assert report["schema"] == "pcc.bootstrap_profile_report.v1"
+    assert report["schema"] == "pcc.diagnostics.bootstrap_profile_report.v1"
     assert report["stage_count"] == 3
     assert report["total_wall_ms"] == 3850
     assert report["total_compile_wall_ms"] == 1400
@@ -170,6 +170,6 @@ def test_bootstrap_profile_report_script_json(tmp_path):
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    assert payload["schema"] == "pcc.bootstrap_profile_report.v1"
+    assert payload["schema"] == "pcc.diagnostics.bootstrap_profile_report.v1"
     assert payload["stage_count"] == 1
     assert payload["total_compiler_profile_ms"] == 100

@@ -4,7 +4,8 @@ import json
 import os
 from unittest import mock
 
-from pcc import cli_bootstrap, cli_core
+from pcc.driver import cli_bootstrap
+from pcc.driver import cli_core
 
 _EMPTY_MODE_ENV = {
     "PCC_BACKEND": "",
@@ -35,7 +36,7 @@ def test_bare_pcc1_python_defaults_to_strict_self_owner(tmp_path):
     assert compile_python.call_args.kwargs["ir_scaffold_mode"] == "on"
 
 
-def test_pcc1_keeps_explicit_llvm_compatibility_modes(tmp_path):
+def test_pcc1_rejects_explicit_removed_llvm_backend(tmp_path, capsys):
     source = _source(tmp_path)
     output = tmp_path / "app"
 
@@ -54,13 +55,13 @@ def test_pcc1_keeps_explicit_llvm_compatibility_modes(tmp_path):
             ]
         )
 
-    assert status == 0
-    assert compile_python.call_args.kwargs["backend"] == "llvm"
-    assert compile_python.call_args.kwargs["libpython_mode"] == "auto"
-    assert compile_python.call_args.kwargs["ir_scaffold_mode"] == "off"
+    assert status == 2
+    compile_python.assert_not_called()
+    assert "invalid --backend 'llvm'; expected self" in capsys.readouterr().err
+    assert not output.exists()
 
 
-def test_pcc1_environment_is_an_explicit_mode_override(tmp_path):
+def test_pcc1_rejects_removed_llvm_backend_from_environment(tmp_path, capsys):
     source = _source(tmp_path)
     output = tmp_path / "app"
     mode_env = {
@@ -75,10 +76,10 @@ def test_pcc1_environment_is_an_explicit_mode_override(tmp_path):
     ):
         status = cli_bootstrap.bootstrap_cli_main([str(source), "-o", str(output)])
 
-    assert status == 0
-    assert compile_python.call_args.kwargs["backend"] == "llvm"
-    assert compile_python.call_args.kwargs["libpython_mode"] == "on"
-    assert compile_python.call_args.kwargs["ir_scaffold_mode"] == "off"
+    assert status == 2
+    compile_python.assert_not_called()
+    assert "invalid --backend 'llvm'; expected self" in capsys.readouterr().err
+    assert not output.exists()
 
 
 def test_pcc1_profile_records_resolved_owner_modes(tmp_path):

@@ -9,7 +9,7 @@ from pcc.backend import precise_stackmap as wire
 
 
 def test_native_stackmap_structural_scan(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     # Compile the actual module in an isolated ordinary package context.
     (tmp_path / "wiremap.py").write_bytes(Path(wire.__file__).read_bytes())
@@ -63,7 +63,7 @@ main()
     output = tmp_path / "probe"
     python_program_compiler(
         str(source), str(output), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for gc in range(5):
         ran = subprocess.run(

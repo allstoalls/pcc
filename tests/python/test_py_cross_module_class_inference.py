@@ -57,7 +57,7 @@ class CrossModuleClassInferenceTests(unittest.TestCase):
         still requires libpython fallback, the test fails with the
         pipeline's error message.
         """
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_xmod_test_")
         self.addCleanup(self._rmtree, td)
@@ -83,7 +83,7 @@ class CrossModuleClassInferenceTests(unittest.TestCase):
             src_paths,
             exe,
             entry_module=entry_module,
-            backend="llvm",
+            backend="self",
             ir_scaffold_mode="on",
             libpython_mode="off",
             recursive_stdlib=True,
@@ -462,7 +462,7 @@ class CrossModuleClassInferenceTests(unittest.TestCase):
     # -- Gap 1 + Gap 2 (stdlib flavor, smaller than pathlib_parts) -------
 
     def test_gap1_gap2_pathlib_purepath_name_only(self):
-        """Bridge regression that uses the real ``pcc/py_stdlib/pathlib``
+        """Bridge regression that uses the real ``pcc/stdlib/pathlib``
         skeleton: only ``PurePath(...)`` constructor + ``.name`` property
         — no ``.suffix`` / ``.rfind`` chain. Verifies the two gaps as
         composed on the existing stdlib shim. Drives ``pathlib_parts``

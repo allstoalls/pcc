@@ -12,13 +12,13 @@ from pcc.tools.runtime_archive_provenance import (
 from tests.runtime_build_cache import cached_pcc_python_runtime, cached_threaded_pcc_python_runtime
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 
 _PCC_PY_RUNTIME_BUILD_CACHE: Path | None = None
 
 
 def _compile_probe(tmp_path, source: str):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "probe.py"
     exe = tmp_path / "probe.out"
@@ -48,7 +48,7 @@ def _build_runtime(tmp_path: Path) -> Path:
     return cached_pcc_python_runtime()
 
 
-def _build_pcc_py_runtime(tmp_path: Path) -> Path:
+def _build_pcc_runtime(tmp_path: Path) -> Path:
     global _PCC_PY_RUNTIME_BUILD_CACHE
     explicit = os.environ.get("PCC_RUNTIME_ARCHIVE")
     if explicit:
@@ -1166,6 +1166,7 @@ def _assert_backend_four_targets_wait_for_phase_reset(
             #include <stdio.h>
             #include <stdlib.h>
             extern void pcc_gc_publish_initialized(PyObject *obj);
+            extern void pcc_gc_set_mark_color(PyObject *obj, int64_t color);
 
             typedef struct {
                 PyObjectHeader h;
@@ -1199,6 +1200,9 @@ def _assert_backend_four_targets_wait_for_phase_reset(
                 int64_t old_id = pcc_gc_object_id(old);
                 if (old_id <= 0) return 0;
 
+                /* The collector relocates only what a mark has reached; a
+                 * completed mark leaves the rooted payload black. */
+                pcc_gc_set_mark_color(old, 32);
                 pcc_gc_telemetry_reset();
                 if (pcc_gc_step(2) <= 0) return 0;
                 PyObject *moved = pcc_gc_load_ptr(0, &slot);
@@ -1282,7 +1286,7 @@ def test_colored_relocating_task_and_scheduler_queue_follow_forwarding(tmp_path)
 def test_pcc_python_colored_relocating_task_and_scheduler_queue_follow_forwarding(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_four_task_and_scheduler_queue_follow_forwarding(
         tmp_path,
         work_runtime,
@@ -1292,7 +1296,7 @@ def test_pcc_python_colored_relocating_task_and_scheduler_queue_follow_forwardin
 
 
 def test_pcc_python_memoryview_owned_buffer_follows_relocation(tmp_path):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_pcc_python_memoryview_owned_buffer_follows_relocation(
         tmp_path,
         work_runtime,
@@ -1309,7 +1313,7 @@ def test_colored_relocating_list_copy_owns_item_array(tmp_path):
 
 
 def test_pcc_python_colored_relocating_list_copy_owns_item_array(tmp_path):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_four_list_relocation_copies_owned_items(
         tmp_path,
         work_runtime,
@@ -1328,7 +1332,7 @@ def test_colored_relocating_tuple_copy_retains_owned_items(tmp_path):
 
 
 def test_pcc_python_colored_relocating_tuple_copy_retains_owned_items(tmp_path):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_four_tuple_relocation_retain_owned_items(
         tmp_path,
         work_runtime,
@@ -1347,7 +1351,7 @@ def test_colored_relocating_task_copy_retains_state_slots(tmp_path):
 
 
 def test_pcc_python_colored_relocating_task_copy_retains_state_slots(tmp_path):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_four_task_relocation_retains_state_slots(
         tmp_path,
         work_runtime,
@@ -1366,7 +1370,7 @@ def test_colored_relocating_set_copy_retains_owned_entries(tmp_path):
 
 
 def test_pcc_python_colored_relocating_set_copy_retains_owned_entries(tmp_path):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_four_set_relocation_retains_owned_entries(
         tmp_path,
         work_runtime,
@@ -1385,7 +1389,7 @@ def test_colored_relocating_dict_copy_retains_owned_tables(tmp_path):
 
 
 def test_pcc_python_colored_relocating_dict_copy_retains_owned_tables(tmp_path):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_four_dict_relocation_retains_owned_tables(
         tmp_path,
         work_runtime,
@@ -1404,7 +1408,7 @@ def test_colored_relocating_instance_copy_retains_owned_fields(tmp_path):
 
 
 def test_pcc_python_colored_relocating_instance_copy_retains_owned_fields(tmp_path):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_four_instance_relocation_retains_owned_fields(
         tmp_path,
         work_runtime,
@@ -1423,7 +1427,7 @@ def test_colored_relocating_targets_wait_for_phase_reset(tmp_path):
 
 
 def test_pcc_python_colored_relocating_targets_wait_for_phase_reset(tmp_path):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_four_targets_wait_for_phase_reset(
         tmp_path,
         work_runtime,
@@ -1554,6 +1558,106 @@ def test_colored_relocating_stable_id_survives_forwarding(tmp_path):
         "True",
         "True",
     ]
+
+
+def test_colored_relocating_member_filter_tracks_the_relocation_set(tmp_path):
+    # Every backend-4 free removes its object from the relocation set. A
+    # key-only member filter lets a non-member skip that list walk, so it
+    # must never miss a member and must forget an object once it is gone.
+    exe = _compile_probe(
+        tmp_path,
+        """
+        from pcc.extern import extern, c_int32, c_int64, c_rawptr, c_void
+
+        pcc_gc_alloc = extern("pcc_gc_alloc", (c_int64, c_int32, c_int32), c_rawptr)
+        pcc_gc_release = extern("pcc_gc_release", (c_rawptr,), c_void)
+        pcc_gc_publish_initialized = extern("pcc_gc_publish_initialized", (c_rawptr,), c_void)
+        pcc_gc_reset_relocation_set = extern("pcc_gc_reset_relocation_set", (), c_void)
+        relocation_add = extern("pcc_gc_backend4_relocation_set_add", (c_rawptr,), c_int64)
+        relocation_contains = extern("pcc_gc_relocation_set_contains", (c_rawptr,), c_int64)
+        relocation_size = extern("pcc_gc_relocation_set_size", (), c_int64)
+        member_maybe = extern("pcc_gc_relocation_member_maybe", (c_rawptr,), c_int64)
+
+        def main() -> None:
+            pcc_gc_reset_relocation_set()
+            a = pcc_gc_alloc(64, 5, 0)
+            b = pcc_gc_alloc(64, 5, 0)
+            c = pcc_gc_alloc(64, 5, 0)
+            pcc_gc_publish_initialized(a)
+            pcc_gc_publish_initialized(b)
+            pcc_gc_publish_initialized(c)
+            print(relocation_add(a), relocation_add(c))
+            print(member_maybe(a), member_maybe(b), member_maybe(c))
+            size = relocation_size()
+            pcc_gc_release(b)
+            print(size - relocation_size())
+            pcc_gc_release(a)
+            print(size - relocation_size(), relocation_contains(c))
+            pcc_gc_reset_relocation_set()
+            print(relocation_size())
+            pcc_gc_release(c)
+            print(member_maybe(c))
+
+        if __name__ == "__main__":
+            main()
+        """,
+    )
+    result = _run_backend_four(exe)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().splitlines() == ["1 1", "1 0 1", "0", "1 1", "0", "0"]
+
+
+def test_colored_relocating_page_selection_takes_every_page_candidate(tmp_path):
+    # Page selection works in 16-object batches. Later batches continue the
+    # page from its own owner list instead of rescanning the whole heap;
+    # every candidate on every selected page must still be taken.
+    exe = _compile_probe(
+        tmp_path,
+        """
+        from pcc.extern import extern, c_int32, c_int64, c_rawptr, c_void
+        from pcc.unsafe import free, load_ptr, malloc, store_ptr
+
+        pcc_gc_alloc = extern("pcc_gc_alloc", (c_int64, c_int32, c_int32), c_rawptr)
+        pcc_gc_release = extern("pcc_gc_release", (c_rawptr,), c_void)
+        pcc_gc_publish_initialized = extern("pcc_gc_publish_initialized", (c_rawptr,), c_void)
+        pcc_gc_set_mark_color = extern("pcc_gc_set_mark_color", (c_rawptr, c_int64), c_void)
+        pcc_gc_reset_relocation_set = extern("pcc_gc_reset_relocation_set", (), c_void)
+        select_pages = extern("pcc_gc_backend4_select_relocation_pages", (c_int64,), c_int64)
+        relocation_contains = extern("pcc_gc_relocation_set_contains", (c_rawptr,), c_int64)
+
+        def main() -> None:
+            table = malloc(48 * 8)
+            index = 0
+            while index < 48:
+                item = pcc_gc_alloc(64, 5, 0)
+                pcc_gc_publish_initialized(item)
+                # The collector relocates only what a mark has reached: a
+                # completed mark leaves these held objects black.
+                pcc_gc_set_mark_color(item, 32)
+                store_ptr(table, index * 8, item)
+                index = index + 1
+            pcc_gc_reset_relocation_set()
+            select_pages(100000)
+            taken = 0
+            index = 0
+            while index < 48:
+                taken = taken + relocation_contains(load_ptr(table, index * 8))
+                index = index + 1
+            print(taken)
+            pcc_gc_reset_relocation_set()
+            index = 0
+            while index < 48:
+                pcc_gc_release(load_ptr(table, index * 8))
+                index = index + 1
+            free(table)
+
+        if __name__ == "__main__":
+            main()
+        """,
+    )
+    result = _run_backend_four(exe)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().splitlines() == ["48"]
 
 
 def test_colored_relocating_selects_unpinned_relocation_set(tmp_path):

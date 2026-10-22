@@ -20,7 +20,7 @@ def pcc_diagnostic_runtime_archive(request):
     """Explicit self-emission overlay for capability tests, not production gates."""
     selected = os.environ.get("PCC_DIAGNOSTIC_RUNTIME_ARCHIVE")
     if not selected:
-        return request.getfixturevalue("pcc_py_runtime_archive")
+        return request.getfixturevalue("pcc_runtime_archive")
     archive = Path(selected).resolve(strict=True)
     receipt = json.loads(Path(str(archive) + ".diagnostic.json").read_text())
     assert receipt["schema"] == "pcc.runtime-diagnostic-overlay.v1"
@@ -41,7 +41,7 @@ def native_pcc1_compiler():
         skip_or_fail_no_current_pcc1("no current pcc1 for source-program regression")
     with compiler.open("rb") as stream:
         magic = stream.read(4)
-    assert magic in (b"\xcf\xfa\xed\xfe", b"\x7fELF", b"\xca\xfe\xba\xbe", b"\xca\xfe\xba\xbf"), (
+    assert magic in (b"\xcf\xfa\xed\xfe", b"\x7fELF", b"\xca\xfe\xba\xbe", b"\xca\xfe\xba\xbf") or magic[:2] == b"MZ", (
         f"pcc1 regression requires a native executable, not a launcher: {compiler}"
     )
     return compiler
@@ -58,14 +58,15 @@ def python_program_compiler(request):
     compiler; the caller still executes and checks every emitted program.
     """
     if request.param == "pcc0":
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         return compile_python
 
     from tests.python.process_timeout import run_process_group_timeout
     compiler = request.getfixturevalue("native_pcc1_compiler")
 
-    def compile_program(source, output, *, backend, libpython_mode, runtime_archive):
+    def compile_program(source, output, *, backend, libpython_mode, runtime_archive,
+                        ir_scaffold_mode="on"):
         env = dict(os.environ)
         env.pop("LC_ALL", None)
         env.update(
@@ -74,13 +75,22 @@ def python_program_compiler(request):
             PCC_HOST_PYTHON="/usr/bin/false",
             PCC_HOST_PCC="/usr/bin/false",
             PCC_NO_AUTO_PCC1="1",
+            # A failing codegen worker then prints its traceback (file and
+            # line) after its usual report; success is unaffected. CI's one
+            # Linux x86 hashlib failure left only "Type: message".
+            PCC_DEBUG_WORKER_RERAISE="1",
         )
         command = [str(compiler), "--backend", backend,
-                   "--python-libpython", libpython_mode, "--ir-scaffold", "on",
+                   "--python-libpython", libpython_mode, "--ir-scaffold", ir_scaffold_mode,
                    str(source), "-o", str(output)]
-        result = run_process_group_timeout(command, env=env, timeout=300)
+        # stderr streams into its file, so a gate killed mid-compile keeps
+        # the coordinator and worker timing printed so far. The 400 s compile
+        # budget matches the prior-worker gate's NATIVE_GATE_TIMEOUT_S.
+        result = run_process_group_timeout(
+            command, env=env, timeout=400,
+            stderr_path=str(output) + ".compile.stderr",
+        )
         Path(str(output) + ".compile.stdout").write_text(result.stdout, encoding="utf-8")
-        Path(str(output) + ".compile.stderr").write_text(result.stderr, encoding="utf-8")
         assert result.returncode == 0, (
             f"native compiler {compiler} exited {result.returncode}:\n"
             + result.stdout + result.stderr

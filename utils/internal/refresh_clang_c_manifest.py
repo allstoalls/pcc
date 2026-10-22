@@ -1,5 +1,6 @@
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -31,13 +32,29 @@ def _classify_compile_only(case_path):
 def _classify_runtime(case_path):
     try:
         native = run_native(case_path, REPO_ROOT)
-    except Exception:
+    except subprocess.TimeoutExpired:
         return "runtime_timeout"
+    except Exception:
+        return "runtime_build_or_execution_failure"
 
     try:
         pcc = run_pcc(case_path, REPO_ROOT)
-    except Exception:
+    except subprocess.TimeoutExpired:
         return "runtime_timeout"
+    except Exception:
+        return "runtime_build_or_execution_failure"
+
+    # A compiler/linker/worker status is never a program exit status. Keep
+    # rejected fixtures visible without promoting them to runtime matches.
+    if not native.executed or not pcc.executed:
+        # A completed exit 124 is legitimate; only an incomplete stage
+        # carrying the timeout status identifies a timeout.
+        if any(
+            not result.stages[-1].completed and result.returncode == 124
+            for result in (native, pcc)
+        ):
+            return "runtime_timeout"
+        return "runtime_build_or_execution_failure"
 
     if native.returncode == 0 and pcc.returncode == 0:
         if pcc.stdout == native.stdout and pcc.stderr == native.stderr:

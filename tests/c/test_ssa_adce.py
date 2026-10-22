@@ -1,5 +1,5 @@
-from pcc.parse.c_parser import CParser
-from pcc.ssa import SSAADCEAnalyzer, SSABuilder
+from pcc.frontends.c.parse.c_parser import CParser
+from pcc.frontends.c.ssa import SSAADCEAnalyzer, SSABuilder
 
 
 _PARSER = CParser(lex_optimize=True, yacc_debug=False, yacc_optimize=True)

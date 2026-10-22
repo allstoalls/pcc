@@ -5,7 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from pcc.virtual_thread_comparison import (
+from pcc.diagnostics.virtual_thread_comparison import (
     build_virtual_thread_comparison_report,
     dumps_report,
     format_virtual_thread_comparison_report,

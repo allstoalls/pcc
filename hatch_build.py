@@ -3,13 +3,13 @@
 The hook fires at wheel-build time (`python -m build`,
 `pip install .`, or `pip install python-cc` going through sdist):
 
-1. Run pcc itself (CPython-hosted) to compile pcc/py_runtime — both
+1. Run pcc itself (CPython-hosted) to compile pcc/runtime — both
    the C runtime sources and the pcc-Python runtime ports — into
    ``libpy_runtime_pcc_py.a``.
 2. Run pcc again to self-compile ``pcc/__main__.py`` into a native
-   ``pcc1`` executable, mirroring ``scripts/bootstrap.sh`` stage1.
+   ``pcc1`` executable, mirroring ``scripts/bootstrap.py`` stage1.
 3. Bundle both native artifacts into the wheel: the archive plus its verified
-   provenance/C-API-inventory sidecars under ``pcc/py_runtime`` (consumed by
+   provenance/C-API-inventory sidecars under ``pcc/runtime`` (consumed by
    the lazy first-run path), and the binary at ``.data/scripts/pcc1`` as the
    explicit native bootstrap helper.
 
@@ -17,8 +17,9 @@ The default ``self`` backend owns native artifact construction. A failure is
 fatal; the hook never retries a different backend.
 
 Honours environment overrides:
-- PCC_BUILD_BACKEND={self|llvm}   override backend (default: self)
-- PCC_BUILD_TARGET=<make target>  override make target
+- PCC_BUILD_BACKEND=self          select the owned backend (default: self)
+- PCC_BUILD_TARGET=<archive>      override the output archive name
+- PCC_RUNTIME_BUILD=make          explicit CPython-host reference oracle only
 - PCC_BUILD_PCC1=<path>           bundle an already verified platform pcc1
                                   instead of rebuilding it (release/CI reuse)
 - PCC_BUILD_SKIP=1                skip both runtime + binary build
@@ -35,6 +36,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import os
+import platform
 import subprocess
 import sys
 from types import ModuleType
@@ -106,7 +108,7 @@ verify_runtime_archive_manifest = _provenance.verify_runtime_archive_manifest
 
 
 def _load_build_targets():
-    path = Path(__file__).resolve().parent / "pcc" / "py_frontend" / "pipeline_targets.py"
+    path = Path(__file__).resolve().parent / "pcc" / "frontends" / "python" / "pipeline_targets.py"
     spec = importlib.util.spec_from_file_location("_pcc_build_targets", path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load owned target definitions: {path}")
@@ -116,6 +118,33 @@ def _load_build_targets():
 
 
 _build_targets = _load_build_targets()
+
+
+def _native_wheel_tag() -> str:
+    """``py3-none-<platform>``: native artifacts, but no CPython extension.
+
+    pcc1 and the runtime archive do not depend on the building interpreter, so
+    one wheel serves every supported Python. The platform part follows pcc1:
+    the owned Mach-O linker writes minos 12.0, and the owned ELF output is a
+    static executable that needs no particular glibc.
+    """
+    machine = platform.machine().lower()
+    if sys.platform == "darwin":
+        if machine in ("arm64", "aarch64"):
+            return "py3-none-macosx_12_0_arm64"
+        if machine in ("x86_64", "amd64"):
+            return "py3-none-macosx_12_0_x86_64"
+    elif sys.platform.startswith("linux"):
+        if machine in ("x86_64", "amd64"):
+            return "py3-none-manylinux_2_17_x86_64"
+        if machine in ("aarch64", "arm64"):
+            return "py3-none-manylinux_2_17_aarch64"
+    elif sys.platform == "win32":
+        if machine in ("amd64", "x86_64"):
+            return "py3-none-win_amd64"
+    raise RuntimeError(
+        f"no native wheel tag for platform {sys.platform!r} machine {machine!r}"
+    )
 
 
 class CustomBuildHook(BuildHookInterface):
@@ -132,9 +161,15 @@ class CustomBuildHook(BuildHookInterface):
         if os.environ.get("PCC_BUILD_SKIP") == "1":
             self.app.display_info("PCC_BUILD_SKIP=1, skipping runtime + binary build")
             return
+        if getattr(self, "target_name", "") == "sdist":
+            # The sdist carries sources only. The wheel build constructs the
+            # runtime archive and bundles pcc1; an sdist build that tried both
+            # hit the 10-minute self-compile budget and failed.
+            self.app.display_info("sdist build: skipping runtime archive and pcc1 build")
+            return
 
         root = Path(self.root)
-        runtime_dir = root / "pcc" / "py_runtime"
+        runtime_dir = root / "pcc" / "runtime"
         target = os.environ.get("PCC_BUILD_TARGET", "libpy_runtime_pcc_py.a")
         archive = runtime_dir / target
 
@@ -169,7 +204,7 @@ class CustomBuildHook(BuildHookInterface):
             manifest = self._require_runtime_archive_manifest(archive)
             capi_inventory = capi_inventory_path_for_archive(archive)
             self._write_archive_target_stamp(archive)
-            rel = f"pcc/py_runtime/{target}"
+            rel = f"pcc/runtime/{target}"
             build_data.setdefault("force_include", {})[str(archive)] = rel
             build_data.setdefault("force_include", {})[str(manifest)] = (
                 rel + ".provenance.json"
@@ -191,7 +226,7 @@ class CustomBuildHook(BuildHookInterface):
         else:
             raise RuntimeError(
                 "pcc runtime archive build failed; refusing to publish a wheel "
-                f"without pcc/py_runtime/{target}"
+                f"without pcc/runtime/{target}"
             )
 
         # ---- 2. native pcc1 binary (hard-fail for published sdists) ----
@@ -217,7 +252,7 @@ class CustomBuildHook(BuildHookInterface):
 
         build_data.setdefault("shared_scripts", {})[str(out_binary)] = "pcc1.exe" if os.name == "nt" else "pcc1"
         build_data["pure_python"] = False
-        build_data["infer_tag"] = True
+        build_data["tag"] = _native_wheel_tag()
         self.app.display_info("bundled native pcc1 binary at .data/scripts/pcc1")
 
     def _validate_prebuilt_pcc1(self, path: Path) -> bool:
@@ -315,7 +350,7 @@ class CustomBuildHook(BuildHookInterface):
         # directory (dist/), and every non-distribution entry left there makes
         # the PyPI upload fail with "InvalidDistribution: Unknown distribution
         # format". The marker only needs a real path on disk because it is
-        # force_include-d into the artifact under pcc/py_runtime/.
+        # force_include-d into the artifact under pcc/runtime/.
         marker_root = Path(self.root) / "build" / "pcc-runtime-wheel-markers"
         marker_root.mkdir(parents=True, exist_ok=True)
         marker = marker_root / (archive.name + ".wheel")
@@ -372,18 +407,14 @@ class CustomBuildHook(BuildHookInterface):
         pcc_root = root / "pcc"
         input_roots = [
             pcc_root / "backend",
-            pcc_root / "codegen",
-            pcc_root / "evaluater",
-            pcc_root / "llvm_capi",
-            pcc_root / "parse",
-            pcc_root / "py_frontend",
-            pcc_root / "py_runtime",
+            pcc_root / "frontends",
+            pcc_root / "driver",
+            pcc_root / "ir",
+            pcc_root / "runtime",
             pcc_root / "tools",
             pcc_root / "__main__.py",
             pcc_root / "api.py",
-            pcc_root / "cli_core.py",
             pcc_root / "pcc.py",
-            pcc_root / "project.py",
         ]
         ignored_dirs = {
             ".git",
@@ -436,17 +467,45 @@ class CustomBuildHook(BuildHookInterface):
         *,
         force: bool = False,
     ) -> bool:
-        """Invoke the runtime Makefile under a chosen backend.
+        """Select a source/configuration-verified owned runtime for the wheel.
 
-        Returns True iff make exits 0. The caller reports failure without
-        switching the selected backend or publishing an incomplete wheel.
+        The legacy method name remains for build-hook consumers. Make is an
+        explicitly selected host reference; construction failures never change
+        the selected owner or permit publication of an incomplete wheel.
         """
-        if backend == "self" and (sys.platform.startswith("linux") or sys.platform == "win32"):
-            command = [sys.executable, "-m", "pcc.py_frontend.owned_runtime_build",
-                       "--runtime-dir", str(runtime_dir), "--output", str(runtime_dir / target)]
+        if backend != "self":
+            raise RuntimeError("wheel runtime construction requires PCC_BUILD_BACKEND=self")
+        build_mode = str(os.environ.get("PCC_RUNTIME_BUILD", "") or "").strip().lower() or "owned"
+        if build_mode not in ("owned", "make"):
+            raise RuntimeError("invalid PCC_RUNTIME_BUILD; expected 'owned' or 'make'")
+        if build_mode == "make":
+            if sys.implementation.name != "cpython":
+                raise RuntimeError("PCC_RUNTIME_BUILD=make is a CPython-host reference oracle; native pcc1 requires owned runtime construction")
+            self.app.display_info("explicit host runtime reference oracle PCC_RUNTIME_BUILD=make (external Make/tool commands; not owned construction)")
+        else:
+            # Hatch imports the hook before this source package is installed.
+            # Import the canonical selector in the source-root child rather
+            # than accidentally importing an unrelated installed pcc here.
+            # It admits the complete module inventory, threads/refcount,
+            # target, source and codegen receipts, and reuses current builds.
+            script = (
+                "import os, shutil, sys\n"
+                "from pcc.frontends.python.owned_runtime_build import ensure_target_runtime\n"
+                "runtime_dir, archive, target = sys.argv[1:]\n"
+                "selected = ensure_target_runtime(runtime_dir, target, packaged_archive=archive)\n"
+                "if os.path.abspath(selected) != os.path.abspath(archive):\n"
+                "    for suffix in ('.capi_syms', '', '.provenance.json'):\n"
+                "        shutil.copyfile(selected + suffix, archive + suffix + '.wheel-tmp')\n"
+                "        os.replace(archive + suffix + '.wheel-tmp', archive + suffix)\n"
+            )
+            environment = dict(os.environ)
+            environment["PCC_RUNTIME_DIR"] = str(runtime_dir.resolve())
+            environment.pop("PCC_RUNTIME_ARCHIVE", None)
+            command = [sys.executable, "-c", script, str(runtime_dir.resolve()),
+                       str((runtime_dir / target).resolve()), _build_targets.host_target_triple()]
             try:
                 subprocess.run(command, cwd=self.root, check=True, capture_output=True,
-                               text=True, timeout=2400)
+                               text=True, timeout=2400, env=environment)
                 return True
             except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
                 self.app.display_warning("owned runtime build failed: " + str(exc))
@@ -455,7 +514,7 @@ class CustomBuildHook(BuildHookInterface):
         # Inject the backend flag directly into the PCC command so
         # the Makefile doesn't need to learn a new variable. The
         # existing `$(PCC) --cpp-arg=... --emit-obj ...` invocations
-        # in pcc/py_runtime/Makefile pick this up unchanged.
+        # in pcc/runtime/Makefile pick this up unchanged.
         env["PCC"] = f"{sys.executable} -m pcc --backend {backend}"
 
         cmd = ["make"]
@@ -493,7 +552,7 @@ class CustomBuildHook(BuildHookInterface):
     ) -> bool:
         """Compile pcc/__main__.py into a native pcc binary.
 
-        Mirrors ``scripts/bootstrap.sh`` stage1: CPython-hosted pcc
+        Mirrors ``scripts/bootstrap.py`` stage1: CPython-hosted pcc
         compiles its own entry point with ``--backend self
         --python-libpython=off``. Returns True iff pcc exits 0 and the
         output file exists and is executable.

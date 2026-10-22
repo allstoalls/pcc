@@ -1,9 +1,9 @@
 """Scheduler-integration regression for the vthread timer min-heap.
 
-Slice ``T-P0-VTHREAD-TIMER``: ``pcc/py_runtime/src/py_timer_heap.c`` (the
+Slice ``T-P0-VTHREAD-TIMER``: ``pcc/runtime/src/py_timer_heap.c`` (the
 binary min-heap + lazy-cancel live map, previously landed *standalone* by the
 mirror slice) is now wired into the coroutine/virtual-thread scheduler in
-``pcc/py_runtime/src/pcc_threads.c``, replacing the O(n)-insert sorted
+``pcc/runtime/src/pcc_threads.c``, replacing the O(n)-insert sorted
 singly-linked list that used to back ``py_virtual_thread_sleep`` /
 ``py_virtual_thread_poll_timers`` / ``py_virtual_thread_timer_count``.
 
@@ -56,7 +56,7 @@ import pytest
 from tests.runtime_build_cache import cached_pcc_python_runtime, cached_threaded_pcc_python_runtime
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 
 
 def _cc() -> str:

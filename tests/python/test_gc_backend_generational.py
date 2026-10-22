@@ -14,7 +14,7 @@ from tests.runtime_build_cache import (
 )
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_OBJECT_SLOTS = RUNTIME_DIR / "py" / "freestanding_gc_object_slots.py"
 STRICT_COMMON_MARK_CYCLE = (
     RUNTIME_DIR / "py" / "freestanding_gc_common_mark_cycle.py"
@@ -48,7 +48,7 @@ def _compile_probe(
     backend: str | None = None,
     ir_scaffold_mode: str | None = "on",
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "probe.py"
     exe = tmp_path / "probe.out"
@@ -83,7 +83,7 @@ def _build_threaded_runtime(tmp_path: Path) -> Path:
     return cached_threaded_pcc_python_runtime()
 
 
-def _build_pcc_py_runtime(tmp_path: Path) -> Path:
+def _build_pcc_runtime(tmp_path: Path) -> Path:
     global _PCC_PY_RUNTIME_BUILD_CACHE
     if (
         _PCC_PY_RUNTIME_BUILD_CACHE is not None
@@ -717,7 +717,7 @@ def test_generational_pcc_python_budgeted_young_worklist_advances_without_rescan
 ):
     _assert_generational_budgeted_young_worklist_advances_without_rescan(
         tmp_path,
-        _build_pcc_py_runtime(tmp_path),
+        _build_pcc_runtime(tmp_path),
         "libpy_runtime_pcc_py.a",
         extra_link_args=["-pthread"],
     )
@@ -3685,7 +3685,7 @@ def test_generational_backend_pcc_python_runtime_retains_empty_minor_span_for_st
 def test_generational_backend_pcc_python_runtime_threaded_minor_blocks(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
 
     src = tmp_path / "pcc_py_minor_thread_blocks.c"
     exe = tmp_path / "pcc_py_minor_thread_blocks.out"
@@ -3930,7 +3930,7 @@ def test_generational_backend_tls_foreign_owner_moves_to_oldified_target(
 def test_generational_backend_pcc_python_runtime_tls_foreign_owner_moves_to_oldified_target(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_tls_foreign_owner_moves_to_oldified_target(
         tmp_path,
         work_runtime,
@@ -3954,7 +3954,7 @@ def test_generational_backend_extension_traverse_runs_after_graph_unlock(
 def test_pcc_python_initial_trace_extension_traverse_runs_after_graph_unlock(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_extension_traverse_runs_after_graph_unlock(
         tmp_path,
         work_runtime,
@@ -3967,7 +3967,7 @@ def test_pcc_python_initial_trace_extension_traverse_runs_after_graph_unlock(
 def test_pcc_python_final_trace_extension_traverse_runs_after_graph_unlock(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_final_trace_extension_traverse_runs_after_graph_unlock(
         tmp_path,
         work_runtime,
@@ -3978,7 +3978,7 @@ def test_pcc_python_final_trace_extension_traverse_runs_after_graph_unlock(
 def test_generational_backend_pcc_python_runtime_extension_traverse_runs_after_graph_unlock(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_extension_traverse_runs_after_graph_unlock(
         tmp_path,
         work_runtime,
@@ -5129,7 +5129,7 @@ def test_generational_backend_cross_domain_remembered_slot_rewrite(tmp_path):
 def test_generational_backend_pcc_python_runtime_minor_refill_promotes_tls_exception_root(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_minor_refill_promotes_tls_exception_root(
         tmp_path,
         work_runtime,
@@ -5141,7 +5141,7 @@ def test_generational_backend_pcc_python_runtime_minor_refill_promotes_tls_excep
 def test_generational_backend_pcc_python_runtime_minor_refill_oldifies_copy_for_remembered_child(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
 
     src = tmp_path / "pcc_py_minor_oldify_copy_probe.c"
     exe = tmp_path / "pcc_py_minor_oldify_copy_probe.out"
@@ -5244,7 +5244,7 @@ def test_generational_backend_pcc_python_runtime_minor_refill_oldifies_copy_for_
 def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_remembered_list_slot_to_oldified_copy(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
 
     src = tmp_path / "pcc_py_minor_oldify_slot_rewrite_probe.c"
     exe = tmp_path / "pcc_py_minor_oldify_slot_rewrite_probe.out"
@@ -5342,7 +5342,7 @@ def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_remembere
 def test_generational_backend_pcc_python_runtime_old_list_retains_appended_tuples(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
 
     src = tmp_path / "pcc_py_old_list_tuple_retention_probe.c"
     exe = tmp_path / "pcc_py_old_list_tuple_retention_probe.out"
@@ -5427,7 +5427,7 @@ def test_generational_backend_pcc_python_runtime_old_list_retains_appended_tuple
 def test_generational_backend_pcc_python_runtime_young_owner_promotion_rewrites_list_referent_to_oldified_copy(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_young_owner_promotion_rewrites_list_referent(
         tmp_path,
         work_runtime,
@@ -5439,7 +5439,7 @@ def test_generational_backend_pcc_python_runtime_young_owner_promotion_rewrites_
 def test_generational_backend_pcc_python_runtime_safepoint_does_not_promote_frame_roots(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_safepoint_does_not_promote_frame_roots(
         tmp_path,
         work_runtime,
@@ -5451,7 +5451,7 @@ def test_generational_backend_pcc_python_runtime_safepoint_does_not_promote_fram
 def test_generational_backend_pcc_python_runtime_remembered_overflow_scans_examined_nodes_in_batches(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_remembered_overflow_scans_examined_nodes_in_batches(
         tmp_path,
         work_runtime,
@@ -5463,7 +5463,7 @@ def test_generational_backend_pcc_python_runtime_remembered_overflow_scans_exami
 def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_non_list_owned_slots_to_oldified_copy(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_non_list_slots_rewrite(
         tmp_path,
         work_runtime,
@@ -5475,7 +5475,7 @@ def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_non_list_
 def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_frame_root_slot_to_oldified_copy(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_frame_root_slot_rewrite(
         tmp_path,
         work_runtime,
@@ -5487,7 +5487,7 @@ def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_frame_roo
 def test_generational_backend_pcc_python_runtime_borrowed_frame_root_rewrite_preserves_source_ref(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_borrowed_frame_root_rewrite_preserves_source_ref(
         tmp_path,
         work_runtime,
@@ -5499,7 +5499,7 @@ def test_generational_backend_pcc_python_runtime_borrowed_frame_root_rewrite_pre
 def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_suspended_generator_frame_slot_to_oldified_copy(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_suspended_generator_frame_slot_rewrite(
         tmp_path,
         work_runtime,
@@ -5511,7 +5511,7 @@ def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_suspended
 def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_continuation_stack_slot_to_oldified_copy(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_continuation_stack_slot_rewrite(
         tmp_path,
         work_runtime,
@@ -5523,7 +5523,7 @@ def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_continuat
 def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_generator_coroutine_state_slots_to_oldified_copy(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_generator_coroutine_state_slot_rewrite(
         tmp_path,
         work_runtime,
@@ -5535,7 +5535,7 @@ def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_generator
 def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_task_state_slots_to_oldified_copy(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_task_state_slot_rewrite(
         tmp_path,
         work_runtime,
@@ -5547,7 +5547,7 @@ def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_task_stat
 def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_scheduler_root_slot_to_oldified_copy(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_scheduler_root_slot_rewrite(
         tmp_path,
         work_runtime,
@@ -5559,7 +5559,7 @@ def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_scheduler
 def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_scheduler_queue_entry_to_oldified_copy(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_scheduler_queue_entry_slot_rewrite(
         tmp_path,
         work_runtime,
@@ -5571,7 +5571,7 @@ def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_scheduler
 def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_class_metadata_slots_to_oldified_copy(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_class_metadata_slots_rewrite(
         tmp_path,
         work_runtime,
@@ -5583,7 +5583,7 @@ def test_generational_backend_pcc_python_runtime_minor_refill_rewrites_class_met
 def test_generational_backend_pcc_python_runtime_forwarded_minor_source_is_inactive_after_oldify(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_forwarded_minor_source_cleanup(
         tmp_path,
         work_runtime,
@@ -5595,7 +5595,7 @@ def test_generational_backend_pcc_python_runtime_forwarded_minor_source_is_inact
 def test_generational_backend_pcc_python_runtime_release_of_forwarded_source_consumes_source_ref(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_forwarded_source_release_consumes_source_ref(
         tmp_path,
         work_runtime,
@@ -5640,7 +5640,7 @@ def test_generational_backend_string_loop_owned_root_cleanup(
 def test_generational_backend_pcc_python_runtime_oldified_tuple_retains_old_child_ref(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_oldified_tuple_retains_old_child(
         tmp_path,
         work_runtime,
@@ -5652,7 +5652,7 @@ def test_generational_backend_pcc_python_runtime_oldified_tuple_retains_old_chil
 def test_generational_backend_pcc_python_runtime_minor_arena_tuple_cycle_promotes_in_place(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_minor_arena_tuple_cycle_promotes_in_place(
         tmp_path,
         work_runtime,
@@ -5664,7 +5664,7 @@ def test_generational_backend_pcc_python_runtime_minor_arena_tuple_cycle_promote
 def test_generational_backend_pcc_python_runtime_string_loop_owned_root_cleanup(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_string_loop_owned_root_cleanup(
         tmp_path,
         work_runtime,
@@ -5676,7 +5676,7 @@ def test_generational_backend_pcc_python_runtime_string_loop_owned_root_cleanup(
 def test_generational_backend_pcc_python_runtime_cross_domain_remembered_slot_rewrite(
     tmp_path,
 ):
-    work_runtime = _build_pcc_py_runtime(tmp_path)
+    work_runtime = _build_pcc_runtime(tmp_path)
     _assert_backend_three_cross_domain_remembered_slot_rewrite(
         tmp_path,
         work_runtime,

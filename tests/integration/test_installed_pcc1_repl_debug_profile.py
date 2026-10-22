@@ -77,7 +77,7 @@ def installed_python3(tmp_path_factory: pytest.TempPathFactory):
     shutil.copy2(current, executable)
     executable.chmod(executable.stat().st_mode | 0o111)
 
-    source_runtime = ROOT / "pcc/py_runtime/libpy_runtime_pcc_py.a"
+    source_runtime = ROOT / "pcc/runtime/libpy_runtime_pcc_py.a"
     verify_runtime_archive_manifest(source_runtime, runtime_root=source_runtime.parent)
     runtime = _install_runtime_bundle(source_runtime, root / "runtime")
 

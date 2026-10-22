@@ -24,7 +24,7 @@ _REPO_ROOT = Path(__file__).absolute().parents[2]
 
 
 def _run_native(tmp_path: Path, source: str) -> subprocess.CompletedProcess:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -34,7 +34,7 @@ def _run_native(tmp_path: Path, source: str) -> subprocess.CompletedProcess:
         str(exe),
         ir_scaffold_mode="on",
         libpython_mode="off",
-        backend="llvm",
+        backend="self",
     )
     return subprocess.run(
         [str(exe)], capture_output=True, text=True, timeout=60

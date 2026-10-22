@@ -23,8 +23,7 @@ def test_one_million_requires_explicit_manual_gate() -> None:
 def test_gc3_malloc_ownership_is_explicit_after_minor_block_address_scan() -> None:
     py_oldification = (
         REPO_ROOT
-        / "pcc"
-        / "py_runtime"
+        / "pcc" / "runtime"
         / "py"
         / "freestanding_gc_generational_oldification.py"
     ).read_text(encoding="utf-8")

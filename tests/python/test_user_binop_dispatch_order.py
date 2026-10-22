@@ -207,14 +207,19 @@ ORDER_SOURCE = r'''
             if (py_obj_gt(make(base, 1), make(base, 2)) != 1) return 14;
             if (last != LT_BASE * 1000 + 21) return 15;
             /* NotImplemented from every method, or no ordering method at all:
-             * the runtime's builtin ordering answers (its value differs
-             * between the runtimes and is not the subject here), no error */
+             * as in CPython, the comparison raises TypeError */
             last = 0;
             (void)py_obj_lt(make(shy, 1), make(shy, 2));
             if (last != LT_SHY * 1000 + 12) return 17;
-            if (py_err_occurred() != 0) return 18;
+            if (py_err_occurred() == 0) return 18;
+            if (!py_exc_matches(py_current_exception(),
+                                (PyObject *)py_exc_builtin_class(PY_EXC_TYPEERROR))) return 19;
+            py_clear_exception();
             (void)py_obj_le(make(plain, 1), make(plain, 2));
-            if (py_err_occurred() != 0) return 20;
+            if (py_err_occurred() == 0) return 20;
+            if (!py_exc_matches(py_current_exception(),
+                                (PyObject *)py_exc_builtin_class(PY_EXC_TYPEERROR))) return 23;
+            py_clear_exception();
             /* an int on the left asks the instance's reflected method */
             last = 0;
             if (py_obj_lt(py_int_from_i64(5), make(other, 3)) != 1) return 21;
@@ -227,12 +232,12 @@ ORDER_SOURCE = r'''
 
 def test_binop_dispatch_follows_cpython_reflected_order(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     for backend in range(5):
         backend_source = SOURCE.replace("DISPATCH_BACKEND", str(backend))
         for runtime_name, archive in (
-            ("pcc_py", pcc_py_runtime_archive),
+            ("pcc_py", pcc_runtime_archive),
         ):
             result = _compile_and_run(
                 tmp_path,
@@ -249,12 +254,12 @@ def test_binop_dispatch_follows_cpython_reflected_order(
 
 def test_ordering_compares_ask_user_dunders_in_cpython_order(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     for backend in range(5):
         backend_source = ORDER_SOURCE.replace("DISPATCH_BACKEND", str(backend))
         for runtime_name, archive in (
-            ("pcc_py", pcc_py_runtime_archive),
+            ("pcc_py", pcc_runtime_archive),
         ):
             result = _compile_and_run(
                 tmp_path,

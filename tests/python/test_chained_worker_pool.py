@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend.worker_process_pool import run_chained_worker_processes
+from pcc.frontends.python.worker_process_pool import run_chained_worker_processes
 
 
 def _py(code: str) -> str:
@@ -96,16 +96,16 @@ def test_missing_followup_input_is_a_followup_failure(tmp_path):
     assert error.value.cmd == followups[0]
 
 
-def test_native_chained_pool_matches_the_host_contract(tmp_path, pcc_py_runtime_archive):
-    from pcc.py_frontend import worker_process_pool
-    from pcc.py_frontend.pipeline import compile_python_multi
+def test_native_chained_pool_matches_the_host_contract(tmp_path, pcc_runtime_archive):
+    from pcc.frontends.python import worker_process_pool
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     parent_source = tmp_path / "parent.py"
     parent = tmp_path / "parent"
     parent_source.write_text('''
 import sys
 import subprocess
-from pcc.py_frontend.worker_process_pool import run_chained_worker_processes
+from pcc.frontends.python.worker_process_pool import run_chained_worker_processes
 def main():
     primaries = sys.argv[1].split("|")
     followups = sys.argv[2].split("|")
@@ -119,9 +119,9 @@ main()
 ''')
     compile_python_multi(
         [str(Path(worker_process_pool.__file__)), str(parent_source)], str(parent),
-        module_names=["pcc.py_frontend.worker_process_pool", "chained_parent"],
+        module_names=["pcc.frontends.python.worker_process_pool", "chained_parent"],
         entry_module="chained_parent", recursive_stdlib=True,
-        backend="self", libpython_mode="off", runtime_archive=str(pcc_py_runtime_archive),
+        backend="self", libpython_mode="off", runtime_archive=str(pcc_runtime_archive),
     )
     for gc in range(5):
         case = tmp_path / f"gc{gc}"

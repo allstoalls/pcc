@@ -1,0 +1,99 @@
+{
+  "candidate_files": {
+    "pcc/backend/owned_elf_inputs.py": "37dbe1a0a6020e04dc90429d6f8e3442928e1f3cbcb528821c8f818a9366ccbb",
+    "pcc/backend/owned_elf_link.py": "d6467381d55a674bae5aa5c7915549eedd5ceb7440145a549f49488efa342bfa",
+    "pcc/backend/self_backend_kernel.py": "021d6add950632188eefa65195338f9ab7ec6aef0b396a71b5cc170a67fc822d",
+    "pcc/frontends/c/codegen/c_codegen.py": "6e8a06f6d9f2d5c794b1fa5fe7f9244ed5d02e815704cfa27021d20ee9ed91be",
+    "pcc/frontends/c/evaluator/c_evaluator.py": "0de1309274732baa49c2f1582317a6d1f5dbb4f4394c06b60a5def373efaef95",
+    "pcc/frontends/c/passes/base.py": "50f877339da80e6604df6ece4727fdef00d3e95904386f59c500692abef30298",
+    "pcc/frontends/c/preprocessor.py": "7671ad5271b4929d6778a020877ca99bfe2d25d1e20909d4f91738f715af83c4",
+    "pcc/frontends/python/codegen/_l1_codegen_static_methods.py": "49d41a9aef23e7c3df10d10d97ef1d2e3d8267fe6a6def75f230a0520942c451",
+    "pcc/frontends/python/codegen/call_object_lowering.py": "162c0a78aae28546fd4326f870e68295bb7b4c8555fa27ce648e5e17fbcd1bde",
+    "pcc/frontends/python/codegen/host_contract.py": "23c09a811bf9e82a5804d6296a8662b3250f2464268f65ea2445b394b2d18dae",
+    "pcc/frontends/python/codegen/native_gc.py": "8a6ab5e74edad2b6eace79b532789f3ed78fec0f9ef6edd81ae6c65124149e2d",
+    "pcc/frontends/python/owned_runtime_build.py": "e8e519c62942b7ff33127e0c878562495e1c58d86ebfa0646df000d6a81420f3",
+    "pcc/frontends/python/pipeline.py": "8fe68eeee47d158d63a7955fdb896d0e4652a7ef9faea45fc5eb618326572fed",
+    "pcc/frontends/python/pipeline_runtime_archive.py": "c5127b5b3c1af08adc2b9536fbcb58f3538f607a0a2e5eb37e7ffd8416a7bd9a",
+    "pcc/runtime/include/py_runtime.h": "c926e928a013bc6a50001d87a38335435a15672b3a998b21648a2a8fe773536e",
+    "pcc/runtime/py/freestanding_gc_backend0_collector.py": "b6aad613d1dacb9a83f9ebb45bb597fc3ce0692ae3d1449561bd521da53edbe2",
+    "pcc/runtime/py/py_obj.py": "dc954ba46f6312c3ec83db6015592c27737dec4819a6d47f9ae8640f67212f89",
+    "pcc/stdlib/gc.py": "80c3ed3e1d4ae50ab7f1fd97f161d0fd49cb54cb69ffbab0cd107938f6577646",
+    "tests/owned_ir_validation.py": "3e1a944b4ee8582b435e72c4b3dff66c674ed9056a6d3c685b9ac728649ec4ec",
+    "tests/python/test_slot_call_status_reporting.py": "cd8bec179c52c61e6f4e08505298f12b34c3bd79971e8a2bb0cc38ecbf686d5b",
+    "tests/python/test_slot_call_status_reporting_native.py": "f3915510ed44ed2c5e5f8a73f88b22c004ec11a439bd1c5705b3f6ece420fe65",
+    "tests/runtime_fixture_provenance.py": "3d3956a512ecfefb2410a983a83f16b841abe38eeb6a427a851fb9008c9105eb"
+  },
+  "candidate_source_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "canonical_source_inventory_sha256": "5643f83014b0ff2801adb0d3f204dd63541ef9eda6a7d13dc688dc6565b25ea1",
+  "canonical_status_owner_sha256": "5fa765ad62b9e9b60b046a1e9aa11492e02245d53ca3c1a37a7c5d2839709329",
+  "comparison_scope": "same frozen candidate compiler/runtime, exact generated former-inline and candidate probes, explicit test-only dispatch postimage",
+  "ctypes_initialization_prerequisite": {
+    "prior_reviewed_bootstrap_sha256": "41f1e63e8a5e0f3e0f3267c3729c16cc712ed6cc9ded2d82b43a0268ef078f7c",
+    "requires_successor": "exact new runner hash and compile-only scope; preserve one-shot init and all later denials",
+    "stdlib_endian_sha256": "499773a028a41ee18153fedfe0a00a26efb2a650f568b9bc17e2f3a914a23468",
+    "stdlib_init_sha256": "0169e7476bd22f9d4c4f502219f1f0e6ba8ca963e3a7aa2401af6aefcaa71fbf"
+  },
+  "driver_sha256": "aee6acc212aee5a4610f29544c46e826057afb664856f22614ee829e51b0a054",
+  "execution_status": "UNRUN",
+  "harness_sha256": "932863cbaee473488ef775e833b4256b384b24d5797236162d444d16f327033c",
+  "independent_review_status": "PENDING",
+  "limits_per_compile": {
+    "address_space_bytes": 4294967296,
+    "exclusive_shared_lock": true,
+    "hard_nproc": 0,
+    "minimum_free_bytes": 4294967296,
+    "output_reservation_bytes": 536870912,
+    "seconds_total": 300
+  },
+  "native_arguments_contract": "exactly one argument: selected GC backend as decimal 0 or 1",
+  "native_execution": "UNRUN; exact compiled ELF must be separately bound and admitted",
+  "native_stderr": "",
+  "native_stdout": "slot-status-runtime-equal\n",
+  "open_scope": [
+    "GC2",
+    "GC3",
+    "GC4",
+    "native pcc1",
+    "parallel frontend",
+    "full Stage1",
+    "full regression suite"
+  ],
+  "preserved_failed_observation": {
+    "c_assertions": "completed exit0 and exact success marker",
+    "gc0_result_sha256": "4a1689a425e8a842951b9e8e893e8048a2db53b511ff1378922c5c0b6dd24153",
+    "gc1": "UNRUN",
+    "gc_log_sha256": "cd3a1620e54c7a0e276498b5ce900f0af6afd69f5ddf2cac3b4d126d9a46c196",
+    "native_manifest_sha256": "98383cdcd7ad2e72f253532200a5cb49b80ce2052d3a9ea3e2276ebbe3fdf525",
+    "strict_observation": "FAIL"
+  },
+  "production_base_commit": "818187ba7dfff54df589b93bc10594f87786fe22",
+  "program_backend_optimization": false,
+  "program_frontend_passes": "ordinary C PassPipeline.default; frontend_opt_level None",
+  "proposed_native_gc": [
+    0,
+    1
+  ],
+  "readme_sha256": "6603392525b7a89afaf58ff2f9ee0efc2c4e7d96bf5f6351b25f5fc85b2e3b0a",
+  "runtime_required": {
+    "archive_sha256": "a6645f903e03f6766ecc7466b76f2993318582d287a393831aa5522158421915",
+    "codegen_checksum": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+    "member_count": 191,
+    "provenance_sha256": "09f686fc222b14991749e890c9d60823f2a68fcbfd5e3ff2e7669b7c8288052c",
+    "refcount": "atomic",
+    "result_sha256": "c4c77819b3b44712c52d6732338dede4cc04a38ba332c74ba5d9ac00bc911238",
+    "target": "x86_64-unknown-linux-gnu",
+    "threads": true
+  },
+  "schema": "pcc.cold-slot-fresh-exception-dispatch.v1",
+  "successor_scope": "Only the external native-test fixture changes its two raw py_gc_collect() calls to public pcc_gc_collect(-1); driver verifies exact postimage relation and emitted public i64(i32) edges. Frozen compiler/runtime and strict native observer remain unchanged.",
+  "supersedes_compile_packet_manifest_sha256": "ab3a361bed5bbe8ecf28532e4f4fd621cdfcdc46e68f3a8787a70bc0af524ae2",
+  "test_only_successor": {
+    "compiler_inventory_relation": "unchanged old full compiler source inventory; external test-only postimage is separately bound, not substituted into it",
+    "patch_sha256": "1cee8adeb4bb544330b6aa2e30b2d585396519914cf75fad40c61156354004a3",
+    "path": "tests/python/test_slot_call_status_reporting_native.py",
+    "postimage_sha256": "8348c58193351f4d025e3824d596d0a7c38500ca0ce8abf188e3d8382029ab90",
+    "preimage_sha256": "f3915510ed44ed2c5e5f8a73f88b22c004ec11a439bd1c5705b3f6ece420fe65",
+    "public_collection_reason": -1,
+    "replacements": 2
+  }
+}

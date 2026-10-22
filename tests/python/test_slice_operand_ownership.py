@@ -14,7 +14,7 @@ import pytest
 ])
 @pytest.mark.parametrize("receiver", ["attribute", "call", "borrowed"])
 def test_slice_balances_receiver_reference(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
     monkeypatch, annotation, initial, receiver,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
@@ -40,7 +40,7 @@ exercise({initial})
 ''')
     binary = tmp_path / "slice_owner"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)))
@@ -49,7 +49,7 @@ exercise({initial})
 
 
 def test_slice_operand_cleanup_handles_bounds_errors_and_rebinding(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, monkeypatch,
+    tmp_path, pcc_runtime_archive, python_program_compiler, monkeypatch,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = tmp_path / "slice_errors.py"
@@ -122,7 +122,7 @@ main()
 ''')
     binary = tmp_path / "slice_errors"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)))
@@ -133,7 +133,7 @@ main()
 @pytest.mark.parametrize("constructor", ["bytes", "bytearray", "memoryview"])
 @pytest.mark.parametrize("receiver", ["holder.data", "payload"])
 def test_bytes_family_constructor_consumes_only_owned_operand(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
     monkeypatch, constructor, receiver,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
@@ -154,7 +154,7 @@ exercise(("buffer" + str(42)).encode())
 ''')
     binary = tmp_path / "buffer_owner"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)))

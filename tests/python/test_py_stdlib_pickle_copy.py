@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pcc.py_stdlib import copy
-from pcc.py_stdlib import pickle
+from pcc.stdlib import copy
+from pcc.stdlib import pickle
 
 
 def test_pickle_roundtrip_primitives_and_containers():

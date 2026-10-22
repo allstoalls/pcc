@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 
-from pcc.py_frontend.module_action_dag import (
+from pcc.frontends.python.module_action_dag import (
     ACTION_STAGES,
     GraphState,
     ModuleState,

@@ -6,7 +6,7 @@ import textwrap
 from pathlib import Path
 
 
-def test_native_class_level_variable_read_write_and_delete(tmp_path, pcc_py_runtime_archive):
+def test_native_class_level_variable_read_write_and_delete(tmp_path, pcc_runtime_archive):
     src = tmp_path / "classvar_probe.c"
     exe = tmp_path / "classvar_probe"
     src.write_text(
@@ -49,11 +49,11 @@ def test_native_class_level_variable_read_write_and_delete(tmp_path, pcc_py_runt
         [
             os.environ.get("CC", "cc"),
             "-I",
-            str(pcc_py_runtime_archive.parent / "include"),
+            str(pcc_runtime_archive.parent / "include"),
             "-I",
-            str(pcc_py_runtime_archive.parent / "src"),
+            str(pcc_runtime_archive.parent / "src"),
             str(src),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(exe),
@@ -65,6 +65,6 @@ def test_native_class_level_variable_read_write_and_delete(tmp_path, pcc_py_runt
 
 
 def test_classvar_uses_dedicated_attr_dict_not_method_table():
-    internal = Path("pcc/py_runtime/src/py_internal.h").read_text(encoding="utf-8")
+    internal = Path("pcc/runtime/src/py_internal.h").read_text(encoding="utf-8")
 
     assert "PyObject               *attrs;" in internal

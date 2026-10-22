@@ -28,7 +28,7 @@ import textwrap
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME = REPO_ROOT / "pcc" / "runtime"
 PY_OBJ_PORT = (RUNTIME / "py" / "py_obj.py").read_text(encoding="utf-8")
 HEADER = (RUNTIME / "include" / "py_runtime.h").read_text(encoding="utf-8")
 
@@ -39,14 +39,12 @@ def test_no_mirror_still_spells_the_boundary_as_500() -> None:
     assert "PY_TYPE_CEXT_TAG_BASE = 0x10000" in HEADER
     for source, name in ((PY_OBJ_PORT, "py_obj.py"),):
         assert "> 500" not in source, name
-    # The C mirrors use the header constant.  The pcc-Python mirror spells it
-    # as the literal 0x10000, like py_capi_type_runtime.py: comparing against
-    # the imported name lowers through py_obj_ge (the generic object
-    # comparison) instead of the raw integer one, and segfaults on the first
-    # refcount.
-    assert PY_OBJ_PORT.count("tag >= (0x10000)") + PY_OBJ_PORT.count(
-        "tag_dbg >= (0x10000)"
+    # Runtime-library imports are now statically resolved, so the named
+    # generated boundary must protect all four strict refcount entry paths.
+    assert PY_OBJ_PORT.count("tag >= (PY_TYPE_CEXT_TAG_BASE)") + PY_OBJ_PORT.count(
+        "tag_dbg >= (PY_TYPE_CEXT_TAG_BASE)"
     ) >= 4
+
 
 
 def _program() -> str:
@@ -96,7 +94,7 @@ def _program() -> str:
 
 
 def test_a_high_tag_instance_survives_argument_tuple_round_trips(tmp_path) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "many_classes.py"
     exe = tmp_path / "many_classes.out"

@@ -82,7 +82,7 @@ main()
     ],
 )
 def test_for_tuple_targets_bind_and_match_cpython(tmp_path, name, program, expected):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / f"{name}.py"
     exe = tmp_path / f"{name}.out"
@@ -92,7 +92,7 @@ def test_for_tuple_targets_bind_and_match_cpython(tmp_path, name, program, expec
         str(exe),
         ir_scaffold_mode="on",
         libpython_mode="off",
-        backend="llvm",
+        backend="self",
     )
     native = subprocess.run(
         [str(exe)], capture_output=True, text=True, timeout=120,

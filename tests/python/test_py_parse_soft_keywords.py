@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pcc.parse import py_lift, py_parse
+from pcc.frontends.python import py_lift, py_parse
 
 
 def test_match_soft_keyword_can_be_plain_assignment():

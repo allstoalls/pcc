@@ -143,11 +143,11 @@ def test_unsatisfiable_symbols_are_reported_not_swallowed(tmp_path):
 
 def test_parses_the_real_runtime_archive():
     """~2.9MB, BSD extended names, __.SYMDEF SORTED index."""
-    archive = _repo_root() / "pcc" / "py_runtime" / "libpy_runtime_pcc_py.a"
+    archive = _repo_root() / "pcc" / "runtime" / "libpy_runtime_pcc_py.a"
     if not archive.exists():
         raise AssertionError(
             f"{archive} missing; build it with "
-            "`make -C pcc/py_runtime libpy_runtime_pcc_py.a`"
+            "`make -C pcc/runtime libpy_runtime_pcc_py.a`"
         )
     members = read_archive(archive.read_bytes())
     assert len(members) > 50, len(members)

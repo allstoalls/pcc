@@ -131,7 +131,7 @@ def _environment(monkeypatch, tmp_path, *, archive=None):
 
 @pytest.mark.parametrize("case", tuple(_CASES))
 def test_trailing_main_real_entry_ir(tmp_path, monkeypatch, case):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     _environment(monkeypatch, tmp_path)
     source = _source(tmp_path, case)
@@ -162,7 +162,7 @@ def supplied_threaded_runtime():
     requested = os.environ.get("PCC_THREADED_RUNTIME_ARCHIVE", "")
     assert requested, "set explicit prebuilt PCC_THREADED_RUNTIME_ARCHIVE; no automatic build"
     archive = Path(requested).resolve(strict=True)
-    manifest = verify_runtime_archive_manifest(archive, runtime_root=_ROOT / "pcc/py_runtime")
+    manifest = verify_runtime_archive_manifest(archive, runtime_root=_ROOT / "pcc/runtime")
     members = {row["member"] for row in manifest["members"]}
     assert "freestanding_thread_kernel_pthread.o" in members
     assert "freestanding_thread_kernel.o" not in members
@@ -199,7 +199,7 @@ def _execute(binary, environment, directory, case, gc_backend):
 @pytest.mark.parametrize("case", tuple(_CASES))
 def test_host_compiled_trailing_main_executes(tmp_path, monkeypatch, supplied_threaded_runtime,
                                              case, gc_backend):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     archive = supplied_threaded_runtime
     environment = _environment(monkeypatch, tmp_path, archive=archive)

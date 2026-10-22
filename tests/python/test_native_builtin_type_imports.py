@@ -3,7 +3,10 @@ from __future__ import annotations
 import os
 import subprocess
 
+import pytest
 
+
+@pytest.mark.integration
 def test_builtin_type_imports_are_native_without_libpython(tmp_path):
     source = tmp_path / "main.py"
     source.write_text(
@@ -60,6 +63,7 @@ def test_builtin_type_imports_are_native_without_libpython(tmp_path):
     assert run_result.stdout.splitlines() == ["True"] * 8
 
 
+@pytest.mark.integration
 def test_super_type_value_is_stable_and_hashable_without_libpython(tmp_path):
     source = tmp_path / "super_type_value.py"
     source.write_text(

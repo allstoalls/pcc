@@ -37,7 +37,7 @@ PROGRAM = textwrap.dedent("""
 
 @pytest.mark.parametrize("runtime_cc", [None], ids=["port"])
 def test_hex_bin_oct_bignum_matches_cpython(tmp_path, monkeypatch, runtime_cc):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "hexbig.py"
     exe = tmp_path / "hexbig.out"

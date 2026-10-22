@@ -4,14 +4,14 @@ import os
 from pathlib import Path
 import subprocess
 
-from pcc.llvm_capi import ir
-from pcc.py_frontend.pipeline import compile_python_multi
+from pcc.ir import ir
+from pcc.frontends.python.pipeline import compile_python_multi
 
 
-def test_unnamed_and_named_scaffold_modules_are_real_objects(tmp_path, pcc_py_runtime_archive):
+def test_unnamed_and_named_scaffold_modules_are_real_objects(tmp_path, pcc_runtime_archive):
     source = tmp_path / "module_ctor.py"
     source.write_text('''
-from pcc.llvm_capi import ir
+from pcc.ir import ir
 def main():
     module = ir.Module()
     module.triple = "arm64-apple-darwin"
@@ -23,10 +23,10 @@ main()
 ''', encoding="utf-8")
     output = tmp_path / "module_ctor"
     compile_python_multi([str(Path(ir.__file__)), str(source)], str(output),
-                         module_names=["pcc.llvm_capi.ir", "module_ctor"],
+                         module_names=["pcc.ir.ir", "module_ctor"],
                          entry_module="module_ctor", recursive_stdlib=True,
                          ir_scaffold_mode="on", backend="self", libpython_mode="off",
-                         runtime_archive=str(pcc_py_runtime_archive))
+                         runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         result = subprocess.run([str(output)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(gc)))

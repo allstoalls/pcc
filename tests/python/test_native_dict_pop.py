@@ -15,7 +15,7 @@ _BUILD.mkdir(parents=True, exist_ok=True)
 
 
 def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -69,7 +69,7 @@ def test_dict_pop_without_default_uses_native_keyerror_runtime():
 
 
 def test_dict_pop_without_default_raises_keyerror(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "dict_pop_missing.py"
     exe = tmp_path / "dict_pop_missing.out"
@@ -106,10 +106,10 @@ def test_dict_pop_without_default_raises_keyerror(tmp_path):
 def test_dynamic_pop_attr_on_list_and_dict_no_libpython(
     tmp_path,
     monkeypatch,
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
 ):
-    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_py_runtime_archive))
-    from pcc.py_frontend.pipeline import compile_python
+    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_runtime_archive))
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "dynamic_pop_attr.py"
     exe = tmp_path / "dynamic_pop_attr.out"
@@ -210,7 +210,7 @@ def test_dict_popitem_lifo_and_keyerror(tmp_path):
     """``dict.popitem()`` removes+returns the LAST-inserted (key, value) pair
     (insertion-ordered dicts), and raises KeyError when empty. Previously
     unsupported (libpython fallback) on the no-libpython path."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "popitem.py"
     src.write_text(textwrap.dedent("""

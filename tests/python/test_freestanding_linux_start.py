@@ -3,16 +3,16 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SOURCE = REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_linux_start.py"
+SOURCE = REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_linux_start.py"
 LINUX_TRIPLE = "x86_64-unknown-linux-gnu"
 
 
 def test_none_return_type_survives_self_host_module_class_boundary():
-    from pcc.py_frontend.codegen.user_function_decl_lowering import (
+    from pcc.frontends.python.codegen.user_function_decl_lowering import (
         _is_none_semantic_type,
     )
 
@@ -25,7 +25,7 @@ def test_none_return_type_survives_self_host_module_class_boundary():
 
 
 def _compile_linux_ir(tmp_path: Path, monkeypatch) -> str:
-    from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+    from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
     monkeypatch.setattr(
         UnsafeIntrinsicMixin, "_target_sys_platform_text", lambda self: "linux"
@@ -84,8 +84,8 @@ def test_linux_start_lowers_to_raw_syscalls_and_kernel_stack_contract(
 def test_python_cli_propagates_explicit_cross_target_to_emitted_ir(
     tmp_path, monkeypatch
 ):
-    from pcc import cli_core
-    from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+    from pcc.driver import cli_core
+    from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
     monkeypatch.setattr(
         UnsafeIntrinsicMixin, "_target_sys_platform_text", lambda self: "linux"
@@ -112,8 +112,8 @@ def test_python_cli_propagates_explicit_cross_target_to_emitted_ir(
 def test_python_cli_launcher_propagates_explicit_cross_target(
     tmp_path, monkeypatch
 ):
-    from pcc import cli_core
-    from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+    from pcc.driver import cli_core
+    from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
     monkeypatch.setattr(
         UnsafeIntrinsicMixin, "_target_sys_platform_text", lambda self: "linux"

@@ -26,26 +26,26 @@
 
 ### 2.2.1 安装入口与 click 包装
 
-`pip install python-cc` 安装的 `pcc` 命令由 [pyproject.toml](../../pyproject.toml) 的 `[project.scripts]` 指向 `pcc.cli_launcher:main`。[pcc/cli_launcher.py](../../pcc/cli_launcher.py) 全文 22 行:
+`pip install python-cc` 安装的 `pcc` 命令由 [pyproject.toml](../../pyproject.toml) 的 `[project.scripts]` 指向 `pcc.driver.cli_launcher:main`。[pcc/driver/cli_launcher.py](../../pcc/driver/cli_launcher.py) 全文 22 行:
 
 ```python
-# pcc/cli_launcher.py
+# pcc/driver/cli_launcher.py
 def main(argv=None) -> int:
     if argv is None:
         argv = sys.argv[1:]
 
-    from pcc.cli_core import cli_main
+    from pcc.driver.cli_core import cli_main
 
     return cli_main(list(argv))
 ```
 
-文档字符串直接声明立场:"The public command intentionally stays on the full CPython-hosted CLI. The native bootstrap compiler is exposed separately as `pcc1`."——公共命令是宿主 CPython 上的完整 CLI,原生自举编译器另行以 `pcc1` 暴露(轮子构建钩子 `hatch_build.py` 会自编译 [pcc/__main__.py](../../pcc/__main__.py) 产出原生 `pcc1` 随轮子发货)。launcher 只做一件事:转调 [pcc/cli_core.py](../../pcc/cli_core.py) 的 `cli_main`。
+文档字符串直接声明立场:"The public command intentionally stays on the full CPython-hosted CLI. The native bootstrap compiler is exposed separately as `pcc1`."——公共命令是宿主 CPython 上的完整 CLI,原生自举编译器另行以 `pcc1` 暴露(轮子构建钩子 `hatch_build.py` 会自编译 [pcc/__main__.py](../../pcc/__main__.py) 产出原生 `pcc1` 随轮子发货)。launcher 只做一件事:转调 [pcc/driver/cli_core.py](../../pcc/driver/cli_core.py) 的 `cli_main`。
 
 [pcc/pcc.py](../../pcc/pcc.py) 是另一层薄壳:`_build_click_main()` 在运行期 `__import__("click")`,把 `_click_entry` 用 click 的装饰器逐个包出带补全与帮助的命令对象;click 不可用时回落到 `_plain_main`,即同一个 `cli_main`。这个"装饰器在函数里手工套"的写法不是风格怪癖——它让 click 成为可选依赖,缺了它 CLI 照常工作。
 
 ### 2.2.2 手写参数解析器是给自举写的
 
-真正的解析逻辑在 [pcc/cli_core.py](../../pcc/cli_core.py) 的 `parse_cli_args`:一个 `while i < len(argv)` 的手写循环,每个旗标写两个分支(`--flag=value` 与 `--flag value`),返回一个巨大的元组。没有 argparse,没有 click。原因在同文件的细节里可以读出来:作用域环境变量覆盖器 `_temporary_env` 是显式类而非 `@contextmanager`,注释写明"to keep the self-host audit clean";序列复制用手写的 `_copy_seq` 而非切片惯用法;字符串一律以 `(value or "") + ""` 归一。这些都是自举可编译子集的惯用法——`cli_core.py` 属于自举审计([scripts/audit_selfhost.py](../../scripts/audit_selfhost.py))覆盖的文件集,是 pcc1 将来原生执行 C 驱动路径的目标闭包的一部分,尽管今天这一步尚未完成(README 状态表把它列为未来工作)。
+真正的解析逻辑在 [pcc/driver/cli_core.py](../../pcc/driver/cli_core.py) 的 `parse_cli_args`:一个 `while i < len(argv)` 的手写循环,每个旗标写两个分支(`--flag=value` 与 `--flag value`),返回一个巨大的元组。没有 argparse,没有 click。原因在同文件的细节里可以读出来:作用域环境变量覆盖器 `_temporary_env` 是显式类而非 `@contextmanager`,注释写明"to keep the self-host audit clean";序列复制用手写的 `_copy_seq` 而非切片惯用法;字符串一律以 `(value or "") + ""` 归一。这些都是自举可编译子集的惯用法——`cli_core.py` 属于自举审计([scripts/audit_selfhost.py](../../scripts/audit_selfhost.py))覆盖的文件集,是 pcc1 将来原生执行 C 驱动路径的目标闭包的一部分,尽管今天这一步尚未完成(README 状态表把它列为未来工作)。
 
 `cli_main` 的分派顺序本身就是架构图:`-m MODULE` 最先截获(经 `runpy` 跑宿主模块,`pip`/`pip3` 被重写为 `pcc.package.pip_shim`,见第 17 章);`-h/--help` 次之;然后 `parse_cli_args`;最后按路径后缀分流——`.py` 进 Python 流水线,其余进 C 流水线。`.py` 且未给 `-o` 时,编译产物写进临时目录并以子进程运行,退出码透传;这与 C 单文件默认的进程内 MCJIT 执行(2.3.4)形成对照:Python 路径从第一天起就只有"真实进程跑真实二进制"一种执行语义。
 
@@ -55,14 +55,14 @@ def main(argv=None) -> int:
 
 ```python
 # pcc/__main__.py
-from pcc.cli_bootstrap import bootstrap_cli_sys_argv_exit
+from pcc.driver.cli_bootstrap import bootstrap_cli_sys_argv_exit
 
 
 if __name__ == "__main__":
     bootstrap_cli_sys_argv_exit()
 ```
 
-这是自举链的入口——[scripts/bootstrap.sh](../../scripts/bootstrap.sh) 的三个阶段编译的就是 [pcc/__main__.py](../../pcc/__main__.py)。[pcc/cli_bootstrap.py](../../pcc/cli_bootstrap.py)(约七千行)是 pcc1/pcc2/pcc3 实际运行的 CLI:Python 输入由这个二进制自己编译;C 与项目输入按其帮助文本所述"delegated to the full host pcc CLI"(可用 `PCC_HOST_PCC` 覆盖宿主入口);`--pytest` 子命令让 pcc1 启动仓库测试套件(委托 `env -u LC_ALL uv run pytest` 并设置 `PCC1_BINARY`,使 pcc1 专属用例拿到当前二进制)。
+这是自举链的入口——[scripts/bootstrap.sh](../../scripts/bootstrap.sh) 的三个阶段编译的就是 [pcc/__main__.py](../../pcc/__main__.py)。[pcc/driver/cli_bootstrap.py](../../pcc/driver/cli_bootstrap.py)(约七千行)是 pcc1/pcc2/pcc3 实际运行的 CLI:Python 输入由这个二进制自己编译;C 与项目输入按其帮助文本所述"delegated to the full host pcc CLI"(可用 `PCC_HOST_PCC` 覆盖宿主入口);`--pytest` 子命令让 pcc1 启动仓库测试套件(委托 `env -u LC_ALL uv run pytest` 并设置 `PCC1_BINARY`,使 pcc1 专属用例拿到当前二进制)。
 
 为什么不让 `cli_core` 直接当自举入口?因为两者的依赖闭包不同。`cli_core` 要 import `CEvaluator`、`project.py` 等 C 路径模块,那是一个今天还编译不了自己的闭包;`cli_bootstrap` 的闭包被刻意收窄到 Python 流水线加委托逻辑。多文件自举编译则由 [scripts/pcc_multi.py](../../scripts/pcc_multi.py) 入口承担——它包装 `pipeline.compile_python_multi`,而且自身用 `pcc.extern` 写退出逻辑,同样是按"将被 pcc 编译"的标准书写的。
 
@@ -76,12 +76,12 @@ if __name__ == "__main__":
 | `--ir-scaffold` | `on` | `on`:封闭世界 IR-builder 低层化(自举主路径),未实现的方法**清晰报错而非静默回退**(`_resolve_ir_scaffold_mode` 文档字符串原话);`off`:旧低层化路径的兼容逃生门;`auto` 归一为 `on`。 |
 | `--backend` | `llvm` | `llvm`、`llvm_capi`、`self` 三选一,环境变量 `PCC_BACKEND`(见 2.5.1)。 |
 
-C 路径的旗标族围绕项目形态:`--separate-tus`、`--sources-from-make GOAL`、`--depends-on PATH[=GOAL]`、`--system-link`、`--jobs N`(显式给出时要求与多输入或 system-link 搭配,否则报错)、`--cpp-arg`/`--link-arg`、`--prepare-cmd`/`--ensure-make-goal`,以及发射族 `--emit-llvm/--emit-asm/--emit-obj` 与交叉编译的 `--target TRIPLE`(`--target` 必须与发射模式或 `--system-link` 搭配)。诊断面是两条流水线共用的:`--diagnostic-format text|json|sarif`、`--profile-json PATH`、`--explain-fallback`,经环境变量传给 `pcc.compile_observability` 的 `observed_compile` 包装层。
+C 路径的旗标族围绕项目形态:`--separate-tus`、`--sources-from-make GOAL`、`--depends-on PATH[=GOAL]`、`--system-link`、`--jobs N`(显式给出时要求与多输入或 system-link 搭配,否则报错)、`--cpp-arg`/`--link-arg`、`--prepare-cmd`/`--ensure-make-goal`,以及发射族 `--emit-llvm/--emit-asm/--emit-obj` 与交叉编译的 `--target TRIPLE`(`--target` 必须与发射模式或 `--system-link` 搭配)。诊断面是两条流水线共用的:`--diagnostic-format text|json|sarif`、`--profile-json PATH`、`--explain-fallback`,经环境变量传给 `pcc.diagnostics.compile_observability` 的 `observed_compile` 包装层。
 
 一个值得单独点名的细节:C 路径上 `--backend self` 会把 `-O2` 默认钳到 0(`cli_core._effective_self_backend_opt_level`),除非设 `PCC_SELF_BACKEND_VECTORIZE`:
 
 ```python
-# pcc/cli_core.py
+# pcc/driver/cli_core.py
 def _effective_self_backend_opt_level(backend, opt_level: int) -> int:
     backend_name = (backend or os.environ.get("PCC_BACKEND", "") or "").strip().lower()
     if (
@@ -101,20 +101,20 @@ def _effective_self_backend_opt_level(backend, opt_level: int) -> int:
 pcc hello.c | pcc proj/ [--separate-tus | --sources-from-make GOAL | --depends-on ...]
         |
         v
-pcc/cli_core.py        cli_main -> parse_cli_args -> execute_cli
+pcc/driver/cli_core.py        cli_main -> parse_cli_args -> execute_cli
         |
         v
-pcc/project.py         源收集(本章 2.3.1;机制详见第 3 章)
+pcc/driver/project.py         源收集(本章 2.3.1;机制详见第 3 章)
    merged:  collect_project()            -> 一份合并源,main 文件殿后
    multi :  collect_translation_units()  -> [TranslationUnit(name,path,source)...]
    flags :  collect_cpp_args()           -> make 干跑推导的 -D/-I/...
         |
         v
-pcc/evaluater/c_evaluator.py   每 TU 一次(--jobs 进程池并行;磁盘 artifact 缓存)
+pcc/frontends/c/evaluator/c_evaluator.py   每 TU 一次(--jobs 进程池并行;磁盘 artifact 缓存)
    _preprocess_translation_unit_source   cc -E + 伪 libc | 内置 preprocess
    make_c_parser().parse                 -> C AST
    PassPipeline.run_high_tier            AST 分析 -> PassContext
-   LLVMCodeGenerator.generate_code       语义低层化 -> LLVM IR(第 4 章)
+   CCodeGenerator.generate_code       语义低层化 -> LLVM IR(第 4 章)
    postprocess_ir_text + run_low_tier    IR 文本后处理(豁免仅 va_arg,第 12 章)
         |
         +---------------+----------------+---------------------+
@@ -129,7 +129,7 @@ pcc/evaluater/c_evaluator.py   每 TU 一次(--jobs 进程池并行;磁盘 artif
 
 ### 2.3.1 源收集与四种编译模式(project.py)
 
-[pcc/project.py](../../pcc/project.py) 把"一个路径"变成"要编译的东西",输出统一为不可变的 `TranslationUnit(name, path, source)`。四种模式([AGENTS.md](../../AGENTS.md) Compile Modes 一节是权威表):
+[pcc/driver/project.py](../../pcc/driver/project.py) 把"一个路径"变成"要编译的东西",输出统一为不可变的 `TranslationUnit(name, path, source)`。四种模式([AGENTS.md](../../AGENTS.md) Compile Modes 一节是权威表):
 
 1. **单文件**:`pcc hello.c`,整文件读入即一个 TU。
 2. **目录合并(merged,目录输入默认)**:`_collect_directory()` 非递归收集 `*.c` 并排序,用 `// --- 文件名 ---` 注释行拼成一份大源文本,含 `main()` 的文件放最后。`main` 判定 `_has_main()` 先正则粗筛、再做真实预处理确认,避免被 `#if` 排除的 `main` 误判。
@@ -149,7 +149,7 @@ pcc/evaluater/c_evaluator.py   每 TU 一次(--jobs 进程池并行;磁盘 artif
 
 ### 2.3.3 求值器:每 TU 的五段流水线与缓存
 
-[pcc/evaluater/c_evaluator.py](../../pcc/evaluater/c_evaluator.py) 的 `CEvaluator` 是 C 路径的总指挥。每个 TU 经过 `_compile_translation_unit_artifact_job`:预处理(`_preprocess_translation_unit_source`,借系统 `cc -E` 加伪 libc 整形,或回退内置 `preprocess`)→ 解析(`make_c_parser().parse`)→ HighTier AST 分析 pass(填 `PassContext`)→ `LLVMCodeGenerator.generate_code` 语义低层化 → `postprocess_ir_text` 与 LowTier IR pass。产物是可序列化的 artifact 字典:`ir_text`、`return_type`、`external_defs`、`func_return_types`、pass 报告——可序列化这一点不是装饰,它同时支撑磁盘缓存与 `--jobs` 的 `ProcessPoolExecutor` 跨进程并行。
+[pcc/frontends/c/evaluator/c_evaluator.py](../../pcc/frontends/c/evaluator/c_evaluator.py) 的 `CEvaluator` 是 C 路径的总指挥。每个 TU 经过 `_compile_translation_unit_artifact_job`:预处理(`_preprocess_translation_unit_source`,借系统 `cc -E` 加伪 libc 整形,或回退内置 `preprocess`)→ 解析(`make_c_parser().parse`)→ HighTier AST 分析 pass(填 `PassContext`)→ `CCodeGenerator.generate_code` 语义低层化 → `postprocess_ir_text` 与 LowTier IR pass。产物是可序列化的 artifact 字典:`ir_text`、`return_type`、`external_defs`、`func_return_types`、pass 报告——可序列化这一点不是装饰,它同时支撑磁盘缓存与 `--jobs` 的 `ProcessPoolExecutor` 跨进程并行。
 
 缓存有三层,键里都掺了 `backend_signature`(后端身份,见 2.5.1)与优化/pass 签名:进程内 `_jit_cache`(源文本哈希直达函数指针)、原生 `.so` 磁盘缓存(`_build_native_cache`/`_load_native_cache`,冷启动只剩 `ctypes.CDLL`)、TU artifact 磁盘缓存(`_compile_cache_key`,叠加编译器自身指纹 `_compiler_cache_fingerprint()` 防陈旧)。逐层细节见第 3 章;本章只记住:**缓存键的设计就是模式边界的设计**——换后端、换 pass 选择、换目标三元组,都必须自然失效。
 
@@ -175,15 +175,15 @@ pcc app.py [-o out] [--emit-llvm] [--backend llvm|self]
            [--python-libpython off|auto|on] [--ir-scaffold on|off|auto]
         |
         v
-pcc/cli_core.py(宿主)/ pcc/cli_bootstrap.py(pcc1,自身即编译产物)
+pcc/driver/cli_core.py(宿主)/ pcc/driver/cli_bootstrap.py(pcc1,自身即编译产物)
    observed_compile(compile_python, ...)    诊断格式/profile/回退解释包装
         |
         v
-pcc/py_frontend/pipeline.py :: compile_python
+pcc/frontends/python/pipeline.py :: compile_python
    闭包收集   _collect_relative_module_closure(相对导入;入口为 __main__ 时
               收同包绝对导入;off 模式递归)+ 递归 stdlib -> 转多文件路径
    ABI 验证   _validate_package_site_no_libpython_abi(site 包的扩展 ABI 闸门)
-   解析       pcc.parse.py_parse + py_lift(自举安全;CPython ast 逃生门已拆除)
+   解析       pcc.frontends.python.py_parse + py_lift(自举安全;CPython ast 逃生门已拆除)
    类型推断   type_infer.infer_module(第 5 章)
    代码生成   codegen.layer1.L1CodeGen.generate(facade + mixin 群,第 6 章)
               -> LLVM IR 文本
@@ -210,11 +210,11 @@ pcc/py_frontend/pipeline.py :: compile_python
 
 ### 2.4.1 入口与闭包收集
 
-`compile_python(src_path, out_path, ...)` 是单文件入口,但"单文件"只是请求形状,不是编译形状。它先做模块闭包收集:`_collect_relative_module_closure` 追相对导入;当入口模块名以 `.__main__` 结尾时把同包绝对导入也收进来;`--python-libpython=off` 时对同包绝对导入递归。随后 `_filter_ir_scaffold_closure` 按 scaffold 模式过滤,`_validate_package_site_no_libpython_abi` 对来自 site 包的源做扩展 ABI 检查(拒绝 CPython ABI 工件混入 pcc-native 闭包,见第 17 章)。若源码使用原生 stdlib 且处于严格模式,递归 stdlib 展开被强制打开——pcc 自带的 [pcc/py_stdlib/](../../pcc/py_stdlib) 端口优先,找不到才探询宿主(2.4.5)。闭包超过一个文件就转 `compile_python_multi`,它把闭包按模块切分、用工作进程并行做代码生成(`_python_frontend_jobs` 默认自动并行,封顶 10——注释记录了实测:自举闭包上 8 到 10 个工作进程占优,12 个开始输给进程与 IO 争用)。一个反身性细节:工作进程的可执行文件由 `_python_frontend_worker_executable` 解析,在编译版 pcc1 里它就是 pcc1 自己——**编译出来的编译器把自己再 exec 成自己的代码生成工人**。
+`compile_python(src_path, out_path, ...)` 是单文件入口,但"单文件"只是请求形状,不是编译形状。它先做模块闭包收集:`_collect_relative_module_closure` 追相对导入;当入口模块名以 `.__main__` 结尾时把同包绝对导入也收进来;`--python-libpython=off` 时对同包绝对导入递归。随后 `_filter_ir_scaffold_closure` 按 scaffold 模式过滤,`_validate_package_site_no_libpython_abi` 对来自 site 包的源做扩展 ABI 检查(拒绝 CPython ABI 工件混入 pcc-native 闭包,见第 17 章)。若源码使用原生 stdlib 且处于严格模式,递归 stdlib 展开被强制打开——pcc 自带的 [pcc/stdlib/](../../pcc/stdlib) 端口优先,找不到才探询宿主(2.4.5)。闭包超过一个文件就转 `compile_python_multi`,它把闭包按模块切分、用工作进程并行做代码生成(`_python_frontend_jobs` 默认自动并行,封顶 10——注释记录了实测:自举闭包上 8 到 10 个工作进程占优,12 个开始输给进程与 IO 争用)。一个反身性细节:工作进程的可执行文件由 `_python_frontend_worker_executable` 解析,在编译版 pcc1 里它就是 pcc1 自己——**编译出来的编译器把自己再 exec 成自己的代码生成工人**。
 
 ### 2.4.2 前端三级与解析器的去 libpython 化
 
-单模块的主干是三级:`pcc.parse.py_lift.parse_and_lift`(源文本 → pcc 自有 AST)、`type_infer.infer_module`(类型推断,第 5 章)、`codegen.layer1.L1CodeGen.generate`(低层化为 LLVM IR 文本;`layer1.py` 已拆成 facade 加 mixin 群,第 6 章)。`pipeline.py` 在解析调用点留了一条注释作历史界碑:`pcc.parse.py_parse + py_lift` 是自举安全的解析路径,先前那个借 CPython `ast` 模块的逃生门"kept a libpython import edge alive in the compiled pipeline",已被拆除。同一个判断反复出现:任何在编译产物里残留的宿主依赖边,都是自举闭包上的洞。
+单模块的主干是三级:`pcc.frontends.python.py_lift.parse_and_lift`(源文本 → pcc 自有 AST)、`type_infer.infer_module`(类型推断,第 5 章)、`codegen.layer1.L1CodeGen.generate`(低层化为 LLVM IR 文本;`layer1.py` 已拆成 facade 加 mixin 群,第 6 章)。`pipeline.py` 在解析调用点留了一条注释作历史界碑:`pcc.frontends.python.py_parse + py_lift` 是自举安全的解析路径,先前那个借 CPython `ast` 模块的逃生门"kept a libpython import edge alive in the compiled pipeline",已被拆除。同一个判断反复出现:任何在编译产物里残留的宿主依赖边,都是自举闭包上的洞。
 
 ### 2.4.3 回退判定:双探针与三态收尾
 
@@ -244,17 +244,17 @@ pcc/py_frontend/pipeline.py :: compile_python
 
 | 路径 | 流水线位置 |
 |---|---|
-| [pcc/cli_launcher.py](../../pcc/cli_launcher.py)、[pcc/pcc.py](../../pcc/pcc.py)、[pcc/cli_core.py](../../pcc/cli_core.py) | 宿主 CLI:安装入口 → click 包装 → 手写解析与分派 |
-| [pcc/cli_bootstrap.py](../../pcc/cli_bootstrap.py)、[pcc/__main__.py](../../pcc/__main__.py)、[scripts/pcc_multi.py](../../scripts/pcc_multi.py) | 自举 CLI:pcc1/pcc2/pcc3 的入口与多文件编译入口 |
+| [pcc/driver/cli_launcher.py](../../pcc/driver/cli_launcher.py)、[pcc/pcc.py](../../pcc/pcc.py)、[pcc/driver/cli_core.py](../../pcc/driver/cli_core.py) | 宿主 CLI:安装入口 → click 包装 → 手写解析与分派 |
+| [pcc/driver/cli_bootstrap.py](../../pcc/driver/cli_bootstrap.py)、[pcc/__main__.py](../../pcc/__main__.py)、[scripts/pcc_multi.py](../../scripts/pcc_multi.py) | 自举 CLI:pcc1/pcc2/pcc3 的入口与多文件编译入口 |
 | [pcc/api.py](../../pcc/api.py) | C 路径库 API(`build`/`module`) |
-| [pcc/project.py](../../pcc/project.py) | C 源收集:目录/合并/make 干跑/依赖项目 |
-| [pcc/evaluater/c_evaluator.py](../../pcc/evaluater/c_evaluator.py) | C 求值器:预处理→解析→IR→优化→四执行根 |
-| [pcc/parse/c_parser.py](../../pcc/parse/c_parser.py)、[pcc/codegen/c_codegen.py](../../pcc/codegen/c_codegen.py) | C 解析(第 3 章)与 C 语义低层化(第 4 章) |
-| [pcc/parse/py_parse.py](../../pcc/parse/py_parse.py)、`py_lift.py`、[pcc/py_frontend/](../../pcc/py_frontend) | Python 解析/提升、类型推断、低层化(第 5、6 章) |
-| [pcc/py_frontend/pipeline.py](../../pcc/py_frontend/pipeline.py) | Python 流水线总指挥:闭包、回退判定、链接、发布 |
-| [pcc/py_runtime/](../../pcc/py_runtime) | 运行时:semantic/freestanding pcc-Python 生产 owners + C oracle + 五 GC(第 7–11、14 章) |
+| [pcc/driver/project.py](../../pcc/driver/project.py) | C 源收集:目录/合并/make 干跑/依赖项目 |
+| [pcc/frontends/c/evaluator/c_evaluator.py](../../pcc/frontends/c/evaluator/c_evaluator.py) | C 求值器:预处理→解析→IR→优化→四执行根 |
+| [pcc/frontends/c/parse/c_parser.py](../../pcc/frontends/c/parse/c_parser.py)、[pcc/frontends/c/codegen/c_codegen.py](../../pcc/frontends/c/codegen/c_codegen.py) | C 解析(第 3 章)与 C 语义低层化(第 4 章) |
+| [pcc/frontends/python/py_parse.py](../../pcc/frontends/python/py_parse.py)、`py_lift.py`、[pcc/frontends/python/](../../pcc/frontends/python) | Python 解析/提升、类型推断、低层化(第 5、6 章) |
+| [pcc/frontends/python/pipeline.py](../../pcc/frontends/python/pipeline.py) | Python 流水线总指挥:闭包、回退判定、链接、发布 |
+| [pcc/runtime/](../../pcc/runtime) | 运行时:semantic/freestanding pcc-Python 生产 owners + C oracle + 五 GC(第 7–11、14 章) |
 | GUI 框架 | 声明式 GUI kernel 与产品 canary(第 20 章);2026-09-06 迁至 [allstoalls/pcc-gui](https://github.com/allstoalls/pcc-gui) |
-| [pcc/llvm_capi/](../../pcc/llvm_capi)、[pcc/backend/](../../pcc/backend) | LLVM-C 构建层(第 12 章)与 self 后端(第 13 章) |
+| [pcc/ir/](../../pcc/ir)、[pcc/backend/](../../pcc/backend) | LLVM-C 构建层(第 12 章)与 self 后端(第 13 章) |
 | [pcc/extern/](../../pcc/extern)、[pcc/unsafe/](../../pcc/unsafe) | pcc-Python 写底层的两件工具(第 14 章) |
 | [utils/fake_libc_include/](../../utils/fake_libc_include) | 伪 libc 头(第 3 章) |
 | [tests/bootstrap_gate_baseline.json](../../tests/bootstrap_gate_baseline.json)、[tests/fallback_baseline.json](../../tests/fallback_baseline.json) | 自举与回退的权威基线(第 15 章) |
@@ -285,7 +285,7 @@ pcc/py_frontend/pipeline.py :: compile_python
 
 **根因与修复链。** self 后端链接路径原本让 `cc` 直接写最终输出路径。macOS arm64 上,文件内容已就位但装载器/签名状态尚未稳定时被 exec,就得到上述形状。修复是阶梯式逼出来的,每一级都有失败记录:仅原子改名(`mv -f`)不够;改名后补 ad-hoc 签名,失败率降低但仍复现;最终稳定边界是**签名后强制系统校验**——`_finish_self_backend_executable` 的现行序列:临时文件上 `codesign --force -s -`,`/bin/mv -f` 发布,`codesign --verify` 强制装载器一侧观察到最终 Mach-O,再加一道发布屏障。
 
-**架构的反身性。** 中途曾尝试用 `os.replace()` 实现原子发布——被否决,因为严格自举立即报告 `pcc.py_frontend.pipeline` 出现 no-libpython 回退:`pipeline.py` 自己要被 pcc1 编译,它能用的惯用法受自己守护的闸门约束,最终实现只好走已被支持的子进程边界(`/bin/mv`)。修复手段被被修复物的架构选中,这是自举系统特有的闭环。
+**架构的反身性。** 中途曾尝试用 `os.replace()` 实现原子发布——被否决,因为严格自举立即报告 `pcc.frontends.python.pipeline` 出现 no-libpython 回退:`pipeline.py` 自己要被 pcc1 编译,它能用的惯用法受自己守护的闸门约束,最终实现只好走已被支持的子进程边界(`/bin/mv`)。修复手段被被修复物的架构选中,这是自举系统特有的闭环。
 
 **诚实的结尾。** 调查的 2026-05-15 更新记录:加上 `--verify` 之后仍复现过一次 stage3 崩溃,崩溃报告指向 `py_decref` 而非装载器——发布边界修复仍然有用,但"stage3 崩溃类"未被证明关闭,后续移交另一份调查。案例研究的价值一半在修复,另一半在不把"症状消失"写成"根因关闭"。
 
@@ -293,7 +293,7 @@ pcc/py_frontend/pipeline.py :: compile_python
 
 (来源:[docs/investigations/python-pcc-main-static-export-cli-bootstrap.md](../../docs/investigations/python-pcc-main-static-export-cli-bootstrap.md),2026-05-28,已解决)
 
-[pcc/__main__.py](../../pcc/__main__.py) 只有两行:导入 `bootstrap_cli_sys_argv_exit`,调用之。它的独立编译却发射了 4 个 `py_cpy_*` 调用——`ensure_init`、`import`、`getattr`、`call_noargs`,一条完整的"经 CPython 把函数 import 进来再调用"的回退链。根因平淡得有教育意义:`pcc.cli_bootstrap` 在静态原生模块的**消费者白名单**里,却没有对应的**导出表**条目,符号绑不上;`pcc.__main__` 自己则两张表都没登记。修复是给 `layer1_support.py` 加一条 `bootstrap_cli_sys_argv_exit` 的函数导出、登记 `pcc.__main__`,基线里该模块的回退数 4 → 0,并被 [tests/fallback_baseline.json](../../tests/fallback_baseline.json) 锁死。教训有二:其一,在 no-libpython 架构里,**入口脚本不是配置,是编译目标**,两行代码同样要过闭包审计;其二,回退棘轮的价值正在于让"表观上不可能有问题的文件"无处遁形——4 个回退若不被按模块计数,就会永远躲在链接成功的二进制里。
+[pcc/__main__.py](../../pcc/__main__.py) 只有两行:导入 `bootstrap_cli_sys_argv_exit`,调用之。它的独立编译却发射了 4 个 `py_cpy_*` 调用——`ensure_init`、`import`、`getattr`、`call_noargs`,一条完整的"经 CPython 把函数 import 进来再调用"的回退链。根因平淡得有教育意义:`pcc.driver.cli_bootstrap` 在静态原生模块的**消费者白名单**里,却没有对应的**导出表**条目,符号绑不上;`pcc.__main__` 自己则两张表都没登记。修复是给 `layer1_support.py` 加一条 `bootstrap_cli_sys_argv_exit` 的函数导出、登记 `pcc.__main__`,基线里该模块的回退数 4 → 0,并被 [tests/fallback_baseline.json](../../tests/fallback_baseline.json) 锁死。教训有二:其一,在 no-libpython 架构里,**入口脚本不是配置,是编译目标**,两行代码同样要过闭包审计;其二,回退棘轮的价值正在于让"表观上不可能有问题的文件"无处遁形——4 个回退若不被按模块计数,就会永远躲在链接成功的二进制里。
 
 ## 2.7 小结
 

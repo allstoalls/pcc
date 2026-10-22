@@ -8,9 +8,9 @@ import unittest
 sys.path[0:0] = ['.', '..']
 sys.path.insert(0, '../pcc')
 
-from pcc.parse import c_parser
-from pcc.ast.c_ast import *
-from pcc.parse.c_parser import CParser, Coord, ParseError
+from pcc.frontends.c.parse import c_parser
+from pcc.frontends.c.ast.c_ast import *
+from pcc.frontends.c.parse.c_parser import CParser, Coord, ParseError
 
 _c_parser = c_parser.CParser(
                 lex_optimize=True,

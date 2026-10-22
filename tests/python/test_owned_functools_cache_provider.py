@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 SOURCE = '''from functools import lru_cache
@@ -41,7 +41,7 @@ main()
 '''
 
 
-def test_owned_cache_provider_matches_cpython(tmp_path, pcc_py_runtime_archive):
+def test_owned_cache_provider_matches_cpython(tmp_path, pcc_runtime_archive):
     source = tmp_path / "cache_values.py"
     source.write_text(SOURCE, encoding="utf-8")
     expected = subprocess.run([sys.executable, str(source)], capture_output=True,
@@ -50,7 +50,7 @@ def test_owned_cache_provider_matches_cpython(tmp_path, pcc_py_runtime_archive):
     binary = tmp_path / "cache_values"
     compile_python(
         str(source), str(binary), backend="self",
-        libpython_mode="off", runtime_archive=str(pcc_py_runtime_archive),
+        libpython_mode="off", runtime_archive=str(pcc_runtime_archive),
     )
     for gc in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True,

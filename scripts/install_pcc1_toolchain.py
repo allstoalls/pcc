@@ -144,7 +144,7 @@ def prepare_runtime_source(frozen: Path, work: Path) -> Path:
     # Keeping this directory contract preserves its static ABI exports and
     # freestanding ownership policy when compiling a copied runtime.
     runtime = work / "py_runtime"
-    shutil.copytree(frozen / "pcc/py_runtime", runtime)
+    shutil.copytree(frozen / "pcc/runtime", runtime)
     _make_runtime_staging_writable(runtime)
     return runtime
 
@@ -351,8 +351,8 @@ def verify_bootstrap(first: Path, second: Path):
     process_path = second / "stage2-process.result.json"
     process = read_json(process_path)
     expected_command = [
-        "/bin/bash",
-        str(source / "scripts/bootstrap.sh"),
+        sys.executable,
+        str(source / "scripts/bootstrap.py"),
         "--out-dir",
         str(second / "stage2"),
         "--backend",
@@ -1036,7 +1036,6 @@ def install(args):
             "install",
             "--python",
             str(host / "bin/python"),
-            "llvmlite==0.47.0",
             "black==26.3.1",
         ],
         timeout=120,

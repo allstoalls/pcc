@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from pcc.cli_core import parse_cli_args
+from pcc.driver.cli_core import parse_cli_args
 
 
 def test_cli_core_parses_observability_flags(tmp_path, monkeypatch):

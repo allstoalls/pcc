@@ -11,7 +11,7 @@ import pytest
 
 from tests.runtime_build_cache import cached_pcc_python_runtime
 
-from pcc.runtime_effects import (
+from pcc.diagnostics.contracts.runtime_effects import (
     ProductionVThreadEvent,
     ProductionVThreadEventKind,
     RuntimeEffect,
@@ -21,7 +21,7 @@ from pcc.runtime_effects import (
 
 
 REPO_ROOT = Path(__file__).absolute().parents[3]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 
 
 _SOURCE = r"""

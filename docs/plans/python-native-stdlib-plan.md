@@ -39,10 +39,10 @@ Today the Python pipeline has these relevant properties:
   native sibling in multi-file mode
 - `compile_python_multi(...)` already supports native sibling
   cross-module imports and can stay libpython-free for those cases
-- `pcc/py_stdlib/` already contains replacement modules, but they are
+- `pcc/stdlib/` already contains replacement modules, but they are
   not yet treated as first-class native import targets during normal
   lowering
-- many `pcc/py_stdlib/` modules are still `skeleton` or `stub` surface
+- many `pcc/stdlib/` modules are still `skeleton` or `stub` surface
   areas rather than production-ready implementations
 
 This means `pcc` already has the seed of a native module system, but not
@@ -115,11 +115,11 @@ programs:
 
 ```python
 import os          # correct: pcc may lower this to native os helpers
-import struct      # correct: pcc may use pcc/stdlib/struct.py
+import struct      # correct: pcc may use pcc/ir/support/struct.py
 import gc          # correct: pcc may lower this to pcc_gc_* helpers
 ```
 
-Do **not** introduce `import std.os` or `import pcc.stdlib.os` as the
+Do **not** introduce `import std.os` or `import pcc.ir.support.os` as the
 normal surface for standard-library behavior. Those spellings can exist
 only for pcc-private implementation modules or debugging hooks. If a
 program runs on CPython with `import os`, the pcc-native route should
@@ -127,7 +127,7 @@ preserve that spelling and decide at compile time whether the provider is:
 
 - a compile-time-only marker,
 - a builtin native module dispatch,
-- a `pcc/stdlib/<name>.py` port,
+- a `pcc/ir/support/<name>.py` port,
 - a user module in the compile closure,
 - or an explicit CPython fallback when fallback mode is enabled.
 
@@ -219,14 +219,14 @@ Gate:
 - repeated imports do not rerun top-level side effects
 - `from pkg.mod import fn` and `pkg.mod.fn` agree for native packages
 
-### M3. Route `pcc/py_stdlib/` as modules
+### M3. Route `pcc/stdlib/` as modules
 
-**Goal:** stop treating `pcc/py_stdlib/` as documentation-only stubs and
+**Goal:** stop treating `pcc/stdlib/` as documentation-only stubs and
 compile them as real import targets.
 
 Deliverables:
 
-- map stdlib names to files under `pcc/py_stdlib/`
+- map stdlib names to files under `pcc/stdlib/`
 - compile selected stdlib modules as extra native modules in the same
   build graph
 - let native stdlib imports participate in the same pre-pass/export
@@ -375,7 +375,7 @@ This plan is considered successful when all of the following are true:
 
 - stage-2/stage-3 self-host runs do not require CPython stdlib for their
   supported path
-- the bootstrap-safe stdlib subset resolves through `pcc/py_stdlib/`
+- the bootstrap-safe stdlib subset resolves through `pcc/stdlib/`
   natively
 - a documented allowlist of user-facing stdlib modules imports
   libpython-free

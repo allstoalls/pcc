@@ -19,6 +19,13 @@ def emit(func, dest, ret_type, callee, args, windows=False):
         return result
     if callee == "llvm.assume":
         return []
+    if callee.startswith("llvm.frameaddress."):
+        # Every prologue pushes the caller's rbp and points rbp at it.
+        if len(args) != 1 or args[0][1] != "0":
+            raise BackendUnavailable("llvm.frameaddress supports only depth 0")
+        if dest is None or dest not in func.value_slots:
+            return []
+        return _store_reg_to_slot("rbp", func.value_slots[dest].offset, ret_type)
     if callee.startswith(("llvm.memcpy.", "llvm.memmove.", "llvm.memset.")):
         if len(args) < 4:
             raise BackendUnavailable("memory intrinsic requires four operands")

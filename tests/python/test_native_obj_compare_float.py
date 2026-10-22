@@ -76,10 +76,10 @@ def test_obj_compare_boxed_float_no_libpython(tmp_path):
 
 
 def test_runtime_object_comparison_has_one_behavior_owner():
-    from pcc.py_frontend.codegen.compare_membership_lowering import (
+    from pcc.frontends.python.codegen.compare_membership_lowering import (
         CompareMembershipLoweringMixin,
     )
-    from pcc.py_frontend.codegen.host_contract import L1_CODEGEN_HOST_METHODS
+    from pcc.frontends.python.codegen.host_contract import L1_CODEGEN_HOST_METHODS
 
     owner_source = textwrap.dedent(
         inspect.getsource(CompareMembershipLoweringMixin._emit_runtime_object_compare)
@@ -116,9 +116,10 @@ def test_runtime_object_comparison_has_one_behavior_owner():
     assert not {"py_obj_lt", "py_obj_le", "py_obj_gt", "py_obj_ge"}.intersection(
         caller_strings | predicate_strings
     )
-    assert (
-        caller_source.count("_emit_runtime_object_compare(")
-        + predicate_source.count("_emit_runtime_object_compare(")
-    ) == 2
+    # Dyn ordering, class operands and the exact mixed-integer path (whose
+    # operands stay in slot roots) in _emit_compare, and the object-vs-object
+    # string predicate, all delegate to the owner.
+    assert caller_source.count("_emit_runtime_object_compare(") == 3
+    assert predicate_source.count("_emit_runtime_object_compare(") == 1
     assert "_emit_post_call_err_check" in owner_source
     assert "_emit_runtime_object_compare" in L1_CODEGEN_HOST_METHODS

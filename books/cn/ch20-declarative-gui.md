@@ -48,7 +48,7 @@ pcc_gui_cg or Metal/AppKit bridge
 事件路由的 v2 接口只返回完整的 leaf-to-root 路径，不在 kernel 中执行 bubble：
 
 ```python
-# pcc/py_runtime/py/pcc_gui_kit.py
+# pcc/runtime/py/pcc_gui_kit.py
 def pcc_kit_hit_path_v1(root: int, x: int, y: int, path_out, capacity: int) -> int:
     """Write the complete leaf-to-root path; never return a partial path."""
     hit = pcc_kit_hit(root, x, y)
@@ -67,14 +67,14 @@ def pcc_kit_hit_path_v1(root: int, x: int, y: int, path_out, capacity: int) -> i
 
 ## 20.3 冻结 ABI：为什么先限定记录，再谈语法便利
 
-[gui_declarative_contract_v1.json](../../pcc/py_runtime/gui_declarative_contract_v1.json) 是机器可读的 ABI 权威。它冻结容量、字节序、对齐、记录字段、owner、lifetime、错误码、lane aging、effect phase、command completion 和 app transition。`PccGuiRenderContextV1` 是 caller-owned 80 字节记录，`PccGuiDescriptorV1` 为 72 字节，组件 child identity 是 `(parent_component_id, key, node_kind)`。同 key 但不同 node kind 必须 replace，不能错误复用。
+[gui_declarative_contract_v1.json](../../pcc/runtime/gui_declarative_contract_v1.json) 是机器可读的 ABI 权威。它冻结容量、字节序、对齐、记录字段、owner、lifetime、错误码、lane aging、effect phase、command completion 和 app transition。`PccGuiRenderContextV1` 是 caller-owned 80 字节记录，`PccGuiDescriptorV1` 为 72 字节，组件 child identity 是 `(parent_component_id, key, node_kind)`。同 key 但不同 node kind 必须 replace，不能错误复用。
 
 先冻结原始记录而不是让任意 Python 对象穿过回调，有两个理由。第一，自举/self 后端只需实现一份固定 ABI；第二，GC 所有权可审计。v1 state slot 只允许 `i64` 与显式 retain/release 的 opaque handle。`managed_ref` 虽在 contract 中保留类型位，却必须先加入 root、write barrier、trace 和 relocation update，并过 GC0–GC4，才能进入生产记录。把语义对象伪装在 `i64` 中会逃过收集器，属于明确禁止的做法。
 
 component callback 写 descriptor arena 后，`pcc_gui_component_render_commit()` 先验证 ABI、容量、key、node owner 和资源预算，再 staging 新节点；完整 sibling order 通过 kernel 一次提交。入口的前置检查体现了 fail-closed 策略：
 
 ```python
-# pcc/py_runtime/py/pcc_gui_components.py
+# pcc/runtime/py/pcc_gui_components.py
 def pcc_gui_component_render_commit(
     component_id: int,
     descriptor_arena,
@@ -101,7 +101,7 @@ def pcc_gui_component_render_commit(
 调度选择同时带 aging。background 等待 32 个 epoch、default 等待 8 个、animation 等待 2 个后可越过常规优先顺序，避免低 lane 饥饿：
 
 ```python
-# pcc/py_runtime/py/pcc_gui_scheduler.py
+# pcc/runtime/py/pcc_gui_scheduler.py
 def _select_lane(record) -> int:
     if _lane_pending(record, LANE_BACKGROUND) != 0 and load_i32(record, 76) >= 32:
         return LANE_BACKGROUND
@@ -147,7 +147,7 @@ effect phase 依次为 before-mutation snapshot、mutation-time layout cleanup�
 cache hit 不重新 parse，只更新使用 epoch 和计数：
 
 ```python
-# pcc/py_runtime/py/pcc_gui_style.py
+# pcc/runtime/py/pcc_gui_style.py
     key_hash = _candidate_hash(class_bytes, length)
     index = _cache_find(class_bytes, length, key_hash)
     if index >= 0 and _cache_entry_current(index) != 0:
@@ -177,7 +177,7 @@ managed state v1 同样只允许 scalar 和 opaque handle。若未来把 Python 
 `pcc_gui_app_lifecycle.py` 接受 `Ready`、`Resumed`、`MainEventsCleared`、native `WindowEvent`、Darwin `Opened`/`Reopen`、可取消 `ExitRequested` 与 exactly-once `Exit`。native adapter 先把 payload 拷入有界 owner queue；`MainEventsCleared` 是排空 UI work 后再 layout/render 的边界。接受退出后依次关闭 scheduler、command resolver/state、component/listener/effect、passive effect 与 native window handle，最后才发 `Exit`。
 
 ```python
-# pcc/py_runtime/py/pcc_gui_app_lifecycle.py
+# pcc/runtime/py/pcc_gui_app_lifecycle.py
     state = _base("pcc_gui_app_lifecycle_state_value")
     if state == APP_UNINITIALIZED:
         return ERR_OWNERSHIP
@@ -218,7 +218,7 @@ managed state v1 同样只允许 scalar 和 opaque handle。若未来把 Python 
 
 ### 20.8.1 三份 kernel 与“看起来可用”的错误宿主（2026-08）
 
-最初的 GUI 同时有 `pcc/py_runtime/py/pcc_gui_kit.py`、`projects/mac_diff_app/pcc_gui_kit.py` 和 `app.py` 内联的更小 kernel。构建入口使用 `app.py`，被接受的 split-line-table 与 changed-row coalescing 却在 `kit_window.py`；已有测试只覆盖旧 control ABI 和 pre-loop statistics。任何一份都能单独演示，但没有一份同时拥有生产构建、产品语义与直接 kernel 测试。
+最初的 GUI 同时有 `pcc/runtime/py/pcc_gui_kit.py`、`projects/mac_diff_app/pcc_gui_kit.py` 和 `app.py` 内联的更小 kernel。构建入口使用 `app.py`，被接受的 split-line-table 与 changed-row coalescing 却在 `kit_window.py`；已有测试只覆盖旧 control ABI 和 pre-loop statistics。任何一份都能单独演示，但没有一份同时拥有生产构建、产品语义与直接 kernel 测试。
 
 真正问题不是“重复代码不好看”，而是证据无从归属：一个测试可能验证 shadow，应用却链接另一个 owner。后续源码把 `pcc_gui_kit.py` 定为 canonical owner，加入 generation id、reclaim、structural mutation、完整 hit path，并让 declarative app 通过 extern 使用 runtime 模块。留下的不变式是：UI 树、listener table、theme table 和 command table 都只能有一个生产 owner；project-local shadow 只能作为临时 oracle。
 
@@ -236,8 +236,8 @@ pcc GUI 的核心不是控件目录，而是一条可拥有的状态转换链。
 
 ## 练习
 
-1. 阅读 [pcc_gui_kit.py](../../pcc/py_runtime/py/pcc_gui_kit.py) 的 `pcc_kit_destroy_subtree()`、`pcc_kit_replace_children()` 和 `_valid()`，证明 generation id 如何阻止已回收 slot 的旧事件命中。
+1. 阅读 [pcc_gui_kit.py](../../pcc/runtime/py/pcc_gui_kit.py) 的 `pcc_kit_destroy_subtree()`、`pcc_kit_replace_children()` 和 `_valid()`，证明 generation id 如何阻止已回收 slot 的旧事件命中。
 2. 用 contract 中的 update 规则手算两组序列：低 lane `SET(5)` 后高 lane `reduce(+1)`，以及低 lane `reduce(+1)` 后高 lane `SET(5)`；说明 base queue 为何必须保存跳过后的所有已处理 update。
 3. 比较 `pcc_kit_route_event_v2()` 与 legacy `pcc_kit_route_event()`，设计一个回归，确保同一 click 不会在 kernel 与 component registry 各 bubble 一次。
-4. 阅读 [pcc_gui_style.py](../../pcc/py_runtime/py/pcc_gui_style.py)，为 `bg-accent/50 -x-3/[dense]` 写出 candidate、modifier、operation 与 generation dependency；说明为什么 warm apply 不应 parse 或 allocate。
+4. 阅读 [pcc_gui_style.py](../../pcc/runtime/py/pcc_gui_style.py)，为 `bg-accent/50 -x-3/[dense]` 写出 candidate、modifier、operation 与 generation dependency；说明为什么 warm apply 不应 parse 或 allocate。
 5. 为 `mac_diff_app` 设计一份模式标注证据矩阵，分别覆盖 host-pcc headless、current-pcc1 self/no-libpython GC0–GC4、Darwin render/present reachability 与 pixel correctness，并标明哪一格目前不能由 bridge acknowledgement 推出。

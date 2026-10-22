@@ -1,6 +1,6 @@
 """The compiled json provider must produce CPython's bytes.
 
-``pcc/py_stdlib/json.py`` accepted ``indent`` and dropped it, emitted the
+``pcc/stdlib/json.py`` accepted ``indent`` and dropped it, emitted the
 compact separators CPython uses only on request, supported no ``separators``
 argument at all, and defined neither ``load`` nor ``dump`` -- while ``pcc/``
 calls ``json.dumps`` 93 times, ``json.loads`` 50, ``json.load`` 13 and
@@ -33,7 +33,7 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PROVIDER = REPO_ROOT / "pcc" / "py_stdlib" / "json.py"
+PROVIDER = REPO_ROOT / "pcc" / "stdlib" / "json.py"
 
 _OBJECTS = [
     {"b": 1, "a": [1, 2, {"c": True}], "d": "x"},
@@ -152,7 +152,7 @@ def test_recorded_native_helper_divergences():
     with pytest.raises(provider.JSONDecodeError):
         provider.loads('{"k": 1} trailing')
 
-    helper = (REPO_ROOT / "pcc" / "py_runtime" / "py" / "py_json_runtime.py").read_text()
+    helper = (REPO_ROOT / "pcc" / "runtime" / "py" / "py_json_runtime.py").read_text()
     assert "py_raise_owned(" in helper, "the helper must leave a pending exception"
     assert "trailing non-whitespace" in helper, (
         "the trailing-data contract must stay recorded next to the code"

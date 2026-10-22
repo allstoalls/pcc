@@ -1,0 +1,319 @@
+--- /dev/null
++++ b/tests/python/test_native_liveness_worklist.py
+@@ -0,0 +1,316 @@
++"""Function-local native liveness scheduling preserves the set equations."""
++from __future__ import annotations
++
++import pytest
++
++from pcc.backend import BackendUnavailable
++from pcc.backend import self_backend_precise_stackmaps as stackmaps
++from pcc.backend.self_backend_ir import PARSED_INSTRUCTION_KIND_CALL
++from pcc.backend.self_backend_kernel import get_indexed_function_kernel
++from pcc.backend.self_backend_parse import parse_self_backend_module
++from pcc.backend.self_backend_value_arena import CompilerIntArena
++from pcc.ir import ir
++
++
++def _call_states(kernel, states):
++    rows = []
++    for block_id, block_name in enumerate(kernel.block_names):
++        block = kernel.block_fact(block_id)
++        for position in range(block.second):
++            metadata = kernel.instruction_metadata_by_id(block.first + position)
++            if metadata.first != PARSED_INSTRUCTION_KIND_CALL:
++                continue
++            header = kernel.call_header(metadata.second)
++            row = states.record(kernel.call_span(metadata.second).fourth)
++            values = []
++            if row.first:
++                values.append(row.second)
++            if row.first == 2:
++                values.append(row.third)
++            elif row.first > 2:
++                start = -row.third - 2
++                values.extend(states.overflow_ids.get_unchecked(start + index)
++                              for index in range(row.first - 1))
++            rows.append((block_name, position, kernel.call_texts[header.second],
++                         tuple(kernel.value_name(value) for value in values)))
++    return rows
++
++
++def _set_oracle(source, names):
++    function = parse_self_backend_module(source).functions[0]
++    kernel = get_indexed_function_kernel(function)
++    states = None
++    try:
++        tracked = frozenset(kernel.value_id(name) for name in names)
++        assert all(value >= 0 for value in tracked)
++        states = stackmaps._managed_live_after(function, tracked)
++        return _call_states(kernel, states)
++    finally:
++        if states is not None:
++            states.close()
++        kernel.close_native_tables()
++
++
++def _native_run(function, names, monkeypatch, *, ambiguous=False, row_error=None, link_error=None):
++    kernel = get_indexed_function_kernel(function)
++    block_count = len(kernel.block_names)
++    origins = stackmaps.PackedManagedOrigins(len(kernel.value_names))
++    kind = stackmaps._ORIGIN_AMBIGUOUS if ambiguous else stackmaps._ORIGIN_MANAGED
++    for name in names:
++        value_id = kernel.value_id(name)
++        assert value_id >= 0
++        origins.set_state(value_id, kind, -8, 0)
++    constructed = []
++    visits = []
++    links = []
++    work_arenas = []
++    real_init = CompilerIntArena.__init__
++    real_row = CompilerIntArena.converge_liveness_row_unchecked
++    real_append2 = CompilerIntArena.append2
++    real_set = CompilerIntArena.set_unchecked
++    real_result_init = stackmaps.PackedManagedLiveness.__init__
++
++    def track_init(self, initial_capacity=8):
++        real_init(self, initial_capacity)
++        constructed.append(self)
++        # These fixtures choose 3B distinct from every other temporary's
++        # requested capacity; an exact owner-count assertion below prevents
++        # a missed capture from making the cleanup assertion vacuous.
++        if initial_capacity == block_count * 3:
++            work_arenas.append(self)
++
++    def observe_row(self, uses, definitions, live_out, live_in, start, count, mask):
++        visits.append(None if count == 0 else start // count)
++        if row_error is not None:
++            raise row_error
++        return real_row(self, uses, definitions, live_out, live_in, start, count, mask)
++
++    def observe_links(self, first, second):
++        if any(self is arena for arena in work_arenas):
++            assert 0 <= first < block_count
++            assert second == -1 or block_count * 3 <= second < len(self)
++            links.append((first, second))
++            if link_error is not None:
++                raise link_error
++        return real_append2(self, first, second)
++
++    def checked_set(self, index, value):
++        if any(self is arena for arena in work_arenas):
++            assert 0 <= index < len(self)
++            if index < block_count:
++                assert 0 <= value < block_count
++            elif index < block_count * 2:
++                assert value in (0, 1)
++        return real_set(self, index, value)
++
++    def check_result_boundary(self):
++        # The final scan's result is created after convergence but before
++        # the original scratch arenas close. This also identifies the B=0
++        # work owner without guessing among its several capacity-one peers.
++        closed = [arena for arena in constructed if arena._closed]
++        assert len(closed) == int(bool(names))
++        if closed:
++            if not work_arenas:
++                work_arenas.append(closed[0])
++            assert len(work_arenas) == 1 and work_arenas[0] is closed[0]
++        real_result_init(self)
++
++    states = None
++    try:
++        with monkeypatch.context() as guard:
++            guard.setattr(CompilerIntArena, "__init__", track_init)
++            guard.setattr(CompilerIntArena, "converge_liveness_row_unchecked", observe_row)
++            guard.setattr(CompilerIntArena, "append2", observe_links)
++            guard.setattr(CompilerIntArena, "set_unchecked", checked_set)
++            guard.setattr(stackmaps.PackedManagedLiveness, "__init__", check_result_boundary)
++            try:
++                states = stackmaps._native_managed_liveness(function, origins, kernel)
++            finally:
++                # Checked before harness cleanup, including exceptional exit.
++                assert len(work_arenas) == int(bool(names))
++                assert all(arena._closed and len(arena) == 0 for arena in work_arenas)
++        result = _call_states(kernel, states)
++        return result, visits, links, len(work_arenas)
++    finally:
++        if states is not None:
++            states.close()
++        # The pre-existing solver scratch does not have an exception owner;
++        # this host harness releases it after checking the new owner's close.
++        for arena in constructed:
++            arena.close()
++        origins.close()
++        kernel.close_native_tables()
++
++
++def _chain_source(length, reverse, cold):
++    entry_target = length - 1 if reverse else 0
++    blocks = [f"entry:\n  call void @tick()\n  br label %b{entry_target}"]
++    for index in range(length):
++        last = index == (0 if reverse else length - 1)
++        end = "ret ptr %p" if last else f"br label %b{index - 1 if reverse else index + 1}"
++        blocks.append(f"b{index}:\n  call void @tick()\n  {end}")
++    for index in range(cold):
++        blocks.append(f"cold{index}:\n  call void @tick()\n  ret ptr null")
++    return ('target triple = "arm64-apple-darwin23.6.0"\n'
++            'declare void @tick()\ndefine ptr @probe(ptr %p) {\n'
++            + '\n'.join(blocks) + '\n}\n')
++
++
++@pytest.mark.parametrize("length", [2, 7, 31])
++@pytest.mark.parametrize("reverse", [False, True])
++@pytest.mark.parametrize("cold", [0, 3])
++@pytest.mark.parametrize("ambiguous", [False, True])
++def test_worklist_matches_set_oracle_and_keeps_initial_reverse_sweep(
++    monkeypatch, length, reverse, cold, ambiguous,
++):
++    source = _chain_source(length, reverse, cold)
++    expected = _set_oracle(source, ("p",))
++    function = parse_self_backend_module(source).functions[0]
++    kernel = get_indexed_function_kernel(function)
++    block_count = len(kernel.block_names)
++    edge_count = sum(kernel.cfg_successor_count(block) for block in range(block_count))
++    actual, visits, links, owners = _native_run(function, ("p",), monkeypatch, ambiguous=ambiguous)
++    assert actual == expected
++    assert visits[:block_count] == list(range(block_count - 1, -1, -1))
++    assert owners == 1 and len(links) == edge_count
++    # A reverse-layout chain needs length+1 dense sweeps. This synthetic
++    # mechanism assertion is not a real-module performance measurement.
++    assert len(visits) == block_count + (length if reverse else 0)
++    assert len(visits) < (length + 1 if reverse else 2) * block_count
++
++
++@pytest.mark.parametrize("duplicate", [False, True])
++def test_one_slot_ring_requeues_self_and_keeps_duplicate_edges(monkeypatch, duplicate):
++    branch = "br i1 %again, label %entry, label %entry" if duplicate else "br label %entry"
++    source = ('target triple = "arm64-apple-darwin23.6.0"\n'
++              'declare void @tick(ptr)\ndefine void @probe(ptr %p, i1 %again) {\n'
++              'entry:\n  call void @tick(ptr %p)\n  ' + branch + '\n}\n')
++    expected = _set_oracle(source, ("p",))
++    function = parse_self_backend_module(source).functions[0]
++    actual, visits, links, owners = _native_run(function, ("p",), monkeypatch)
++    assert actual == expected
++    # First IN grows, then carried OUT grows, then the row is stable. The
++    # existing helper reports either change, so both notifications remain.
++    assert visits == [0, 0, 0] and owners == 1
++    assert len(links) == (2 if duplicate else 1)
++
++
++def test_zero_tracked_domain_keeps_validation_without_worklist_storage(monkeypatch):
++    source = _chain_source(7, True, 3)
++    expected = _set_oracle(source, ())
++    function = parse_self_backend_module(source).functions[0]
++    block_count = len(get_indexed_function_kernel(function).block_names)
++    actual, visits, links, owners = _native_run(function, (), monkeypatch)
++    assert actual == expected
++    assert visits == [None] * block_count
++    assert not links and owners == 0
++
++
++@pytest.mark.parametrize("tracked", [False, True])
++def test_invalid_unreachable_successor_keeps_first_error_and_closes_work(monkeypatch, tracked):
++    source = '''target triple = "arm64-apple-darwin23.6.0"
++declare void @tick()
++define ptr @probe(ptr %p, i1 %again) {
++entry:
++  call void @tick()
++  br label %exit
++exit:
++  ret ptr %p
++unreachable_bad:
++  call void @tick()
++  br i1 %again, label %exit, label %entry
++}
++'''
++    function = parse_self_backend_module(source).functions[0]
++    kernel = get_indexed_function_kernel(function)
++    assert kernel.block_names == ["entry", "exit", "unreachable_bad"]
++    # Competing errors: highest block wins, then its first successor.
++    kernel.terminator_scalars.set_unchecked(0 * 8 + 3, 77)
++    kernel.terminator_scalars.set_unchecked(2 * 8 + 3, 99)
++    kernel.terminator_scalars.set_unchecked(2 * 8 + 4, 88)
++    with pytest.raises(BackendUnavailable) as caught:
++        _native_run(function, ("p",) if tracked else (), monkeypatch)
++    assert str(caught.value) == "self precise stack-map analysis in 'probe': unknown CFG successor id 99"
++
++
++@pytest.mark.parametrize("failure", ["row", "link"])
++def test_worklist_arena_closes_on_failure(monkeypatch, failure):
++    function = parse_self_backend_module(_chain_source(7, True, 0)).functions[0]
++    sentinel = RuntimeError("injected liveness row failure") if failure == "row" else MemoryError("injected link growth failure")
++    with pytest.raises(type(sentinel)) as caught:
++        _native_run(function, ("p",), monkeypatch,
++                    row_error=sentinel if failure == "row" else None,
++                    link_error=sentinel if failure == "link" else None)
++    assert caught.value is sentinel
++
++
++def test_empty_block_domain_never_accesses_ring(monkeypatch):
++    function = parse_self_backend_module(_chain_source(2, False, 0)).functions[0]
++    kernel = get_indexed_function_kernel(function)
++    # Exercise the helper's existing empty-domain contract directly. No
++    # verifier or emitter is invoked on this intentionally empty kernel.
++    kernel.block_names.clear()
++    actual, visits, links, owners = _native_run(function, ("p",), monkeypatch)
++    assert actual == visits == links == [] and owners == 1
++
++
++def test_inline_trigger_liveness_matches_explicit_split_set_oracle(monkeypatch):
++    for name in ("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "PCC_DIRECT_INDEXED_KERNEL_EMIT",
++                 "PCC_DIRECT_INDEXED_KERNEL_FUSE_USES"):
++        monkeypatch.setenv(name, "1")
++    monkeypatch.setattr(ir, "_DIRECT_INLINE_ERROR_EDGE_CAPTURE_ENABLED", True)
++    module = ir.Module(name="liveness-trigger")
++    module.triple = "arm64-apple-darwin23.6.0"
++    ptr = ir.PointerType(ir.IntType(8))
++    before = ir.Function(module, ir.FunctionType(ir.VoidType(), []), name="before")
++    trigger = ir.Function(module, ir.FunctionType(ir.IntType(1), []), name="trigger")
++    after = ir.Function(module, ir.FunctionType(ir.VoidType(), []), name="after")
++    cleanup_tick = ir.Function(module, ir.FunctionType(ir.VoidType(), []), name="cleanup_tick")
++    function = ir.Function(module, ir.FunctionType(ptr, [ptr, ptr]), name="probe")
++    function.args[0].name = "p"
++    function.args[1].name = "q"
++    entry = function.append_basic_block("entry")
++    cleanup = function.append_basic_block("cleanup")
++    builder = ir.IRBuilder(entry)
++    builder.call(before, [])
++    failed = builder.call(trigger, [], name="failed")
++    assert ir.IRBuilder_try_inline_error_edge(builder, failed, cleanup, 42, 0)
++    builder.call(after, [])
++    builder.ret(function.args[1])
++    builder.position_at_end(cleanup)
++    builder.call(cleanup_tick, [])
++    builder.ret(function.args[0])
++    direct = module.direct_indexed_module()
++    actual_function = next(item for item in direct.functions if item.name == "probe")
++    actual_kernel = get_indexed_function_kernel(actual_function)
++    assert actual_kernel.inline_error_edge_span(0).second == 1
++    assert actual_kernel.inline_error_edge_trigger(0) == 1
++    actual, _visits, _links, _owners = _native_run(actual_function, ("p", "q"), monkeypatch)
++    text = '''target triple = "arm64-apple-darwin23.6.0"
++declare void @before()
++declare i1 @trigger()
++declare void @after()
++declare void @cleanup_tick()
++define ptr @probe(ptr %p, ptr %q) {
++entry:
++  call void @before()
++  %failed = call i1 @trigger()
++  br i1 %failed, label %cleanup, label %normal
++cleanup:
++  call void @cleanup_tick()
++  ret ptr %p
++normal:
++  call void @after()
++  ret ptr %q
++}
++'''
++    expected = _set_oracle(text, ("p", "q"))
++    def by_callee(rows):
++        assert len({row[2] for row in rows}) == len(rows) == 4
++        return {row[2]: frozenset(row[3]) for row in rows}
++    assert by_callee(actual) == by_callee(expected) == {
++        "before": frozenset(("p", "q")),
++        "trigger": frozenset(("p", "q")),
++        "after": frozenset(("q",)),
++        "cleanup_tick": frozenset(("p",)),
++    }

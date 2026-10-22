@@ -7,7 +7,7 @@ import textwrap
 
 
 def test_native_os_uname_matches_host_and_supports_named_field(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"

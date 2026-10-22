@@ -1,7 +1,7 @@
 """Container-builtin walks must fail closed on their exception edges.
 
-Three positional walks (``dict(d)`` copy, ``any()``/``all()``, ``zip()``)
-acquire owned temporaries — a ``py_dict_keys`` view, per-iteration
+Positional walks (``dict(d)`` copy, ``zip()``, and formerly ``any()``/
+``all()``) acquire owned temporaries — a ``py_dict_keys`` view, per-iteration
 element/index refs, the result under construction — and then call runtime
 helpers that can raise for DynType sources.  Two defect classes, found by
 external review plus reading the runtime contracts:
@@ -17,43 +17,48 @@ external review plus reading the runtime contracts:
    produced ``{}`` where CPython raises TypeError.
 
 CPython-truth note: ``any({"a": 1})`` is ``True`` in CPython (iterating a
-mapping yields keys).  Making DynType-held mappings iterate by keys is the
-separate ``PY-P1-SET-FROM-DYN-MAPPING`` row (iterator protocol); until that
-lands, the contract pinned here for dyn-held mappings is FAIL CLOSED — a
-clean catchable exception, never a silent wrong answer.  The dyn non-dict
-``dict(x)`` case IS CPython-correct here (TypeError).
+mapping yields keys).  ``any()``/``all()`` now run CPython's iterator
+protocol in the runtime (``py_builtin_any_all``), so a dyn-held mapping
+iterates its keys exactly as CPython does.  For ``zip()`` over a dyn-held
+mapping the contract pinned here is still FAIL CLOSED -- a clean catchable
+exception, never a silent wrong answer.  The dyn non-dict ``dict(x)`` case
+IS CPython-correct here (TypeError).
 
-Static-shape cost guard: sources whose static type proves the walk cannot
-raise (``ListType``/``TupleType``/``DictType``/``SetType``) must gain NO new
-``py_err_occurred`` checks — the fail-closed edges are emitted only for
-DynType sources, so pcc1's own hot shapes keep byte-stable IR.
+any/all make one runtime call with one error check, whatever the static
+shape: an item's ``__bool__`` can raise even for a proven built-in source.
+Zip uses registered owner transactions: even static shapes check
+lease/publication errors and clean up through root slots.
 """
 from __future__ import annotations
 
+import os
 import re
 import subprocess
+import tempfile
 import textwrap
 from pathlib import Path
 
+from tests.native_provisioning import require_native_provisioning_allowed
+from tests.runtime_fixture_provenance import _verified_test_runtime_archive
+
 _REPO_ROOT = Path(__file__).absolute().parents[2]
-_BUILD = _REPO_ROOT / "build"
-_BUILD.mkdir(parents=True, exist_ok=True)
 
 
 def _compile_to_ll(source: str, name: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
-    src = _BUILD / f"{name}.py"
-    out = _BUILD / f"{name}.ll"
-    src.write_text(textwrap.dedent(source).lstrip(), encoding="utf-8")
-    compile_python(
-        str(src),
-        str(out),
-        emit_llvm_only=True,
-        ir_scaffold_mode="on",
-        libpython_mode="off",
-    )
-    return out.read_text(encoding="utf-8")
+    with tempfile.TemporaryDirectory(prefix="pcc-container-ir-") as temporary:
+        src = Path(temporary) / f"{name}.py"
+        out = Path(temporary) / f"{name}.ll"
+        src.write_text(textwrap.dedent(source).lstrip(), encoding="utf-8")
+        compile_python(
+            str(src),
+            str(out),
+            emit_llvm_only=True,
+            ir_scaffold_mode="on",
+            libpython_mode="off",
+        )
+        return out.read_text(encoding="utf-8")
 
 
 def _function_body(ir_text: str, fn_name_suffix: str) -> str | None:
@@ -68,7 +73,15 @@ def _function_body(ir_text: str, fn_name_suffix: str) -> str | None:
 
 
 def _run_native(tmp_path: Path, source: str) -> subprocess.CompletedProcess:
-    from pcc.py_frontend.pipeline import compile_python
+    explicit = os.environ.get("PCC_RUNTIME_ARCHIVE")
+    runtime_options = {}
+    if explicit:
+        archive, _manifest = _verified_test_runtime_archive(explicit)
+        runtime_options["runtime_archive"] = str(archive)
+    else:
+        require_native_provisioning_allowed(_REPO_ROOT)
+
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -78,7 +91,8 @@ def _run_native(tmp_path: Path, source: str) -> subprocess.CompletedProcess:
         str(exe),
         ir_scaffold_mode="on",
         libpython_mode="off",
-        backend="llvm",
+        backend="self",
+        **runtime_options,
     )
     return subprocess.run(
         [str(exe)], capture_output=True, text=True, timeout=60
@@ -112,10 +126,9 @@ def test_dict_of_non_dict_dyn_raises_typeerror(tmp_path):
     assert native.stdout.split() == ["caught"], native.stdout
 
 
-def test_any_over_dyn_mapping_fails_closed(tmp_path):
-    """Interim fail-closed contract (see module docstring): the mid-walk
-    KeyError must exit the walk cleanly, not keep looping over NULLs and
-    return False with a stale TLS error."""
+def test_any_over_dyn_mapping_iterates_keys(tmp_path):
+    """CPython: iterating a mapping yields its keys, so any({"a": 1}) is
+    True. The positional walk raised KeyError mid-walk instead."""
     native = _run_native(
         tmp_path,
         """
@@ -134,7 +147,7 @@ def test_any_over_dyn_mapping_fails_closed(tmp_path):
         """,
     )
     assert native.returncode == 0, native.stderr
-    assert native.stdout.split() == ["caught"], native.stdout
+    assert native.stdout.split() == ["returned", "True"], native.stdout
 
 
 def test_zip_over_dyn_mapping_fails_closed(tmp_path):
@@ -401,9 +414,9 @@ def test_dict_pairs_walk_releases_loop_temps():
 
 
 def test_dict_copy_error_edges_release_owned_temps():
-    """The two existing err checks in the dict-copy walk must release the
-    owned keys view (and the loop temps on the first edge) before jumping
-    to the error exit — i.e. they carry ``call.err.cleanup`` blocks."""
+    """Both dict-copy error edges retire their owners and restore original TLS."""
+    from tests.python.test_slot_call_exception_cleanup import assert_dict_copy_error_cleanup
+
     ir_text = _compile_to_ll(
         """
         def f(d: dict) -> dict:
@@ -413,10 +426,7 @@ def test_dict_copy_error_edges_release_owned_temps():
     )
     body = _function_body(ir_text, "f")
     assert body is not None
-    assert "call.err.cleanup" in body, body
-    # 3 normal-path releases (v, k, keys) + first-edge (v, k, keys) +
-    # second-edge (keys) = at least 7 release sites in the walk.
-    assert body.count("@pcc_gc_release") >= 7, body.count("@pcc_gc_release")
+    assert_dict_copy_error_cleanup(body)
 
 
 def test_zip_dyn_source_edges_check_and_release():
@@ -432,27 +442,33 @@ def test_zip_dyn_source_edges_check_and_release():
     body = _function_body(ir_text, "f")
     assert body is not None
     assert body.count("@py_err_occurred") >= 2, body
-    assert "call.err.cleanup" in body, body
-    assert "@pcc_gc_release" in body, body
+    assert "call.slot.cleanup" in body, body
+    # Cleanup clears authoritative owners before finalizers or frame leave.
+    # A raw pcc_gc_release(value) would reintroduce the stale-address gap.
+    assert "@pcc_gc_store_root" in body, body
+    assert "@pcc_gc_frame_leave_lifo" in body, body
+    assert "zip.arg.0.keys.operand" in body, body
+    assert "zip.row.operand" in body and "zip.index.operand" in body, body
 
 
-def test_any_over_static_dict_gains_no_err_checks():
-    """Cost guard: a source whose static type proves the walk cannot raise
-    must not pay for the dyn fail-closed edges."""
+def test_any_over_static_dict_is_one_runtime_iteration():
+    """Cost guard: any(d) is one runtime iterator-protocol call; no inline
+    positional walk (len/getitem per element) is emitted for any shape."""
     ir_text = _compile_to_ll(
         """
         def f(d: dict) -> bool:
             return any(d)
         """,
-        "any_static_no_checks",
+        "any_static_runtime",
     )
     body = _function_body(ir_text, "f")
     assert body is not None
-    assert "@py_err_occurred" not in body, body
+    assert body.count("@py_builtin_any_all(") == 1, body
+    assert "@py_obj_len(" not in body and "@py_obj_getitem(" not in body, body
 
 
-def test_any_over_dyn_source_checks_len_and_getitem():
-    """any(dyn) walks with fail-closed checks after len and getitem."""
+def test_any_over_dyn_source_checks_the_runtime_status():
+    """any(dyn) checks the runtime's error after its single iteration call."""
     ir_text = _compile_to_ll(
         """
         def f(x: object) -> bool:
@@ -462,4 +478,5 @@ def test_any_over_dyn_source_checks_len_and_getitem():
     )
     body = _function_body(ir_text, "f")
     assert body is not None
-    assert body.count("@py_err_occurred") >= 2, body
+    call = body.index("@py_builtin_any_all(")
+    assert "@py_err_occurred" in body[call:], body

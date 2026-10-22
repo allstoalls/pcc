@@ -1,0 +1,99 @@
+{
+  "application_status": "UNAPPLIED",
+  "codegen_checksums": {
+    "baseline": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+    "candidate": "71a7d53a6e959bd2e6664fc7544e62967ac4517372f49b535c245434a0381216"
+  },
+  "comparator_sha256": "b235ecada2094149d91476d1313bef6a00ea7f8d0bbfcbe46330aa4d21eb548a",
+  "driver_sha256": "81f991f1a567bab7372062d88f3afd423ab29d2d82806c2269d36437895ecb51",
+  "effective_environment": {
+    "PCC_CODE_PROFILE": "",
+    "PCC_DIRECT_INDEXED_KERNEL_CAPTURE": "1",
+    "PCC_DIRECT_INDEXED_KERNEL_EMIT": "1",
+    "PCC_DIRECT_INDEXED_KERNEL_FUSE_USES": "1",
+    "PCC_DIRECT_INDEXED_KERNEL_RELEASE_FRONTEND": "0",
+    "PCC_DIRECT_INDEXED_KERNEL_REQUIRE_ZERO_FALLBACK": "1",
+    "PCC_DIRECT_INDEXED_KERNEL_VALIDATE": "0",
+    "PCC_DIRECT_INLINE_ERROR_EDGE_CAPTURE": "0",
+    "PCC_PYTHON_IR_PASSES": "off",
+    "PCC_SELF_TARGET_PASSES": "off",
+    "PCC_SELF_TARGET_PASS_TRANSPORT": "text",
+    "PCC_TEXT_INDEXED_KERNEL_EMIT": "0"
+  },
+  "execution_status": "UNRUN",
+  "host_pass_qualification_sha256": "dc5283621a614d04c8d34b5f3c66808f36d8418fc44c7584d12198103ff6566d",
+  "host_pass_receipt_sha256": "db0c269ded249f02248d9d9fe05f78bd35c3510af62db1828aac60a3a2087d3c",
+  "host_test_successor_manifest_sha256": "a6d4373ea96fda658d5509823882300defb9feb2ad0a98aeac7011a2b848d0c5",
+  "limits_per_process": {
+    "free_reserve_bytes": 4294967296,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "seconds": 300,
+    "shared_exclusive_lock": true
+  },
+  "mechanism_threshold": {
+    "minimum_weighted_word_reduction_percent": 25,
+    "positive_word_successor_visits_must_not_increase": true,
+    "total_row_visits_must_not_increase": true
+  },
+  "module": "pcc.frontends.c.ast.c_ast",
+  "planned_output_reservation_bytes": 1073741824,
+  "production_base_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "production_manifest_sha256": "8d8de3cd946c9fdc7013e7b29f31bfb76f29951254af2d257b89259da235a978",
+  "production_patch_sha256": "90928dbd238208e4a11868dae4b0e7d171fbc24d28a875377d5dbf31b90f7f67",
+  "public_files": [
+    "real_module_gate.py",
+    "compare_results.py",
+    "README.md",
+    "manifest.json"
+  ],
+  "readme_sha256": "de79f6441a0a2587a978337a7faaa6ced8da6ecc2ab4551c9424fd21a3603594",
+  "schema": "pcc.arm-managed-liveness-real-module.v1",
+  "scope_limits": [
+    "Host single-source full c_ast library context and Mac structured native-object transport",
+    "No synthetic exports, x86-input retagging, native execution, runtime build, full Stage1 or speed claim",
+    "Dense-row work proxy excludes queue/index/allocation and other codegen costs; threshold PASS does not authorize timing"
+  ],
+  "shared_source_files": {
+    "pcc/backend/arm64_asm_driver.py": "9c590fe91b796136c328a50b2598b6f469e53209ef1b54fbdc3358ea992b5671",
+    "pcc/backend/native_object.py": "8dab4c52c44ed87ec09f20af6252d009745a783f11459962148353669c6c5062",
+    "pcc/backend/precise_stackmap.py": "35804439d9fbc2be34af433c07dc034d5a3a82ba7cd3997449f1586a26779b91",
+    "pcc/backend/self_backend_aarch64_darwin.py": "16054b9b562f3e5e4adf70fb459e2e1b5fe58f5eeb6af9f8d9fa6ad8f8b801d8",
+    "pcc/backend/self_backend_call_flags.py": "46e7573e183076021626f53d4b0d0cbae205ec38a0179478ff6218bfd6cee280",
+    "pcc/backend/self_backend_emit.py": "e7500836fcd1cf3bf65acf99f1ad7001cbcbecde0021347b616450aadc8b891c",
+    "pcc/backend/self_backend_indexed_codec.py": "87bc72cbbab7029a1e7029b0831b54384d25803a6370f599714d99ca8b4a566c",
+    "pcc/backend/self_backend_instruction_dispatch.py": "1d8388770690d4091a92d10b46c0b45c94633d6820761271e84e695a37d9111d",
+    "pcc/backend/self_backend_ir.py": "0018e1fb981ac01cf5b7aa75e1c36d7b68261023efb04a49406e771980a2f268",
+    "pcc/backend/self_backend_kernel.py": "021d6add950632188eefa65195338f9ab7ec6aef0b396a71b5cc170a67fc822d",
+    "pcc/backend/self_backend_prepare.py": "1b042b1297c67713513a764f8f47dea08b6afaed6b83f0f963034a90cca77837",
+    "pcc/backend/self_backend_stackprep.py": "fae5e2c2384caf652da26aa7f6e1dfe0fc48a1011e80c1e981ddae060df714f9",
+    "pcc/backend/self_backend_target_match.py": "57154d5ba7627311f798009bccc7a353d3c31f3c62b27bba8c552227e73a0576",
+    "pcc/backend/self_backend_value_arena.py": "d6e98642a2c653e34ba7bf7831601187d63a3502d1773ae401850503bec41caa",
+    "pcc/backend/self_backend_verify.py": "91f63f7a876b6dbf41f33e3d6c4a6f1bd8f54fd8c8ebada7421cf6ed548b708a",
+    "pcc/frontends/c/ast/c_ast.py": "21eacf1370cec218ea7ff97092ee47a96752505067caad2699f20239c74f2b58",
+    "pcc/frontends/python/codegen/_l1_codegen_static_methods.py": "49d41a9aef23e7c3df10d10d97ef1d2e3d8267fe6a6def75f230a0520942c451",
+    "pcc/frontends/python/codegen/call_object_lowering.py": "162c0a78aae28546fd4326f870e68295bb7b4c8555fa27ce648e5e17fbcd1bde",
+    "pcc/frontends/python/codegen/generation_lowering.py": "0982b9b0209b8785552b75cd552c3e18837ff39f92c289cf53df373eaa140904",
+    "pcc/frontends/python/codegen/host_contract.py": "23c09a811bf9e82a5804d6296a8662b3250f2464268f65ea2445b394b2d18dae",
+    "pcc/frontends/python/codegen/layer1.py": "863a85f30b3da3f04002a2c248957cc7aa0d7858d77eb4f9397190097040dc11",
+    "pcc/frontends/python/codegen/layer1_entrypoints.py": "ef63c0134120e02f55a2b4c5725ea00a26742737b515b51a1e420ce8524b10c1",
+    "pcc/frontends/python/pipeline_frontend_worker_execution.py": "a2109b4670c369de7ac28bca5af991a6dbf93e9ea070d918a4eecabe6f4314e2",
+    "pcc/frontends/python/pipeline_import_policy.py": "ad5938c11e4e3a6df52488f4ef1829ae0f8cfc9b5c248c1403a8fe50c74436ca",
+    "pcc/frontends/python/py_lift.py": "94ebd0bd0c90e0abc0f49652419a75c9e3c538f0727e7301784e7686c805e413",
+    "pcc/frontends/python/type_infer.py": "dd7ec0ec772d574ea5712fc4af2eb54707d0d6b4492ab6349ba53ab65a2fbe22",
+    "pcc/ir/direct_indexed_kernel.py": "c522df0dacc0afa61f6a38aad957b8deb918bdd21a78d36b543c4c5dff33883c",
+    "pcc/ir/ir.py": "821d3c0232a8daeae7c63d927586b80f6775f6aa03c3147aa7e6b462707ed39b",
+    "pcc/tools/runtime_archive_provenance.py": "fccfe0bcbb34e780e825ed68e77e8aaf06298bc9d4f9813db5aaac0a2947233e"
+  },
+  "solver_sha256": {
+    "baseline": "bfc3630f958d6c63a1c4f0677b2d55082dfb4d90960978df84cf2c83a72eaa64",
+    "candidate": "f1882fa4c29ad15c8843d30a9bf4d4bebf5b52307d0dc4daa155157b8d8289fe"
+  },
+  "source_inventories": {
+    "baseline": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+    "candidate": "6e6b6d034804c0ebeb4c48fbfc11df2614043ea5150c816cd8b7d014f2fe9d2b"
+  },
+  "source_relation": "Complete baseline pcc subtree matches02b9; retained full snapshot contains older unrelated tests/docs/bootstrap. Candidate changes only one production file plus the new host test.",
+  "source_review_status": "PASS: independent exact-driver/comparator review found no blocker in descriptor/owner handling, protocol filtering, full coverage, target route, source pins, equality checks or fixed stop rule. All actual-module execution remains UNRUN.",
+  "target": "arm64-apple-darwin23.6.0"
+}

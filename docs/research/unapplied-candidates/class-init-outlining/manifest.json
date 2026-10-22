@@ -1,0 +1,114 @@
+{
+  "artifacts": {
+    "DESIGN.md": {
+      "bytes": 14473,
+      "sha256": "f55cd5c50d0b2def83c55440882487f61886344c54e959d6e36d8f9240bf945a"
+    }
+  },
+  "evidence": {
+    "arm_input_pidx_sha256": "d5f8711ac0e6fdf09d9836938aedf590314527e947c1d8cf59b9258de97ee14d",
+    "real_arm_qualification_sha256": "ee16084467a85a237a1fe1075f0dcaaeff36cf2845ef346115c42eafd0edff0e",
+    "representation_readback_sha256": "0a64d58cac8691839ae7e0af71513a44a2469f46df1756dd5aae9048df843e9b",
+    "target": "arm64-apple-darwin23.6.0",
+    "worklist_decision": "HOLD_NO_MATERIAL_ROW_WORK_REDUCTION"
+  },
+  "execution": "UNRUN",
+  "predecessor_design_sha256": "ff3a0cbb1d470bce23cc0b0bb76db3091da965a816b1e57600a4ace663d74d7d",
+  "production_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "production_pcc_git_tree": "d234174fbac80575ea822f6100f65fe914dd4498",
+  "review_scope": "two independent read-only source and final-document reviews completed; shared literal/singleton identity wording corrected; implementation and all execution remain unrun",
+  "schema": 1,
+  "source_container_caveat": "pcc subtree matches the production commit; unrelated older test and documentation files remain in the container",
+  "source_container_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "source_files": {
+    "pcc/backend/self_backend_call_flags.py": {
+      "bytes": 1871,
+      "sha256": "46e7573e183076021626f53d4b0d0cbae205ec38a0179478ff6218bfd6cee280"
+    },
+    "pcc/backend/self_backend_precise_stackmaps.py": {
+      "bytes": 253415,
+      "sha256": "bfc3630f958d6c63a1c4f0677b2d55082dfb4d90960978df84cf2c83a72eaa64"
+    },
+    "pcc/frontends/c/ast/c_ast.py": {
+      "bytes": 28044,
+      "sha256": "21eacf1370cec218ea7ff97092ee47a96752505067caad2699f20239c74f2b58"
+    },
+    "pcc/frontends/python/codegen/class_gen.py": {
+      "bytes": 343221,
+      "sha256": "d4ec2c4ccc6a9123ed502108fbaf32cdc1dd1a979169ba4628506cb902f4b53e"
+    },
+    "pcc/frontends/python/codegen/core_helpers.py": {
+      "bytes": 11277,
+      "sha256": "5375de43465952e6ec5639869f9107db46174b636559a9382a0d79e8c7662524"
+    },
+    "pcc/frontends/python/codegen/cpy_call_lowering.py": {
+      "bytes": 57533,
+      "sha256": "38baabce789c1f22c559c0e0abb40e932298471a5e2b590af762d9a4d01dd852"
+    },
+    "pcc/frontends/python/codegen/exception_lowering.py": {
+      "bytes": 86764,
+      "sha256": "0cda07bc052fd67b98b5e01fc09d91a2e03d9f64148873a3f3cd2f48c7d58da6"
+    },
+    "pcc/frontends/python/codegen/generation_lowering.py": {
+      "bytes": 50484,
+      "sha256": "0982b9b0209b8785552b75cd552c3e18837ff39f92c289cf53df373eaa140904"
+    },
+    "pcc/frontends/python/codegen/hoist_lowering.py": {
+      "bytes": 96207,
+      "sha256": "a31785077d8bb9b0b4e65a9b456c4d9939212af644494621575f6a0e44c3bccd"
+    },
+    "pcc/frontends/python/codegen/literal_lowering.py": {
+      "bytes": 117878,
+      "sha256": "0f4e6facb71bc993452ded1b00bbf018a3269a36d7b572ff9d72c76fb9cfe8c0"
+    },
+    "pcc/frontends/python/codegen/module_lifecycle_lowering.py": {
+      "bytes": 24777,
+      "sha256": "1be2d14c16eb3805373aa3f4d7ba09e63d7a6e2966121103215cfb941bf690cd"
+    },
+    "pcc/frontends/python/codegen/name_lowering.py": {
+      "bytes": 61787,
+      "sha256": "a2c1ada243f7034215d518f64daa2a0a0df226d692d00400dae074137c82cb16"
+    },
+    "pcc/frontends/python/codegen/ownership_lowering.py": {
+      "bytes": 71609,
+      "sha256": "231dcc40f6a120c097c75fc1b4de97f1dd105d22a2f68d05333b780b7ffcf803"
+    },
+    "pcc/frontends/python/codegen/stmt_dispatch_lowering.py": {
+      "bytes": 19473,
+      "sha256": "e3b28cf9eec3dbcb48e66006bdcc4baa41ea5c3ed6b90c0bea65b0352b45823f"
+    },
+    "pcc/frontends/python/codegen/user_function_lowering.py": {
+      "bytes": 157312,
+      "sha256": "7d3d6c7827a3f1ac7d005921ac5ac9af21f10f377656431f420835ed79587f3f"
+    },
+    "pcc/frontends/python/compiled_owned_passes.py": {
+      "bytes": 4464,
+      "sha256": "b6a9b39366247ce972ebf81fc66872d068070cb64f5afd819bcc026883cfae44"
+    },
+    "pcc/frontends/python/pipeline.py": {
+      "bytes": 167309,
+      "sha256": "8fe68eeee47d158d63a7955fdb896d0e4652a7ef9faea45fc5eb618326572fed"
+    },
+    "pcc/frontends/python/py_ast.py": {
+      "bytes": 10292,
+      "sha256": "eb2bcbadd50ddbac038e470f3102220177076e156af639e198485c9ff92d7bf2"
+    },
+    "pcc/frontends/python/type_infer.py": {
+      "bytes": 292713,
+      "sha256": "dd7ec0ec772d574ea5712fc4af2eb54707d0d6b4492ab6349ba53ab65a2fbe22"
+    },
+    "pcc/ir/ir.py": {
+      "bytes": 151427,
+      "sha256": "821d3c0232a8daeae7c63d927586b80f6775f6aa03c3147aa7e6b462707ed39b"
+    },
+    "pcc/ir/optimization/inline.py": {
+      "bytes": 36890,
+      "sha256": "07396162c9f0754358f2578f0c5e82f546a1b139e4e1c47620dc8e891005325c"
+    },
+    "pcc/runtime/py/py_recursion_runtime.py": {
+      "bytes": 2821,
+      "sha256": "6ff3ba3ce7d0dff77b06186137ef1bb765161f48935359c89c5acf3783c57b64"
+    }
+  },
+  "status": "source-only-design-no-production-patch-or-execution"
+}

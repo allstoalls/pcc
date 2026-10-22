@@ -33,11 +33,11 @@ int main(int argc, char **argv) {
 }
 '''
 
-def test_waiter_clear_does_not_release_raw_storage(tmp_path: Path, pcc_py_runtime_archive):
+def test_waiter_clear_does_not_release_raw_storage(tmp_path: Path, pcc_runtime_archive):
     source=tmp_path/"waiter_poison.c"
     source.write_text(SOURCE)
     binary=tmp_path/"waiter_poison"
-    archive=Path(pcc_py_runtime_archive)
+    archive=Path(pcc_runtime_archive)
     built=subprocess.run([os.environ.get("CC","cc"),"-I"+str(archive.parent/"include"),str(source),str(archive),"-pthread","-o",str(binary)],capture_output=True,text=True,timeout=30)
     assert built.returncode==0,built.stdout+built.stderr
     for backend in range(5):

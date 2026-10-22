@@ -1,7 +1,7 @@
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def test_class_chained_assignment_initializes_all_aliases(tmp_path):

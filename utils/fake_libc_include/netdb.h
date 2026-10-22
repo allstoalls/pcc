@@ -3,7 +3,7 @@
 
 /* Minimal addrinfo / sockaddr placeholders so pcc's C parser can lower
  * sources that traffic in name-resolution structs (e.g.
- * pcc/py_runtime/src/py_http.c). The real definitions live in the
+ * pcc/runtime/src/py_http.c). The real definitions live in the
  * platform headers consumed by the system compiler; pcc only needs the
  * shape — field ordering matches both glibc and Darwin's netdb.h. */
 #ifndef __PCC_FAKE_LIBC_ADDRINFO_DEFINED

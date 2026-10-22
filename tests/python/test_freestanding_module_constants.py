@@ -25,7 +25,7 @@ from pathlib import Path
 import subprocess
 import textwrap
 
-from pcc.parse.py_lift import parse_and_lift
+from pcc.frontends.python.py_lift import parse_and_lift
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

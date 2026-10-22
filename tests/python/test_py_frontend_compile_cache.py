@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import compile_cache, pipeline
+from pcc.frontends.python import compile_cache, pipeline
 
 
 def _plan(tmp_path, monkeypatch, *, compiler_text="compiler"):

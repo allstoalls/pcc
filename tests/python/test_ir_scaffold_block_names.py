@@ -2,7 +2,7 @@
 
 import pytest
 
-from pcc.llvm_capi import ir
+from pcc.ir import ir
 
 
 @pytest.mark.parametrize("route", ["function", "builder", "scaffold_function", "scaffold_builder"])

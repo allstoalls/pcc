@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 def _compile_probe(tmp_path: Path) -> str:
@@ -121,7 +121,7 @@ def _compile_platform_guarded_loader_probe(tmp_path: Path) -> str:
 def test_dynamic_loader_platform_guard_links_without_non_target_imports(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+    from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
     monkeypatch.setattr(
         UnsafeIntrinsicMixin,
@@ -399,6 +399,34 @@ def test_open_readonly_and_open_file_share_the_vararg_open_declaration(tmp_path:
         emit_llvm_only=True,
         libpython_mode="off",
         python_library=True,
+        target_triple="arm64-apple-macosx11.0",
     )
     text = llvm_ir.read_text(encoding="utf-8")
-    assert text.count("declare i32 @open(ptr, i32, ...)") == 1
+    declarations = [line for line in text.splitlines() if line.startswith("declare ")]
+    assert sum("@open(ptr, i32, ...)" in line for line in declarations) == 1
+
+
+@pytest.mark.parametrize('target', ['x86_64-unknown-linux-gnu','aarch64-unknown-linux-gnu','arm64-apple-macosx11.0','x86_64-pc-windows-msvc'])
+def test_open_file_flags_owned_target_lowering(tmp_path, target):
+    import re
+    from pcc.frontends.python.pipeline import compile_python
+    from tests.owned_ir_validation import verify_ir_text
+    source=tmp_path/'open_flags.py';out=tmp_path/'open_flags.ll'
+    source.write_text('''from pcc import i64
+from pcc.extern import c_abi_export, c_ptr
+from pcc.unsafe import open_file_flags
+__pcc_freestanding__ = True
+@c_abi_export('probe_open_flags')
+def probe(path: c_ptr, flags: i64, permissions: i64, directory: i64) -> i64:
+    return open_file_flags(path, flags, permissions, directory)
+''')
+    compile_python(str(source),str(out),emit_llvm_only=True,python_library=True,libpython_mode='off',target_triple=target)
+    text=out.read_text();verify_ir_text(text)
+    assert not re.search(r'\bcall[^\n]*@py_cpy_', text)
+    if 'linux' in target:
+        assert '@openat(' not in text
+        assert ('syscall' in text) if target.startswith('x86') else ('svc' in text)
+    elif 'apple' in target:
+        assert '@openat(i32, ptr, i32, ...)' in text
+    else:
+        assert '@openat(' not in text and 'ret i64 -38' in text

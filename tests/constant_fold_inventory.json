@@ -4,25 +4,25 @@
   "claim": "Finite integer constant folds owned by pcc, checked against independent small-bitwidth mathematical oracles.",
   "semantic_owners": [
     {
-      "path": "pcc/codegen/c_integer_fold_contract.py",
+      "path": "pcc/frontends/c/codegen/c_integer_fold_contract.py",
       "symbol": "fold_c_integer_binary",
       "domain": "C integer promotions already applied; undefined C operations fail closed"
     },
     {
-      "path": "pcc/native_ir/integer_fold_contract.py",
+      "path": "pcc/ir/optimization/integer_fold_contract.py",
       "symbol": "fold_llvm_integer_binary",
       "domain": "LLVM integer binops, poison-producing flags, and bit-width wrapping"
     },
     {
-      "path": "pcc/native_ir/integer_fold_contract.py",
+      "path": "pcc/ir/optimization/integer_fold_contract.py",
       "symbol": "fold_llvm_integer_compare",
       "domain": "LLVM signed and unsigned icmp predicates"
     }
   ],
   "fold_sites": [
     {
-      "path": "pcc/codegen/c_codegen.py",
-      "symbol": "LLVMCodeGenerator._eval_const_expr",
+      "path": "pcc/frontends/c/codegen/c_codegen.py",
+      "symbol": "CCodeGenerator._eval_const_expr",
       "owner_calls": ["_fold_c_integer_binary(", "_fold_c_integer_unary("]
     },
     {
@@ -36,12 +36,12 @@
       "owner_calls": ["evaluate_binary(", "evaluate_compare("]
     },
     {
-      "path": "pcc/native_ir/instsimplify.py",
+      "path": "pcc/ir/optimization/instsimplify.py",
       "symbol": "_fold_constant_binop/_simplify_icmp",
       "owner_calls": ["fold_llvm_integer_binary(", "fold_llvm_integer_compare("]
     },
     {
-      "path": "pcc/native_ir/instcombine.py",
+      "path": "pcc/ir/optimization/instcombine.py",
       "symbol": "_fold_const_binop",
       "owner_calls": ["fold_llvm_integer_binary("]
     },
@@ -56,7 +56,7 @@
       "owner_calls": ["fold_llvm_integer_binary("]
     },
     {
-      "path": "pcc/ssa/sccp.py",
+      "path": "pcc/frontends/c/ssa/sccp.py",
       "symbol": "SSASCCPAnalyzer._evaluate_binary/_evaluate_unary/_evaluate_cast",
       "owner_calls": ["_fold_c_integer_binary(", "_fold_c_integer_unary("]
     }

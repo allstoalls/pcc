@@ -4,7 +4,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def test_decimal_type_identity_imports_without_libpython(tmp_path: Path) -> None:

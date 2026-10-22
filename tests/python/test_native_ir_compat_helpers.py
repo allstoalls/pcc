@@ -2,13 +2,13 @@
 import os
 from pathlib import Path
 import subprocess
-from pcc.py_frontend.pipeline import compile_python_multi
+from pcc.frontends.python.pipeline import compile_python_multi
 
 
-def test_ir_compat_helpers_execute_with_aliases(tmp_path, pcc_py_runtime_archive):
+def test_ir_compat_helpers_execute_with_aliases(tmp_path, pcc_runtime_archive):
     repo = Path(__file__).resolve().parents[2]
     source = tmp_path / 'ir_helpers.py'
-    source.write_text('''from pcc.llvm_capi.compat import ir, add_raw_function_attribute as add_attribute, set_struct_body
+    source.write_text('''from pcc.ir.compat import ir, add_raw_function_attribute as add_attribute, set_struct_body
 
 def main():
     module = ir.Module(name="helpers")
@@ -29,10 +29,10 @@ def main():
 main()
 ''', encoding='utf-8')
     binary = tmp_path / 'ir_helpers'
-    compile_python_multi([str(repo / 'pcc/llvm_capi/ir.py'), str(source)], str(binary),
-                         module_names=['pcc.llvm_capi.ir', 'ir_helpers'], entry_module='ir_helpers',
+    compile_python_multi([str(repo / 'pcc/ir/ir.py'), str(source)], str(binary),
+                         module_names=['pcc.ir.ir', 'ir_helpers'], entry_module='ir_helpers',
                          recursive_stdlib=True, backend='self', libpython_mode='off',
-                         runtime_archive=str(pcc_py_runtime_archive))
+                         runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=15,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(gc)))

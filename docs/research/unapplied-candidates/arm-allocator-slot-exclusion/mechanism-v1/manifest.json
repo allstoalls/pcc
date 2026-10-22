@@ -1,0 +1,183 @@
+{
+  "artifacts": {
+    "README.md": {
+      "bytes": 8951,
+      "sha256": "22e619604f8ee86c02414cbae174f8b74c8cc76300ad1a83fd5d3f15cda973ea"
+    },
+    "check_mechanism.py": {
+      "bytes": 20828,
+      "sha256": "b3407cd5efc9dcaf305eb49c65416176b9937fdd1272814738f64825e191baaa"
+    }
+  },
+  "base_pcc_tree": "930263bf204e578796c72dab5d4aa31fd7ab27ae",
+  "candidate_packet_manifest_sha256": "4c95f64a7f65973bf096129b668cf70eeffa4c1f9dd6d4f939dd814415061df0",
+  "candidate_pcc_tree": "992c49dc67063865c2b3b26a7092d3dcc6348a96",
+  "codegen_checksums": {
+    "baseline": "ce75a8770afcdad0679e4fb854f4bb6752fec786ae7558bf07fa46ec52152eb6",
+    "candidate": "b7bdfdc62fd97e204b25c4b3f3c232164b739b765db846cb12250c239d0fc014"
+  },
+  "effective_environment": {
+    "PCC_CODE_PROFILE": "",
+    "PCC_DIRECT_INDEXED_KERNEL_CAPTURE": "1",
+    "PCC_DIRECT_INDEXED_KERNEL_EMIT": "1",
+    "PCC_DIRECT_INDEXED_KERNEL_FUSE_USES": "1",
+    "PCC_DIRECT_INDEXED_KERNEL_RELEASE_FRONTEND": "0",
+    "PCC_DIRECT_INDEXED_KERNEL_REQUIRE_ZERO_FALLBACK": "1",
+    "PCC_DIRECT_INDEXED_KERNEL_VALIDATE": "0",
+    "PCC_DIRECT_INLINE_ERROR_EDGE_CAPTURE": "0",
+    "PCC_PYTHON_IR_PASSES": "off",
+    "PCC_SELF_TARGET_PASSES": "off",
+    "PCC_SELF_TARGET_PASS_TRANSPORT": "text",
+    "PCC_TEXT_INDEXED_KERNEL_EMIT": "0"
+  },
+  "fixed_sequence": [
+    "baseline",
+    "candidate"
+  ],
+  "host_qualification_sha256": "21a5c91003136825108a7bb308626f003e79e46a74f7efc4ad9b20b6ae750bf1",
+  "host_result_sha256": "bbc85727f246fe70c308097114f27c6b6ec0a5690047ade7be5188da4fb0242e",
+  "limits_per_process": {
+    "free_reserve_bytes": 4294967296,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "maximum_output_growth_bytes": 536870912,
+    "seconds": 300,
+    "shared_exclusive_lock": true
+  },
+  "mechanism_threshold": {
+    "baseline_positive_visits_required": true,
+    "minimum_predecessor_entry_reduction_percent": 25,
+    "pending_pops_must_not_increase": true,
+    "per_function_pops_and_predecessor_entries_must_not_increase": true
+  },
+  "module": "pcc.frontends.c.ast.c_ast",
+  "production_base_commit": "bf1bf82d8242a60a85a06322ceee97fab5346cc0",
+  "public_files": [
+    "check_mechanism.py",
+    "README.md",
+    "manifest.json"
+  ],
+  "reference_inputs": {
+    "QUALIFICATION.json": {
+      "bytes": 5079671,
+      "sha256": "ee16084467a85a237a1fe1075f0dcaaeff36cf2845ef346115c42eafd0edff0e"
+    },
+    "baseline/payload/module.pco": {
+      "bytes": 18577664,
+      "sha256": "2a684530426482465ec2a808f6621093ac4cc357d84fc440db33eed105392154"
+    },
+    "baseline/payload/result.json": {
+      "bytes": 1814988,
+      "sha256": "5e1398dac364315a7a65fab215646101e3faaaa1480bc2d4d81b26d112f08b20"
+    },
+    "prepare/payload/input.pidx": {
+      "bytes": 58153998,
+      "sha256": "d5f8711ac0e6fdf09d9836938aedf590314527e947c1d8cf59b9258de97ee14d"
+    },
+    "prepare/payload/result.json": {
+      "bytes": 47030,
+      "sha256": "1f89d36ba3f10ee42de1ca1fcb10ddeeb1ef47852039c15baf770fcbb2d9f62f"
+    }
+  },
+  "reference_source_relation": {
+    "all_backend_differences": {
+      "pcc/backend/coff_x86_64.py": {
+        "baseline_sha256": "15939bf25b6b8cffd853ac82cd99fbbe1708a3e8d3c8b7bf6599578a8bc440f5",
+        "reference_sha256": "f564767a154adae848e53f1286833c08b618c9b6311a688096bfdd5548be1aeb",
+        "route": "not called by direct ARM transport plus native packed-object entry"
+      },
+      "pcc/backend/indexed_phase_timing.py": {
+        "baseline_sha256": "b2123e4546245e39d0dc937bc7da2e22d3fa3d57e6f351946b1912663714b7ca",
+        "reference_sha256": null,
+        "route": "optional timing only, disabled"
+      },
+      "pcc/backend/self_backend_aarch64_darwin.py": {
+        "baseline_sha256": "fe3c14c169ab9b1af2852c7a0753c2d956826dd27d827eb1a96649ec5a759233",
+        "reference_sha256": "16054b9b562f3e5e4adf70fb459e2e1b5fe58f5eeb6af9f8d9fa6ad8f8b801d8",
+        "route": "optional timing only, disabled"
+      },
+      "pcc/backend/self_backend_prepare.py": {
+        "baseline_sha256": "bf2a466eef5af72406fcb902e215c607b1c3f4665c0cada8ad1dd677899d4f1e",
+        "reference_sha256": "1b042b1297c67713513a764f8f47dea08b6afaed6b83f0f963034a90cca77837",
+        "route": "optional timing only, disabled"
+      },
+      "pcc/backend/self_backend_x86_64_linux.py": {
+        "baseline_sha256": "4d866d533c945debc79ca793eb1273999054b083ad7a84e48f2a04617d4c894e",
+        "reference_sha256": "9c515249d01aa01a0baa6913f7e51c28d80555c90685160b9e5590a755677ec5",
+        "route": "not called by direct ARM transport plus native packed-object entry"
+      },
+      "pcc/backend/target_objects.py": {
+        "baseline_sha256": "5ea98a6c8b37ff5b0555865164df73ea14a4b58e50e2e3abdc4833cb0a57e4a8",
+        "reference_sha256": "43328564860270186bd597549c39a70d891715d388613353c1667f1f2265aba6",
+        "route": "not called by direct ARM transport plus native packed-object entry"
+      },
+      "pcc/backend/x86_64_asm_driver.py": {
+        "baseline_sha256": "a85b7b1fcfa7cb6fec61e08b1cb8a95096cb03b9ebe38778d2d0de1472fc88b4",
+        "reference_sha256": "cc71a7b5b5c5db56d665fc83afe670b021c20f76403fb5a381a085cdf37cf84d",
+        "route": "not called by direct ARM transport plus native packed-object entry"
+      }
+    },
+    "applicability_gate": "Current baseline must reproduce complete retained object before candidate starts.",
+    "codegen_checksum": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+    "historical_pre_class_outline": true,
+    "source_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635"
+  },
+  "regalloc_sha256": {
+    "baseline": "2c71d952927362c219c2539478fb477b7dfae51561076d27b7675b73f623d100",
+    "candidate": "49403685d7beaf24b9db20a9539118fe2c5f7b56cda90bdf4960e878fa44dddb"
+  },
+  "rejected_inherited_environment": [
+    "PCC_CODE_PROFILE",
+    "PCC_DIRECT_INDEXED_KERNEL_CAPTURE",
+    "PCC_DIRECT_INDEXED_KERNEL_EMIT",
+    "PCC_DIRECT_INDEXED_KERNEL_FUSE_USES",
+    "PCC_DIRECT_INDEXED_KERNEL_RELEASE_FRONTEND",
+    "PCC_DIRECT_INDEXED_KERNEL_REQUIRE_ZERO_FALLBACK",
+    "PCC_DIRECT_INDEXED_KERNEL_VALIDATE",
+    "PCC_DIRECT_INLINE_ERROR_EDGE_CAPTURE",
+    "PCC_PYTHON_IR_PASSES",
+    "PCC_PY_FRONTEND_WORKER_TIMING",
+    "PCC_SELF_CALLEE_SAVED_REGISTERS",
+    "PCC_SELF_CALL_RESULT_REGISTERS",
+    "PCC_SELF_FUNCTION_LIVE_INTERVALS",
+    "PCC_SELF_TARGET_PASSES",
+    "PCC_SELF_TARGET_PASS_TRANSPORT",
+    "PCC_TEXT_INDEXED_KERNEL_EMIT"
+  ],
+  "schema": "pcc.arm-allocator-slot-exclusion-mechanism.v1",
+  "shared_source_files": {
+    "pcc/backend/arm64_asm_driver.py": "9c590fe91b796136c328a50b2598b6f469e53209ef1b54fbdc3358ea992b5671",
+    "pcc/backend/arm64_encode.py": "4332f3eafb259cdcfd81fa74ba5609df0d2d5815e0d5c78f5ad4b8b19239b826",
+    "pcc/backend/indexed_phase_timing.py": "b2123e4546245e39d0dc937bc7da2e22d3fa3d57e6f351946b1912663714b7ca",
+    "pcc/backend/native_object.py": "8dab4c52c44ed87ec09f20af6252d009745a783f11459962148353669c6c5062",
+    "pcc/backend/precise_stackmap.py": "35804439d9fbc2be34af433c07dc034d5a3a82ba7cd3997449f1586a26779b91",
+    "pcc/backend/self_backend_aarch64_darwin.py": "fe3c14c169ab9b1af2852c7a0753c2d956826dd27d827eb1a96649ec5a759233",
+    "pcc/backend/self_backend_aarch64_darwin_prologue.py": "3da82551b03fbbfe22933f95bda5c48780a324b816d06be68d6a6f23d693e98d",
+    "pcc/backend/self_backend_call_flags.py": "46e7573e183076021626f53d4b0d0cbae205ec38a0179478ff6218bfd6cee280",
+    "pcc/backend/self_backend_emit.py": "e7500836fcd1cf3bf65acf99f1ad7001cbcbecde0021347b616450aadc8b891c",
+    "pcc/backend/self_backend_indexed_codec.py": "87bc72cbbab7029a1e7029b0831b54384d25803a6370f599714d99ca8b4a566c",
+    "pcc/backend/self_backend_instruction_dispatch.py": "1d8388770690d4091a92d10b46c0b45c94633d6820761271e84e695a37d9111d",
+    "pcc/backend/self_backend_ir.py": "0018e1fb981ac01cf5b7aa75e1c36d7b68261023efb04a49406e771980a2f268",
+    "pcc/backend/self_backend_kernel.py": "021d6add950632188eefa65195338f9ab7ec6aef0b396a71b5cc170a67fc822d",
+    "pcc/backend/self_backend_precise_stackmaps.py": "bfc3630f958d6c63a1c4f0677b2d55082dfb4d90960978df84cf2c83a72eaa64",
+    "pcc/backend/self_backend_prepare.py": "bf2a466eef5af72406fcb902e215c607b1c3f4665c0cada8ad1dd677899d4f1e",
+    "pcc/backend/self_backend_stackprep.py": "fae5e2c2384caf652da26aa7f6e1dfe0fc48a1011e80c1e981ddae060df714f9",
+    "pcc/backend/self_backend_target_match.py": "57154d5ba7627311f798009bccc7a353d3c31f3c62b27bba8c552227e73a0576",
+    "pcc/backend/self_backend_value_arena.py": "d6e98642a2c653e34ba7bf7831601187d63a3502d1773ae401850503bec41caa",
+    "pcc/backend/self_backend_verify.py": "91f63f7a876b6dbf41f33e3d6c4a6f1bd8f54fd8c8ebada7421cf6ed548b708a"
+  },
+  "source_inventories": {
+    "baseline": "7430a30766c11a59e7185758b725b289388ae131498ce6a8a568bdf10ff773ba",
+    "candidate": "dce88d3b8b29e7364e7faec2e71694ae577aeeee1aec0f6a4866b98974eb00d0"
+  },
+  "status": "SOURCE_ONLY_REVIEW_PENDING_ALL_PACKET_EXECUTION_UNRUN",
+  "target": "arm64-apple-darwin23.6.0",
+  "unrun": [
+    "This packet",
+    "Current outlined corpus coverage",
+    "Unhooked performance",
+    "Active MADD/tail-call plans",
+    "Native ABI and native pcc1",
+    "Full Stage1/five-GC/async/gateway"
+  ]
+}

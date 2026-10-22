@@ -5,7 +5,7 @@ import subprocess
 import pytest
 
 from pcc import valueclass
-from pcc.compiler_hot_objects import migrated_value_model_hot_objects
+from pcc.support.compiler_hot_objects import migrated_value_model_hot_objects
 from pcc.value_model import (
     ValueBox,
     box_value,
@@ -15,7 +15,7 @@ from pcc.value_model import (
     unbox_value,
     value_model_status,
 )
-from pcc.py_frontend.py_ast import ClassType, ValueClassType
+from pcc.frontends.python.py_ast import ClassType, ValueClassType
 
 
 def test_valueclass_host_projection_box_flatten_and_specialize():
@@ -39,8 +39,8 @@ def test_valueclass_host_projection_box_flatten_and_specialize():
 
 
 def test_type_infer_marks_pcc_valueclass_as_value_class_type():
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
 
     source = "import pcc\n\n@pcc.valueclass\nclass Point:\n    x: int\n    y: int\n"
     ast_mod = parse_and_lift(source, "<valueclass>", "value_mod")
@@ -57,7 +57,7 @@ def test_type_infer_marks_pcc_valueclass_as_value_class_type():
 
 
 def test_valueclass_compiles_and_keeps_frozen_semantics(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "valueclass_smoke.py"
     exe = tmp_path / "valueclass_smoke"

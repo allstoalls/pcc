@@ -16,53 +16,53 @@ import pytest
 
 _REPO_ROOT = Path(__file__).absolute().parents[2]
 _STDLIB_DIR = _REPO_ROOT / "pcc" / "stdlib"
-_PY_STDLIB_DIR = _REPO_ROOT / "pcc" / "py_stdlib"
+_PY_STDLIB_DIR = _REPO_ROOT / "pcc" / "stdlib"
 
 
-def test_pcc_stdlib_dir_exists():
-    """The pcc/stdlib/ directory exists and has __init__.py so
+def test_pcc_port_registry_dir_exists():
+    """The pcc/stdlib/ port registry exists and has __init__.py so
     Python recognises it as a package."""
     assert _STDLIB_DIR.is_dir(), f"{_STDLIB_DIR} should be a directory"
     init_py = _STDLIB_DIR / "__init__.py"
     assert init_py.is_file(), f"{init_py} should exist"
 
 
-def test_pcc_py_stdlib_dir_exists():
-    """The primary native stdlib tree is pcc/py_stdlib."""
+def test_pcc_stdlib_dir_exists():
+    """The primary native stdlib tree is pcc/stdlib."""
     assert _PY_STDLIB_DIR.is_dir(), f"{_PY_STDLIB_DIR} should be a directory"
     init_py = _PY_STDLIB_DIR / "__init__.py"
     assert init_py.is_file(), f"{init_py} should exist"
 
 
-def test_locator_prefers_pcc_py_stdlib_when_present():
-    """Normal CPython spelling should resolve to pcc/py_stdlib ports
+def test_locator_prefers_pcc_stdlib_when_present():
+    """Normal CPython spelling should resolve to pcc/stdlib ports
     before probing the host CPython installation."""
-    from pcc.py_frontend.pipeline import _locate_stdlib_module_source
+    from pcc.frontends.python.pipeline import _locate_stdlib_module_source
 
     located = _locate_stdlib_module_source("string")
     assert located is not None
     assert str(_PY_STDLIB_DIR) in located, (
-        f"string should resolve via pcc/py_stdlib/, got: {located}"
+        f"string should resolve via pcc/stdlib/, got: {located}"
     )
 
 
-def test_locator_supports_dotted_pcc_py_stdlib_packages():
+def test_locator_supports_dotted_pcc_stdlib_packages():
     """Dotted CPython stdlib names should map to package paths under
-    pcc/py_stdlib, not only flat ``name.py`` files."""
-    from pcc.py_frontend.pipeline import _locate_stdlib_module_source
+    pcc/stdlib, not only flat ``name.py`` files."""
+    from pcc.frontends.python.pipeline import _locate_stdlib_module_source
 
     located = _locate_stdlib_module_source("urllib.parse")
     assert located is not None
-    assert located.endswith("pcc/py_stdlib/urllib/parse.py"), located
+    assert located.endswith("pcc/stdlib/urllib/parse.py"), located
 
 
 def test_locator_finds_py_stdlib_from_stage_binary_ancestor(tmp_path, monkeypatch):
     """Compiled pcc1 has a synthetic ``__file__`` value, so native stdlib
     discovery must also work from the stage binary path."""
-    from pcc.py_frontend import pipeline_dependency_closure as pipeline
+    from pcc.frontends.python import pipeline_dependency_closure as pipeline
 
     repo = tmp_path / "repo"
-    py_stdlib = repo / "pcc" / "py_stdlib"
+    py_stdlib = repo / "pcc" / "stdlib"
     py_stdlib.mkdir(parents=True)
     (py_stdlib / "__init__.py").write_text("", encoding="utf-8")
     (py_stdlib / "string.py").write_text("ascii_lowercase = 'abc'\n", encoding="utf-8")
@@ -85,19 +85,19 @@ def test_locator_finds_py_stdlib_from_stage_binary_ancestor(tmp_path, monkeypatc
 
 
 def test_pcc_owned_stdlib_provider_bypasses_fail_soft_probe(monkeypatch):
-    from pcc.py_frontend import pipeline_dependency_closure as pipeline
+    from pcc.frontends.python import pipeline_dependency_closure as pipeline
 
     monkeypatch.setattr(
         pipeline,
         "_native_stdlib_root_for_path",
-        lambda _path: "/fake/pcc/py_stdlib",
+        lambda _path: "/fake/pcc/stdlib",
     )
 
     assert pipeline._stdlib_module_compiles("/missing/provider.py", "provider")
 
 
 def test_locator_accepts_host_stdlib_provider(monkeypatch, tmp_path):
-    from pcc.py_frontend import pipeline_dependency_closure as pipeline
+    from pcc.frontends.python import pipeline_dependency_closure as pipeline
 
     stdlib = tmp_path / "python" / "lib"
     stdlib.mkdir(parents=True)
@@ -118,7 +118,7 @@ def test_locator_accepts_host_stdlib_provider(monkeypatch, tmp_path):
 
 def test_native_discovery_never_spawns_host_python_probes(monkeypatch):
     from types import SimpleNamespace
-    from pcc.py_frontend import pipeline_dependency_closure as closure
+    from pcc.frontends.python import pipeline_dependency_closure as closure
 
     attempts = []
 
@@ -136,7 +136,7 @@ def test_native_discovery_never_spawns_host_python_probes(monkeypatch):
 
 
 def test_locator_rejects_host_site_packages_provider(monkeypatch, tmp_path):
-    from pcc.py_frontend import pipeline_dependency_closure as pipeline
+    from pcc.frontends.python import pipeline_dependency_closure as pipeline
 
     stdlib = tmp_path / "python" / "lib"
     site = stdlib / "site-packages"
@@ -158,7 +158,7 @@ def test_locator_rejects_host_site_packages_provider(monkeypatch, tmp_path):
 
 
 def test_host_subprocess_source_root_uses_repo_parent(monkeypatch, tmp_path):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     repo = tmp_path / "repo"
     pcc_dir = repo / "pcc"
@@ -170,7 +170,7 @@ def test_host_subprocess_source_root_uses_repo_parent(monkeypatch, tmp_path):
 
 
 def test_import_classifier_keeps_cpython_spelling_with_native_provider():
-    from pcc.py_frontend.pipeline import _classify_python_import
+    from pcc.frontends.python.pipeline import _classify_python_import
 
     assert _classify_python_import("typing") == "compile_time_only"
     assert _classify_python_import(
@@ -178,13 +178,13 @@ def test_import_classifier_keeps_cpython_spelling_with_native_provider():
     ) == "native_user_module"
     assert _classify_python_import("os.path") == "builtin_native_dispatch"
     assert _classify_python_import("urllib.parse") == "native_stdlib"
-    assert _classify_python_import("keyword") == "cpython_fallback"
+    assert _classify_python_import("colorsys") == "cpython_fallback"
 
 
-def test_locator_prefers_pcc_stdlib_when_present(tmp_path):
+def test_locator_prefers_pcc_port_when_present(tmp_path):
     """When `pcc/stdlib/X.py` exists, the recursive-stdlib locator
     returns its path instead of CPython's `X.py`."""
-    from pcc.py_frontend.pipeline import _locate_stdlib_module_source
+    from pcc.frontends.python.pipeline import _locate_stdlib_module_source
 
     # Drop a probe port file
     probe_name = "_pcc_test_probe_module"
@@ -203,22 +203,22 @@ def test_locator_prefers_pcc_stdlib_when_present(tmp_path):
 def test_locator_falls_back_to_cpython(tmp_path):
     """When `pcc/stdlib/X.py` is absent, falls back to CPython's
     source path."""
-    from pcc.py_frontend.pipeline import _locate_stdlib_module_source
+    from pcc.frontends.python.pipeline import _locate_stdlib_module_source
 
-    located = _locate_stdlib_module_source("keyword")
+    located = _locate_stdlib_module_source("colorsys")
     assert located is not None
-    # keyword has no pcc/stdlib port, so should resolve to CPython's
-    assert "stdlib/keyword.py" not in located.replace("\\", "/")
+    # colorsys has no pcc/stdlib port, so should resolve to CPython's
+    assert "pcc/stdlib/colorsys.py" not in located.replace("\\", "/")
 
 
-def test_pcc_stdlib_port_with_recursive_compile(tmp_path):
+def test_pcc_port_with_recursive_compile(tmp_path):
     """End-to-end: a port placed in pcc/stdlib/ gets pulled into
     the native closure when user code imports the CPython module name.
 
     The public spelling remains ``import X``; ``pcc/stdlib/X.py`` is
     the implementation location, not a user-facing ``std.X`` namespace.
     """
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         _collect_multi_source_relative_closure,
     )
 
@@ -241,7 +241,7 @@ def test_pcc_stdlib_port_with_recursive_compile(tmp_path):
             f"got mods={mods}"
         )
         assert f"std.{probe_name}" not in mods
-        assert f"pcc.stdlib.{probe_name}" not in mods
+        assert f"pcc.ir.support.{probe_name}" not in mods
         # Verify the source path used is the pcc/stdlib one
         idx = mods.index(probe_name)
         assert str(_STDLIB_DIR) in srcs[idx], (

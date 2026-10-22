@@ -9,7 +9,7 @@
 #endif
 
 /* Darwin-layout IPv4/IPv6 address structs so pcc can lower sources that
- * traffic in socket addresses (e.g. pcc/py_runtime/src/py_asyncio_io.c).
+ * traffic in socket addresses (e.g. pcc/runtime/src/py_asyncio_io.c).
  * Field order/size match macOS so the bytes handed to the real libc at
  * link time are interpreted correctly. */
 #ifndef __PCC_FAKE_LIBC_IN_ADDR_DEFINED

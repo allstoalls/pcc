@@ -1,0 +1,168 @@
+; Direct calls into the matching production archive. No cleanup-body copies,
+; runtime symbol overrides, or alternate metaclass/instance dispatch are used.
+; {{NAME}} tokens are filled from the generated public ABI constants.
+; This checked-in template is source, not a generated .ll build artifact.
+; Status: 1 exception/result, 2 refcount, 3 prior pin, 4 pin metric,
+; 5 missing field layout, 6 lease acquisition, 7 lease release, 8 tuple setup.
+@lookup_cleanup_roots = internal constant i32 {{ROOT_SLOT_COUNT}}
+@lookup_cleanup_name = internal constant [8 x i8] c"missing\00"
+@pcc_gc_metric_pin = external global i32
+
+declare void @pcc_gc_frame_enter(ptr, ptr)
+declare void @pcc_gc_frame_leave(ptr)
+declare ptr @pcc_gc_load_ptr(ptr, ptr)
+declare void @pcc_gc_store_root(ptr, ptr)
+declare i64 @pcc_gc_foreign_lease_acquire(ptr)
+declare i64 @pcc_gc_foreign_lease_release(ptr, i64)
+declare ptr @py_tuple_new(i64)
+declare void @py_incref(ptr)
+declare void @py_decref(ptr)
+declare ptr @py_class_metaclass_call(ptr, ptr, ptr)
+declare ptr @py_instance_getattr_default(ptr, ptr)
+declare ptr @py_instance_getattr(ptr, ptr)
+declare void @py_instance_set_field(ptr, i32, ptr)
+declare ptr @py_current_exception()
+declare void @py_clear_exception()
+declare i32 @strcmp(ptr, ptr)
+
+define internal i64 @lookup_cleanup_finish(ptr %roots, i64 %receiver_lease, i64 %error_lease, i64 %status) {
+entry:
+  %error_slot = getelementptr i8, ptr %roots, i64 {{C_POINTER_SIZE}}
+  %args_slot = getelementptr i8, ptr %roots, i64 {{ARGS_OFFSET}}
+  call void @pcc_gc_store_root(ptr %args_slot, ptr null)
+  %error_release = call i64 @pcc_gc_foreign_lease_release(ptr %error_slot, i64 %error_lease)
+  %receiver_release = call i64 @pcc_gc_foreign_lease_release(ptr %roots, i64 %receiver_lease)
+  call void @pcc_gc_store_root(ptr %error_slot, ptr null)
+  call void @pcc_gc_store_root(ptr %roots, ptr null)
+  call void @pcc_gc_frame_leave(ptr %roots)
+  %error_ok = icmp eq i64 %error_release, 0
+  %receiver_ok = icmp eq i64 %receiver_release, 0
+  %leases_ok = and i1 %error_ok, %receiver_ok
+  %result = select i1 %leases_ok, i64 %status, i64 7
+  ret i64 %result
+}
+
+define i64 @test_class_lookup_cleanup(ptr %receiver_input, ptr %error_input, i64 %entry_kind, i64 %requested_pin) {
+entry:
+  ; The descriptor counts owned pointer slots. Use a nominal aggregate span,
+  ; as required by the precise-stack-map root_group contract.
+  %roots = alloca [{{ROOT_SLOT_COUNT}} x ptr], align {{C_POINTER_SIZE}}
+  %error_slot = getelementptr i8, ptr %roots, i64 {{C_POINTER_SIZE}}
+  %args_slot = getelementptr i8, ptr %roots, i64 {{ARGS_OFFSET}}
+  call void @py_incref(ptr %receiver_input)
+  call void @py_incref(ptr %error_input)
+  store ptr %receiver_input, ptr %roots
+  store ptr %error_input, ptr %error_slot
+  store ptr null, ptr %args_slot
+  call void @pcc_gc_frame_enter(ptr @lookup_cleanup_roots, ptr %roots)
+  %receiver_acquired = call i64 @pcc_gc_foreign_lease_acquire(ptr %roots)
+  %error_acquired = call i64 @pcc_gc_foreign_lease_acquire(ptr %error_slot)
+  %receiver_positive = icmp sgt i64 %receiver_acquired, 0
+  %receiver_valid = icmp sge i64 %receiver_acquired, 0
+  %error_positive = icmp sgt i64 %error_acquired, 0
+  %receiver_lease = select i1 %receiver_positive, i64 %receiver_acquired, i64 0
+  %error_lease = select i1 %error_positive, i64 %error_acquired, i64 0
+  %leases_ok = and i1 %receiver_valid, %error_positive
+  br i1 %leases_ok, label %prepare, label %bad_lease
+bad_lease:
+  %lease_status = call i64 @lookup_cleanup_finish(ptr %roots, i64 %receiver_lease, i64 %error_lease, i64 6)
+  ret i64 %lease_status
+prepare:
+  %args = call ptr @py_tuple_new(i64 0)
+  store ptr %args, ptr %args_slot
+  %args_ok = icmp ne ptr %args, null
+  br i1 %args_ok, label %select_entry, label %bad_args
+bad_args:
+  call void @py_clear_exception()
+  %args_status = call i64 @lookup_cleanup_finish(ptr %roots, i64 %receiver_lease, i64 %error_lease, i64 8)
+  ret i64 %args_status
+select_entry:
+  %receiver = call ptr @pcc_gc_load_ptr(ptr null, ptr %roots)
+  %error = call ptr @pcc_gc_load_ptr(ptr null, ptr %error_slot)
+  %is_metaclass = icmp eq i64 %entry_kind, 0
+  br i1 %is_metaclass, label %before_call, label %find_field
+find_field:
+  ; Validate the actual class layout rather than assuming missing is field 0.
+  %class_slot = getelementptr i8, ptr %receiver, i64 {{PYINSTANCEOBJECT_CLS_OFFSET}}
+  %class = call ptr @pcc_gc_load_ptr(ptr %receiver, ptr %class_slot)
+  %field_count_slot = getelementptr i8, ptr %class, i64 {{PYCLASSOBJECT_N_FIELDS_OFFSET}}
+  %field_count32 = load i32, ptr %field_count_slot
+  %field_count = sext i32 %field_count32 to i64
+  %field_names_slot = getelementptr i8, ptr %class, i64 {{PYCLASSOBJECT_FIELD_NAMES_OFFSET}}
+  %field_names = load ptr, ptr %field_names_slot
+  br label %field_loop
+field_loop:
+  %index = phi i64 [ 0, %find_field ], [ %next_index, %field_next ]
+  %in_bounds = icmp slt i64 %index, %field_count
+  br i1 %in_bounds, label %field_name, label %bad_field
+field_name:
+  %name_offset = mul i64 %index, {{C_POINTER_SIZE}}
+  %name_slot = getelementptr i8, ptr %field_names, i64 %name_offset
+  %name = load ptr, ptr %name_slot
+  %comparison = call i32 @strcmp(ptr %name, ptr @lookup_cleanup_name)
+  %matched = icmp eq i32 %comparison, 0
+  br i1 %matched, label %clear_field, label %field_next
+field_next:
+  %next_index = add i64 %index, 1
+  br label %field_loop
+clear_field:
+  ; NULL is a missing physical field, not the Python None singleton. Both
+  ; public getters must therefore enter _instance_getattr_default_rooted.
+  %field_index = trunc i64 %index to i32
+  call void @py_instance_set_field(ptr %receiver, i32 %field_index, ptr null)
+  br label %before_call
+bad_field:
+  %field_status = call i64 @lookup_cleanup_finish(ptr %roots, i64 %receiver_lease, i64 %error_lease, i64 5)
+  ret i64 %field_status
+before_call:
+  %flags_slot = getelementptr i8, ptr %error, i64 {{PYOBJECTHEADER_FLAGS_OFFSET}}
+  %refcount_slot = getelementptr i8, ptr %error, i64 {{PYOBJECTHEADER_REFCOUNT_OFFSET}}
+  %original_flags = load i32, ptr %flags_slot
+  %original_pin = and i32 %original_flags, {{PY_FLAG_GC_PINNED}}
+  %unpin_masked = and i32 %original_flags, {{UNPIN_MASK}}
+  %prior_pin = trunc i64 %requested_pin to i32
+  %test_flags = or i32 %unpin_masked, %prior_pin
+  ; Counted leases keep the address stable while testing both legacy pin bits.
+  store i32 %test_flags, ptr %flags_slot
+  %references_before = load i64, ptr %refcount_slot
+  %pins_before = load i32, ptr @pcc_gc_metric_pin
+  br i1 %is_metaclass, label %call_metaclass, label %choose_instance
+call_metaclass:
+  %current_args = call ptr @pcc_gc_load_ptr(ptr null, ptr %args_slot)
+  %meta_result = call ptr @py_class_metaclass_call(ptr %receiver, ptr %current_args, ptr null)
+  br label %inspect
+choose_instance:
+  %is_default = icmp eq i64 %entry_kind, 1
+  br i1 %is_default, label %call_default, label %call_custom
+call_default:
+  %default_result = call ptr @py_instance_getattr_default(ptr %receiver, ptr @lookup_cleanup_name)
+  br label %inspect
+call_custom:
+  %custom_result = call ptr @py_instance_getattr(ptr %receiver, ptr @lookup_cleanup_name)
+  br label %inspect
+inspect:
+  %result = phi ptr [ %meta_result, %call_metaclass ], [ %default_result, %call_default ], [ %custom_result, %call_custom ]
+  %pending = call ptr @py_current_exception()
+  %same_error = icmp eq ptr %pending, %error
+  %failed_result = icmp eq ptr %result, null
+  %exception_ok = and i1 %same_error, %failed_result
+  %flags_after = load i32, ptr %flags_slot
+  %pin_after = and i32 %flags_after, {{PY_FLAG_GC_PINNED}}
+  %pin_ok = icmp eq i32 %pin_after, %prior_pin
+  call void @py_decref(ptr %result)
+  call void @py_clear_exception()
+  %references_after = load i64, ptr %refcount_slot
+  %references_ok = icmp eq i64 %references_after, %references_before
+  %pins_after = load i32, ptr @pcc_gc_metric_pin
+  %pins_ok = icmp eq i32 %pins_after, %pins_before
+  %metric_status = select i1 %pins_ok, i64 0, i64 4
+  %reference_status = select i1 %references_ok, i64 %metric_status, i64 2
+  %pin_status = select i1 %pin_ok, i64 %reference_status, i64 3
+  %status = select i1 %exception_ok, i64 %pin_status, i64 1
+  %current_flags = load i32, ptr %flags_slot
+  %without_test_pin = and i32 %current_flags, {{UNPIN_MASK}}
+  %restored_flags = or i32 %without_test_pin, %original_pin
+  store i32 %restored_flags, ptr %flags_slot
+  %final_status = call i64 @lookup_cleanup_finish(ptr %roots, i64 %receiver_lease, i64 %error_lease, i64 %status)
+  ret i64 %final_status
+}

@@ -616,7 +616,7 @@ def test_backend4_mutator_payload_retarget_is_one_locked_metadata_transaction():
     )
     assert symbol not in RUNTIME_SIGNATURES
     internal_header = (
-        REPO_ROOT / "pcc" / "py_runtime" / "src" / "py_internal.h"
+        REPO_ROOT / "pcc" / "runtime" / "src" / "py_internal.h"
     ).read_text(encoding="utf-8")
     assert symbol in internal_header
 

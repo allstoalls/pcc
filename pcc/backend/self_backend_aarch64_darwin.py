@@ -20,7 +20,11 @@ Supported slice today:
 Unsupported shapes still raise ``BackendUnavailable`` instead of guessing.
 """
 from . import BackendUnavailable
-from .arm64_asm_driver import AArch64ModuleBuilder, StructuredAArch64Module
+from .arm64_asm_driver import (
+    AArch64ModuleBuilder,
+    StructuredAArch64Module,
+    measure_text_layout,
+)
 from .arm64_encode import (
     EMITTED_INSTRUCTION_CALL,
     EMITTED_INSTRUCTION_FALLBACK,
@@ -32,6 +36,7 @@ from .arm64_encode import (
     intern_emitted_symbol,
 )
 from .code_profile import apply_function_order_profile
+from .precise_stackmap import precise_stackmap_tables_enabled
 from .self_backend_aarch64_darwin_abi import (
     aggregate_returned_indirect as _aggregate_returned_indirect,
     aggregate_returned_indirect_indexed as _aggregate_returned_indirect_indexed,
@@ -48,6 +53,7 @@ from .self_backend_aarch64_darwin_memory import (
     emit_memory_instruction_by_id as _memory_emit_instruction,
 )
 from .self_backend_aarch64_darwin_mem import (
+    DIRECT_CALL_INSTRUCTION_PLACEHOLDER,
     DIRECT_INSTRUCTION_PLACEHOLDER,
     begin_direct_instruction_capture,
     borrow_direct_instruction_records,
@@ -88,6 +94,10 @@ from .self_backend_aarch64_darwin_returns import (
     emit_return_terminator_indexed as _rets_emit_return_terminator_indexed,
 )
 from .self_backend_emit import emit_function_blocks, emit_indexed_function_blocks
+from .self_backend_dwarf import (
+    DebugFunctionPlan, build_dwarf_sections, function_debug, has_source_debug,
+    render_dwarf_sections,
+)
 from .self_backend_instruction_dispatch import (
     emit_instruction_dispatch_parts,
 )
@@ -126,6 +136,7 @@ from .self_backend_prepare import (
 )
 from .self_backend_precise_stackmaps import (
     FunctionStackMapPlan,
+    PackedPlannedSafepoints,
     build_aarch64_stack_map_section,
     build_function_stack_map_plan,
     build_stack_map_plans,
@@ -142,7 +153,12 @@ from .self_backend_target_passes import (
 )
 from .self_backend_target_match import is_aarch64_darwin_triple, is_aarch64_linux_triple
 from .self_backend_terminator_dispatch import emit_terminator_dispatch
-from .self_backend_value_arena import CompilerInt2, CompilerInt4, CompilerIntArena
+from .self_backend_value_arena import (
+    CompilerInt2,
+    CompilerInt4,
+    CompilerIntArena,
+    CompilerRecordSpanArena,
+)
 from .self_backend_aarch64_fragments import (
     AArch64EmissionFragments,
     EMISSION_RECORD_LABEL,
@@ -189,6 +205,19 @@ class _NativeAArch64Emission:
         self.barrier_depth: int = 0
         self.fragment_record_count: int = 0
         self.fallback_lines: list[str] = []
+        # Imported names are live module bindings under pcc1; read them once
+        # per emission scope instead of on every emitted line (a third of
+        # append's samples).
+        self._family_fallback = EMITTED_INSTRUCTION_FALLBACK
+        self._direct_placeholder = DIRECT_INSTRUCTION_PLACEHOLDER
+        self._direct_call_placeholder = DIRECT_CALL_INSTRUCTION_PLACEHOLDER
+        self._family_call = EMITTED_INSTRUCTION_CALL
+        self._fixup_call = STRUCTURED_FIXUP_CALL
+        self._barrier_begin = AARCH64_MEMORY_PAIR_BARRIER_BEGIN
+        self._barrier_end = AARCH64_MEMORY_PAIR_BARRIER_END
+        self._family_unscaled = EMITTED_INSTRUCTION_UNSCALED
+        self._family_move = EMITTED_INSTRUCTION_MOVE
+        self._family_scalar = EMITTED_INSTRUCTION_SCALAR
 
     def close(self) -> None:
         self.builder.close()
@@ -246,20 +275,24 @@ class _NativeAArch64Emission:
         self.fragments.reset()
 
     def append(self, line: str) -> None:
-        family = EMITTED_INSTRUCTION_FALLBACK
-        if line == DIRECT_INSTRUCTION_PLACEHOLDER:
+        family = self._family_fallback
+        if line == self._direct_placeholder or line == self._direct_call_placeholder:
             if self.direct_index * 4 >= len(self.direct_records):
                 raise BackendUnavailable("direct instruction transport is truncated")
             record: CompilerInt4 = self.direct_records.get4_unchecked(self.direct_index)
+            if (line == self._direct_call_placeholder) != (
+                record.second == self._family_call
+            ):
+                raise BackendUnavailable("direct call marker does not match record family")
             self.direct_index += 1
             self.direct_count += 1
             word = record.first
             family = record.second
             kind = record.third
             symbol_id = record.fourth
-            if family == EMITTED_INSTRUCTION_CALL:
+            if family == self._family_call:
                 word = 0x94000000
-                kind = STRUCTURED_FIXUP_CALL
+                kind = self._fixup_call
             elif kind < 0 and kind not in (-26, -19):
                 raise BackendUnavailable("direct instruction relocation kind is invalid")
             if kind != 0:
@@ -270,12 +303,12 @@ class _NativeAArch64Emission:
                 )
             self.builder.append_encoded(word, kind, symbol_id)
         else:
-            if line == AARCH64_MEMORY_PAIR_BARRIER_BEGIN:
+            if line == self._barrier_begin:
                 self.barrier_depth = advance_aarch64_memory_pair_barrier(
                     self.barrier_depth, True,
                 )
                 return
-            if line == AARCH64_MEMORY_PAIR_BARRIER_END:
+            if line == self._barrier_end:
                 self.barrier_depth = advance_aarch64_memory_pair_barrier(
                     self.barrier_depth, False,
                 )
@@ -293,7 +326,7 @@ class _NativeAArch64Emission:
                 line, 0, 0, -1, None, self.scratch,
                 self.symbol_ids, self.symbol_names,
             )
-            if family == EMITTED_INSTRUCTION_FALLBACK:
+            if family == self._family_fallback:
                 self.fallback_lines.append(line)
                 self.builder.append_chunk(line)
                 return
@@ -302,13 +335,13 @@ class _NativeAArch64Emission:
             encoded: CompilerInt4 = self.scratch.get4_unchecked(0)
             self.builder.append_encoded(encoded.second, encoded.third, encoded.fourth)
         self.structured_count += 1
-        if family == EMITTED_INSTRUCTION_UNSCALED:
+        if family == self._family_unscaled:
             self.unscaled_count += 1
-        elif family == EMITTED_INSTRUCTION_MOVE:
+        elif family == self._family_move:
             self.move_count += 1
-        elif family == EMITTED_INSTRUCTION_CALL:
+        elif family == self._family_call:
             self.call_count += 1
-        elif family != EMITTED_INSTRUCTION_SCALAR:
+        elif family != self._family_scalar:
             raise BackendUnavailable("direct memory instruction family is invalid")
 
 
@@ -339,7 +372,9 @@ _INDEXED_FIXED_PAYLOAD_KIND_IDS = (
     PARSED_INSTRUCTION_KIND_CALL,
     PARSED_INSTRUCTION_KIND_ALLOCA,
     PARSED_INSTRUCTION_KIND_LOAD,
+    PARSED_INSTRUCTION_KIND_LOAD_ATOMIC,
     PARSED_INSTRUCTION_KIND_STORE,
+    PARSED_INSTRUCTION_KIND_STORE_ATOMIC,
     PARSED_INSTRUCTION_KIND_CAST,
     PARSED_INSTRUCTION_KIND_ICMP,
     PARSED_INSTRUCTION_KIND_BINOP,
@@ -366,30 +401,11 @@ def _append_compact_unwind(
         return lines
 
     symbols = [_asm_symbol(func.name, module_symbols) for func in functions]
-    wanted = set(symbols)
-    offsets: dict[str, int] = {} if target_offsets is None else target_offsets
-    text_offset = target_text_size
-    in_text = False
-    for raw in lines:
-        line = raw.strip()
-        if line.startswith(".section "):
-            section = line[len(".section ") :].strip()
-            in_text = section.startswith("__TEXT,__text,")
-            continue
-        if not in_text or not line:
-            continue
-        if line.endswith(":"):
-            label = line[:-1].strip()
-            if label in wanted:
-                if label in offsets:
-                    raise BackendUnavailable(
-                        f"duplicate self-backend function label {label!r}"
-                    )
-                offsets[label] = text_offset
-            continue
-        if line.startswith("."):
-            continue
-        text_offset += 4
+    if target_offsets is None:
+        offsets, text_offset = measure_text_layout(lines)
+    else:
+        offsets = target_offsets
+        text_offset = target_text_size
 
     missing = [symbol for symbol in symbols if symbol not in offsets]
     if missing:
@@ -443,6 +459,7 @@ def emit_aarch64_darwin_asm(ir_text: str, optimize: bool = True) -> str:
             _aggregate_returned_indirect_indexed
         ),
         materialize_legacy_slots=False,
+        source_debug=True,
     )
     _emit_trace("prepare end")
     return _emit_prepared_aarch64_darwin_module(
@@ -452,7 +469,9 @@ def emit_aarch64_darwin_asm(ir_text: str, optimize: bool = True) -> str:
     )
 
 
-def emit_aarch64_darwin_indexed_module(module, optimize: bool = True) -> str:
+def emit_aarch64_darwin_indexed_module(
+    module, optimize: bool = True, *, phase_timing=None,
+) -> str:
     """Emit an already-indexed module through the ordinary verified backend."""
     prepared = prepare_parsed_module_for_target(
         module,
@@ -461,17 +480,22 @@ def emit_aarch64_darwin_indexed_module(module, optimize: bool = True) -> str:
             _aggregate_returned_indirect_indexed
         ),
         materialize_legacy_slots=False,
+        source_debug=True,
+        phase_timing=phase_timing,
     )
     return _emit_prepared_aarch64_darwin_module(
         prepared,
         optimize,
         profile_ir_text="",
+        phase_timing=phase_timing,
     )
 
 
 def emit_aarch64_darwin_indexed_lines(
     module,
     optimize: bool = True,
+    *,
+    phase_timing=None,
 ) -> list[str]:
     """Emit the indexed module without materializing a joined text string."""
 
@@ -482,11 +506,14 @@ def emit_aarch64_darwin_indexed_lines(
             _aggregate_returned_indirect_indexed
         ),
         materialize_legacy_slots=False,
+        source_debug=True,
+        phase_timing=phase_timing,
     )
     return _emit_prepared_aarch64_darwin_lines(
         prepared,
         optimize,
         profile_ir_text="",
+        phase_timing=phase_timing,
     )
 
 
@@ -494,6 +521,8 @@ def emit_aarch64_darwin_indexed_transport(
     module,
     optimize: bool = True,
     structured_instructions: bool = True,
+    *,
+    phase_timing=None,
 ) -> StructuredAArch64Module:
     """Emit indexed code plus final structured section payloads."""
 
@@ -504,7 +533,11 @@ def emit_aarch64_darwin_indexed_transport(
             _aggregate_returned_indirect_indexed
         ),
         materialize_legacy_slots=False,
+        source_debug=True,
+        phase_timing=phase_timing,
     )
+    if has_source_debug(prepared.functions):
+        optimize = False
     structured_sections = []
     native_text = structured_instructions and not optimize
     encoded_line_records = None if native_text else CompilerIntArena()
@@ -528,6 +561,7 @@ def emit_aarch64_darwin_indexed_transport(
         ),
         native_undefined=native_undefined if native_text else None,
         native_fallback_lines=native_fallback_lines if native_text else None,
+        phase_timing=phase_timing,
     )
     if not structured_instructions:
         structured_counts = [0, 0, 0, 0, 0, 0, 0]
@@ -554,6 +588,18 @@ def emit_aarch64_darwin_indexed_transport(
 _AARCH64_EMISSION_ACTIVE = False
 
 
+def retire_aarch64_module_state() -> None:
+    """Drop prior-module roots after all object and unwind consumers finish."""
+    global _MODULE_SYMBOLS
+    if _AARCH64_EMISSION_ACTIVE:
+        raise BackendUnavailable("cannot retire active AArch64 emission")
+    require_direct_instruction_capture_idle()
+    _MODULE_SYMBOLS = PreparedModuleSymbols(
+        internal_prefix="", defined_symbols=frozenset(),
+        internal_symbols=frozenset(), thread_local_symbols=frozenset(),
+    )
+
+
 def _emit_prepared_aarch64_darwin_lines(
     prepared: PreparedSelfBackendModule,
     optimize: bool = True,
@@ -566,8 +612,11 @@ def _emit_prepared_aarch64_darwin_lines(
     structured_counts: list[int] | None = None,
     native_undefined: list[str] | None = None,
     native_fallback_lines: list[str] | None = None,
+    phase_timing=None,
 ) -> list[str]:
     global _AARCH64_EMISSION_ACTIVE
+    if has_source_debug(prepared.functions):
+        optimize = False
     direct_instruction_capture = (
         encoded_line_records is not None or native_undefined is not None
     ) and not optimize
@@ -597,6 +646,7 @@ def _emit_prepared_aarch64_darwin_lines(
                 native_sink=native_sink,
                 native_undefined=native_undefined,
                 native_fallback_lines=native_fallback_lines,
+                phase_timing=phase_timing,
             )
         finally:
             if native_sink is not None:
@@ -620,6 +670,7 @@ def _emit_prepared_aarch64_darwin_lines_active(
     native_sink: _NativeAArch64Emission | None = None,
     native_undefined: list[str] | None = None,
     native_fallback_lines: list[str] | None = None,
+    phase_timing=None,
 ) -> list[str]:
     global _MODULE_SYMBOLS
     direct_instruction_capture = encoded_line_records is not None and not optimize
@@ -630,7 +681,7 @@ def _emit_prepared_aarch64_darwin_lines_active(
         )
     if (
         str(os.environ.get("PCC_SELF_TARGET_PASS_TRANSPORT", "") or "").strip().lower()
-        == "memory"
+        == "memory" and not has_source_debug(prepared.functions)
     ):
         prepared = run_self_target_memory_pass_pipeline(
             prepared,
@@ -651,7 +702,12 @@ def _emit_prepared_aarch64_darwin_lines_active(
     # eligibility is proved again for this target/optimization invocation.
     for func in functions:
         func.aarch64_tail_call_ids = []
+    emit_stack_map_tables = False
+    if functions:
+        emit_stack_map_tables = precise_stackmap_tables_enabled(triple)
     _emit_trace("stack map plans begin funcs=" + str(len(functions)))
+    if phase_timing is not None:
+        phase_start = phase_timing.start()
     stack_map_plans = {
         plan.function_name: plan
         for plan in build_stack_map_plans(
@@ -659,8 +715,11 @@ def _emit_prepared_aarch64_darwin_lines_active(
             globals_,
             target="aarch64-darwin",
             function_symbol=_function_symbol,
+            _share_globals_index=True,
         )
     }
+    if phase_timing is not None:
+        phase_timing.add(5, phase_start)
 
     _emit_trace("stack map plans end")
     lines = _emit_globals(globals_, _MODULE_SYMBOLS)
@@ -668,6 +727,7 @@ def _emit_prepared_aarch64_darwin_lines_active(
         native_sink.extend(lines)
         lines = []
     _emit_trace("globals end")
+    debug_plans: list[DebugFunctionPlan] = []
     cold_fallthrough_edges: list[tuple[str, str, str]] = []
     if functions:
         if native_sink is None:
@@ -682,10 +742,14 @@ def _emit_prepared_aarch64_darwin_lines_active(
             plan_aarch64_tail_calls(func, stack_map_plans[func.name], enabled=optimize)
             if func.aarch64_tail_call_ids:
                 previous_plan = stack_map_plans[func.name]
+                if phase_timing is not None:
+                    phase_start = phase_timing.start()
                 stack_map_plans[func.name] = build_function_stack_map_plan(
                     func, globals_, target="aarch64-darwin",
                     identity_name=_function_symbol(func.name),
                 )
+                if phase_timing is not None:
+                    phase_timing.add(5, phase_start)
                 if previous_plan.packed_records is not None:
                     previous_plan.packed_records.close()
             plan_aarch64_madd_fusions(func, enabled=optimize)
@@ -703,25 +767,55 @@ def _emit_prepared_aarch64_darwin_lines_active(
                         _block_label(func.name, success_block),
                     )
                 )
+            if phase_timing is not None:
+                phase_start = phase_timing.start()
+            debug_plan = None
+            source_info = function_debug(func)
+            if source_info is not None:
+                debug_plan = DebugFunctionPlan(
+                    func.type_context.debug_info, source_info,
+                    _function_symbol(func.name), stack_map_plans[func.name].end_label,
+                )
+                debug_plans.append(debug_plan)
             if native_sink is None:
-                lines.extend(_emit_function(func, stack_map_plans[func.name]))
+                lines.extend(_emit_function(
+                    func, stack_map_plans[func.name], debug_plan=debug_plan, phase_timing=phase_timing,
+                ))
             else:
-                _emit_function(func, stack_map_plans[func.name], native_sink=native_sink)
+                _emit_function(
+                    func, stack_map_plans[func.name], native_sink=native_sink,
+                    debug_plan=debug_plan, phase_timing=phase_timing,
+                )
                 native_sink.release_captured_function()
+                if close_native_tables:
+                    # Final words and deferred error stubs are published. Plans
+                    # own their scalar tables; unwind only needs function names.
+                    get_indexed_function_kernel(func).close_native_tables()
+            if phase_timing is not None:
+                phase_timing.add(6, phase_start)
+    if phase_timing is not None:
+        phase_start = phase_timing.start()
     if native_sink is not None:
         if (
             optimize or structured_sections is None or structured_counts is None
             or native_undefined is None or native_fallback_lines is None
         ):
             raise BackendUnavailable("native text emission sinks are incomplete")
+        native_sink.builder.finalize_text_layout()
         target_offsets = native_sink.builder.text_label_offsets()
         if functions:
-            ordered_native_plans = tuple(stack_map_plans[func.name] for func in functions)
-            structured_sections.append(build_aarch64_stack_map_section(
-                [], ordered_native_plans,
-                function_symbol=_function_symbol, block_label=_block_label,
-                target_offsets=target_offsets,
-            ))
+            if emit_stack_map_tables:
+                ordered_native_plans = tuple(stack_map_plans[func.name] for func in functions)
+                structured_sections.append(build_aarch64_stack_map_section(
+                    [], ordered_native_plans,
+                    function_symbol=_function_symbol, block_label=_block_label,
+                    target_offsets=target_offsets,
+                ))
+            else:
+                for func in functions:
+                    packed_records = stack_map_plans[func.name].packed_records
+                    if packed_records is not None:
+                        packed_records.close()
             if close_native_tables:
                 for func in functions:
                     get_indexed_function_kernel(func).close_native_tables()
@@ -730,6 +824,7 @@ def _emit_prepared_aarch64_darwin_lines_active(
                 [], functions, _MODULE_SYMBOLS, target_offsets,
                 native_sink.builder.text_size(),
             ))
+        structured_sections.extend(build_dwarf_sections(debug_plans, target_offsets))
         native_sink.append(".subsections_via_symbols")
         sections, undefined = native_sink.builder.finish(structured_sections)
         structured_sections.clear()
@@ -742,6 +837,8 @@ def _emit_prepared_aarch64_darwin_lines_active(
             native_sink.call_count, native_sink.direct_count,
             native_sink.fragment_record_count,
         ])
+        if phase_timing is not None:
+            phase_timing.add(7, phase_start)
         return []
     if optimize:
         lines = _forward_adjacent_stack_store_load(lines)
@@ -780,36 +877,11 @@ def _emit_prepared_aarch64_darwin_lines_active(
     # but before compact-unwind sizing.  Even with optimization disabled this
     # finalizer removes the source-semantics barrier pseudo-directives.
     lines = pair_adjacent_aarch64_64bit_memory_ops(lines, enabled=optimize)
-    if functions:
-        ordered_stack_map_plans = tuple(
-            stack_map_plans[func.name] for func in functions
-        )
-        if structured_sections is None:
-            lines.extend(render_aarch64_stack_map_section(
-                lines,
-                ordered_stack_map_plans,
-                function_symbol=_function_symbol,
-                block_label=_block_label,
-            ))
-        else:
-            structured_sections.append(build_aarch64_stack_map_section(
-                lines,
-                ordered_stack_map_plans,
-                function_symbol=_function_symbol,
-                block_label=_block_label,
-            ))
-        if close_native_tables:
-            for func in functions:
-                get_indexed_function_kernel(func).close_native_tables()
-    if not is_aarch64_linux_triple(triple):
-        lines = _append_compact_unwind(lines, functions, _MODULE_SYMBOLS)
     direct_instruction_records = None
     direct_instruction_symbols = None
     if direct_instruction_capture:
         direct_instruction_records = borrow_direct_instruction_records()
         direct_instruction_symbols = borrow_direct_instruction_symbol_names()
-    if lines:
-        lines.append(".subsections_via_symbols")
     if encoded_line_records is not None:
         if structured_symbol_names is None:
             raise BackendUnavailable("structured symbol-name sink is missing")
@@ -826,7 +898,9 @@ def _emit_prepared_aarch64_darwin_lines_active(
             line = lines[line_index]
             if (
                 direct_instruction_records is not None
-                and line == DIRECT_INSTRUCTION_PLACEHOLDER
+                and line in (
+                    DIRECT_INSTRUCTION_PLACEHOLDER, DIRECT_CALL_INSTRUCTION_PLACEHOLDER,
+                )
             ):
                 if direct_instruction_index * 4 >= len(direct_instruction_records):
                     raise BackendUnavailable(
@@ -835,6 +909,10 @@ def _emit_prepared_aarch64_darwin_lines_active(
                 direct_record = direct_instruction_records.get4_unchecked(
                     direct_instruction_index
                 )
+                if (line == DIRECT_CALL_INSTRUCTION_PLACEHOLDER) != (
+                    direct_record.second == EMITTED_INSTRUCTION_CALL
+                ):
+                    raise BackendUnavailable("direct call marker does not match record family")
                 direct_instruction_index += 1
                 word = direct_record.first
                 relocation_kind = direct_record.third
@@ -936,6 +1014,57 @@ def _emit_prepared_aarch64_darwin_lines_active(
         structured_counts.append(structured_call_count)
         structured_counts.append(direct_instruction_index)
         structured_counts.append(0)
+    # All code-changing passes and the structured-record adapter have finished.
+    # Measure the same relaxed layout that the section assembler will consume;
+    # no instruction or label may be added after offset metadata is serialized.
+    target_offsets: dict[str, int] = {}
+    target_text_size = 0
+    if functions:
+        target_offsets, target_text_size = measure_text_layout(
+            lines, encoded_line_records,
+            () if structured_symbol_names is None else structured_symbol_names,
+        )
+        if emit_stack_map_tables:
+            ordered_stack_map_plans = tuple(
+                stack_map_plans[func.name] for func in functions
+            )
+            if structured_sections is None:
+                lines.extend(render_aarch64_stack_map_section(
+                    lines,
+                    ordered_stack_map_plans,
+                    function_symbol=_function_symbol,
+                    block_label=_block_label,
+                    target_offsets=target_offsets,
+                ))
+            else:
+                structured_sections.append(build_aarch64_stack_map_section(
+                    lines,
+                    ordered_stack_map_plans,
+                    function_symbol=_function_symbol,
+                    block_label=_block_label,
+                    target_offsets=target_offsets,
+                ))
+        else:
+            for func in functions:
+                packed_records = stack_map_plans[func.name].packed_records
+                if packed_records is not None:
+                    packed_records.close()
+        if close_native_tables:
+            for func in functions:
+                get_indexed_function_kernel(func).close_native_tables()
+    if not is_aarch64_linux_triple(triple):
+        lines = _append_compact_unwind(
+            lines, functions, _MODULE_SYMBOLS, target_offsets, target_text_size,
+        )
+    debug_sections = build_dwarf_sections(debug_plans, target_offsets)
+    if structured_sections is None:
+        lines.extend(render_dwarf_sections(debug_sections))
+    else:
+        structured_sections.extend(debug_sections)
+    if lines:
+        lines.append(".subsections_via_symbols")
+    if phase_timing is not None:
+        phase_timing.add(7, phase_start)
     return lines
 
 
@@ -945,14 +1074,21 @@ def _emit_prepared_aarch64_darwin_module(
     *,
     profile_ir_text: str = "",
     close_native_tables: bool = True,
+    phase_timing=None,
 ) -> str:
     lines = _emit_prepared_aarch64_darwin_lines(
         prepared,
         optimize,
         profile_ir_text=profile_ir_text,
         close_native_tables=close_native_tables,
+        phase_timing=phase_timing,
     )
-    return "\n".join(lines) + "\n"
+    if phase_timing is not None:
+        phase_start = phase_timing.start()
+    result = "\n".join(lines) + "\n"
+    if phase_timing is not None:
+        phase_timing.add(7, phase_start)
+    return result
 
 
 def _parse_stack_transfer(line: str, opcode: str) -> tuple[str, str] | None:
@@ -1248,8 +1384,14 @@ def _line_defines_reg(line: str, reg: str) -> bool:
         return False
     if opcode in (
         "cmp",
+        "cmn",
+        "tst",
         "fcmp",
         "ret",
+        "br",
+        "blr",
+        "tbz",
+        "tbnz",
         "stur",
         "str",
         # Release stores consume their first register operand just like the
@@ -1277,7 +1419,10 @@ def _line_uses_reg(line: str, reg: str) -> bool:
     opcode, sep, rest = stripped.partition(" ")
     if not sep:
         return reg in _tokens_for_reg_scan(stripped)
-    if _line_defines_reg(line, reg):
+    # These partial writes preserve bits from the previous destination.  They
+    # define it and use it, including when the scan observes its W/X alias.
+    # Treating the destination as write-only can delete its initialization.
+    if opcode not in ("movk", "bfi", "bfxil") and _line_defines_reg(line, reg):
         _dest, sep2, tail = rest.partition(", ")
         return bool(sep2) and reg in _tokens_for_reg_scan(tail)
     return reg in _tokens_for_reg_scan(rest)
@@ -1301,7 +1446,10 @@ def _can_drop_zero_mov_after_store(
             _local_label_name(line) is not None
             or _is_function_label(line)
             or line.startswith(".")
-            or line.startswith(("  b ", "  b.", "  bl ", "  cbz ", "  cbnz ", "  ret"))
+            or line.startswith(
+                ("  b ", "  b.", "  bl ", "  cbz ", "  cbnz ", "  ret",
+                 "  br ", "  blr ", "  tbz ", "  tbnz ")
+            )
         ):
             return False
         if _line_uses_reg_alias(line, reg):
@@ -2131,23 +2279,32 @@ def _emit_function(
     func: ParsedFunction,
     stack_map_plan: FunctionStackMapPlan,
     native_sink: _NativeAArch64Emission | None = None,
+    *,
+    debug_plan: DebugFunctionPlan | None = None,
+    phase_timing=None,
 ) -> list[str]:
+    if phase_timing is not None:
+        phase_start = phase_timing.start()
     note_aarch64_reload_destinations(func, stack_map_plan)
     lines = _prologue_emit_function_prologue(func, _MODULE_SYMBOLS)
     if native_sink is not None:
         native_sink.extend(lines)
         lines = []
     kernel = get_indexed_function_kernel(func)
+    if phase_timing is not None:
+        phase_timing.add(12, phase_start)
+    if debug_plan is not None and stack_map_plan.packed_records is None:
+        raise BackendUnavailable("source debug requires the packed AArch64 emit path")
     if stack_map_plan.packed_records is not None and (
-        not func.blocks or direct_instruction_capture_active()
+        not func.blocks or direct_instruction_capture_active() or debug_plan is not None
     ):
         # AArch64 plans are packed even for parsed/oracle inputs. Emit reloads
         # at their final position, never through an eagerly rendered line index.
         if native_sink is None:
-            lines.extend(_emit_dense_indexed_function_blocks(func, kernel, stack_map_plan))
+            lines.extend(_emit_dense_indexed_function_blocks(func, kernel, stack_map_plan, debug_plan=debug_plan))
         else:
             _emit_dense_indexed_function_blocks(
-                func, kernel, stack_map_plan, native_sink=native_sink,
+                func, kernel, stack_map_plan, native_sink=native_sink, debug_plan=debug_plan,
             )
     elif not func.blocks:
         require_direct_instruction_capture_idle()
@@ -2225,7 +2382,7 @@ def _emit_indexed_instruction_core(
     instruction_index: int,
     instruction_id: int,
     kind_id: int,
-    data: tuple,
+    data: int | tuple,
     is_volatile: bool,
 ) -> list[str]:
     instruction_fact: CompilerInt4 = indexed_kernel.instruction_fact_by_id(
@@ -2293,7 +2450,7 @@ def _emit_indexed_instruction_parts(
     instruction_index: int,
     instruction_id: int,
     kind_id: int,
-    data: tuple,
+    data: int | tuple,
     is_volatile: bool,
 ) -> list[str]:
     return _emit_indexed_instruction_core(
@@ -2309,6 +2466,19 @@ def _emit_indexed_instruction_parts(
     )
 
 
+def _after_last_call_part(parts: list[str]) -> int:
+    """Index just past the last captured or textual call, or ``len(parts)``."""
+    index = len(parts) - 1
+    while index >= 0:
+        if (
+            parts[index] == DIRECT_CALL_INSTRUCTION_PLACEHOLDER
+            or parts[index].lstrip().startswith(("bl ", "blr "))
+        ):
+            return index + 1
+        index -= 1
+    return len(parts)
+
+
 def _emit_dense_indexed_instruction_parts(
     func: ParsedFunction,
     indexed_kernel: IndexedFunctionKernel,
@@ -2316,7 +2486,7 @@ def _emit_dense_indexed_instruction_parts(
     instruction_index: int,
     instruction_id: int,
     kind_id: int,
-    data: tuple,
+    data: int | tuple,
     is_volatile: bool,
 ) -> list[str]:
     return _emit_indexed_instruction_core(
@@ -2576,13 +2746,37 @@ def _emit_dense_indexed_function_blocks(
     kernel: IndexedFunctionKernel,
     stack_map_plan: FunctionStackMapPlan,
     native_sink: _NativeAArch64Emission | None = None,
+    debug_plan: DebugFunctionPlan | None = None,
 ) -> list[str]:
     """Emit the packed AArch64 path without dynamic callback adapters."""
 
     records = stack_map_plan.packed_records
     if records is None:
         raise BackendUnavailable("packed AArch64 emit requires packed stack maps")
+    # The build/emit/close path keeps these owned arenas stable during emission.
+    # Prove their concrete scalar projection once, not at every call safepoint.
+    # Synthetic/subclass owners keep their original method calls and failures.
+    reload_spans = None
+    if (
+        type(stack_map_plan) is FunctionStackMapPlan
+        and type(records) is PackedPlannedSafepoints
+        and type(records.spans) is CompilerIntArena
+        and type(records.labels) is list
+        and len(records.spans) == 4 * len(records.labels)
+        and stack_map_plan.target == "aarch64-darwin"
+        and type(native_sink) is _NativeAArch64Emission
+        and type(native_sink.fragments) is AArch64EmissionFragments
+        and type(native_sink.fragments.spans) is CompilerRecordSpanArena
+        and type(native_sink.fragments.records) is CompilerIntArena
+        and type(native_sink.fragments.cursor) is CompilerIntArena
+        and not native_sink.fragments.closed
+        and not native_sink.fragments.spans.closed
+    ):
+        reload_spans = records.spans
     lines: list[str] = []
+    # Empty instructions share invocation-local scratch. Replace a nonempty
+    # batch only after both label and reload passes have consumed its IDs.
+    suffix_records: list[int] = []
     layout_count = len(kernel.block_layout_ids)
     block_position = 0
     block_count = layout_count if layout_count else len(kernel.block_names)
@@ -2610,7 +2804,9 @@ def _emit_dense_indexed_function_blocks(
                 native_sink.append(_block_label(func.name, block_name) + ":")
         if native_sink is None:
             stack_map_plan.append_packed_entry_lines(lines, block_id)
-        else:
+        elif records.entry_route_spans.get_unchecked(block_id * 2 + 1):
+            # Empty routes publish no records. Avoid creating and walking an
+            # empty fragment at each block boundary in the native path.
             fragment: CompilerInt2 = native_sink.fragments.new_fragment()
             stack_map_plan.append_packed_entry_span(
                 native_sink.fragments, fragment, block_id,
@@ -2638,39 +2834,29 @@ def _emit_dense_indexed_function_blocks(
                 instruction_id
             )
             kind_id = metadata.first
-            if kind_id in _INDEXED_FIXED_PAYLOAD_KIND_IDS:
+            if kind_id in _INDEXED_FIXED_PAYLOAD_KIND_IDS and metadata.second >= 0:
                 instruction_data = metadata.second
             else:
                 instruction_data = kernel.instruction_data(
                     block_id,
                     instruction_index,
                 )
-            if native_sink is None:
-                lines.extend(
-                    _emit_dense_indexed_instruction_parts(
-                        func,
-                        kernel,
-                        block_id,
-                        instruction_index,
-                        instruction_id,
-                        kind_id,
-                        instruction_data,
-                        bool(metadata.third),
-                    )
-                )
-            else:
-                native_sink.extend(
-                    _emit_dense_indexed_instruction_parts(
-                        func,
-                        kernel,
-                        block_id,
-                        instruction_index,
-                        instruction_id,
-                        kind_id,
-                        instruction_data,
-                        bool(metadata.third),
-                    )
-                )
+            if debug_plan is not None:
+                marker = debug_plan.mark(block_id, instruction_index)
+                if native_sink is None:
+                    lines.append(marker)
+                else:
+                    native_sink.append(marker)
+            parts = _emit_dense_indexed_instruction_parts(
+                func,
+                kernel,
+                block_id,
+                instruction_index,
+                instruction_id,
+                kind_id,
+                instruction_data,
+                bool(metadata.third),
+            )
             while suffix_route_index < suffix_route_end:
                 route_scalar = suffix_route_index * 3
                 route_instruction = records.suffix_routes.get_unchecked(
@@ -2679,21 +2865,45 @@ def _emit_dense_indexed_function_blocks(
                 if route_instruction > instruction_index:
                     break
                 if route_instruction == instruction_index:
-                    record_index = records.suffix_routes.get_unchecked(
-                        route_scalar + 2
+                    suffix_records.append(
+                        records.suffix_routes.get_unchecked(route_scalar + 2)
                     )
-                    if native_sink is None:
-                        stack_map_plan.append_packed_record_lines(
-                            lines,
-                            record_index,
-                        )
-                    else:
+                suffix_route_index += 1
+            # A call safepoint is recorded at the return address (a stack walk
+            # finds it there), so its label precedes the call's result moves;
+            # its reloads still follow them.
+            if not suffix_records:
+                if native_sink is None:
+                    lines.extend(parts)
+                else:
+                    native_sink.extend(parts)
+            else:
+                split = _after_last_call_part(parts)
+                if native_sink is None:
+                    lines.extend(parts[:split])
+                    for record_index in suffix_records:
+                        lines.append(stack_map_plan.packed_record_label_line(record_index))
+                    lines.extend(parts[split:])
+                    for record_index in suffix_records:
+                        lines.extend(stack_map_plan.packed_record_reload_lines(record_index))
+                else:
+                    native_sink.extend(parts[:split])
+                    for record_index in suffix_records:
                         fragment: CompilerInt2 = native_sink.fragments.new_fragment()
-                        stack_map_plan.append_packed_record_span(
+                        stack_map_plan.append_packed_label_span(
                             native_sink.fragments, fragment, record_index,
                         )
                         native_sink.publish_fragment(fragment)
-                suffix_route_index += 1
+                    native_sink.extend(parts[split:])
+                    for record_index in suffix_records:
+                        if reload_spans is not None and not reload_spans.get_unchecked(record_index * 4 + 3):
+                            continue
+                        fragment: CompilerInt2 = native_sink.fragments.new_fragment()
+                        stack_map_plan.append_packed_reload_span(
+                            native_sink.fragments, fragment, record_index,
+                        )
+                        native_sink.publish_fragment(fragment)
+                suffix_records = []
             while error_edge_offset < error_span.second:
                 edge_id = error_span.first + error_edge_offset
                 trigger = kernel.inline_error_edge_trigger(edge_id)
@@ -2731,9 +2941,15 @@ def _emit_dense_indexed_function_blocks(
                 "inline error edge trigger exceeds source block"
             )
 
+        if debug_plan is not None:
+            marker = debug_plan.mark(block_id, -1)
+            if native_sink is None:
+                lines.append(marker)
+            else:
+                native_sink.append(marker)
         if native_sink is None:
             stack_map_plan.append_packed_terminator_lines(lines, block_id)
-        else:
+        elif records.terminator_route_spans.get_unchecked(block_id * 2 + 1):
             fragment: CompilerInt2 = native_sink.fragments.new_fragment()
             stack_map_plan.append_packed_terminator_span(
                 native_sink.fragments, fragment, block_id,
@@ -2776,6 +2992,12 @@ def _emit_dense_indexed_function_blocks(
     # placeholders must enter their streams in the same final order. Reuse
     # the kernel's edge IDs instead of building a second cold line container.
     if len(kernel.error_edge_scalars):
+        if debug_plan is not None:
+            marker = debug_plan.mark_location(None)
+            if native_sink is None:
+                lines.append(marker)
+            else:
+                native_sink.append(marker)
         block_position = 0
         while block_position < block_count:
             block_id = (

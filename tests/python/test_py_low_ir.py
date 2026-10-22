@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import textwrap
 
-from pcc.llvm_capi.compat import ir
-from pcc.py_frontend import low_ir
-from pcc.py_frontend import parser
-from pcc.py_frontend import type_infer
-from pcc.py_frontend.codegen import layer1
-from pcc.py_frontend.codegen.runtime_abi import declare_runtime
-from pcc.py_frontend.py_ast import FuncDef, SourceSpan
+from pcc.ir.compat import ir
+from pcc.frontends.python import low_ir
+from pcc.frontends.python import parser
+from pcc.frontends.python import type_infer
+from pcc.frontends.python.codegen import layer1
+from pcc.frontends.python.codegen.runtime_abi import declare_runtime
+from pcc.frontends.python.py_ast import FuncDef, SourceSpan
 
 
 def _typed_func(source: str, name: str) -> FuncDef:

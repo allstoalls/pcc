@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from pcc.profile_events import ProfileRecorder, make_subprocess_event
+from pcc.diagnostics.profile_events import ProfileRecorder, make_subprocess_event
 
 
 def test_profile_recorder_schema_and_phase_totals():

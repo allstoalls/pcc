@@ -34,7 +34,7 @@ MAX_GROUPS = 32
 
 
 @pytest.fixture(scope="session")
-def engine(tmp_path_factory, pcc_py_runtime_archive):
+def engine(tmp_path_factory, pcc_runtime_archive):
     out_dir = tmp_path_factory.mktemp("re_engine")
     dylib = out_dir / "libpccre.dylib"
     # Pull only the archive members the engine entry points need.
@@ -44,7 +44,7 @@ def engine(tmp_path_factory, pcc_py_runtime_archive):
             "cc",
             "-dynamiclib",
             *undefined,
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(dylib),
@@ -400,7 +400,7 @@ def test_frontend_checker_subset_of_engine(engine):
     """The frontend's conservative checker must never approve a pattern the
     engine rejects (checker-approved => engine-supported), or the E1
     compile-time gate would turn into construction-time raises."""
-    from pcc.py_frontend.codegen.native_text_modules import (
+    from pcc.frontends.python.codegen.native_text_modules import (
         NativeTextModulesLoweringMixin,
     )
 

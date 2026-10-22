@@ -81,7 +81,7 @@ Consequently:
 
 ## Implementation pointers
 
-All in `pcc/cli_bootstrap.py` (compiled no-libpython into pcc1, so the manifest
+All in `pcc/driver/cli_bootstrap.py` (compiled no-libpython into pcc1, so the manifest
 is serialized with the file's hand-rolled `_json_*` helpers, never the `json`
 module):
 

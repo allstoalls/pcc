@@ -142,15 +142,21 @@ def _text_vmaddr(binary: Path) -> int:
     raise SystemExit(f"cannot read __TEXT vmaddr from {binary}")
 
 
+_NM_SECTION_SYMBOL = re.compile(r"^([0-9a-fA-F]+) \(__TEXT,(__[A-Za-z0-9_]+)\) .* (\S+)$")
+
+
 def _symbols(binary: Path) -> list[tuple[int, str]]:
+    # pcc's owned linker splits code into __text, __text1, __text2, ...;
+    # nm types symbols outside __TEXT,__text as "s", so read each symbol's
+    # section rather than filtering on t/T.
     out = []
-    for line in _run(["nm", "-n", str(binary)]).splitlines():
-        parts = line.split()
-        if len(parts) >= 3 and parts[1] in ("t", "T"):
-            try:
-                out.append((int(parts[0], 16), parts[2]))
-            except ValueError:
-                pass
+    for line in _run(["nm", "-n", "-m", str(binary)]).splitlines():
+        match = _NM_SECTION_SYMBOL.match(line)
+        if match is None:
+            continue
+        section = match.group(2)
+        if section.startswith("__text") or section in ("__stubs", "__veneers"):
+            out.append((int(match.group(1), 16), match.group(3)))
     out.sort()
     return out
 

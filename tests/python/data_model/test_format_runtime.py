@@ -5,7 +5,7 @@ import subprocess
 import textwrap
 
 
-def test_format_runtime_builtin_and_user_dunder(tmp_path, pcc_py_runtime_archive):
+def test_format_runtime_builtin_and_user_dunder(tmp_path, pcc_runtime_archive):
     src = tmp_path / "format_probe.c"
     exe = tmp_path / "format_probe"
     src.write_text(
@@ -41,9 +41,9 @@ def test_format_runtime_builtin_and_user_dunder(tmp_path, pcc_py_runtime_archive
     subprocess.run(
         [
             os.environ.get("CC", "cc"),
-            "-I", str(pcc_py_runtime_archive.parent / "include"),
-            "-I", str(pcc_py_runtime_archive.parent / "src"),
-            str(src), str(pcc_py_runtime_archive),
+            "-I", str(pcc_runtime_archive.parent / "include"),
+            "-I", str(pcc_runtime_archive.parent / "src"),
+            str(src), str(pcc_runtime_archive),
             "-lm", "-o", str(exe),
         ],
         check=True,

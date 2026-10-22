@@ -7,7 +7,7 @@ expression (arithmetic, a same-file call, or an imported call) — e.g.
 shape (computed version strings / configs / registries at import time).
 
 Before the fix the multi-file export classifier
-(pcc/py_frontend/pipeline.py) only registered LITERAL module-top assignments
+(pcc/frontends/python/pipeline.py) only registered LITERAL module-top assignments
 (str/int/bool/None) as ``constant`` exports and statically-typeable containers
 as ``module_global`` exports; a computed-RHS assignment (``BinOp``/``Call``)
 produced no export entry at all, so cross-package ``pkg.V`` fell through to

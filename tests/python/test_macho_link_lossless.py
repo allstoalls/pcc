@@ -54,11 +54,11 @@ def _counts(objects):
 
 
 def test_merging_runtime_members_loses_no_relocation():
-    archive = REPO / "pcc" / "py_runtime" / "libpy_runtime_pcc_py.a"
+    archive = REPO / "pcc" / "runtime" / "libpy_runtime_pcc_py.a"
     if not archive.exists():
         raise AssertionError(
             f"{archive} missing; build it with "
-            "`make -C pcc/py_runtime libpy_runtime_pcc_py.a`"
+            "`make -C pcc/runtime libpy_runtime_pcc_py.a`"
         )
     members = read_archive(archive.read_bytes())
     # Pull a substantial, dependency-closed slice of the runtime.

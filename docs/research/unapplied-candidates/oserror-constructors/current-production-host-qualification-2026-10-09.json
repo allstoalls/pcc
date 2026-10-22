@@ -1,0 +1,79 @@
+{
+  "base_commit": "761bcdaf62408d56060bb9074585218e6b8bccc4",
+  "changed_paths": [
+    "pcc/frontends/python/codegen/exception_lowering.py",
+    "pcc/runtime/include/py_runtime.h",
+    "pcc/runtime/py/freestanding_stdio.py",
+    "pcc/runtime/py/py_exc_objects.py",
+    "pcc/runtime/py/py_file.py",
+    "pcc/runtime/py/py_obj_ops_dispatch.py",
+    "tests/python/test_native_open_errno.py",
+    "tests/python/test_os_error_constructors.py",
+    "tests/python/test_owned_fdopen_provider.py"
+  ],
+  "codegen_checksum": "819d8a565812fb28205d0056fc859ac8810d2cd5518ca3129a80e8674173fc35",
+  "counts": {
+    "collected": 440,
+    "errors": 0,
+    "failed": 0,
+    "passed": 439,
+    "skipped": 0,
+    "xfailed": 1,
+    "xpassed": 0
+  },
+  "groups": {
+    "cold_slot_host_controls": {
+      "passed": 64
+    },
+    "oserror_actual_body_models": {
+      "passed": 369,
+      "strict_xfailed": 1
+    },
+    "oserror_original_frontend_ir": {
+      "passed": 6
+    }
+  },
+  "guard": {
+    "cleanup": "CLEAN",
+    "continuous_minimum_free_bytes": 4294967296,
+    "denied_audit_events": 0,
+    "echild": true,
+    "elapsed_seconds": 81.73991079400002,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "outer_timeout_seconds": 300.0,
+    "peak_sampled_root_rss_bytes": 121999360,
+    "root_reaped": true
+  },
+  "imported_source_closure": "PASS",
+  "known_strict_xfail": "BlockingIOError.characters_written outside the constructor slice",
+  "latest_production_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "performance_claim": "None",
+  "prior_old_base_receipt_relation": "The earlier369PASS+1strictXFAIL and6IRPASS are preserved separately; these results were rerun on the retargeted current source",
+  "qualification_sha256": "ce01bb102d3f259749cce917c82d2125569cca8f5a58be3b5129af39d1f9b3bd",
+  "runtime_relation": "A fresh matching191-member threaded/atomic runtime is required; the old cold-slot archive is not reused",
+  "schema": "pcc.oserror_current_production_host_public_qualification.v1",
+  "scope": "Exact current-production closure plus nine OSError postimages: 370 actual-body models (one known strict XFAIL), six original OSError IR controls and 64 cold-slot host controls including four-target in-memory owned object checks. No runtime build, reference subprocess or emitted native execution.",
+  "source_before_after": "PASS",
+  "source_closure": {
+    "bytes": 44453538,
+    "complete_trees": [
+      "pcc",
+      "scripts",
+      "tests",
+      ".github"
+    ],
+    "files": 3866,
+    "full_repository_checkout": false,
+    "ordinary_independent_copy": true
+  },
+  "source_manifest_sha256": "03538c5d750db4b1e8541cae229d0c5695a376a2b5ed80b6a451cb7818319c19",
+  "status": "PASS_WITH_ONE_DECLARED_STRICT_XFAIL",
+  "unrun": [
+    "matching runtime build",
+    "native GC0-4",
+    "macOS",
+    "pcc1",
+    "full regression suites"
+  ]
+}

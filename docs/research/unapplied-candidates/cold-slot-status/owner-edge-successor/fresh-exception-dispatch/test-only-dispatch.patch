@@ -1,0 +1,20 @@
+--- a/tests/python/test_slot_call_status_reporting_native.py
++++ b/tests/python/test_slot_call_status_reporting_native.py
+@@ -68,7 +68,7 @@
+             if (!roots[arm + 1]) return 7;
+             py_clear_exception();
+             pcc_gc_store_root(&roots[0], NULL);
+-            py_gc_collect();
++            pcc_gc_collect(-1);
+             if (pcc_gc_frame_root_slot_count() != root_count) return 8;
+         }
+         /* Exact message and source-frame order, including no helper frame. */
+@@ -91,7 +91,7 @@
+     }
+     py_clear_exception();
+     pcc_gc_store_root(&roots[0], NULL);
+-    py_gc_collect();
++    pcc_gc_collect(-1);
+     pcc_gc_frame_leave(roots);
+     puts("slot-status-runtime-equal");
+     return 0;

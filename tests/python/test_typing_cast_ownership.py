@@ -8,7 +8,7 @@ import pytest
 @pytest.mark.parametrize("raw_scaffold", [False, True])
 @pytest.mark.parametrize("spelling", ["cast", "typing.cast"])
 def test_cast_of_dynamic_tuple_element_preserves_container_owners(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive,
     raw_scaffold, spelling,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
@@ -47,7 +47,7 @@ main()
        .replace("CAST", spelling))
     binary = tmp_path / "cast_tuple_owner"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], capture_output=True, text=True, timeout=20,
                              env=dict(os.environ, PATH="/nonexistent", PCC_GC_BACKEND=str(backend)))
@@ -58,7 +58,7 @@ main()
 @pytest.mark.parametrize("source_kind", ["borrowed", "fresh", "attribute"])
 @pytest.mark.parametrize("spelling", ["cast", "typing.cast"])
 def test_typing_cast_keeps_its_alias_alive(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive,
     source_kind, spelling,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
@@ -102,7 +102,7 @@ main()
 '''.replace("SETUP", setup).replace("CAST", spelling).replace("OPERAND", operand).replace("RELEASE", release))
     binary = tmp_path / "cast_owner"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], capture_output=True, text=True, timeout=20,
                              env=dict(os.environ, PATH="/nonexistent", PCC_GC_BACKEND=str(backend)))
@@ -112,7 +112,7 @@ main()
 
 @pytest.mark.parametrize("freestanding", [False, True])
 def test_typing_cast_preserves_raw_pointer_domain(tmp_path, monkeypatch, freestanding):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = tmp_path / "cast_raw.py"

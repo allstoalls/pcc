@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_relocation_drain.py"
 MANAGED_SOURCE = RUNTIME_DIR / "py" / "py_gc_backend.py"
 MAKEFILE = RUNTIME_DIR / "Makefile"
@@ -192,10 +192,10 @@ def test_relocation_drain_preserves_budget_lock_and_handoff_contract() -> None:
 
 
 def test_production_archive_has_one_relocation_drain_owner(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -304,13 +304,13 @@ def _link_drain_probe(tmp_path: Path, name: str, archive: Path) -> Path:
 )
 def test_relocation_drain_for_object_page_and_step_budgets(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
     argument: str,
     expected: str,
 ) -> None:
     # ``expected`` is what the retired C runtime oracle printed.
     implementation = _link_drain_probe(
-        tmp_path, "drain_pcc_python_" + argument, pcc_py_runtime_archive
+        tmp_path, "drain_pcc_python_" + argument, pcc_runtime_archive
     )
     result = subprocess.run(
         [str(implementation), argument], capture_output=True, text=True, timeout=30

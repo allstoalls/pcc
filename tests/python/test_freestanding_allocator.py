@@ -4,12 +4,12 @@ import platform
 import subprocess
 import sys
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ALLOCATOR_SOURCE = (
-    REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_allocator.py"
+    REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_allocator.py"
 )
 ALLOCATOR_SYMBOLS = (
     "malloc",
@@ -385,7 +385,7 @@ def test_freestanding_allocator_threaded_churn_llvm_and_self(tmp_path):
 
 def test_linux_allocator_closes_over_raw_syscalls(tmp_path, monkeypatch):
     from pcc.backend.self_backend_dispatch import emit_self_asm
-    from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+    from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
     monkeypatch.setattr(
         UnsafeIntrinsicMixin,
@@ -420,7 +420,7 @@ def test_linux_allocator_closes_over_raw_syscalls(tmp_path, monkeypatch):
 
 
 def test_pcc_python_runtime_archive_plan_selects_python_allocator_object():
-    runtime_dir = REPO_ROOT / "pcc" / "py_runtime"
+    runtime_dir = REPO_ROOT / "pcc" / "runtime"
     plan = subprocess.run(
         ["make", "-B", "-n", "libpy_runtime_pcc_py.a"],
         cwd=runtime_dir,
@@ -440,7 +440,7 @@ def test_pcc_python_runtime_archive_plan_selects_python_allocator_object():
 
 def test_default_pcc_python_runtime_uses_allocator_under_all_gc_backends(
     tmp_path,
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
     python_program_compiler,
 ):
     source = tmp_path / "allocator_runtime_smoke.py"
@@ -463,7 +463,7 @@ def test_default_pcc_python_runtime_uses_allocator_under_all_gc_backends(
         str(executable),
         backend="self",
         libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
 
     symbols = subprocess.run(

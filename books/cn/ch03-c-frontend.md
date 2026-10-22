@@ -1,6 +1,6 @@
 # 第 3 章 C 前端:解析、伪 libc 与求值器
 
-pcc 的 C 前端是仓库中最成熟的子系统:它编译并运行过 Lua、SQLite、PostgreSQL `libpq`、zlib、lz4、zstd、PCRE、OpenSSL 这一级别的真实项目。本章讲它如何把一份(或一个目录的)C 源码变成可解析的翻译单元(translation unit,TU),再送进求值器流水线。具体来说:解析器从 PLY 到原生 LR 驱动的双轨结构、两条预处理路径、[utils/fake_libc_include/](../../utils/fake_libc_include) 这套"只有声明没有实现"的伪 libc、[pcc/evaluater/c_evaluator.py](../../pcc/evaluater/c_evaluator.py) 的 preprocess→parse→IR→optimize→execute 流水线,以及 [pcc/project.py](../../pcc/project.py) 的源收集与 `--sources-from-make`。表达式如何低层化(lowering)为 LLVM IR、符号性如何跟踪,是第 4 章的内容;本章止步于"AST 进了代码生成器"这条线。
+pcc 的 C 前端是仓库中最成熟的子系统:它编译并运行过 Lua、SQLite、PostgreSQL `libpq`、zlib、lz4、zstd、PCRE、OpenSSL 这一级别的真实项目。本章讲它如何把一份(或一个目录的)C 源码变成可解析的翻译单元(translation unit,TU),再送进求值器流水线。具体来说:解析器从 PLY 到原生 LR 驱动的双轨结构、两条预处理路径、[utils/fake_libc_include/](../../utils/fake_libc_include) 这套"只有声明没有实现"的伪 libc、[pcc/frontends/c/evaluator/c_evaluator.py](../../pcc/frontends/c/evaluator/c_evaluator.py) 的 preprocess→parse→IR→optimize→execute 流水线,以及 [pcc/driver/project.py](../../pcc/driver/project.py) 的源收集与 `--sources-from-make`。表达式如何低层化(lowering)为 LLVM IR、符号性如何跟踪,是第 4 章的内容;本章止步于"AST 进了代码生成器"这条线。
 
 ## 本章导读:C 前端的四个阶段
 
@@ -18,9 +18,9 @@ C 前端要回答的问题不是"如何解析 C 语言"——这在教科书里�
 2. **声明与实现可以分离。** 解析和类型检查只需要 `printf` 的原型,不需要它的实现——实现在链接期由真实的 libc 提供。这个观察是伪 libc 设计的根。
 3. **真实项目没有"源文件列表"这个输入。** 它们有 Makefile、configure 脚本、amalgamation、条件编译进出的 TU。前端的入口不是 `parse(file)`,而是"从一个目录和一个构建系统里恢复出参与编译的 `.c` 集合与预处理旗标"。
 
-在解析器本体上,设计空间有三个候选:自写完整 C 前端、绑 clang 的 AST、复用 pycparser。pcc 选择了第三条:[pcc/parse/c_parser.py](../../pcc/parse/c_parser.py) 的文件头仍保留着 pycparser 的版权声明(Eli Bendersky, BSD),文法实现的注释明说是 K&R2 附录 A.13 的 BNF。理由是务实的:pycparser 的文法和 AST 经过十几年真实代码的打磨,而绑 clang 会把"前端"变成对外部 C++ 巨型依赖的封装——这与第 1 章的自托管目标直接冲突。但复用不是终点:pycparser 依赖 PLY,而 PLY 在运行期动态构造解析表、依赖 Python 反射机制,这对"pcc 编译 pcc 自身"的自举(bootstrap)路线是负担。于是 C 解析器走出了一条双轨演化路径——PLY 版保留为参照,默认路径换成无 PLY 的原生 LR 驱动(见 3.2)。
+在解析器本体上,设计空间有三个候选:自写完整 C 前端、绑 clang 的 AST、复用 pycparser。pcc 选择了第三条:[pcc/frontends/c/parse/c_parser.py](../../pcc/frontends/c/parse/c_parser.py) 的文件头仍保留着 pycparser 的版权声明(Eli Bendersky, BSD),文法实现的注释明说是 K&R2 附录 A.13 的 BNF。理由是务实的:pycparser 的文法和 AST 经过十几年真实代码的打磨,而绑 clang 会把"前端"变成对外部 C++ 巨型依赖的封装——这与第 1 章的自托管目标直接冲突。但复用不是终点:pycparser 依赖 PLY,而 PLY 在运行期动态构造解析表、依赖 Python 反射机制,这对"pcc 编译 pcc 自身"的自举(bootstrap)路线是负担。于是 C 解析器走出了一条双轨演化路径——PLY 版保留为参照,默认路径换成无 PLY 的原生 LR 驱动(见 3.2)。
 
-预处理的设计同样是两轨:一个纯 Python 的内置预处理器([pcc/preprocessor.py](../../pcc/preprocessor.py))处理无系统编译器的环境,一条"借系统 `cc -E` 之力、用伪 libc 头替换真实系统头"的主路径处理真实项目。两轨的共同立场是:**文本级整形在预处理边界是合法的,在 IR 层不是。** 仓库的 IR Fix Policy 规定 IR 文本重写只剩 `va_arg` 一个豁免(见第 12 章);相对地,本章会出现大量正则与字符扫描——因为预处理层的职责就是把宿主世界整形成解析器能接受的 C 子集,这是边界层的本职,不是 hack 的遮羞布。
+预处理的设计同样是两轨:一个纯 Python 的内置预处理器([pcc/frontends/c/preprocessor.py](../../pcc/frontends/c/preprocessor.py))处理无系统编译器的环境,一条"借系统 `cc -E` 之力、用伪 libc 头替换真实系统头"的主路径处理真实项目。两轨的共同立场是:**文本级整形在预处理边界是合法的,在 IR 层不是。** 仓库的 IR Fix Policy 规定 IR 文本重写只剩 `va_arg` 一个豁免(见第 12 章);相对地,本章会出现大量正则与字符扫描——因为预处理层的职责就是把宿主世界整形成解析器能接受的 C 子集,这是边界层的本职,不是 hack 的遮羞布。
 
 ## 3.2 解析器:从 PLY 到原生 LR 驱动
 
@@ -40,7 +40,7 @@ C 不是上下文无关语言。`A * b;` 是声明还是乘法,取决于 `A` 是
 PLY 在首次运行时构造 LALR 表,代价不小,所以 `CParser.__init__` 把表写盘复用。缓存模块名是带版本号的常量:
 
 ```python
-_DEFAULT_PLY_LEXTAB = "pcc_lextab_v14"
+_DEFAULT_PLY_LEXTAB = "pcc_frontends_c_lextab_v14"
 _DEFAULT_PLY_YACCTAB = "pcc_yacctab_v19"
 ```
 
@@ -50,14 +50,14 @@ _DEFAULT_PLY_YACCTAB = "pcc_yacctab_v19"
 
 ### 3.2.3 原生 LR 驱动:把 PLY 移出闭包
 
-[pcc/parse/__init__.py](../../pcc/parse/__init__.py) 的 `make_c_parser()` 工厂是现在唯一正确的解析器入口:
+[pcc/frontends/c/parse/__init__.py](../../pcc/frontends/c/parse/__init__.py) 的 `make_c_parser()` 工厂是现在唯一正确的解析器入口:
 
 ```python
 def make_c_parser():
     if os.environ.get("PCC_USE_PLY_C_PARSER") == "1":
-        from pcc.parse.c_parser import CParser
+        from pcc.frontends.c.parse.c_parser import CParser
         return CParser()
-    from pcc.parse.c_parse_driver import CParseDriver
+    from pcc.frontends.c.parse.c_parse_driver import CParseDriver
     return CParseDriver()
 ```
 
@@ -70,9 +70,9 @@ def make_c_parser():
                                           └── 文法动作(c_parser_actions)
 ```
 
-- [pcc/parse/c_parsetab.py](../../pcc/parse/c_parsetab.py) 是**冻结的** LR 表:由 [scripts/freeze_c_parser_tables.py](../../scripts/freeze_c_parser_tables.py) 从 PLY 文法离线生成的纯数据 Python 字面量,加载时不 import PLY。文件头带 `GRAMMAR_SHA256`——对 `c_parser.py` 全部 `p_*` 方法源码拼接后的 SHA-256,CI 用它对照活文法,检测"改了文法忘了重新冻结"。这就是对 3.2.2 手工版本号纪律的机器化替代:从"人记得 bump"变成"哈希不匹配就报警"。
-- [pcc/parse/c_parse_driver.py](../../pcc/parse/c_parse_driver.py) 是约 250 行的标准移进/归约状态机,通过 `_PSlot` 类向动作函数复刻 PLY 的最小接口(`p[i]`、`p.lineno(i)`、`p.slice`),使两套驱动共享同一份文法动作语义。
-- [pcc/parse/c_lex.py](../../pcc/parse/c_lex.py) 是手写的逐字符扫描器,热路径不用正则(正则只留给整数后缀、浮点指数这类天然多字符模式),与 `pcc.lex.c_lexer.CLexer` 构造器签名、token 名完全兼容。
+- [pcc/frontends/c/parse/c_parsetab.py](../../pcc/frontends/c/parse/c_parsetab.py) 是**冻结的** LR 表:由 [scripts/freeze_c_parser_tables.py](../../scripts/freeze_c_parser_tables.py) 从 PLY 文法离线生成的纯数据 Python 字面量,加载时不 import PLY。文件头带 `GRAMMAR_SHA256`——对 `c_parser.py` 全部 `p_*` 方法源码拼接后的 SHA-256,CI 用它对照活文法,检测"改了文法忘了重新冻结"。这就是对 3.2.2 手工版本号纪律的机器化替代:从"人记得 bump"变成"哈希不匹配就报警"。
+- [pcc/frontends/c/parse/c_parse_driver.py](../../pcc/frontends/c/parse/c_parse_driver.py) 是约 250 行的标准移进/归约状态机,通过 `_PSlot` 类向动作函数复刻 PLY 的最小接口(`p[i]`、`p.lineno(i)`、`p.slice`),使两套驱动共享同一份文法动作语义。
+- [pcc/frontends/c/parse/c_lex.py](../../pcc/frontends/c/parse/c_lex.py) 是手写的逐字符扫描器,热路径不用正则(正则只留给整数后缀、浮点指数这类天然多字符模式),与 `pcc.frontends.c.lex.c_lexer.CLexer` 构造器签名、token 名完全兼容。
 
 两条路径的行为等价由 [tests/c/test_c_parse_driver_parity.py](../../tests/c/test_c_parse_driver_parity.py) 闸门(gate)保证。诚实声明一条边界:`c_parse_driver.py` 的文档自己写明,驱动层源码级无 PLY,但整个 pcc 包仍经由 [pcc/__init__.py](../../pcc/__init__.py) 传递性加载 PLY——这是尚未完成的表面清理,不是已达成的"零 PLY"。
 
@@ -82,7 +82,7 @@ def make_c_parser():
 
 ### 3.3.1 内置预处理器
 
-[pcc/preprocessor.py](../../pcc/preprocessor.py) 的 `Preprocessor` 是纯 Python 实现,模块 docstring 列出支持面:`#include "..."`(读入内联)、`#include <...>`(**静默忽略**)、对象宏/函数宏/标志宏、`#undef`、完整的 `#ifdef`/`#ifndef`/`#if`/`#elif`/`#else`/`#endif` 与 `defined()` 求值、`##` 粘接、`__VA_ARGS__`。系统头被忽略后,常用类型由 `TYPE_PREAMBLE`(`size_t`、`va_list`、`FILE` 等 typedef 文本)注入,常用宏由 `BUILTIN_DEFINES`(`NULL`、`INT_MAX`、`__STDC_VERSION__` 等)预载。
+[pcc/frontends/c/preprocessor.py](../../pcc/frontends/c/preprocessor.py) 的 `Preprocessor` 是纯 Python 实现,模块 docstring 列出支持面:`#include "..."`(读入内联)、`#include <...>`(**静默忽略**)、对象宏/函数宏/标志宏、`#undef`、完整的 `#ifdef`/`#ifndef`/`#if`/`#elif`/`#else`/`#endif` 与 `defined()` 求值、`##` 粘接、`__VA_ARGS__`。系统头被忽略后,常用类型由 `TYPE_PREAMBLE`(`size_t`、`va_list`、`FILE` 等 typedef 文本)注入,常用宏由 `BUILTIN_DEFINES`(`NULL`、`INT_MAX`、`__STDC_VERSION__` 等)预载。
 
 最值得一读的是 `#if` 表达式求值器。直觉写法是把展开后的表达式丢给 Python 的 `eval()`——但 `eval` 在自举审计([scripts/audit_selfhost.py](../../scripts/audit_selfhost.py))的禁用内建列表上,源码注释明说了这一点。于是 `_eval_cpp_expr()` 配了一个完整的递归下降解析器 `_CppExprParser`,产出带标签元组树,由 `_eval_tree()` 按 **C 语义**求值:`&&`/`||` 与 `?:` 未取分支短路(死分支里的 `1/0` 不会炸,与 C 一致)、整数除法向零截断(`int(l / r) if (l < 0) ^ (r < 0) else l // r`)、`!0 == 1`。求值失败抛 `_CppExprError`,上层 `_eval_condition()` 发 warning 并按假处理。这是一个缩影:**自举约束会一路渗透到看似无关的工具代码里**。
 
@@ -90,7 +90,7 @@ def make_c_parser():
 
 ### 3.3.2 系统 cpp 路径:借力但不失控
 
-主路径在 `CEvaluator._system_cpp()`([pcc/evaluater/c_evaluator.py](../../pcc/evaluater/c_evaluator.py)):有系统编译器时(`_has_system_cpp()` 探测 `cc`/`gcc`),预处理交给真家伙,但用三个手段保证输出仍落在 pcc 可消化的子集内:
+主路径在 `CEvaluator._system_cpp()`([pcc/frontends/c/evaluator/c_evaluator.py](../../pcc/frontends/c/evaluator/c_evaluator.py)):有系统编译器时(`_has_system_cpp()` 探测 `cc`/`gcc`),预处理交给真家伙,但用三个手段保证输出仍落在 pcc 可消化的子集内:
 
 ```text
 cc -E -P -nostdinc -isystem utils/fake_libc_include  -I <用户目录>...  <大量 -D>  file.c
@@ -129,14 +129,14 @@ cc -E -P -nostdinc -isystem utils/fake_libc_include  -I <用户目录>...  <大�
 
 ## 3.5 求值器流水线
 
-[pcc/evaluater/c_evaluator.py](../../pcc/evaluater/c_evaluator.py) 的 `CEvaluator` 是 C 路径的发动机舱。核心流水线在模块级函数 `_compile_translation_unit_artifact_job` 与 `_compile_preprocessed_translation_unit_artifact` 里,形状是:
+[pcc/frontends/c/evaluator/c_evaluator.py](../../pcc/frontends/c/evaluator/c_evaluator.py) 的 `CEvaluator` 是 C 路径的发动机舱。核心流水线在模块级函数 `_compile_translation_unit_artifact_job` 与 `_compile_preprocessed_translation_unit_artifact` 里,形状是:
 
 ```text
 TranslationUnit(name, path, source)
   → _preprocess_translation_unit_source        # 3.3 的两条路径之一 + 归一化
   → make_c_parser().parse(codestr)             # 3.2 的双轨解析器
   → PassPipeline.run_high_tier(ast, ctx)       # AST 分析 pass,填 PassContext
-  → LLVMCodeGenerator(...).generate_code(ast)  # 语义低层化(第 4 章)
+  → CCodeGenerator(...).generate_code(ast)  # 语义低层化(第 4 章)
   → postprocess_ir_text(str(module))           # IR 文本后处理(豁免仅 va_arg,第 12 章)
   → PassPipeline.run_low_tier(ir_text, ctx)    # IR 级 pass
   → artifact 字典                               # ir_text / return_type / external_defs /
@@ -155,7 +155,7 @@ TranslationUnit(name, path, source)
 
 ## 3.6 项目收集与 --sources-from-make
 
-[pcc/project.py](../../pcc/project.py) 负责把"一个路径"变成"一组 `TranslationUnit`"。第 2 章已概述四种编译模式,这里讲机制与限制。
+[pcc/driver/project.py](../../pcc/driver/project.py) 负责把"一个路径"变成"一组 `TranslationUnit`"。第 2 章已概述四种编译模式,这里讲机制与限制。
 
 **目录默认合并(merged)。** `_collect_directory()` 非递归收集 `*.c`(`os.listdir` + 排序),把含 `main()` 的文件放到最后,用 `// --- 文件名 ---` 注释行拼接成单一大 TU。`main` 的判定 `_has_main()` 是两阶段的:先用正则 `\b(?:int|void)\s+main\s*\([^;{}]*\)\s*\{` 粗筛,命中后再做**真实预处理**(`CEvaluator._system_cpp`)并对预处理结果重新匹配——这样被 `#if` 条件编译排除掉的 `main` 不会造成误判;预处理失败则回退正则并发 warning。`--separate-tus` 模式(`_collect_directory_units`)收集同一组文件但各自成 TU,并强制恰好一个 `main`;`--depends-on` 的依赖输入则一个 `main` 都不许有。
 
@@ -224,8 +224,8 @@ C 前端的每一层都是同一个判断的不同投影:**复用成熟件起步
 
 ## 练习
 
-1. **读源码验证。** 在 [pcc/parse/c_parser.py](../../pcc/parse/c_parser.py) 中找到 `p_declaration` 与 `p_decl_body` 的拆分注释,解释:如果合并为单条规则,`typedef int T; T x;` 两行连写为什么会解析失败?yacc 的向前看 token 在其中扮演什么角色?
-2. **缓存考古。** 对照 `_DEFAULT_PLY_YACCTAB` 的手工版本号与 [pcc/parse/c_parsetab.py](../../pcc/parse/c_parsetab.py) 的 `GRAMMAR_SHA256` 机制,各写出一种它们能/不能捕获的陈旧场景;再看 `_compiler_cache_fingerprint()`,说明编译产物缓存为什么不需要任何手工版本号(提示:`_COMPILE_CACHE_VERSION` 仍然存在,它防的是哪类变化?)。
+1. **读源码验证。** 在 [pcc/frontends/c/parse/c_parser.py](../../pcc/frontends/c/parse/c_parser.py) 中找到 `p_declaration` 与 `p_decl_body` 的拆分注释,解释:如果合并为单条规则,`typedef int T; T x;` 两行连写为什么会解析失败?yacc 的向前看 token 在其中扮演什么角色?
+2. **缓存考古。** 对照 `_DEFAULT_PLY_YACCTAB` 的手工版本号与 [pcc/frontends/c/parse/c_parsetab.py](../../pcc/frontends/c/parse/c_parsetab.py) 的 `GRAMMAR_SHA256` 机制,各写出一种它们能/不能捕获的陈旧场景;再看 `_compiler_cache_fingerprint()`,说明编译产物缓存为什么不需要任何手工版本号(提示:`_COMPILE_CACHE_VERSION` 仍然存在,它防的是哪类变化?)。
 3. **伪 libc 失配实验(纸面)。** `_fake_typedefs.h` 断言 `mode_t` 为 `unsigned short`,内置预处理器 `TYPE_PREAMBLE` 断言 `unsigned int`。构造一个最小 C 程序,使它在两条预处理路径下产生不同的 `sizeof` 行为;再论证:什么样的真实 libc 调用会把这个失配变成运行时错误?
 4. **设计权衡。** 内置预处理器为实现 `#if` 求值专门写了 `_CppExprParser`,而不是调用 `eval()`。除了自举审计的禁令,再给出至少两个独立于自举的理由(提示:C 语义 vs Python 语义;攻击面)。反方向论证一次:如果 pcc 永远不自举,`eval()` 方案是否就是正确的工程选择?
 5. **案例研究重演。** 仅凭 3.7.2 的信息,写出你在拿到"PCRE 在 `pcre_compile` 挂起"这个报告后的前四个动作,并为每个动作标注它要证伪的假设。然后对照报告原文 [docs/investigations/pcre-op-lengths-incomplete-array-binding.md](../../docs/investigations/pcre-op-lengths-incomplete-array-binding.md) 的实际顺序,找出你的方案中最昂贵的多余步骤。

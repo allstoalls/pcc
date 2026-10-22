@@ -127,7 +127,7 @@ main()
 @pytest.mark.parametrize("backend", ["0", "3", "4"])
 def test_container_retain_paths_match_cpython(tmp_path, backend, monkeypatch):
     """dict/list/tuple/instance/compare/set paths under GC0/GC3/GC4."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     monkeypatch.setenv("PCC_GC_BACKEND", backend)
     src = tmp_path / "prog.py"
@@ -138,7 +138,7 @@ def test_container_retain_paths_match_cpython(tmp_path, backend, monkeypatch):
         str(exe),
         ir_scaffold_mode="on",
         libpython_mode="off",
-        backend="llvm",
+        backend="self",
     )
     native = subprocess.run(
         [str(exe)],
@@ -166,7 +166,7 @@ def test_container_retain_paths_match_cpython(tmp_path, backend, monkeypatch):
 @pytest.mark.integration
 def test_container_retain_paths_c_mirror(tmp_path, monkeypatch):
     """The C runtime mirror must agree with the pcc-Python port."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     monkeypatch.setenv("PCC_GC_BACKEND", "0")
     src = tmp_path / "prog.py"
@@ -177,7 +177,7 @@ def test_container_retain_paths_c_mirror(tmp_path, monkeypatch):
         str(exe),
         ir_scaffold_mode="on",
         libpython_mode="off",
-        backend="llvm",
+        backend="self",
     )
     native = subprocess.run(
         [str(exe)], capture_output=True, text=True, timeout=240,

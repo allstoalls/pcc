@@ -10,9 +10,9 @@ import subprocess
 
 import pytest
 
-from pcc.cli_bootstrap_array_core import _run_native_package_array_core_from_pcc1
+from pcc.driver.cli_bootstrap_array_core import _run_native_package_array_core_from_pcc1
 from pcc.package.array_core import array_core_report
-from pcc.array_numeric import float_sum, wrap_integer
+from pcc.package.array_numeric import float_sum, wrap_integer
 from tests.integration.test_pcc1_release_features import verify_release_compiler
 from tests.python.test_self_host_oracle_diff import pcc1_self_host_binary
 

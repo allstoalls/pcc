@@ -12,11 +12,11 @@ import pytest
 @pytest.mark.parametrize("helper", ["_module_find", "_module_ensure"])
 def test_runtime_library_helpers_preserve_manual_return_ownership(tmp_path, helper):
     """Raw runtime helpers balance their references explicitly, including borrows."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = (
         Path(__file__).resolve().parents[2]
-        / "pcc/py_runtime/py/py_module_attrs_runtime.py"
+        / "pcc/runtime/py/py_module_attrs_runtime.py"
     )
     output = tmp_path / "module_attrs.ll"
     compile_python(
@@ -43,7 +43,7 @@ def test_returning_borrowed_parameter_retains_for_owned_call_result(tmp_path):
     return lowering must retain it before the caller stores and later releases
     the call result as an owned local.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "return_borrowed_param.py"
     src.write_text(
@@ -93,7 +93,7 @@ def test_returning_borrowed_parameter_retains_for_owned_call_result(tmp_path):
 
 
 def test_c_abi_raw_scaffold_returning_borrowed_parameter_still_retains(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "return_borrowed_c_abi.py"
     src.write_text(

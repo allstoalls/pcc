@@ -7,9 +7,9 @@ this_dir = os.path.dirname(os.path.abspath(__file__))
 # rely on tests/conftest.py's global Path.resolve/dirname shim.
 parent_dir = os.path.dirname(os.path.dirname(this_dir))
 sys.path.insert(0, parent_dir)
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.codegen.c_codegen import LLVMCodeGenerator
-from pcc.parse.c_parser import CParser
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.frontends.c.codegen.c_codegen import CCodeGenerator
+from pcc.frontends.c.parse.c_parser import CParser
 import unittest
 
 
@@ -67,7 +67,7 @@ class TestArrayOfPointers(unittest.TestCase):
         assert ret == 6
 
     def test_multidim_ptr_array_ir_keeps_all_dimensions(self):
-        cg = LLVMCodeGenerator()
+        cg = CCodeGenerator()
         ast = CParser().parse(
             '''
             int a = 11;

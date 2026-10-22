@@ -56,12 +56,12 @@ def test_link_ab_detects_only_competing_pcc_work() -> None:
     assert _parse_competing_processes(
         """ 12 /usr/bin/python ordinary.py
  13 /tmp/build/pcc1 --backend self input.py
- 14 bash scripts/bootstrap.sh --stage 2
+ 14 python scripts/bootstrap.py --stage 2
  15 /usr/bin/python worker.py --pcc-python-multi-codegen-worker x
  16 /tmp/output.macho --help
 """
     ) == [
         (13, "/tmp/build/pcc1 --backend self input.py"),
-        (14, "bash scripts/bootstrap.sh --stage 2"),
+        (14, "python scripts/bootstrap.py --stage 2"),
         (15, "/usr/bin/python worker.py --pcc-python-multi-codegen-worker x"),
     ]

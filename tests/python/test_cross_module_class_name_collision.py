@@ -2,7 +2,7 @@
 
 Cross-module class lookup in ``_resolve_method_mro`` is keyed by bare class
 name and scanned the whole export table, so the first module that happened to
-define the name won.  ``pcc/ast/c_ast.py`` defines ``Enum``, ``If``, ``For``,
+define the name won.  ``pcc/frontends/c/ast/c_ast.py`` defines ``Enum``, ``If``, ``For``,
 ``Union``, ``Struct``, ``Return``, ``While``, ``ID``, ``Constant``, ``Cast``,
 ``Decl``, ``Label``, ``Case``, ``Default``, ``Break``, ``Continue``,
 ``Switch``, ``Typename`` and ``Assignment``.  The moment the C frontend joined
@@ -102,7 +102,7 @@ def test_calling_a_class_whose_base_name_collides_still_compiles(tmp_path):
     the C AST node's ``__init__(self, name, values, coord=None)`` and the call
     was rejected outright.
     """
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     provider = tmp_path / "colliding_provider.py"
     consumer = tmp_path / "consumer.py"
@@ -121,7 +121,7 @@ def test_calling_a_class_whose_base_name_collides_still_compiles(tmp_path):
 
 def test_both_same_named_classes_keep_their_own_behaviour(tmp_path):
     """The provider's ``Enum`` and ``enum.Enum`` coexist at runtime."""
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     provider = tmp_path / "colliding_provider.py"
     consumer = tmp_path / "consumer.py"
@@ -158,7 +158,7 @@ def test_c_ast_leaf_names_that_collide_are_still_present():
     say so here rather than let it quietly become a tautology.
     """
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "pcc" / "ast" / "c_ast.py").read_text(encoding="utf-8")
+    source = (repo_root / "pcc" / "frontends" / "c" / "ast" / "c_ast.py").read_text(encoding="utf-8")
     for name in ("Enum", "If", "For", "Union", "Return", "While", "Constant"):
         assert "\nclass " + name + "(" in source, name
 
@@ -197,7 +197,7 @@ main()
     ),
 )
 def test_string_valued_enum_members_expose_value(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "string_enum.py"
     exe = tmp_path / "string_enum.out"

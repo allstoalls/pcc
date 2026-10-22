@@ -1,9 +1,8 @@
 """Independent byte differentials for the A64 encoder.
 
-One corpus, three encoders: every operand shape the self backend emits is
-assembled by as(1), by the LLVM MC/AsmPrinter embedded in the repository-pinned
-llvmlite wheel, and by `pcc.backend.arm64_encode`.  The instruction words must
-match exactly. Extern-referencing instructions (bl, adrp/@PAGEOFF, GOT loads)
+The corpus compares the owned encoder with an explicitly labeled as(1)
+reference. Retired LLVM MC comparisons are in ``experiments/llvm_reference``.
+The instruction words must match exactly. Extern-referencing instructions (bl, adrp/@PAGEOFF, GOT loads)
 are additionally checked for relocation equality against as(1) — the fixup
 fields must be zero-filled the same way as(1) leaves them.
 
@@ -15,15 +14,14 @@ not silently mis-encode.
 from __future__ import annotations
 
 import os
+import platform
 import re
 import shutil
 import struct
 import subprocess
-from importlib.metadata import version
 from pathlib import Path
 
 import pytest
-from llvmlite import binding as llvm
 
 from pcc.backend import macho_spec as spec
 from pcc.backend.aarch64_fp_immediates import DIRECT_FP_IMMEDIATE_ENCODINGS
@@ -38,14 +36,7 @@ from pcc.backend.self_backend_ir import TypeDesc
 
 _CC = shutil.which(os.environ.get("CC", "cc"))
 _OTOOL = shutil.which("otool")
-_IS_ARM64_DARWIN = os.uname().sysname == "Darwin" and os.uname().machine == "arm64"
-_LLVMLITE_VERSION = version("llvmlite")
-_PINNED_LLVMLITE_VERSION = "0.46.0"
-_LLVM_MC_PROVENANCE = (
-    f"llvmlite=={_LLVMLITE_VERSION}; "
-    f"LLVM {'.'.join(str(v) for v in llvm.llvm_version_info)}; "
-    "binding.TargetMachine.emit_object"
-)
+_IS_ARM64_DARWIN = platform.system() == "Darwin" and platform.machine() == "arm64"
 if not _IS_ARM64_DARWIN:
     _AS_GATE = "needs Darwin arm64"
 elif _CC is None or _OTOOL is None:
@@ -53,24 +44,7 @@ elif _CC is None or _OTOOL is None:
 else:
     _AS_GATE = None
 
-# The as(1) and LLVM MC oracles are separate gates. The llvmlite pin is
-# provenance for the MC comparison only; gating the whole module on it
-# deselected the as(1) differential too, so an encoder change shipped with no
-# oracle running at all whenever the installed wheel differed from the pin.
-if _AS_GATE is not None:
-    _MC_GATE = _AS_GATE
-elif _LLVMLITE_VERSION != _PINNED_LLVMLITE_VERSION:
-    _MC_GATE = (
-        "LLVM MC oracle provenance changed: expected llvmlite=="
-        + _PINNED_LLVMLITE_VERSION
-        + ", got "
-        + _LLVMLITE_VERSION
-    )
-else:
-    _MC_GATE = None
-
 _as_oracle = pytest.mark.pcc_gate(unavailable=_AS_GATE)
-_mc_oracle = pytest.mark.pcc_gate(unavailable=_MC_GATE)
 
 
 def test_line_input_api_matches_string_projection() -> None:
@@ -88,39 +62,8 @@ def _run(cmd, **kw):
     return subprocess.run(cmd, capture_output=True, text=True, timeout=120, **kw)
 
 
-def _llvm_ir_string(text: str) -> str:
-    """Quote one assembler line as an LLVM IR string without locale escapes."""
-    out = []
-    for byte in text.encode("utf-8"):
-        if 0x20 <= byte <= 0x7E and byte not in (ord('"'), ord("\\")):
-            out.append(chr(byte))
-        else:
-            out.append("\\" + format(byte, "02X"))
-    return "".join(out)
 
 
-def _llvm_mc_object(asm_text: str, *, symbol: str) -> bytes:
-    """Assemble through llvmlite's pinned LLVM MC/AsmPrinter oracle."""
-    llvm.initialize_all_targets()
-    llvm.initialize_all_asmprinters()
-    llvm.initialize_native_asmparser()
-    triple = llvm.get_default_triple()
-    asm_lines = [
-        ".section __TEXT,__text,regular,pure_instructions",
-        ".globl " + symbol,
-        ".p2align 2",
-        *asm_text.splitlines(),
-        ".subsections_via_symbols",
-    ]
-    ir_text = "target triple = \"" + triple + "\"\n" + "".join(
-        'module asm "' + _llvm_ir_string(line) + '"\n'
-        for line in asm_lines
-    )
-    module = llvm.parse_assembly(ir_text)
-    module.verify()
-    target_machine = llvm.Target.from_triple(triple).create_target_machine()
-    module.data_layout = str(target_machine.target_data)
-    return target_machine.emit_object(module)
 
 
 def _text_bytes(object_bytes: bytes) -> bytes:
@@ -427,74 +370,8 @@ def test_every_instruction_word_matches_as(tmp_path):
     )
 
 
-@_mc_oracle
-def test_every_instruction_word_matches_pinned_llvm_mc():
-    ref_code = _text_bytes(_llvm_mc_object(CORPUS, symbol="_f"))
-    ours = assemble_text(CORPUS)
-    assert len(ours.code) == len(ref_code), (
-        f"instruction count differs: pcc {len(ours.code)//4}, "
-        f"LLVM MC {len(ref_code)//4}; oracle={_LLVM_MC_PROVENANCE}"
-    )
-    mismatches = []
-    lines = [
-        line.strip() for line in CORPUS.splitlines()
-        if line.strip() and not line.strip().endswith(":")
-    ]
-    for offset in range(0, len(ref_code), 4):
-        ref_word = struct.unpack_from("<I", ref_code, offset)[0]
-        our_word = struct.unpack_from("<I", ours.code, offset)[0]
-        if ref_word != our_word:
-            mismatches.append(
-                f"  +{offset:#06x} {lines[offset // 4]!r}: "
-                f"LLVM MC {ref_word:#010x}, pcc {our_word:#010x}"
-            )
-    assert not mismatches, (
-        "encodings diverge from the pinned LLVM MC oracle "
-        f"({_LLVM_MC_PROVENANCE}):\n" + "\n".join(mismatches)
-    )
 
 
-@_mc_oracle
-def test_llvm_mc_and_pcc_objects_disassemble_to_the_same_instructions(tmp_path):
-    """Second oracle: both byte streams survive Mach-O disassembly equally."""
-    from pcc.backend import macho_obj
-    from pcc.backend.macho_obj import Section, TextSymbol, TEXT_SECTION_FLAGS
-
-    corpus = """\
-_roundtrip:
-	sub	sp, sp, #32
-	stp	x29, x30, [sp, #-16]!
-	mov	x29, sp
-	movz	x9, #4660
-	add	x0, x1, x2
-	cmp	x0, #0
-	cset	w8, ne
-	fadd	d0, d1, d2
-	ldp	x29, x30, [sp], #16
-	add	sp, sp, #32
-	ret
-"""
-    llvm_path = tmp_path / "llvm-mc.o"
-    llvm_path.write_bytes(_llvm_mc_object(corpus, symbol="_roundtrip"))
-
-    ours = assemble_text(corpus)
-    pcc_path = tmp_path / "pcc-encoder.o"
-    pcc_path.write_bytes(macho_obj.emit_object(
-        [Section(
-            sectname="__text",
-            segname="__TEXT",
-            data=ours.code,
-            align_log2=2,
-            flags=TEXT_SECTION_FLAGS,
-            symbols=(TextSymbol("_roundtrip", 0),),
-            relocations=tuple(ours.relocations),
-        )],
-        undefined=ours.undefined,
-    ))
-
-    assert _disassembled_instructions(pcc_path) == _disassembled_instructions(
-        llvm_path
-    ), "pcc and LLVM MC objects do not round-trip through otool identically"
 
 
 @_as_oracle
@@ -558,15 +435,12 @@ def test_madd_has_the_proven_four_gpr_encoding():
     assert assembled.relocations == []
 
 
-@_mc_oracle
+@_as_oracle
 def test_mov_register_31_uses_zero_register_width_not_sp_alias(tmp_path):
     asm = "_mov_zero:\n\tmov\txzr, x0\n\tmov\twzr, w0\n"
     assembled = assemble_text(asm)
 
     assert assembled.code == struct.pack("<2I", 0xAA0003FF, 0x2A0003FF)
-    assert assembled.code == _text_bytes(
-        _llvm_mc_object(asm, symbol="_mov_zero")
-    )
 
     source = tmp_path / "mov-zero.s"
     source.write_text(

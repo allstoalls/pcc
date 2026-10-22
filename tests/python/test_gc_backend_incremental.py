@@ -15,7 +15,7 @@ def _compile_probe(
     backend: str | None = None,
     ir_scaffold_mode: str | None = "on",
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "probe.py"
     exe = tmp_path / "probe.out"
@@ -36,7 +36,7 @@ def _compile_probe(
     return exe
 
 
-# PCC_GC_DEFAULT_DEBT_THRESHOLD in pcc/py_runtime/src/py_gc_backend.c.  The
+# PCC_GC_DEFAULT_DEBT_THRESHOLD in pcc/runtime/src/py_gc_backend.c.  The
 # tuned value below is 16x smaller, which is 16x more incremental steps for the
 # same allocation volume, because a step fires when debt reaches the threshold.
 _DEFAULT_DEBT_THRESHOLD = 65536

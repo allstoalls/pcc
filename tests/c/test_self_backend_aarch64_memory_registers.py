@@ -1,5 +1,7 @@
 """Memory instructions should consume existing register assignments directly."""
 
+import sys
+import platform
 from pcc.backend.self_backend_aarch64_darwin import emit_aarch64_darwin_asm
 
 import pytest
@@ -62,6 +64,8 @@ entry:
     assert "ldr x1, [x1]" in assembly
 
 
+# AArch64 Darwin execution
+@pytest.mark.pcc_gate(probe=lambda: not (sys.platform != "darwin" or platform.machine() != "arm64"))
 def test_indexed_memory_register_selection_executes(tmp_path):
     source = _TRIPLE + '''
 @values = global [3 x i64] [i64 1, i64 23, i64 8], align 8
@@ -99,8 +103,6 @@ def _execute_memory_ir(source, tmp_path):
     from pcc.backend.self_backend_aarch64_darwin import emit_aarch64_darwin_indexed_transport
     from pcc.backend.self_backend_parse import parse_self_backend_module
 
-    if sys.platform != "darwin" or platform.machine() != "arm64":
-        pytest.skip("AArch64 Darwin execution")
     for optimize in (False, True):
         transport = emit_aarch64_darwin_indexed_transport(parse_self_backend_module(source), optimize=optimize)
         sections, undefined = transport.assemble_sections()
@@ -114,6 +116,8 @@ def _execute_memory_ir(source, tmp_path):
         assert result.returncode == 0, result.stderr
 
 
+# AArch64 Darwin execution
+@pytest.mark.pcc_gate(probe=lambda: not (sys.platform != "darwin" or platform.machine() != "arm64"))
 def test_halfword_and_null_stores_preserve_surrounding_bytes(tmp_path):
     source = _TRIPLE + """
 @source = global [4 x i8] [i8 17, i8 255, i8 255, i8 34], align 1

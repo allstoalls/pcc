@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 
 
 def _cc() -> str:
@@ -64,17 +64,17 @@ def _run_strategy_probe(
     return subprocess.run([str(exe)], capture_output=True, text=True, timeout=20)
 
 
-def test_nonatomic_refcount_strategy_smoke(tmp_path, pcc_py_runtime_archive):
+def test_nonatomic_refcount_strategy_smoke(tmp_path, pcc_runtime_archive):
     result = _run_strategy_probe(
-        tmp_path, pcc_py_runtime_archive, strategy=0, with_threads=0
+        tmp_path, pcc_runtime_archive, strategy=0, with_threads=1
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "ok"
 
 
-def test_atomic_refcount_strategy_smoke(tmp_path, threaded_pcc_py_runtime_archive):
+def test_atomic_refcount_strategy_smoke(tmp_path, threaded_pcc_runtime_archive):
     result = _run_strategy_probe(
-        tmp_path, threaded_pcc_py_runtime_archive, strategy=1, with_threads=1
+        tmp_path, threaded_pcc_runtime_archive, strategy=1, with_threads=1
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "ok"

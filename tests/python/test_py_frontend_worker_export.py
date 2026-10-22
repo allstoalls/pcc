@@ -2,15 +2,15 @@ from pathlib import Path
 
 
 def test_export_worker_full_lifts_native_stdlib_asyncio(tmp_path):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     repo = None
     for parent in Path(__file__).resolve().parents:
-        if (parent / "pcc" / "py_stdlib" / "asyncio.py").is_file():
+        if (parent / "pcc" / "stdlib" / "asyncio.py").is_file():
             repo = parent
             break
     assert repo is not None
-    src = repo / "pcc" / "py_stdlib" / "asyncio.py"
+    src = repo / "pcc" / "stdlib" / "asyncio.py"
     result = tmp_path / "export.tsv"
     export_dir = tmp_path / "exports"
     export_dir.mkdir()

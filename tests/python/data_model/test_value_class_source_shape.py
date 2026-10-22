@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from pcc.parse.py_lift import parse_and_lift
-from pcc.py_frontend import type_infer
-from pcc.py_frontend.types import PyFrontendError
+from pcc.frontends.python.py_lift import parse_and_lift
+from pcc.frontends.python import type_infer
+from pcc.frontends.python.types import PyFrontendError
 
 
 def _infer(source: str):

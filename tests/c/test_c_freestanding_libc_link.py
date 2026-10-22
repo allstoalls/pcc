@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import platform
 import re
@@ -11,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from pcc.cli_core import cli_main
-from pcc.evaluater.c_evaluator import CEvaluator, FREESTANDING_C_LIBC_PY_MODULES
+from pcc.driver.cli_core import cli_main
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator, FREESTANDING_C_LIBC_PY_MODULES
 
 
 @pytest.mark.parametrize(
@@ -99,7 +100,7 @@ def test_linux_freestanding_libc_forwards_non_pie_link_args(
         link_calls.append(command)
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr("pcc.evaluater.c_evaluator.subprocess.run", fake_run)
+    monkeypatch.setattr("pcc.frontends.c.evaluator.c_evaluator.subprocess.run", fake_run)
     allowed = ["-Wl,-Map,freestanding.map", "-no-pie", "./libpie-helper.a"]
 
     result = evaluator.run_compiled_translation_units_with_system_cc(
@@ -176,45 +177,54 @@ def test_c_cli_freestanding_libc_link_map_selects_only_pcc_python_libc(
     if sys.platform == "darwin":
         assert "libpy_runtime_pcc_py.a(freestanding_allocator.o)" in ownership
         assert "libpy_runtime_pcc_py.a(freestanding_mem_str.o)" in ownership
-        object_paths = {}
-        for line in ownership.splitlines():
-            match = re.match(r"\[\s*(\d+)\]\s+(.+)$", line)
-            if match:
-                object_paths[match.group(1)] = match.group(2)
-        system_owners = {
-            owner
-            for owner, path in object_paths.items()
-            if path.endswith(".tbd")
-        }
-        assert {
-            Path(object_paths[owner]).name for owner in system_owners
-        } == {"libSystem.tbd", "libsystem_kernel.tbd"}
-
-        system_symbols = set()
-        symbol_table = ownership.split("# Symbols:\n", 1)[1]
-        for line in symbol_table.splitlines():
-            match = re.search(r"\[\s*(\d+)\]\s+(\S+)$", line)
-            if match and match.group(1) in system_owners:
-                system_symbols.add(match.group(2))
-        # The contract is *which* libc the program still depends on, not how
-        # the linker spells each reference.  `_mmap.got` and `_mmap.stub` are
-        # the indirect-address and the call-thunk entry for one symbol, so
-        # pinning the suffix made a linker that emits both fail a test about
-        # library ownership.  Compare the symbols; keep the set exact so a
-        # third system symbol still fails.
-        system_symbol_names = {
-            name.rsplit(".", 1)[0] if name.endswith((".got", ".stub")) else name
-            for name in system_symbols
-        }
-        assert system_symbol_names == {"_mmap", "_munmap"}, system_symbols
+        declared = [
+            json.loads(line[len("# declared_library "):])
+            for line in ownership.splitlines()
+            if line.startswith("# declared_library ")
+        ]
+        assert declared == [
+            {"ordinal": 1, "install_name": "/usr/lib/libSystem.B.dylib"}
+        ]
+        imports = [
+            json.loads(line[len("# dynamic_import "):])
+            for line in ownership.splitlines()
+            if line.startswith("# dynamic_import ")
+        ]
+        # The owned image declares libSystem as the import provider. It does
+        # not consume SDK .tbd files or establish physical reexport owners.
+        assert {item["symbol"] for item in imports} == {"_mmap", "_munmap"}
+        assert all(item["library_ordinal"] == 1 and item["weak"] is False
+                   for item in imports)
+        assert ".tbd" not in ownership
     else:
-        assert "libpcc_freestanding_c.a(freestanding_allocator.o)" in ownership
-        assert "libpcc_freestanding_c.a(freestanding_mem_str.o)" in ownership
+        assert "libpy_runtime_pcc_py.a(freestanding_allocator.o)" in ownership
+        assert "libpy_runtime_pcc_py.a(freestanding_mem_str.o)" in ownership
         assert "libc.a" not in ownership
+    # Attribute the bytes actually selected by the owned linker to the
+    # admitted production archive, without manufacturing a C-only alias.
+    for member in ("freestanding_allocator.o", "freestanding_mem_str.o"):
+        selected = re.search(
+            r"^(.+libpy_runtime_pcc_py\.a)\(" + re.escape(member)
+            + r"\) archive_sha256=([0-9a-f]{64}) member_sha256=([0-9a-f]{64})$",
+            ownership,
+            re.MULTILINE,
+        )
+        assert selected is not None, member
+        archive_bytes = Path(selected.group(1)).read_bytes()
+        assert hashlib.sha256(archive_bytes).hexdigest() == selected.group(2)
+        if sys.platform == "darwin":
+            from pcc.backend.macho_archive import read_archive
+
+            member_bytes = {item.name: item.data for item in read_archive(archive_bytes)}[member]
+        else:
+            from pcc.backend.elf_x86_64 import read_archive_payloads
+
+            member_bytes = dict(read_archive_payloads(archive_bytes))[member]
+        assert hashlib.sha256(member_bytes).hexdigest() == selected.group(3)
 
 
 def test_c_freestanding_libc_link_view_lists_only_pcc_python_sources():
-    runtime_py = Path(__file__).resolve().parents[2] / "pcc" / "py_runtime" / "py"
+    runtime_py = Path(__file__).resolve().parents[2] / "pcc" / "runtime" / "py"
     assert FREESTANDING_C_LIBC_PY_MODULES == (
         "freestanding_mem_str",
         "freestanding_allocator",

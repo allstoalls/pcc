@@ -18,7 +18,7 @@ def test_native_frontend_artifact_copy(native_compiler, tmp_path):
     compile_run(native_compiler, tmp_path / "program", """
         import sys
         import os
-        from pcc.py_frontend.pipeline_frontend_parallel import _copy_frontend_artifact_tree
+        from pcc.frontends.python.pipeline_frontend_parallel import _copy_frontend_artifact_tree
         def run():
             _copy_frontend_artifact_tree(sys.argv[1], sys.argv[2])
             with open(os.path.join(sys.argv[2], "empty.ast"), "rb") as stream:

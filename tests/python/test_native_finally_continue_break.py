@@ -15,7 +15,7 @@ import textwrap
 
 
 def test_finally_on_continue_break_matches_cpython(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "fcb.py"
     exe = tmp_path / "fcb.out"

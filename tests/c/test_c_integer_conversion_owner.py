@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import inspect
 
-from pcc.codegen.c_codegen import (
-    LLVMCodeGenerator,
+from pcc.frontends.c.codegen.c_codegen import (
+    CCodeGenerator,
     _decide_usual_integer_conversion,
 )
-from pcc.evaluater.c_evaluator import CEvaluator
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
 
 
 def test_integer_conversion_decision_covers_rank_and_signedness_cases():
@@ -34,10 +34,10 @@ def test_integer_conversion_decision_covers_rank_and_signedness_cases():
 
 def test_integer_conversion_paths_share_one_decision_owner():
     users = (
-        LLVMCodeGenerator._usual_arithmetic_conversion_ir_type,
-        LLVMCodeGenerator._usual_arithmetic_conversion,
-        LLVMCodeGenerator._generic_usual_arithmetic_conversion_key,
-        LLVMCodeGenerator._eval_const_expr,
+        CCodeGenerator._usual_arithmetic_conversion_ir_type,
+        CCodeGenerator._usual_arithmetic_conversion,
+        CCodeGenerator._generic_usual_arithmetic_conversion_key,
+        CCodeGenerator._eval_const_expr,
     )
     for user in users:
         assert "_decide_usual_integer_conversion(" in inspect.getsource(user)

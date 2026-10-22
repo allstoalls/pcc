@@ -24,7 +24,7 @@ import pytest
 
 
 def _run(tmp_path, backend, body: str) -> list[str]:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -34,7 +34,7 @@ def _run(tmp_path, backend, body: str) -> list[str]:
         str(exe),
         ir_scaffold_mode="on",
         libpython_mode="off",
-        backend="llvm",
+        backend="self",
     )
     native = subprocess.run(
         [str(exe)],

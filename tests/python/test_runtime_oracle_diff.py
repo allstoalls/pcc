@@ -52,7 +52,7 @@ def _run_env() -> dict[str, str]:
 
 
 @pytest.mark.parametrize("program", _corpus_programs(), ids=lambda p: p.stem)
-def test_corpus_program_matches_cpython(tmp_path, program, pcc_py_runtime_archive):
+def test_corpus_program_matches_cpython(tmp_path, program, pcc_runtime_archive):
     cpython_dir = tmp_path / "cpython"
     native_dir = tmp_path / "native"
     cpython_dir.mkdir()
@@ -63,7 +63,7 @@ def test_corpus_program_matches_cpython(tmp_path, program, pcc_py_runtime_archiv
 
     compile_env = dict(os.environ)
     compile_env.pop("LC_ALL", None)
-    compile_env["PCC_RUNTIME_ARCHIVE"] = str(pcc_py_runtime_archive)
+    compile_env["PCC_RUNTIME_ARCHIVE"] = str(pcc_runtime_archive)
     compiled = subprocess.run(
         [
             _pcc_binary(),

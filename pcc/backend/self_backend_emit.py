@@ -40,6 +40,40 @@ _INDEXED_FIXED_PAYLOAD_KIND_IDS = (
 )
 
 
+_CALL_INSTRUCTION_PREFIXES = ("bl ", "blr ", "call ")
+
+
+def _record_call_safepoint_at_return(
+    lines: list[str], instruction_start: int, suffix_start: int,
+) -> None:
+    """Put a call safepoint's labels right after the call instruction.
+
+    The suffix (labels, then reloads) follows the whole lowered call, after
+    its result moves; a stack walk finds the record by the return address the
+    callee's frame record holds, so the labels move to just after the call.
+    The reloads, and the result moves before them, keep their order.
+    """
+    if suffix_start >= len(lines):
+        return
+    call_line = suffix_start - 1
+    while call_line >= instruction_start:
+        if lines[call_line].lstrip().startswith(_CALL_INSTRUCTION_PREFIXES):
+            break
+        call_line -= 1
+    if call_line < instruction_start or call_line == suffix_start - 1:
+        return
+    suffix = lines[suffix_start:]
+    labels = [line for line in suffix if line.endswith(":")]
+    if not labels:
+        return
+    reloads = [line for line in suffix if not line.endswith(":")]
+    moves = lines[call_line + 1:suffix_start]
+    del lines[call_line + 1:]
+    lines.extend(labels)
+    lines.extend(moves)
+    lines.extend(reloads)
+
+
 def _block_line_index_get(index: dict, block_name: str):
     for existing_name, value in index.get(
         _stable_text_bucket_key(block_name), []
@@ -74,7 +108,7 @@ def emit_function_blocks(
             int,
             int,
             int,
-            tuple,
+            int | tuple,
             bool,
         ],
         list[str],
@@ -82,8 +116,10 @@ def emit_function_blocks(
     emit_indexed_terminator: Callable[
         [ParsedFunction, ParsedBlock, ParsedInstr, int], list[str]
     ] | None = None,
+    emit_indexed_error_edge=None,
 ) -> list[str]:
     lines: list[str] = []
+    cold_lines: list[str] = []
     entry_index: dict = {}
     suffix_index: dict = {}
     term_index: dict = {}
@@ -124,6 +160,20 @@ def emit_function_blocks(
         terminator_use_count = 0
         terminator_use_id = -1
         instruction_index = 0
+        # Inline error edges live only in the kernel: a block that has them
+        # carries no compare-and-branch for those checks, so a target that
+        # cannot emit them must refuse instead of dropping the checks.
+        error_edge_first = 0
+        error_edge_count = 0
+        error_edge_offset = 0
+        if block_id >= 0:
+            error_span: CompilerInt2 = indexed_kernel.inline_error_edge_span(block_id)
+            error_edge_first = error_span.first
+            error_edge_count = error_span.second
+            if error_edge_count and emit_indexed_error_edge is None:
+                raise BackendUnavailable(
+                    "target does not support inline error edges"
+                )
         if block_id >= 0 and emit_indexed_instruction is not None:
             indexed_block: CompilerInt4 = indexed_kernel.block_fact(block_id)
             block_instruction_start = indexed_block.first
@@ -134,6 +184,7 @@ def emit_function_blocks(
             instruction_count = len(block.instructions)
         while instruction_index < instruction_count:
             instr = None
+            instruction_start = len(lines)
             if block_id >= 0 and emit_indexed_instruction is not None:
                 kind_id = indexed_kernel.instruction_kind_id(
                     block_id, instruction_index
@@ -164,6 +215,7 @@ def emit_function_blocks(
             else:
                 instr = block.instructions[instruction_index]
                 lines.extend(emit_instruction(func, block, instr))
+            suffix_start = len(lines)
             if emit_instruction_suffix is not None:
                 if instr is None:
                     instr = indexed_kernel.diagnostic_instruction(
@@ -179,7 +231,30 @@ def emit_function_blocks(
                 and instruction_index in block_suffix_index
             ):
                 lines.extend(block_suffix_index[instruction_index])
+            _record_call_safepoint_at_return(lines, instruction_start, suffix_start)
+            while error_edge_offset < error_edge_count:
+                edge_id = error_edge_first + error_edge_offset
+                trigger = indexed_kernel.inline_error_edge_trigger(edge_id)
+                if trigger > instruction_index:
+                    break
+                if trigger < instruction_index:
+                    raise BackendUnavailable(
+                        "inline error edges are not trigger-ordered"
+                    )
+                lines.extend(
+                    emit_indexed_error_edge(
+                        func,
+                        indexed_kernel,
+                        edge_id,
+                        cold_lines,
+                    )
+                )
+                error_edge_offset += 1
             instruction_index += 1
+        if error_edge_offset != error_edge_count:
+            raise BackendUnavailable(
+                "inline error edge trigger exceeds source block"
+            )
         term = block.terminator
         if emit_terminator_prefix is not None:
             if term is None and indexed_kernel is None:
@@ -215,6 +290,7 @@ def emit_function_blocks(
                 term = indexed_kernel.diagnostic_terminator(block_id)
             assert term is not None
             lines.extend(emit_terminator(func, block, term))
+    lines.extend(cold_lines)
     return lines
 
 
@@ -302,6 +378,7 @@ def emit_indexed_function_blocks(
                     block_id,
                     instruction_index,
                 )
+            instruction_start = len(lines)
             lines.extend(
                 emit_indexed_instruction(
                     func,
@@ -314,6 +391,7 @@ def emit_indexed_function_blocks(
                     bool(metadata.third),
                 )
             )
+            suffix_start = len(lines)
             if (
                 block_suffix_index is not None
                 and instruction_index in block_suffix_index
@@ -336,6 +414,7 @@ def emit_indexed_function_blocks(
                             record_index,
                         )
                     suffix_route_index += 1
+            _record_call_safepoint_at_return(lines, instruction_start, suffix_start)
             while error_edge_offset < error_span.second:
                 edge_id = error_span.first + error_edge_offset
                 trigger = indexed_kernel.inline_error_edge_trigger(edge_id)

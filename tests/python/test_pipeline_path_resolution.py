@@ -5,19 +5,19 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend import pipeline_paths
+from pcc.frontends.python import pipeline
+from pcc.driver import paths as pipeline_paths
 
 
 def _make_pcc_package(root: Path) -> Path:
     package = root / "pcc"
     (package / "backend").mkdir(parents=True)
-    (package / "py_stdlib").mkdir()
+    (package / "stdlib").mkdir()
     (package / "__init__.py").write_text("", encoding="utf-8")
     (package / "backend" / "self_backend_dispatch.py").write_text(
         "", encoding="utf-8"
     )
-    (package / "py_stdlib" / "__init__.py").write_text("", encoding="utf-8")
+    (package / "stdlib" / "__init__.py").write_text("", encoding="utf-8")
     return package
 
 
@@ -25,7 +25,7 @@ def test_explicit_source_root_resolves_package_without_pipeline_import_state(
     tmp_path, monkeypatch
 ):
     package = _make_pcc_package(tmp_path / "checkout")
-    synthetic_pipeline = tmp_path / "installed" / "pcc" / "py_frontend" / "pipeline.py"
+    synthetic_pipeline = tmp_path / "installed" / "pcc" / "frontends" / "python" / "pipeline.py"
     synthetic_pipeline.parent.mkdir(parents=True)
     synthetic_pipeline.write_text("", encoding="utf-8")
     monkeypatch.setenv("PCC_SOURCE_ROOT", str(package.parent))
@@ -42,11 +42,11 @@ def test_runtime_path_selection_is_ordered_and_falls_back_to_package_runtime(
     tmp_path, monkeypatch
 ):
     package = _make_pcc_package(tmp_path / "checkout")
-    runtime = package / "py_runtime"
+    runtime = package / "runtime"
     (runtime / "include").mkdir(parents=True)
     (runtime / "include" / "py_runtime.h").write_text("", encoding="utf-8")
-    synthetic_pipeline = package / "py_frontend" / "pipeline.py"
-    synthetic_pipeline.parent.mkdir()
+    synthetic_pipeline = package / "frontends" / "python" / "pipeline.py"
+    synthetic_pipeline.parent.mkdir(parents=True)
     synthetic_pipeline.write_text("", encoding="utf-8")
     monkeypatch.setenv("PCC_SOURCE_ROOT", str(package))
 

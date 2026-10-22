@@ -5,7 +5,7 @@ import textwrap
 
 
 def test_typeddict_total_keyword_is_noop_self_backend(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "typeddict_total.py"
     src.write_text(textwrap.dedent(
@@ -43,7 +43,7 @@ def test_typeddict_total_keyword_is_noop_self_backend(tmp_path):
 def test_typing_supports_index_alias_and_typeddict_are_compile_time_only(
     tmp_path,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "typing_metadata.py"
     src.write_text(

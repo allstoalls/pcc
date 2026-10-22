@@ -15,8 +15,8 @@ import zipfile as host_zipfile
 
 import pytest
 
-from pcc.py_stdlib import tarfile as port_tarfile
-from pcc.py_stdlib import zipfile as port_zipfile
+from pcc.stdlib import tarfile as port_tarfile
+from pcc.stdlib import zipfile as port_zipfile
 
 
 def _tar_add_bytes(archive, name, payload):

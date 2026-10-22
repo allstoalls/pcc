@@ -15,7 +15,7 @@ import subprocess
 from pathlib import Path
 from textwrap import dedent
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def _build_and_run(tmp_path: Path, source: str) -> list[str]:
@@ -62,6 +62,7 @@ def test_native_re_match_engine_subset_matches_cpython(tmp_path):
 
 
 def test_native_re_match_unsupported_pattern_raises(tmp_path):
+    # Lookahead joined the engine subset; lookbehind is still outside it.
     out = _build_and_run(
         tmp_path,
         """
@@ -69,7 +70,7 @@ def test_native_re_match_unsupported_pattern_raises(tmp_path):
 
         def main():
             try:
-                re.match("(?=x)x", "x")
+                re.match("(?<=a)b", "ab")
                 print("no-raise")
             except NotImplementedError:
                 print("raised")
@@ -255,8 +256,9 @@ def test_native_re_findall_engine_semantics(tmp_path):
             ys = PAT.findall("v1.22")
             for y in ys:
                 print("<" + y + ">")
+            print(len(re.findall("(?=x)", "xax")))
             try:
-                re.findall("(?=x)", "x")
+                re.findall("(?<=a)b", "ab")
                 print("no-raise")
             except NotImplementedError:
                 print("raised")
@@ -277,6 +279,7 @@ def test_native_re_findall_engine_semantics(tmp_path):
         "<>",
         "<1>",
         "<22>",
+        "2",
         "raised",
     ]
 
@@ -437,4 +440,47 @@ def test_native_re_flags_engine_semantics(tmp_path):
         "<a>",
         "<c>",
         "flags-raised",
+    ]
+
+
+def test_native_re_module_calls_accept_flag_expressions_and_keywords(tmp_path):
+    # re.compile already folded ``re.I | re.S`` and accepted ``flags=``; the
+    # module-level match/search/fullmatch/finditer calls fell back to CPython
+    # for both shapes, which no-libpython builds turn into a runtime stub.
+    out = _build_and_run(
+        tmp_path,
+        """
+        import re
+
+        OPTIONS = "option('allow-noblas', type: 'boolean', value: true)\\nOPTION(\\"debug_x\\",\\n  type: 'BOOLEAN')"
+
+        def main():
+            m = re.search("o(\\\\d)", "xO1 o2", re.I | re.S)
+            print(m.group(1) if m else None)
+            print(bool(re.match("x.o", "X\\nO1", re.I | re.S)))
+            print(bool(re.match("x.o", "X\\nO1", re.I)))
+            print(bool(re.fullmatch("a.b", "A\\nB", flags=re.I | re.DOTALL)))
+            print([m.group(1) for m in re.finditer("o(\\\\d)", "xO1 o2 O3", flags=re.IGNORECASE)])
+            print(re.search(pattern="b", string="abc").span())
+            print(re.search("B", "abc", flags=0))
+            for match in re.finditer(
+                r"option\\(\\s*['\\"]([^'\\"]+)['\\"](?P<body>.*?)\\)",
+                OPTIONS,
+                re.IGNORECASE | re.DOTALL,
+            ):
+                print(match.group(1), repr(match.group("body")))
+
+        main()
+        """,
+    )
+    assert out == [
+        "1",
+        "True",
+        "False",
+        "True",
+        "['1', '2', '3']",
+        "(1, 2)",
+        "None",
+        "allow-noblas \", type: 'boolean', value: true\"",
+        "debug_x \",\\n  type: 'BOOLEAN'\"",
     ]

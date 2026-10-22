@@ -1,4 +1,4 @@
-from pcc.self_backend_profile import SelfBackendPhase, summarize_self_backend
+from pcc.diagnostics.self_backend_profile import SelfBackendPhase, summarize_self_backend
 
 
 def test_self_backend_profile_totals_spills():

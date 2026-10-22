@@ -118,14 +118,14 @@ def test_stage2_tool_rejects_compiler_hash_drift(tmp_path: Path):
         raise AssertionError("Stage2 tool accepted a drifted pcc1")
 
 
-def test_stage2_tool_defaults_to_two_workers_and_eight_gib_cap():
+def test_stage2_tool_defaults_to_two_workers_and_automatic_cap():
     tool = _load_tool()
     args = tool._parser().parse_args(
         ["--stage1-dir", "/tmp/stage1", "--output-dir", "/tmp/stage2"]
     )
 
     assert args.self_backend_jobs == 2
-    assert args.max_tree_rss_bytes == 8 * 1024 * 1024 * 1024
+    assert args.max_tree_rss_bytes == 0
     tool._validate_limits(args)
 
     args.max_tree_rss_bytes = 16 * 1024 * 1024 * 1024
@@ -158,7 +158,7 @@ def _fake_prior_stage2(tmp_path: Path) -> Path:
         rows.append(f"{index}\tmod{index}\t{source}")
     manifest = state / "manifests" / "worker_0.manifest"
     manifest.write_text(
-        "pcc.py_frontend.codegen_worker.v4\n" + "\n".join(rows) + "\n",
+        "pcc.frontends.python.codegen_worker.v4\n" + "\n".join(rows) + "\n",
         encoding="utf-8",
     )
     plan = stage2 / "pcc2.pcc-codegen-plan"
@@ -260,6 +260,8 @@ def test_stage2_runner_args_carry_every_resource_envelope_field():
     args = tool._parser().parse_args(
         ["--stage1-dir", "/tmp/stage1", "--output-dir", "/tmp/stage2"]
     )
+    # run() resolves automatic selection before building this Namespace.
+    args.max_tree_rss_bytes = 8 * 1024 * 1024 * 1024
     runner_args = tool._runner_args(args, {"PCC_GC_BACKEND": "3"})
     envelope = tool.stage_ab._resource_envelope(
         args=runner_args, environment={}, process={}

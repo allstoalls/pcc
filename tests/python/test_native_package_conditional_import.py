@@ -4,7 +4,7 @@ An import that is INDENTED in the entry module — inside a module-level
 ``try:`` / ``if:`` block, or inside a function (lazy import) — fell back to
 libpython under ``--backend self --python-libpython=off``
 ("imports still lower through CPython fallback"). The entry import-discovery
-(``_top_level_import_targets`` in pcc/py_frontend/pipeline.py) was called with
+(``_top_level_import_targets`` in pcc/frontends/python/pipeline.py) was called with
 ``top_level_only=True``, so it skipped every indented import line; the
 referenced module was never added to the native compile set and the import
 lowered through ``py_cpy_import``, tripping the no-libpython gate.
@@ -305,7 +305,7 @@ def test_cross_module_function_attribute_is_a_first_class_value(tmp_path):
 
 
 def test_module_scope_import_scanner_excludes_function_and_class_bodies():
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     source = (
         "if True:\n"

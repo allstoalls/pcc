@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from pcc.ir_diff import diff_ir
+from pcc.diagnostics.ir_diff import diff_ir
 
 
 def main(argv=None) -> int:

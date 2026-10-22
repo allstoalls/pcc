@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def test_unique_external_class_annotation_dispatches_method_natively(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     owner = tmp_path / "owner.py"
     owner.write_text(

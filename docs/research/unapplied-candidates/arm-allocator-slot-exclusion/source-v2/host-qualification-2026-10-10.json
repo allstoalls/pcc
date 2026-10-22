@@ -1,0 +1,135 @@
+{
+  "candidate_patch_sha256": "b9738c9de66c014d444ae61ce4b04db4e8338c88cf6c54728cf51b38e5db4cee",
+  "candidate_status": "UNAPPLIED",
+  "evidence_sha256": {
+    "base_postseal": "6e8c43fbbc6c642829c99f8789bbaa5017bbdc141d131b86925dade335c10d44",
+    "candidate_postseal": "6493906a32689298685b564fbb23ea533df91e51e27e30441683417137e8ed63",
+    "collection": "8ea2eb716701e1ea9a2862c116bead1ade7a5992f8d0d2b028828904664f08a0",
+    "junit": "87d3b8b2332e30cdc47570ac8dca322835946bd9b8d6f905b088bcad511ec44a",
+    "payload_result": "bbc85727f246fe70c308097114f27c6b6ec0a5690047ade7be5188da4fb0242e",
+    "qualification": "21a5c91003136825108a7bb308626f003e79e46a74f7efc4ad9b20b6ae750bf1"
+  },
+  "executed": {
+    "counts": {
+      "collected": 44,
+      "errors": 0,
+      "failed": 0,
+      "passed": 44,
+      "skipped": 0,
+      "xfailed": 0,
+      "xpassed": 0
+    },
+    "deselected": [],
+    "direct_builder_disabling_flags": {
+      "PCC_DIRECT_INDEXED_KERNEL_VALIDATE": null,
+      "PCC_TEXT_INDEXED_KERNEL_EMIT": null
+    },
+    "failure": null,
+    "junit_cases": 44,
+    "pytest_options": [
+      "-x",
+      "-n0",
+      "-vv",
+      "--tb=short",
+      "-o",
+      "addopts="
+    ],
+    "runs": 1,
+    "scope": "Host allocator helper/state and owned Darwin/Linux ARM object comparisons; no frontend compilation, runtime build, FFI or emitted native execution",
+    "unrun_nodes": []
+  },
+  "history": {
+    "correction": "Only the new test changes: use the actual builder SSA name and cross-check its direct value ID. The production postimage and compiler identity remain unchanged. V1 was not rerun.",
+    "prior_candidate_commit": "c3263977301823c2198fe22c2c1c09aa14519885",
+    "prior_counts": {
+      "collected": 44,
+      "failed": 1,
+      "passed": 42,
+      "unrun": 1
+    },
+    "prior_failure_qualification_sha256": "f987b141e448911ffc7955ebab9cd0b43fc2e4c12ee73a72a2fb88dbf6d3d205",
+    "prior_failure_receipt_commit": "4f070447d711da20af1f424bd2df4b955b80e6c7"
+  },
+  "limits": [
+    "This is a focused host gate, not full regression or native acceptance.",
+    "No real-module mechanism, performance, runtime build, emitted native behavior, pcc1 or full Stage1 qualification was run for this candidate.",
+    "Active MADD/tail-call eligibility remains untested: the selected object fixtures use optimize=False.",
+    "This isolated host result does not alter the independently published numeric-data batching production or its exact-head CI.",
+    "Sampled RSS is observational; the hard memory limit was address space."
+  ],
+  "packet_manifest_sha256": "4c95f64a7f65973bf096129b668cf70eeffa4c1f9dd6d4f939dd814415061df0",
+  "preserved_candidate_commit": "34134665d8d92d8ada6820e6c871a368dcd49431",
+  "qualification_date_utc": "2026-10-10",
+  "schema": "pcc.arm_allocator_slot_exclusion_host_public_qualification.v2",
+  "source": {
+    "base_full_source_relation": "Retained numeric-batching snapshot: complete pcc subtree equals published bf1bf82d; full source retains older unrelated docs/bootstrap and native-test f391 bytes. Not a full current-master checkout.",
+    "base_pcc_tree": "930263bf204e578796c72dab5d4aa31fd7ab27ae",
+    "base_production_commit": "bf1bf82d8242a60a85a06322ceee97fab5346cc0",
+    "base_source_manifest_sha256": "7430a30766c11a59e7185758b725b289388ae131498ce6a8a568bdf10ff773ba",
+    "candidate_pcc_tree": "992c49dc67063865c2b3b26a7092d3dcc6348a96",
+    "candidate_source_manifest_sha256": "dce88d3b8b29e7364e7faec2e71694ae577aeeee1aec0f6a4866b98974eb00d0",
+    "changed_files": [
+      {
+        "base_bytes": 71082,
+        "base_sha256": "2c71d952927362c219c2539478fb477b7dfae51561076d27b7675b73f623d100",
+        "mode": "100644",
+        "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+        "post_bytes": 73423,
+        "post_sha256": "49403685d7beaf24b9db20a9539118fe2c5f7b56cda90bdf4960e878fa44dddb"
+      },
+      {
+        "base_bytes": null,
+        "base_sha256": null,
+        "mode": "100644",
+        "path": "tests/python/test_aarch64_allocator_slot_exclusion.py",
+        "post_bytes": 16230,
+        "post_sha256": "f216ab109ef91dea5d0e72a1f42298030164a491385b1a87c28d45f9b14371e9"
+      }
+    ],
+    "copy": "Independent ordinary source; original five internal symlinks retained.",
+    "files": 30029,
+    "logical_bytes": 390563864,
+    "retained_snapshot_codegen_checksum": "b7bdfdc62fd97e204b25c4b3f3c232164b739b765db846cb12250c239d0fc014"
+  },
+  "source_preservation": {
+    "imported_source_closure": "PASS",
+    "in_guard_complete_before_after": "PASS",
+    "independent_complete_base_and_candidate_postseals": "PASS",
+    "original_shared_lock_released": true
+  },
+  "stages": {
+    "host": {
+      "bootstrap_sha256": "6d5c7dc6a120b619db1ee3a80b40e4779668d22ce69d96d78aaae10a398a9860",
+      "bootstrap_status": "PASS",
+      "cleanup": "CLEAN; root reaped; ECHILD; no active handles",
+      "continuous_free_reserve_bytes": 4294967296,
+      "denied_audit_events": 0,
+      "elapsed_seconds": 5.162419259999297,
+      "guard_sha256": "31b86d41d533533027cc344048da9ab1e4382ea265bab62844201e2f0e7a4a10",
+      "guard_status": "COMPLETE",
+      "hard_address_space_bytes": 4294967296,
+      "hard_nproc": 0,
+      "max_disk_growth_bytes": 536870912,
+      "outer_seconds": 300,
+      "returncode": 0,
+      "sampled_peak_root_rss_bytes": 91119616
+    },
+    "materialization": {
+      "bootstrap_sha256": "bd35e3b75f943c69a98f638556a2eea116d77558038ce448591d4e0f6af01659",
+      "bootstrap_status": "PASS",
+      "cleanup": "CLEAN; root reaped; ECHILD; no active handles",
+      "continuous_free_reserve_bytes": 4294967296,
+      "denied_audit_events": 0,
+      "elapsed_seconds": 10.986208973998146,
+      "guard_sha256": "18e727b6b1cd7121d0e574170497cf1876f5f55f088fb121967355f53cdcf533",
+      "guard_status": "COMPLETE",
+      "hard_address_space_bytes": 1073741824,
+      "hard_nproc": 0,
+      "max_disk_growth_bytes": 536870912,
+      "outer_seconds": 60,
+      "returncode": 0,
+      "sampled_peak_root_rss_bytes": 65941504
+    }
+  },
+  "status": "PASS: all 44 focused host cases"
+}

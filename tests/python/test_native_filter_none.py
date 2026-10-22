@@ -14,7 +14,7 @@ import textwrap
 
 
 def test_filter_none_matches_cpython(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "filtnone.py"
     exe = tmp_path / "filtnone.out"

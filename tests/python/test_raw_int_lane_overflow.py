@@ -76,10 +76,10 @@ def _run(binary, backend):
 
 
 def test_pow_result_keeps_the_exact_int_in_the_raw_lane(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     binary = _compile(
-        tmp_path, "raw_pow", _EXACT, python_program_compiler, pcc_py_runtime_archive,
+        tmp_path, "raw_pow", _EXACT, python_program_compiler, pcc_runtime_archive,
     )
     expected = "-1 4611686018427387904 -9223372036854775808 -1 3909821048582988049\n"
     for backend in range(5):
@@ -89,11 +89,11 @@ def test_pow_result_keeps_the_exact_int_in_the_raw_lane(
 
 
 def test_int_beyond_the_raw_lane_raises_instead_of_reading_zero(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     binary = _compile(
         tmp_path, "raw_too_big", _TOO_BIG, python_program_compiler,
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
     )
     for backend in range(5):
         ran = _run(binary, backend)

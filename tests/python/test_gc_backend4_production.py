@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_runtime.py.py_abi_constants import (
+from pcc.runtime.py.py_abi_constants import (
     C_POINTER_SIZE,
     PYCLASSMETHOD_FUNC_OFFSET,
     PYCLASSMETHOD_SIZE,
@@ -20,7 +20,7 @@ from tests.runtime_build_cache import (
 )
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_OBJECT_SLOTS = RUNTIME_DIR / "py" / "freestanding_gc_object_slots.py"
 STRICT_COMMON_MARK_CYCLE = (
     RUNTIME_DIR / "py" / "freestanding_gc_common_mark_cycle.py"
@@ -1051,56 +1051,62 @@ def _relocation_type_specific_raw_payload_source() -> str:
     '''
 
 
-def test_backend4_deallocating_objects_are_quarantined_from_add_score_and_copy_source():
+def _quarantine_guard(source: str, owner: str, required_bits: set[str], result: str):
+    """The first flags guard in ``source`` and its position.
 
+    The guard must test every bit in ``required_bits`` and also reject pinned
+    objects, either through bit 64 in the mask or the
+    pcc_gc_object_is_address_pinned helper (which also counts leases), then
+    return ``result``.
+    """
+    import re
+
+    pattern = re.compile(
+        r"if \(flags & \(?([0-9 |]+)\)?\) != 0"
+        r"(?: or pcc_gc_object_is_address_pinned\(" + owner + r"\) != 0)?:\n\s+"
+        + re.escape(result)
+    )
+    match = pattern.search(source)
+    assert match is not None, source[:400]
+    bits = {term.strip() for term in match.group(1).split("|")}
+    assert required_bits <= bits, match.group(0)
+    assert "64" in bits or "pcc_gc_object_is_address_pinned" in match.group(0), match.group(0)
+    return match.start()
+
+
+def test_backend4_deallocating_objects_are_quarantined_from_add_score_and_copy_source():
+    # The contract: a deallocating object (524288) is refused by the
+    # relocation-set add, the candidate score and the copy before any
+    # allocation, flag change or scoring work. Match the bits and order, not
+    # the exact literal: the guards have grown fresh-alloc bits, and the
+    # pinned bit 64 became pcc_gc_object_is_address_pinned, which also covers
+    # foreign leases.
     strict_backend = (RUNTIME_DIR / "py" / "py_gc_backend.py").read_text(
         encoding="utf-8"
     )
     strict_add = strict_backend.split("def _relocation_set_add(", 1)[1].split(
         '@c_abi_export("pcc_gc_backend4_relocation_set_remove")', 1
     )[0]
-    # Match the bits this contract is about, not the exact literal mask: the
-    # guard has since grown the fresh-alloc and pinned bits, which does not
-    # weaken the quarantine but did make an exact-string assertion fail while
-    # the property it names still held.
-    strict_guard = strict_add.split("flags & (", 1)[1].split(")", 1)[0]
-    strict_guard_bits = {term.strip() for term in strict_guard.split("|")}
-    assert {"8192", "524288"} <= strict_guard_bits, strict_guard
-    strict_after_guard = strict_add.split(
-        "flags & (" + strict_guard + ")", 1
-    )[1]
-    assert strict_after_guard.startswith(") != 0:\n        return 0"), (
-        strict_after_guard[:60]
-    )
-    assert strict_add.index("524288") < strict_add.index("node = malloc(16)")
-    assert strict_add.index("524288") < strict_add.index(
-        "store_i32(obj, 12, flags | 2048)"
-    )
+    guard = _quarantine_guard(strict_add, "obj", {"8192", "524288"}, "return 0")
+    assert guard < strict_add.index("node = malloc(16)")
+    assert guard < strict_add.index("store_i32(obj, 12, flags | 2048)")
+
     strict_selector = STRICT_RELOCATION_SELECTOR.read_text(encoding="utf-8")
     strict_score = strict_selector.split(
         "def _backend4_zpage_candidate_score(", 1
     )[1].split(
         '@c_abi_export("pcc_gc_relocation_selector_add_candidate_node")', 1
     )[0]
-    assert (
-        "if (flags & (64 | 2048 | 8192 | 524288)) != 0:\n        return -1"
-        in strict_score
-    )
-    assert strict_score.index("524288") < strict_score.index(
-        "size: i64 = load_i64(node, 32)"
-    )
-    assert strict_score.index("524288") < strict_score.index(
-        'atomic_rmw_i32("or", obj, 12, 32768, "acq_rel")'
-    )
+    guard = _quarantine_guard(strict_score, "obj", {"2048", "8192", "524288"}, "return -1")
+    assert guard < strict_score.index("size: i64 = load_i64(node, 32)")
+    assert guard < strict_score.index('atomic_rmw_i32("or", obj, 12, 32768, "acq_rel")')
+
     strict_copy_source = STRICT_RELOCATION_COPY.read_text(encoding="utf-8")
     strict_copy = strict_copy_source.split(
         '@c_abi_export("pcc_gc_relocate_copy")', 1
     )[1]
-    assert "if (flags & (64 | 524288)) != 0:" in strict_copy
-    assert strict_copy.index("if (flags & (64 | 524288)) != 0:") < (
-        strict_copy.index("eligible = 0", strict_copy.index("524288"))
-    )
-    assert strict_copy.index("524288") < strict_copy.index(
+    guard = _quarantine_guard(strict_copy, "from_obj", {"524288"}, "eligible = 0")
+    assert guard < strict_copy.index(
         "to_obj = pcc_gc_alloc(size, tag, (flags & ~10240) | 64)"
     )
 
@@ -1114,12 +1120,12 @@ def test_backend4_c_runtime_quarantines_deallocating_objects_from_selection_and_
 
 def test_backend4_strict_runtime_quarantines_deallocating_objects_from_selection_and_copy(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     result = _compile_and_run_archive(
         tmp_path,
         _deallocating_relocation_quarantine_source(),
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
         "backend4_strict_deallocating_quarantine",
     )
     assert result.returncode == 0, result.stdout + result.stderr
@@ -1332,14 +1338,16 @@ def test_backend4_deallocating_index_node_is_not_active(tmp_path: Path) -> None:
     py_finish = py_obj.split("def _py_decref_finish(", 1)[1].split(
         '@c_abi_export("py_decref")', 1
     )[0]
+    # Death is published with one atomic or (809d6bf67): other threads
+    # update the same flags word.
     assert py_prepare.index("new_rc: int = pcc_refcount_decref(o)") < (
         py_prepare.index("if new_rc == 0:")
     ) < py_prepare.index(
-        "store_i32(o, PYOBJECTHEADER_FLAGS_OFFSET, flags | 524288)"
+        'atomic_rmw_i32("or", o, PYOBJECTHEADER_FLAGS_OFFSET, 524288, "release")'
     )
-    assert "pcc_runtime_log_event_code" not in py_prepare
+    assert "pcc_diagnostics_runtime_log_event_code" not in py_prepare
     assert "flags | 524288" not in py_finish
-    assert py_finish.index("pcc_runtime_log_event_code") < py_finish.index(
+    assert py_finish.index("pcc_diagnostics_runtime_log_event_code") < py_finish.index(
         "py_weakref_invalidate(o)"
     )
 
@@ -1646,12 +1654,12 @@ def test_c_reseed_retains_multiple_authoritative_evacuation_pages(
 
 def test_strict_reseed_retains_multiple_authoritative_evacuation_pages(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     result = _compile_and_run_archive(
         tmp_path,
         _reseed_authoritative_evacuation_pages_source(),
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
         "backend4_strict_reseed_authoritative_pages",
     )
     assert result.returncode == 0, result.stdout + result.stderr
@@ -1722,12 +1730,12 @@ def test_c_reseed_counts_more_than_one_page_batch(tmp_path: Path) -> None:
 
 def test_strict_reseed_counts_more_than_one_page_batch(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     result = _compile_and_run_archive(
         tmp_path,
         _many_page_reseed_source(),
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
         "backend4_strict_many_page_reseed",
     )
     assert result.returncode == 0, result.stdout + result.stderr
@@ -4180,6 +4188,8 @@ def test_backend4_relocation_retargets_class_attrs_side_table(tmp_path):
         typedef struct {
             const char *name;
             PyObject *func;
+            uint32_t name_hash;
+            int32_t name_length;
         } ProbeClassMethod;
 
         typedef struct ProbeClassObject {
@@ -4593,6 +4603,8 @@ def test_backend4_class_relocation_loads_forwarded_metadata_slots(tmp_path):
         typedef struct {
             const char *name;
             PyObject *func;
+            uint32_t name_hash;
+            int32_t name_length;
         } ProbeClassMethod;
 
         typedef struct ProbeClassObject {
@@ -4737,6 +4749,8 @@ def test_backend4_class_lookup_loads_forwarded_method_slot(tmp_path):
         typedef struct {
             const char *name;
             PyObject *func;
+            uint32_t name_hash;
+            int32_t name_length;
         } ProbeClassMethod;
 
         typedef struct ProbeClassObject {
@@ -4765,6 +4779,7 @@ def test_backend4_class_lookup_loads_forwarded_method_slot(tmp_path):
         } ProbeListObject;
 
         extern PyObject *py_class_lookup(ProbeClassObject *cls, const char *name);
+        extern void py_class_add_method(ProbeClassObject *cls, const char *name, PyObject *func);
 
         int main(void) {
             if (pcc_gc_set_backend(PCC_GC_KIND_COLORED_RELOCATING) != 0) return 2;
@@ -4781,18 +4796,20 @@ def test_backend4_class_lookup_loads_forwarded_method_slot(tmp_path):
             cls->bases = 0;
             cls->n_mro = 1;
             cls->mro = (ProbeClassObject **)calloc(1, sizeof(ProbeClassObject *));
-            cls->n_methods = 1;
-            cls->methods = (ProbeClassMethod *)calloc(1, sizeof(ProbeClassMethod));
+            cls->n_methods = 0;
+            cls->methods = 0;
             cls->n_fields = 0;
             cls->field_names = 0;
             cls->instance_size = 32;
             cls->type_tag_alloc = 1005;
             cls->del_method = 0;
             cls->attrs = 0;
-            if (cls->mro == 0 || cls->methods == 0) return 4;
+            if (cls->mro == 0) return 4;
             cls->mro[0] = cls;
-            cls->methods[0].name = "method";
-            cls->methods[0].func = func;
+            /* The runtime records the name hash and length that lookups
+               compare before the name itself. */
+            py_class_add_method(cls, "method", func);
+            if (cls->n_methods != 1 || cls->methods[0].func != func) return 4;
             int64_t func_id = pcc_gc_object_id(func);
             /* Fill the method-location cache before the function moves.  The
                second lookup below must hit that cached location and still
@@ -5276,6 +5293,8 @@ def test_backend4_class_add_method_resolves_forwarded_class_argument(tmp_path):
         typedef struct {
             const char *name;
             PyObject *func;
+            uint32_t name_hash;
+            int32_t name_length;
         } ProbeClassMethod;
 
         typedef struct ProbeClassObject {
@@ -6905,6 +6924,23 @@ def test_backend4_genzgc_store_buffer_owner_count_high_water(tmp_path):
             if (pcc_gc_backend4_store_buffer_entries() != 0) return 11;
             if (pcc_gc_backend4_store_buffer_owner_count_high_water() != 2) return 12;
 
+            /* Drained owners remain alive: a reset must seed the empty queues,
+               and another owner must not inherit their retired index keys. */
+            pcc_gc_telemetry_reset();
+            if (pcc_gc_backend4_store_buffer_owner_count_high_water() != 0) return 13;
+            if (pcc_gc_telemetry(PCC_GC_COUNTER_GENZGC_STORE_BUFFER_OWNER_COUNT_HIGH_WATER) != 0) return 14;
+            ProbeListObject *owner3 = new_owner();
+            PyObject *child3 = new_young_list();
+            if (owner3 == 0 || child3 == 0) return 15;
+            pcc_gc_store_ptr((PyObject *)owner3, &owner3->items[0], child3);
+            if (pcc_gc_backend4_store_buffer_entries() != 1) return 16;
+            if (pcc_gc_backend4_store_buffer_owner_count_high_water() != 1) return 17;
+            if (pcc_gc_telemetry(PCC_GC_COUNTER_GENZGC_STORE_BUFFER_OWNER_COUNT_HIGH_WATER) != 1) return 18;
+            if (pcc_gc_step(1) < 1) return 19;
+            if (pcc_gc_backend4_store_buffer_entries() != 0) return 20;
+
+            pcc_gc_release(child3);
+            pcc_gc_release((PyObject *)owner3);
             pcc_gc_release(child1);
             pcc_gc_release(child2);
             pcc_gc_release((PyObject *)owner1);
@@ -7214,6 +7250,7 @@ def test_backend4_genzgc_fragmentation_policy_exposes_backlog_and_efficiency(tmp
             obj->length = 0;
             obj->capacity = 0;
             obj->items = 0;
+            pcc_gc_publish_initialized((PyObject *)obj);
             return (PyObject *)obj;
         }
 
@@ -7285,6 +7322,7 @@ def test_backend4_genzgc_selector_prefers_fragmented_zpage(tmp_path):
             obj->length = 0;
             obj->capacity = 0;
             obj->items = 0;
+            pcc_gc_publish_initialized((PyObject *)obj);
             return (PyObject *)obj;
         }
 
@@ -8104,6 +8142,8 @@ def test_backend4_genzgc_step_evacuates_fragmented_large_zpage(tmp_path):
         #include "py_runtime.h"
         #include <stdio.h>
 
+        extern void pcc_gc_set_mark_color(PyObject *obj, int64_t color);
+
         int main(void) {
             if (pcc_gc_set_backend(PCC_GC_KIND_COLORED_RELOCATING) != 0) return 2;
 
@@ -8130,6 +8170,9 @@ def test_backend4_genzgc_step_evacuates_fragmented_large_zpage(tmp_path):
 
             pcc_gc_telemetry_reset();
             pcc_gc_publish_initialized((PyObject *)large);
+            /* The collector relocates only what a mark has reached; a
+             * completed mark leaves the rooted object black. */
+            pcc_gc_set_mark_color(large, 32);
             if (pcc_gc_step(1) != 1) return 10;
             if (pcc_gc_backend4_evacuated_bytes() != 70000) return 11;
             if (pcc_gc_telemetry(PCC_GC_COUNTER_GENZGC_EVACUATED_BYTES) != 70000) return 12;
@@ -9466,6 +9509,17 @@ def test_backend4_class_creation_registers_bases_and_mro_payload_spans(tmp_path)
             return a >= 0 && b >= 0 && a != b;
         }
 
+        /* A payload span lies in its owner's page when the page has room;
+           otherwise it is registered as an external span (offset -1, see
+           pcc_gc_backend4_zpage_payload_span_preflight_locked) and its slots
+           share the owner's card. Which case each array gets depends on the
+           C3 scratch tuples allocated between the two registrations. */
+        static int span_cards_valid(PyObject *owner, int64_t first, int64_t later) {
+            if (card_differs(first, later)) return 1;
+            int64_t owner_card = pcc_gc_backend4_zpage_owner_span_card(owner);
+            return owner_card >= 0 && first == owner_card && later == owner_card;
+        }
+
         int main(void) {
             if (pcc_gc_set_backend(PCC_GC_KIND_COLORED_RELOCATING) != 0) return 2;
             pcc_gc_telemetry_reset();
@@ -9489,7 +9543,7 @@ def test_backend4_class_creation_registers_bases_and_mro_payload_spans(tmp_path)
                 (PyObject *)derived,
                 (PyObject **)&derived->bases[64]
             );
-            if (!card_differs(bases_card0, bases_card64)) return 7;
+            if (!span_cards_valid((PyObject *)derived, bases_card0, bases_card64)) return 7;
 
             int64_t mro_card0 = pcc_gc_backend4_zpage_owner_slot_span_card(
                 (PyObject *)derived,
@@ -9499,7 +9553,12 @@ def test_backend4_class_creation_registers_bases_and_mro_payload_spans(tmp_path)
                 (PyObject *)derived,
                 (PyObject **)&derived->mro[64]
             );
-            if (!card_differs(mro_card0, mro_card64)) return 8;
+            if (!span_cards_valid((PyObject *)derived, mro_card0, mro_card64)) return 8;
+            /* Either way, creation registered exactly one span per array. */
+            if (pcc_gc_backend4_zpage_unregister_owner_payload_span(
+                    (PyObject *)derived, (void *)derived->bases) != 1) return 9;
+            if (pcc_gc_backend4_zpage_unregister_owner_payload_span(
+                    (PyObject *)derived, (void *)derived->mro) != 1) return 10;
 
             printf("backend4-class-create-payload-span-registration-ok\\n");
             return 0;
@@ -9567,7 +9626,7 @@ def test_backend4_class_creation_payload_span_registration_is_mirrored_source():
     header = (RUNTIME_DIR / "include" / "py_runtime.h").read_text(encoding="utf-8")
     py_class = (RUNTIME_DIR / "py" / "py_class.py").read_text(encoding="utf-8")
     py_gc = (RUNTIME_DIR / "py" / "py_gc_backend.py").read_text(encoding="utf-8")
-    abi = (REPO_ROOT / "pcc" / "py_frontend" / "codegen" / "runtime_abi.py").read_text(
+    abi = (REPO_ROOT / "pcc" / "frontends" / "python" / "codegen" / "runtime_abi.py").read_text(
         encoding="utf-8"
     )
 
@@ -9593,7 +9652,7 @@ def test_backend4_class_creation_payload_span_registration_is_mirrored_source():
         '@c_abi_export("py_class_mark_slots_only")', 1
     )[0]
     assert "pcc_gc_backend4_zpage_register_owner_payload_span(" in py_new
-    assert "n_bases * 8" in py_new
+    assert "n_bases * C_POINTER_SIZE" in py_new
     assert C_POINTER_SIZE == 8
     assert "mro_len * C_POINTER_SIZE" in py_new
     py_add_method = py_class.split("def py_class_add_method(", 1)[1].split(
@@ -9947,6 +10006,8 @@ def test_backend4_genzgc_selector_prefers_old_zpage_age_pressure(tmp_path):
             PyObject *old_obj = pcc_gc_alloc(128, PY_TYPE_LIST, PY_FLAG_GC_OLD);
             PyObject *young_obj = pcc_gc_alloc(128, PY_TYPE_LIST, 0);
             if (old_obj == 0 || young_obj == 0) return 3;
+            pcc_gc_publish_initialized(old_obj);
+            pcc_gc_publish_initialized(young_obj);
             if (pcc_gc_backend4_zpage_old_pages() < 1) return 4;
             if (pcc_gc_backend4_zpage_young_pages() < 1) return 5;
 
@@ -10323,6 +10384,8 @@ def test_backend4_genzgc_step_selects_and_drains_whole_zpage(tmp_path):
         #include "py_runtime.h"
         #include <stdio.h>
 
+        extern void pcc_gc_set_mark_color(PyObject *obj, int64_t color);
+
         enum {
             PY_FLAG_GC_YOUNG = 0x80
         };
@@ -10360,6 +10423,10 @@ def test_backend4_genzgc_step_selects_and_drains_whole_zpage(tmp_path):
              * one-unit step below measures page selection/drain itself. */
             pcc_gc_publish_initialized((PyObject *)a);
             pcc_gc_publish_initialized((PyObject *)b);
+            /* The collector relocates only what a mark has reached; a
+             * completed mark leaves both rooted objects black. */
+            pcc_gc_set_mark_color(a, 32);
+            pcc_gc_set_mark_color(b, 32);
             if (pcc_gc_step(2) != 2) return 19;
             if (pcc_gc_relocation_set_size() != 0) return 20;
             pcc_gc_telemetry_reset();
@@ -11170,7 +11237,7 @@ def test_backend4_public_telemetry_symbols_are_wired():
     py_gc_state = (RUNTIME_DIR / "py" / "freestanding_gc_state.py").read_text(
         encoding="utf-8"
     )
-    abi = (REPO_ROOT / "pcc" / "py_frontend" / "codegen" / "runtime_abi.py").read_text(
+    abi = (REPO_ROOT / "pcc" / "frontends" / "python" / "codegen" / "runtime_abi.py").read_text(
         encoding="utf-8"
     )
 

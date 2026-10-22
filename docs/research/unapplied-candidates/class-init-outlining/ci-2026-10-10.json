@@ -1,0 +1,252 @@
+{
+  "commit": "b68d422cf134357a16ea79be004c1174c7e39fac",
+  "date_utc": "2026-10-10",
+  "evidence": {
+    "all_five_archive_digests_verified": true,
+    "all_job_logs_and_archive_bytes_retained": true,
+    "artifact_readback_sha256": "579462f77682071dd336803b27477afc781c867314ba22cdb8477a8d8d5a61a8",
+    "full_qualification_sha256": "943873f76cef482360023c6924d0feda3e36faccfa12044f15722f73d009604e"
+  },
+  "interpretation": [
+    "The focused macOS pcc0 job passed 11 tests with a newly matched thread-enabled atomic Darwin runtime. This includes existing native aggregate ownership and time programs.",
+    "All four self-host build jobs reached their existing 2400-second Stage1 deadline. The Linux and Windows matrices failed in their shared GC0 Stage1 before the five-GC Stage2/Stage3 chains. The macOS pcc1 job did not produce pcc1.",
+    "The recorded terminal causes are timeouts. They do not establish that the new class helper has passed pcc1 compilation or that no semantic problem remains later in the build.",
+    "The original local29-case host gate and real-module structural counts remain separate evidence; this CI workflow did not explicitly select the new class-outlining host-test file.",
+    "The new helper native semantic edge cases, successful full Stage1, Stage2/Stage3 fixed point, full async16, gateway and installed-wheel qualification remain incomplete. No cap or workflow was changed after these results.",
+    "Sampled memory values are platform-specific process-tree observations, not comparable benchmarks or proof of a memory improvement."
+  ],
+  "job_summary": {
+    "failure": 4,
+    "success": 1,
+    "unfinished": 0
+  },
+  "jobs": [
+    {
+      "aggregate_ownership": {
+        "ci_receipts_record_matching_observed_collectors": true,
+        "native_executions": 25,
+        "programs": 5,
+        "requested_collectors": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "stdout_and_stderr_match_reference": true
+      },
+      "artifact": {
+        "id": 11651978990,
+        "name": "macos-pcc0-regression-receipts",
+        "zip_bytes": 171018,
+        "zip_sha256": "abba2b479f84b78dd91abac2853e2c8635888c6d2452a1b2c29a24bd624b0243"
+      },
+      "clock_scope": "real host/native clock epoch; simulated suspend; emitted native worker-state reader",
+      "completed_at": "2026-10-10T00:43:26Z",
+      "conclusion": "success",
+      "failed_skipped_errors": 0,
+      "job_id": 114084616344,
+      "name": "macOS arm64 focused pcc0 native regressions",
+      "runtime": {
+        "archive_sha256": "f98025a75e6ce2f8e7cfd55a64c7fc55370912d4e5240accc549300c333bde5e",
+        "capi_inventory_sha256": "71ab7e714faa2f754fd353fc6d7f50cf95267d32f4388895b95d30ddd01dffda",
+        "codegen_sha256": [
+          "d157eb615451b552a265243136e5f1a1e294cab93ff802005d9832e1a269a15b"
+        ],
+        "config": {
+          "refcount": "atomic",
+          "threads": true
+        },
+        "member_count": 181,
+        "provenance_sha256": "985fc71f4a6bbf82b60c54e47ea581dc7c7e5a142595a5db2909903043367128",
+        "target": "arm64-apple-darwin"
+      },
+      "scope": "host pcc0 self/off emitted execution; Stage1 is a separate job",
+      "started_at": "2026-10-10T00:26:55Z",
+      "test_groups": [
+        {
+          "group": "clock",
+          "tests": 2
+        },
+        {
+          "group": "native-worker-clock",
+          "tests": 1
+        },
+        {
+          "group": "root-joins",
+          "tests": 5
+        },
+        {
+          "group": "time",
+          "tests": 1
+        },
+        {
+          "group": "worker-handles",
+          "tests": 2
+        }
+      ],
+      "tests_passed": 11,
+      "time": {
+        "native_executions": 5,
+        "observation_limit": "These five time receipts record the requested backend only; they are not counted as observed-collector evidence.",
+        "programs": 1,
+        "requested_collectors": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "url": "https://github.com/ikshengmin/pcc/actions/runs/38009075780/job/114084616344"
+    },
+    {
+      "artifact": {
+        "id": 11654465666,
+        "name": "bootstrap-linux-x86_64",
+        "zip_bytes": 977414,
+        "zip_sha256": "edd1f3f4cc8f8dfc2bcc91e8e142f2ef79996077e858f658c21ff26cd1a74de2"
+      },
+      "classification": "Stage1 timeout",
+      "completed_at": "2026-10-10T01:13:23Z",
+      "conclusion": "failure",
+      "evidence": {
+        "failure_json_sha256": "f61f356d71b5b62bc6fdbd4978dc0e27559be6cb49c7a69f833cb159321bdc37",
+        "last_sample_elapsed_seconds": 2400.189562504,
+        "later_stage2_stage3": "UNRUN; shared Stage1 did not complete",
+        "peak_sampled_rss_bytes": 2460315648,
+        "sample_count": 9711,
+        "shared_gc0": true,
+        "source": {
+          "clean_commit": true,
+          "commit": "b68d422cf134357a16ea79be004c1174c7e39fac",
+          "source_file_count": 1125,
+          "source_scope": "compiler-runtime-headers-build-harness-v1",
+          "source_sha256": "dc02bcb972ab2200a1bf02f6bf5701425cfeeaef30b4386e8b43e100c93c300c"
+        },
+        "stage": 1,
+        "stage1_log_sha256": "61d0eec08f9d895fb0866434f3f6e615a2d63cce3c39b68a7eb0db67ca5351ae",
+        "status": "TIMEOUT"
+      },
+      "failure_step": "Qualify all five GC self-host chains",
+      "job_id": 114084616429,
+      "name": "Native wheel / linux-x86_64",
+      "peak_sampled_process_tree_rss_bytes": 2460315648,
+      "stage_timeout_seconds": 2400,
+      "started_at": "2026-10-10T00:26:48Z",
+      "url": "https://github.com/ikshengmin/pcc/actions/runs/38009075780/job/114084616429"
+    },
+    {
+      "artifact": {
+        "id": 11654420577,
+        "name": "bootstrap-windows-x86_64",
+        "zip_bytes": 1098481,
+        "zip_sha256": "315176f40926a305fda91b03f3b039bf448635cce3cecbcb9e95b7b4af38b310"
+      },
+      "classification": "Stage1 timeout",
+      "completed_at": "2026-10-10T01:12:50Z",
+      "conclusion": "failure",
+      "evidence": {
+        "failure_json_sha256": "cab2c1ef02b3c897914354846ff9621eb6611e19b75dea4ab3f220982989032f",
+        "last_sample_elapsed_seconds": 2400.1517818,
+        "later_stage2_stage3": "UNRUN; shared Stage1 did not complete",
+        "peak_sampled_rss_bytes": 4844244992,
+        "sample_count": 9973,
+        "shared_gc0": true,
+        "source": {
+          "clean_commit": true,
+          "commit": "b68d422cf134357a16ea79be004c1174c7e39fac",
+          "source_file_count": 1125,
+          "source_scope": "compiler-runtime-headers-build-harness-v1",
+          "source_sha256": "41cd514f3d31ca2f46183956374bd562b54251d4a875f879ef01d2cc26180e74"
+        },
+        "stage": 1,
+        "stage1_log_sha256": "a9e5504602d40bd3cc760a854a2d6cdaba6c0057b347f21d7a9eb552002d62b9",
+        "status": "TIMEOUT"
+      },
+      "failure_step": "Qualify all five GC self-host chains",
+      "job_id": 114084616433,
+      "name": "Native wheel / windows-x86_64",
+      "peak_sampled_process_tree_rss_bytes": 4844244992,
+      "stage_timeout_seconds": 2400,
+      "started_at": "2026-10-10T00:26:48Z",
+      "url": "https://github.com/ikshengmin/pcc/actions/runs/38009075780/job/114084616433"
+    },
+    {
+      "artifact": {
+        "id": 11653174269,
+        "name": "bootstrap-linux-aarch64",
+        "zip_bytes": 1152961,
+        "zip_sha256": "2a43fc0e9fc883c734386eedd25fdf73664e0986b8792a03b2d6ba6ea17e6bfd"
+      },
+      "classification": "Stage1 timeout",
+      "completed_at": "2026-10-10T01:12:38Z",
+      "conclusion": "failure",
+      "evidence": {
+        "failure_json_sha256": "f61f356d71b5b62bc6fdbd4978dc0e27559be6cb49c7a69f833cb159321bdc37",
+        "last_sample_elapsed_seconds": 2400.129511047,
+        "later_stage2_stage3": "UNRUN; shared Stage1 did not complete",
+        "peak_sampled_rss_bytes": 5391630336,
+        "sample_count": 11099,
+        "shared_gc0": true,
+        "source": {
+          "clean_commit": true,
+          "commit": "b68d422cf134357a16ea79be004c1174c7e39fac",
+          "source_file_count": 1125,
+          "source_scope": "compiler-runtime-headers-build-harness-v1",
+          "source_sha256": "dc02bcb972ab2200a1bf02f6bf5701425cfeeaef30b4386e8b43e100c93c300c"
+        },
+        "stage": 1,
+        "stage1_log_sha256": "4c084017a1b80df8cd8944609934b83f55bf313e208ba802611ee5e7ba2ace2a",
+        "status": "TIMEOUT"
+      },
+      "failure_step": "Qualify all five GC self-host chains",
+      "job_id": 114084616564,
+      "name": "Native wheel / linux-aarch64",
+      "peak_sampled_process_tree_rss_bytes": 5391630336,
+      "stage_timeout_seconds": 2400,
+      "started_at": "2026-10-10T00:26:50Z",
+      "url": "https://github.com/ikshengmin/pcc/actions/runs/38009075780/job/114084616564"
+    },
+    {
+      "artifact": {
+        "id": 11653531988,
+        "name": "bootstrap-macos-arm64",
+        "zip_bytes": 277547,
+        "zip_sha256": "b1cb529d21da9fd2cb29c5957cbf3bfd08d68be0a4587ff56ae013a9a90a67c3"
+      },
+      "classification": "Stage1 timeout",
+      "completed_at": "2026-10-10T01:07:20Z",
+      "conclusion": "failure",
+      "evidence": {
+        "elapsed_seconds": 2400.3012857910003,
+        "later_native_smoke_wheel_parity": "UNRUN",
+        "max_tree_rss_bytes": 2722824192,
+        "outer_bootstrap_returncode": 124,
+        "pcc1_output": "none",
+        "peak_sampled_rss_bytes": 2050031616,
+        "result_json_sha256": "f36a77d56f2779b316de46c30be6e1851743f5eed94796d984562edf38d6723c",
+        "shared_gc0": false,
+        "stage": 1,
+        "status": "TIMEOUT",
+        "supervised_child_returncode": 143
+      },
+      "failure_step": "Build current pcc1",
+      "job_id": 114084616658,
+      "name": "macOS arm64 native pcc1 and installed wheel",
+      "peak_sampled_process_tree_rss_bytes": 2050031616,
+      "stage_timeout_seconds": 2400,
+      "started_at": "2026-10-10T00:26:52Z",
+      "url": "https://github.com/ikshengmin/pcc/actions/runs/38009075780/job/114084616658"
+    }
+  ],
+  "overall_conclusion": "failure",
+  "pcc_tree": "dc63c2a946f533f7b31ce63db2f759a044fdc37f",
+  "repository": "ikshengmin/pcc",
+  "run_id": 38009075780,
+  "run_url": "https://github.com/ikshengmin/pcc/actions/runs/38009075780",
+  "schema": "pcc.class-init-outlining-ci-qualification.v1",
+  "tree": "dccaaa3b68df37b2acb6c9695eae6f765b901274",
+  "trigger": "One automatic push-triggered run for the exact three-path production increment; no manual dispatch or rerun.",
+  "workflow_path": ".github/workflows/pcc1-package-parity.yml"
+}

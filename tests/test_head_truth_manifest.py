@@ -28,11 +28,11 @@ from scripts.head_truth_manifest import (
 def _runtime_provenance_observation() -> dict[str, object]:
     return {
         "artifact_paths": [
-            "pcc/py_runtime/libpy_runtime_pcc_py.a",
-            "pcc/py_runtime/libpy_runtime_pcc_py.a.provenance.json",
-            "pcc/py_runtime/libpy_runtime_pcc_py.a.capi_syms",
+            "pcc/runtime/libpy_runtime_pcc_py.a",
+            "pcc/runtime/libpy_runtime_pcc_py.a.provenance.json",
+            "pcc/runtime/libpy_runtime_pcc_py.a.capi_syms",
         ],
-        "backend": "llvm",
+        "backend": "self",
         "gc_backend": None,
         "links_libpython": None,
         "pcc2_pcc3_equal": None,
@@ -47,7 +47,7 @@ def _runtime_provenance_observation() -> dict[str, object]:
         "capi_inventory_sha256": "7" * 64,
         "producer_kind": "pcc-python-library-ir-to-obj",
         "source_kind": "pcc-python",
-        "object_emitter": "llvmlite-target-machine",
+        "object_emitter": "pcc-self-backend-object-writer",
         "uses_host_cc": False,
         "failure": None,
     }
@@ -88,7 +88,7 @@ def _result(
 ) -> GateResult:
     registered = {spec.gate_id: spec for spec in head_truth.gate_specs(Path("."))}
     spec = registered.get(gate_id)
-    bootstrap = gate_id in {"llvm-bootstrap", "self-five-gc-bootstrap"}
+    bootstrap = gate_id == "self-five-gc-bootstrap"
     runtime_archive = gate_id == "runtime-archive-preflight"
     native_artifact = bootstrap or gate_id == "numpy-core-head"
     return GateResult(
@@ -109,7 +109,7 @@ def _result(
         backend=(
             spec.backend
             if spec is not None
-            else "llvm" if runtime_archive else "self" if native_artifact else None
+            else "self" if (runtime_archive or native_artifact) else None
         ),
         gc_backend=(
             spec.gc_backend
@@ -176,7 +176,6 @@ def _manifest() -> dict[str, object]:
             _result("runtime-archive-preflight", kind="command"),
             _result("fallback-ratchet"),
             _result("gc-production-contract"),
-            _result("llvm-bootstrap", kind="bootstrap"),
             _result("self-five-gc-bootstrap", kind="pytest-bootstrap"),
             _result("numpy-core-head", kind="command"),
         ],
@@ -191,7 +190,7 @@ def _gate(manifest: dict[str, object], gate_id: str) -> dict[str, object]:
 def test_runtime_archive_inspector_records_verified_provenance(
     tmp_path: Path, monkeypatch
 ) -> None:
-    runtime_root = tmp_path / "pcc" / "py_runtime"
+    runtime_root = tmp_path / "pcc" / "runtime"
     runtime_root.mkdir(parents=True)
     archive = runtime_root / "libpy_runtime_pcc_py.a"
     archive.write_bytes(b"verified archive")
@@ -218,13 +217,13 @@ def test_runtime_archive_inspector_records_verified_provenance(
             {
                 "producer_kind": "pcc-python-library-ir-to-obj",
                 "source_kind": "pcc-python",
-                "object_emitter": "llvmlite-target-machine",
+                "object_emitter": "pcc-self-backend-object-writer",
                 "uses_host_cc": False,
             },
             {
                 "producer_kind": "pcc-python-library-ir-to-obj",
                 "source_kind": "pcc-python",
-                "object_emitter": "llvmlite-target-machine",
+                "object_emitter": "pcc-self-backend-object-writer",
                 "uses_host_cc": False,
             },
         ],
@@ -244,11 +243,11 @@ def test_runtime_archive_inspector_records_verified_provenance(
     assert observations == [
         {
             "artifact_paths": [
-                "pcc/py_runtime/libpy_runtime_pcc_py.a",
-                "pcc/py_runtime/libpy_runtime_pcc_py.a.provenance.json",
-                "pcc/py_runtime/libpy_runtime_pcc_py.a.capi_syms",
+                "pcc/runtime/libpy_runtime_pcc_py.a",
+                "pcc/runtime/libpy_runtime_pcc_py.a.provenance.json",
+                "pcc/runtime/libpy_runtime_pcc_py.a.capi_syms",
             ],
-            "backend": "llvm",
+            "backend": "self",
             "gc_backend": None,
             "links_libpython": None,
             "pcc2_pcc3_equal": None,
@@ -265,14 +264,14 @@ def test_runtime_archive_inspector_records_verified_provenance(
             ).hexdigest(),
             "producer_kind": "pcc-python-library-ir-to-obj",
             "source_kind": "pcc-python",
-            "object_emitter": "llvmlite-target-machine",
+            "object_emitter": "pcc-self-backend-object-writer",
             "uses_host_cc": False,
             "failure": None,
         }
     ]
 
 
-def test_runtime_archive_preflight_uses_llvm_mode_and_verified_observation(
+def test_runtime_archive_preflight_uses_self_mode_and_verified_observation(
     tmp_path: Path, monkeypatch
 ) -> None:
     spec = next(
@@ -302,10 +301,10 @@ def test_runtime_archive_preflight_uses_llvm_mode_and_verified_observation(
         runner,
     )
 
-    assert spec.backend == "llvm"
-    assert captured_env["PCC_BACKEND"] == "llvm"
+    assert spec.backend == "self"
+    assert captured_env["PCC_BACKEND"] == "self"
     assert result.status == PASS
-    assert result.backend == "llvm"
+    assert result.backend == "self"
     assert result.links_libpython is None
     assert result.observations == [_runtime_provenance_observation()]
 
@@ -313,7 +312,7 @@ def test_runtime_archive_preflight_uses_llvm_mode_and_verified_observation(
 def test_runtime_archive_preflight_fails_when_provenance_manifest_is_missing(
     tmp_path: Path,
 ) -> None:
-    runtime_root = tmp_path / "pcc" / "py_runtime"
+    runtime_root = tmp_path / "pcc" / "runtime"
     runtime_root.mkdir(parents=True)
     (runtime_root / "libpy_runtime_pcc_py.a").write_bytes(b"archive")
     spec = next(
@@ -342,7 +341,7 @@ def test_runtime_archive_preflight_fails_when_provenance_manifest_is_missing(
 def test_runtime_archive_preflight_fails_when_provenance_manifest_is_tampered(
     tmp_path: Path,
 ) -> None:
-    runtime_root = tmp_path / "pcc" / "py_runtime"
+    runtime_root = tmp_path / "pcc" / "runtime"
     runtime_root.mkdir(parents=True)
     archive = runtime_root / "libpy_runtime_pcc_py.a"
     archive.write_bytes(b"archive")
@@ -448,14 +447,15 @@ def test_pass_rejects_missing_summary_timeout_and_bad_bootstrap_claims() -> None
     manifest = _manifest()
     _gate(manifest, "fallback-ratchet")["pytest_summary"] = None
     _gate(manifest, "gc-production-contract")["returncode"] = 124
-    _gate(manifest, "llvm-bootstrap")["links_libpython"] = True
-    _gate(manifest, "self-five-gc-bootstrap")["pcc2_pcc3_equal"] = False
+    five_gc = _gate(manifest, "self-five-gc-bootstrap")
+    five_gc["links_libpython"] = True
+    five_gc["pcc2_pcc3_equal"] = False
 
     errors = validate_manifest(manifest)
 
     assert "fallback-ratchet: pytest PASS requires a final summary" in errors
     assert "gc-production-contract: PASS requires returncode 0" in errors
-    assert "llvm-bootstrap: PASS requires links_libpython=false" in errors
+    assert "self-five-gc-bootstrap: PASS requires links_libpython=false" in errors
     assert "self-five-gc-bootstrap: PASS requires pcc2_pcc3_equal=true" in errors
 
 
@@ -487,8 +487,8 @@ def test_runtime_archive_pass_rejects_failed_provenance_observation() -> None:
 @pytest.mark.parametrize(
     ("scope", "field", "invalid", "error_fragment"),
     [
-        ("gate", "backend", "self", "backend must be llvm"),
-        ("observation", "backend", "self", "observation backend must be llvm"),
+        ("gate", "backend", "llvm", "backend must be self"),
+        ("observation", "backend", "llvm", "observation backend must be self"),
         ("observation", "schema", "tampered", "schema is invalid"),
         ("observation", "policy", "tampered", "policy is invalid"),
         ("observation", "target_triple", "", "target_triple is invalid"),

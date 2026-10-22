@@ -5,10 +5,10 @@ from pathlib import Path
 import subprocess
 import sys
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
-def test_pattern_finditer(tmp_path, pcc_py_runtime_archive):
+def test_pattern_finditer(tmp_path, pcc_runtime_archive):
     source = tmp_path / "finditer.py"
     source.write_text('''
 import re
@@ -68,7 +68,7 @@ main()
     assert expected.returncode == 0, expected.stderr
     output = tmp_path / "finditer"
     compile_python(str(source), str(output), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(output)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)))
@@ -76,25 +76,32 @@ main()
         assert result.stdout == expected.stdout, f"GC{backend}: {result.stdout}"
 
 
-def test_native_preprocessor_macro_scan(tmp_path, pcc_py_runtime_archive):
-    from pcc.preprocessor import preprocess
-    from pcc.py_frontend.pipeline import compile_python_multi
+def test_native_preprocessor_macro_scan(tmp_path, pcc_runtime_archive):
+    from pcc.frontends.c.preprocessor import preprocess
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     text = "#define N 42\n#define INC(x) ((x)+1)\nint f(void) { return INC(N); }\n"
     expected = preprocess(text, base_dir=str(tmp_path))
     source = tmp_path / "macro_scan.py"
     source.write_text(
-        "from pcc.preprocessor import preprocess\n"
+        "from pcc.frontends.c.preprocessor import preprocess\n"
         "def main():\n    print(preprocess(" + repr(text) + ", base_dir="
         + repr(str(tmp_path)) + "))\nmain()\n", encoding="utf-8",
     )
     output = tmp_path / "macro_scan"
-    provider = Path(__file__).resolve().parents[2] / "pcc/preprocessor.py"
+    root = Path(__file__).resolve().parents[2]
+    # The preprocessor resolves its target ABI through these lazy imports.
+    providers = {
+        "pcc.frontends.c.preprocessor": root / "pcc/frontends/c/preprocessor.py",
+        "pcc.frontends.c.c_abi_layout": root / "pcc/frontends/c/c_abi_layout.py",
+        "pcc.backend.self_backend_target_match": root / "pcc/backend/self_backend_target_match.py",
+        "pcc.frontends.python.pipeline_targets": root / "pcc/frontends/python/pipeline_targets.py",
+    }
     compile_python_multi(
-        [str(provider), str(source)], str(output),
-        module_names=["pcc.preprocessor", "macro_scan"], entry_module="macro_scan",
+        [str(path) for path in providers.values()] + [str(source)], str(output),
+        module_names=[*providers, "macro_scan"], entry_module="macro_scan",
         recursive_stdlib=True, backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         result = subprocess.run([str(output)], capture_output=True, text=True, timeout=20,

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from pcc.package_compat import get_package_target, level_name
+from pcc.package.compat import get_package_target, level_name
 from pcc.package.metadata import inspect_artifact
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]

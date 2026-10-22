@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from pcc.capi_surface import extension_abi_plan
+from pcc.frontends.c.capi_surface import extension_abi_plan
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1,0 +1,474 @@
+--- a/pcc/backend/self_backend_x86_64_linux.py
++++ b/pcc/backend/self_backend_x86_64_linux.py
+@@ -28,11 +28,19 @@
+     float64_to_bits,
+ )
+ from .wide_float import encode_float_bits
+-from .self_backend_instruction_dispatch import emit_instruction_dispatch
+-from .self_backend_kernel import get_indexed_function_kernel
++from .self_backend_instruction_dispatch import (
++    emit_instruction_dispatch,
++    emit_instruction_dispatch_parts,
++)
++from .self_backend_kernel import (
++    IndexedFunctionKernel,
++    get_indexed_function_kernel,
++)
+ from .self_backend_aarch64_darwin_symbols import sanitize_label
+ from .self_backend_ir import (
+     GlobalDef,
++    PARSED_INSTRUCTION_KINDS,
++    ParsedBlock,
+     ParsedFunction,
+     ParsedInstr,
+     TypeDesc,
+@@ -2902,6 +2910,55 @@
+     )
+ 
+ 
++def _emit_indexed_instruction(
++    func: ParsedFunction,
++    block: ParsedBlock,
++    kernel: IndexedFunctionKernel,
++    block_id: int,
++    instruction_index: int,
++    instruction_id: int,
++    kind_id: int,
++    data: int | tuple,
++    is_volatile: bool,
++) -> list[str]:
++    # The existing x86 selectors consume decoded operands, not ParsedInstr
++    # identity. Decode fixed records at their use boundary; cold records have
++    # already been decoded by emit_function_blocks. Keep selection unchanged.
++    if isinstance(data, int):
++        data = kernel.instruction_data(block_id, instruction_index)
++    return emit_instruction_dispatch_parts(
++        func,
++        block,
++        PARSED_INSTRUCTION_KINDS[kind_id],
++        data,
++        emit_memory=_emit_memory_instruction,
++        emit_compute=_emit_compute_instruction,
++    )
++
++
++def _materialize_indexed_block_shells(
++    func: ParsedFunction, kernel: IndexedFunctionKernel,
++) -> None:
++    # Branch lowering still consumes the complete block/PHI/terminator view.
++    # Instructions stay in the authoritative kernel instead of being copied
++    # through another block-local arena and operand-interning pass.
++    blocks: list[ParsedBlock] = []
++    block_id = 0
++    while block_id < len(kernel.block_names):
++        # Eager projection read the arithmetic-flag side table before any
++        # selector ran. Preserve that validation even though x86 selection
++        # does not otherwise consume flags. No operand tuples are built here.
++        instruction_index = 0
++        instruction_count = kernel.instruction_count(block_id)
++        while instruction_index < instruction_count:
++            kernel.instruction_arithmetic_flags(block_id, instruction_index)
++            instruction_index += 1
++        blocks.append(kernel.diagnostic_block(block_id, include_instructions=False))
++        block_id += 1
++    func.blocks = blocks
++    func.block_map = {block.name: block for block in blocks}
++
++
+ def _emit_terminator(func: ParsedFunction, block, term: ParsedInstr) -> list[str]:
+     return emit_terminator_dispatch(
+         func,
+@@ -2937,7 +2994,10 @@
+     original_blocks = func.blocks
+     original_block_map = func.block_map
+     try:
+-        kernel.materialize_legacy_blocks(func)
++        if original_blocks:
++            kernel.materialize_legacy_blocks(func)
++        else:
++            _materialize_indexed_block_shells(func, kernel)
+         for block_id, block in enumerate(func.blocks):
+             if block.phis:
+                 continue
+@@ -2958,6 +3018,9 @@
+                 emit_terminator=_emit_terminator,
+                 stack_map_plan=stack_map_plan,
+                 indexed_kernel=kernel,
++                emit_indexed_instruction=(
++                    None if original_blocks else _emit_indexed_instruction
++                ),
+             )
+         )
+     finally:
+--- a/tests/python/test_x86_64_emission_lifetime.py
++++ b/tests/python/test_x86_64_emission_lifetime.py
+@@ -249,7 +249,7 @@
+     entry_state = []
+     failure = BackendUnavailable("injected x86 emission failure")
+     real_emit_function = emitter._emit_function
+-    real_materialize = IndexedFunctionKernel.materialize_legacy_blocks
++    real_materialize = emitter._materialize_indexed_block_shells
+     real_emit_blocks = emitter.emit_function_blocks
+ 
+     def traced_emit_function(function, plan):
+@@ -257,8 +257,8 @@
+         entry_state.append((function.blocks, function.block_map))
+         return real_emit_function(function, plan)
+ 
+-    def fail_after_projection(kernel, function):
+-        blocks = real_materialize(kernel, function)
++    def fail_after_projection(function, kernel):
++        blocks = real_materialize(function, kernel)
+         if entry_state and function is target and failure_stage == "projection":
+             assert function.blocks and function.block_map
+             assert any(block.phis for block in function.blocks)
+@@ -273,7 +273,7 @@
+         return real_emit_blocks(function, **kwargs)
+ 
+     monkeypatch.setattr(emitter, "_emit_function", traced_emit_function)
+-    monkeypatch.setattr(IndexedFunctionKernel, "materialize_legacy_blocks", fail_after_projection)
++    monkeypatch.setattr(emitter, "_materialize_indexed_block_shells", fail_after_projection)
+     monkeypatch.setattr(emitter, "emit_function_blocks", fail_during_instructions)
+     try:
+         with pytest.raises(BackendUnavailable, match="injected x86 emission failure") as caught:
+--- /dev/null
++++ b/tests/python/test_x86_64_indexed_instruction_bridge.py
+@@ -0,0 +1,338 @@
++"""Direct x86 input skips instruction arenas, preserving the tuple selectors.
++
++These are owned host emission/object checks, with no native execution. The
++legacy-block arm remains an independent eager materialization reference.
++Multiply-invalid payload diagnostic precedence is outside this equivalence
++claim: operand decoding is deliberately delayed until selection.
++"""
++
++from types import SimpleNamespace
++
++import pytest
++
++from pcc.backend import BackendUnavailable
++from pcc.backend import coff_x86_64 as coff
++from pcc.backend import elf_x86_64 as elf
++from pcc.backend import self_backend_ir as parsed_ir
++from pcc.backend import self_backend_x86_64_linux as emitter
++from pcc.backend.precise_stackmap import ARCH_X86_64, decode_stack_map
++from pcc.backend.self_backend_ir import PARSED_INSTRUCTION_KINDS, ParsedInstr
++from pcc.backend.self_backend_kernel import (
++    IndexedFunctionKernel,
++    get_indexed_function_kernel,
++)
++from pcc.backend.target_objects import emit_indexed_assembly, encode_assembly_object
++from tests.python.test_precise_stackmap_abi import _target_final_stackmap_ir
++from tests.python.test_x86_64_emission_lifetime import (
++    PROGRAM,
++    TARGET,
++    _indexed_module,
++    _legacy_module,
++)
++from tests.python.x86_64_atomics_ir_gen import build_module as atomic_program
++
++
++WINDOWS = "x86_64-pc-windows-msvc"
++ROUTES = ((TARGET, False), (TARGET, True), (WINDOWS, False))
++SCALAR_PROGRAM = '''
++@table = global [2 x i64] [i64 7, i64 11]
++declare i64 @external(i64)
++declare i64 @variadic(i64, ...)
++define i64 @scalar(i64 %n, ptr %callee) {
++entry:
++  %slot = alloca i64, align 8
++  store volatile i64 %n, ptr %slot, align 8
++  %loaded = load volatile i64, ptr %slot, align 8
++  %sum = add nsw i64 %loaded, 2
++  %cmp = icmp slt i64 %sum, 15
++  %selected = select i1 %cmp, i64 %sum, i64 15
++  %frozen = freeze i64 %selected
++  %address = getelementptr [2 x i64], ptr @table, i64 0, i64 1
++  %element = load i64, ptr %address, align 8
++  %as_int = ptrtoint ptr %address to i64
++  %as_ptr = inttoptr i64 %as_int to ptr
++  %again = load i64, ptr %as_ptr, align 8
++  %first = call i64 @external(i64 %frozen)
++  %second = call i64 %callee(i64 %first)
++  %third = call i64 (i64, ...) @variadic(i64 %second, i64 %element)
++  %result = xor i64 %third, %again
++  ret i64 %result
++}
++'''
++FLOAT_AGGREGATE_PROGRAM = '''
++define double @floating(double %x) {
++entry:
++  %sum = fadd double %x, 1.000000e+00
++  %negative = fneg double %sum
++  %ordered = fcmp olt double %negative, 0.000000e+00
++  %chosen = select i1 %ordered, double %negative, double %x
++  %small = fptrunc double %chosen to float
++  %wide = fpext float %small to double
++  ret double %wide
++}
++define i64 @aggregate(i64 %value) {
++entry:
++  %pair = insertvalue { i64, i64 } zeroinitializer, i64 %value, 1
++  %field = extractvalue { i64, i64 } %pair, 1
++  ret i64 %field
++}
++define <4 x i32> @vector(i32 %value) {
++entry:
++  %lane = insertelement <4 x i32> poison, i32 %value, i64 0
++  %splat = shufflevector <4 x i32> %lane, <4 x i32> poison, <4 x i32> zeroinitializer
++  ret <4 x i32> %splat
++}
++'''
++SWITCH_PROGRAM = '''
++define i64 @switcher(i64 %value) {
++entry:
++  switch i64 %value, label %other [ i64 1, label %one i64 2, label %two ]
++one:
++  br label %merge
++two:
++  br label %merge
++other:
++  br label %merge
++merge:
++  %result = phi i64 [ 10, %one ], [ 20, %two ], [ 30, %other ]
++  ret i64 %result
++}
++define void @never() {
++entry:
++  unreachable
++}
++'''
++
++
++@pytest.fixture(autouse=True)
++def fixed_configuration(monkeypatch):
++    monkeypatch.delenv("PCC_CODE_PROFILE", raising=False)
++    monkeypatch.setenv("PCC_SELF_TARGET_PASSES", "none")
++    monkeypatch.setenv("PCC_SELF_TARGET_PASS_TRANSPORT", "text")
++
++
++def _program(case, target):
++    if case == "phi-calls":
++        return PROGRAM.replace(TARGET, target)
++    if case == "roots":
++        return _target_final_stackmap_ir(target)
++    if case == "atomics":
++        return atomic_program().replace(TARGET, target)
++    body = {
++        "scalar": SCALAR_PROGRAM,
++        "float-aggregate": FLOAT_AGGREGATE_PROGRAM,
++        "switch": SWITCH_PROGRAM,
++    }[case]
++    return 'target triple = "' + target + '"\n' + body
++
++
++def _close(module):
++    for function in module.functions:
++        get_indexed_function_kernel(function).close_native_tables()
++
++
++def _emit(module, target, packed):
++    plans = [] if packed else None
++    try:
++        assembly = emit_indexed_assembly(module, stack_map_plans_out=plans)
++        encoded = encode_assembly_object(assembly, target, stack_map_plans=plans)
++        return assembly, encoded
++    finally:
++        _close(module)
++
++
++def _decoded(data, target):
++    parsed = coff.parse_object(data) if target == WINDOWS else elf.parse_relocatable(data)
++    stackmaps = tuple(
++        decode_stack_map(section.data, expected_arch=ARCH_X86_64)
++        for section in parsed.sections if section.name == ".pcc_stackmaps"
++    )
++    assert stackmaps
++    return parsed, stackmaps
++
++
++@pytest.mark.parametrize("target,packed", ROUTES)
++@pytest.mark.parametrize("case", (
++    "phi-calls", "roots", "atomics", "scalar", "float-aggregate", "switch",
++))
++def test_lazy_instruction_input_matches_eager_assembly_and_complete_object(
++    tmp_path, monkeypatch, target, packed, case,
++):
++    source = _program(case, target)
++    eager = _legacy_module(tmp_path, source)
++    eager_kernels = [get_indexed_function_kernel(function) for function in eager.functions]
++    expected = _emit(eager, target, packed)
++    assert sum(kernel.instruction_arena_diagnostic_projections for kernel in eager_kernels) > 0
++
++    direct = _indexed_module(tmp_path, source)
++    kernels = [get_indexed_function_kernel(function) for function in direct.functions]
++    original_states = [(function.blocks, function.block_map) for function in direct.functions]
++    seen_shells = []
++    emit_blocks = emitter.emit_function_blocks
++
++    def checked_blocks(function, **kwargs):
++        assert kwargs["emit_indexed_instruction"] is emitter._emit_indexed_instruction
++        assert function.blocks and function.block_map
++        assert all(not block.instructions for block in function.blocks)
++        assert all(block.terminator is not None for block in function.blocks)
++        seen_shells.extend(function.blocks)
++        return emit_blocks(function, **kwargs)
++
++    def forbidden(*args, **kwargs):
++        raise AssertionError("direct x86 emission rebuilt a ParsedInstr/operand arena")
++
++    # Install after input construction. The protected scope is real emission,
++    # including preparation and stack-map planning, not codec construction.
++    monkeypatch.setattr(emitter, "emit_function_blocks", checked_blocks)
++    monkeypatch.setattr(IndexedFunctionKernel, "diagnostic_instruction", forbidden)
++    monkeypatch.setattr(parsed_ir, "_interned_operands", forbidden)
++    actual = _emit(direct, target, packed)
++    assert seen_shells
++    assert all(kernel.instruction_arena_diagnostic_projections == 0 for kernel in kernels)
++    for function, (blocks, block_map) in zip(direct.functions, original_states):
++        assert function.blocks is blocks and not blocks
++        assert function.block_map is block_map and not block_map
++    assert actual == expected
++    assert _decoded(actual[1], target) == _decoded(expected[1], target)
++    if target == WINDOWS:
++        names = {section.name for section in coff.parse_object(actual[1]).sections}
++        assert {".pdata", ".xdata"} <= names
++
++
++@pytest.mark.parametrize("kind_id", range(len(PARSED_INSTRUCTION_KINDS)))
++@pytest.mark.parametrize("fixed_payload", [False, True])
++def test_indexed_adapter_preserves_selector_arguments_and_unknown_errors(
++    monkeypatch, kind_id, fixed_payload,
++):
++    """All kind spellings retain the same dispatcher, including unknown kinds."""
++    function = SimpleNamespace(name="provider")
++    block = SimpleNamespace(name="entry")
++    operands = ("operand", object())
++    calls = []
++
++    class Kernel:
++        def instruction_data(self, block_id, instruction_index):
++            assert (block_id, instruction_index) == (2, 3)
++            calls.append("decode")
++            return operands
++
++    def memory(function_arg, kind, data):
++        assert function_arg is function and data is operands
++        calls.append(("memory", kind))
++        return None
++
++    def compute(function_arg, kind, data):
++        assert function_arg is function and data is operands
++        calls.append(("compute", kind))
++        return None
++
++    monkeypatch.setattr(emitter, "_emit_memory_instruction", memory)
++    monkeypatch.setattr(emitter, "_emit_compute_instruction", compute)
++    with pytest.raises(BackendUnavailable) as old:
++        emitter._emit_instruction(function, block, ParsedInstr(PARSED_INSTRUCTION_KINDS[kind_id], operands))
++    old_calls = calls[:]
++    calls.clear()
++    with pytest.raises(BackendUnavailable) as new:
++        emitter._emit_indexed_instruction(
++            function, block, Kernel(), 2, 3, 17, kind_id,
++            19 if fixed_payload else operands, True,
++        )
++    assert str(new.value) == str(old.value)
++    assert calls == (["decode"] if fixed_payload else []) + old_calls
++
++
++@pytest.mark.parametrize("target", (TARGET, WINDOWS))
++def test_actual_direct_capture_uses_the_instruction_adapter(tmp_path, monkeypatch, target):
++    from pcc.ir import ir
++
++    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "1")
++    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_EMIT", "0")
++    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_FUSE_USES", "1")
++    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_REQUIRE_ZERO_FALLBACK", "1")
++    source = ir.Module(name="x86-direct-instruction-bridge")
++    source.triple = target
++    i64 = ir.IntType(64)
++    function = ir.Function(source, ir.FunctionType(i64, [i64]), "increment")
++    builder = ir.IRBuilder(function.append_basic_block("entry"))
++    value = builder.add(function.args[0], ir.Constant(i64, 2), name="result")
++    builder.ret(value)
++    text = str(source)
++    direct = source.direct_indexed_module()
++    assert source._direct_indexed_fallback_records == 0
++    assert all(not function.blocks for function in direct.functions)
++    expected = _emit(_legacy_module(tmp_path, text), target, False)
++    actual = _emit(direct, target, False)
++    assert actual == expected
++    assert all(get_indexed_function_kernel(function).instruction_arena_diagnostic_projections == 0
++               for function in direct.functions)
++
++
++def _outcome(tmp_path, source, *, eager):
++    module = None
++    try:
++        module = _indexed_module(tmp_path, source)
++        if eager:
++            for function in module.functions:
++                get_indexed_function_kernel(function).materialize_legacy_blocks(function)
++        _emit(module, module.triple, False)
++    except (BackendUnavailable, IndexError, KeyError, ValueError, TypeError) as error:
++        return type(error), str(error)
++    finally:
++        if module is not None:
++            _close(module)
++    raise AssertionError("malformed/unsupported fixture unexpectedly emitted")
++
++
++@pytest.mark.parametrize("target", (TARGET, WINDOWS))
++@pytest.mark.parametrize("body", (
++    "define i64 @bad() {\nentry:\n ret i64 %missing\n}",
++    "define i64 @bad() {\nentry:\n br label %missing\n}",
++    "define i64 @bad(i32 %value) {\nentry:\n %sum = add i64 %value, 1\n ret i64 %sum\n}",
++    "define i32 @bad(<4 x i32> %vector) {\nentry:\n %lane = extractelement <4 x i32> %vector, i32 0\n ret i32 %lane\n}",
++    "define i1 @bad(ptr %cell) {\nentry:\n %value = load atomic i1, ptr %cell acquire, align 1\n ret i1 %value\n}",
++    "define i32 @bad() {\nentry:\n %value = mystery i32 1\n ret i32 %value\n}",
++))
++def test_single_malformed_or_unsupported_input_keeps_exception(tmp_path, target, body):
++    source = 'target triple = "' + target + '"\n' + body
++    assert _outcome(tmp_path, source, eager=False) == _outcome(tmp_path, source, eager=True)
++
++
++@pytest.mark.parametrize("target", (TARGET, WINDOWS))
++def test_corrupt_flag_side_table_is_rejected_before_instruction_selection(
++    tmp_path, monkeypatch, target,
++):
++    source = 'target triple = "' + target + '"\n' + '''
++define i64 @flagged(i64 %value) {
++entry:
++  %sum = add nsw i64 %value, 1
++  ret i64 %sum
++}
++'''
++    outcomes = []
++    for eager in (True, False):
++        module = _indexed_module(tmp_path, source)
++        function = module.functions[0]
++        kernel = get_indexed_function_kernel(function)
++        assert kernel.instruction_arithmetic_flag_values
++        instruction_id = next(iter(kernel.instruction_arithmetic_flag_values))
++        assert kernel.instruction_metadata.get_unchecked(instruction_id * 4 + 3)
++        del kernel.instruction_arithmetic_flag_values[instruction_id]
++        blocks, block_map = function.blocks, function.block_map
++        try:
++            with monkeypatch.context() as guard:
++                def forbidden(*args, **kwargs):
++                    raise AssertionError("corrupt flag metadata reached a selector")
++                guard.setattr(emitter, "_emit_memory_instruction", forbidden)
++                guard.setattr(emitter, "_emit_compute_instruction", forbidden)
++                with pytest.raises(KeyError) as caught:
++                    if eager:
++                        kernel.materialize_legacy_blocks(function)
++                    else:
++                        emit_indexed_assembly(module)
++                outcomes.append((type(caught.value), str(caught.value)))
++            assert function.blocks is blocks and not blocks
++            assert function.block_map is block_map and not block_map
++            assert not emitter._X86_EMISSION_ACTIVE and not emitter._WINDOWS_ABI
++        finally:
++            _close(module)
++    assert outcomes[0] == outcomes[1]

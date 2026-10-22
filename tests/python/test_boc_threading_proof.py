@@ -47,9 +47,9 @@ N_WORKERS = 4
 
 
 @pytest.fixture
-def threaded_runtime(monkeypatch, threaded_pcc_py_runtime_archive):
+def threaded_runtime(monkeypatch, threaded_pcc_runtime_archive):
     monkeypatch.setenv("PCC_WITH_THREADS", "1")
-    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(threaded_pcc_py_runtime_archive))
+    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(threaded_pcc_runtime_archive))
 
 
 def _run_binary(
@@ -83,7 +83,7 @@ def _run_binary(
 
 
 def test_pcc_threads_complete_all_workers(tmp_path, threaded_runtime):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "boc_bank_demo.py"
     shutil.copyfile(PARALLEL_SRC, src)
@@ -108,7 +108,7 @@ def test_pcc_threads_complete_all_workers(tmp_path, threaded_runtime):
 
 @pytest.mark.pcc_gate(env="PCC_RUN_BOC_SPEEDUP")
 def test_pcc_threads_give_real_parallel_speedup(tmp_path, threaded_runtime):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     parallel_src = tmp_path / "boc_bank_demo.py"
     serial_src = tmp_path / "boc_bank_demo_serial.py"

@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 import pytest
 
-from pcc.py_frontend import compiled_default_passes, pipeline
+from pcc.frontends.python import compiled_default_passes, pipeline
 
 
 _SCALAR_IR = """\
@@ -512,3 +512,237 @@ def test_rewrite_functions_is_called_directly_not_as_a_value():
     assert "_rewrite_functions(text, _mem2reg_function)" not in text
     assert "_rewrite_functions(current, _sroa_function)" not in text
     assert "_sroa_function(_mem2reg_function(function_lines))" in text
+
+
+def _removed_definition_scan_reference(lines, removed_names):
+    """The original fail-closed search, including per-pair name coercion."""
+    for line in lines:
+        for name in removed_names:
+            if compiled_default_passes._contains_ssa_name(line, str(name)):
+                return True
+    return False
+
+
+def test_removed_definition_scan_matches_raw_text_reference():
+    cases = [
+        ([], ["slot"], False),
+        (["%slot"], [], False),
+        (["ret i64 %s10"], ["s1"], False),
+        (["%s100 %s10 %s1"], ["s1", "s1"], True),
+        (["%a.b-c_$9"], ["a", "a.b-c_$9"], True),
+        (["%a.b-c_$9suffix"], ["a.b-c_$9"], False),
+        (["word%slot %%slot"], ["slot"], True),
+        (["; removed value %slot only in a comment"], ["slot"], True),
+        (['@g = constant [6 x i8] c"%slot\\00"'], ["slot"], True),
+        (['%"slot"'], ["slot"], False),
+        (['%"slot"'], ['"slot"'], True),
+        (['%"slot\\22suffix"'], ['"slot\\22suffix"'], True),
+        (['%"slot\\22suffix"'], ["slot"], False),
+        (["%sloté"], ["slot"], True),
+        (["%é"], ["é"], True),
+        (["%éx"], ["é"], False),
+        (["%"], [""], True),
+        (["%slot"], [""], False),
+        (["%%slot"], [""], True),
+        (["%%"], ["%"], True),
+        (["%a\\b"], ["a\\b"], True),
+        (["%quoted %slot"], ['"quoted"', "slot"], True),
+        (["ret void", "%late"], ["missing", "late"], True),
+    ]
+    for lines, names, expected in cases:
+        assert _removed_definition_scan_reference(lines, names) is expected
+        assert compiled_default_passes._references_removed_definitions(lines, names) is expected
+
+
+def test_removed_definition_scan_matches_fixed_random_reference():
+    import random
+
+    alphabet = "abcXYZ019_.$-% ,;:\"\\\né"
+    probes = ["a", "a0", "a00", "_.$-", "", '"a"', '"a\\22b"', "é", "a\\b", "%"]
+    for seed in (0, 17, 991):
+        rng = random.Random(seed)
+        for sample in range(128):
+            lines = ["".join(rng.choice(alphabet) for _ in range(rng.randrange(64)))
+                     for _ in range(rng.randrange(6))]
+            if sample % 2:
+                names = ["".join(rng.choice("abcXYZ019_.$-")
+                                 for _ in range(rng.randrange(1, 9)))
+                         for _ in range(rng.randrange(12))]
+            else:
+                names = [rng.choice(probes) for _ in range(rng.randrange(12))]
+            if lines and names and sample % 3 == 0:
+                lines[-1] += "%" + names[-1] + ";"
+            assert compiled_default_passes._references_removed_definitions(lines, names) == (
+                _removed_definition_scan_reference(lines, names)
+            ), (seed, sample, lines, names)
+
+
+def test_removed_definition_scan_visits_each_raw_line_once(monkeypatch):
+    module = compiled_default_passes
+    original = module._ssa_names_in
+    visited = []
+
+    def tokens(line):
+        visited.append(line)
+        return original(line)
+
+    def unexpected_search(*_args):
+        raise AssertionError("simple names returned to the per-definition search")
+
+    monkeypatch.setattr(module, "_ssa_names_in", tokens)
+    monkeypatch.setattr(module, "_contains_ssa_name", unexpected_search)
+    names = ["slot" + str(index) for index in range(128)]
+    lines = ["ret void", "%slot128 %slot00", '; "%slot127suffix"', "%other"]
+    assert module._references_removed_definitions(lines, names) is False
+    assert visited == lines
+    visited.clear()
+    assert module._references_removed_definitions(lines + ['; "%slot127"', "%later"], names) is True
+    assert visited == lines + ['; "%slot127"']
+    visited.clear()
+    assert module._references_removed_definitions(lines, []) is False
+    assert visited == []
+
+
+def test_removed_definition_scan_preserves_fallback_results_errors_and_order(monkeypatch):
+    def unexpected_tokens(_line):
+        raise AssertionError("non-plain input entered the token fast path")
+
+    monkeypatch.setattr(compiled_default_passes, "_ssa_names_in", unexpected_tokens)
+
+    def outcome(scan, case):
+        events = []
+
+        class Name:
+            def __str__(self):
+                events.append("name-str")
+                if case == "coercion-error":
+                    raise ValueError("original name coercion failure")
+                return "slot"
+
+        class Lines(list):
+            def __iter__(self):
+                events.append("lines-iter")
+                return super().__iter__()
+
+        class Names(list):
+            def __iter__(self):
+                events.append("names-iter")
+                return super().__iter__()
+
+        class Line(str):
+            def find(self, needle, start=0):
+                events.append(("line-find", needle, start))
+                return super().find(needle, start)
+
+        class StringName(str):
+            def __str__(self):
+                events.append("string-name-str")
+                return "slot"
+
+        def names_iterator():
+            events.append("names-next")
+            yield "slot"
+
+        def lines_iterator():
+            for line in ("ret void", "%slot"):
+                events.append(("lines-next", line))
+                yield line
+
+        lines = ["ret void", "%slot"]
+        names = ["slot"]
+        if case == "coercion" or case == "coercion-error":
+            names = [Name()]
+        elif case == "early-hit-before-coercion":
+            lines, names = ["%slot"], ["slot", Name()]
+        elif case == "empty-before-coercion":
+            lines, names = [], [Name()]
+        elif case == "lines-subclass":
+            lines = Lines(lines)
+        elif case == "names-subclass":
+            names = Names(names)
+        elif case == "line-subclass":
+            lines = [Line(line) for line in lines]
+        elif case == "name-subclass":
+            names = [StringName("unused")]
+        elif case == "names-iterator":
+            names = names_iterator()
+        elif case == "lines-iterator":
+            lines = lines_iterator()
+        elif case == "names-tuple":
+            names = ("slot",)
+        elif case == "bad-line":
+            lines = [None]
+        elif case == "early-hit-before-bad-line":
+            lines = ["%slot", None]
+        elif case == "bad-lines":
+            lines = None
+        elif case == "bad-names":
+            names = None
+        elif case == "empty-before-bad-names":
+            lines, names = [], None
+        elif case == "quoted":
+            lines, names = ['%"slot"'], ['"slot"']
+        else:
+            raise AssertionError(case)
+        try:
+            result = scan(lines, names)
+        except Exception as exc:
+            return "raise", type(exc), str(exc), events
+        return "return", result, events
+
+    cases = ("coercion", "coercion-error", "early-hit-before-coercion",
+             "empty-before-coercion", "lines-subclass", "names-subclass",
+             "line-subclass", "name-subclass", "names-iterator", "lines-iterator",
+             "names-tuple", "bad-line", "early-hit-before-bad-line", "bad-lines",
+             "bad-names", "empty-before-bad-names", "quoted")
+    for case in cases:
+        assert outcome(compiled_default_passes._references_removed_definitions, case) == (
+            outcome(_removed_definition_scan_reference, case)
+        ), case
+
+
+def test_removed_definition_scan_preserves_complete_tier_bytes(monkeypatch):
+    module = compiled_default_passes
+    current = module._references_removed_definitions
+    sources = ((_SCALAR_IR, True), (_STRUCT_IR, True), (_SCALAR_IR + _STRUCT_IR, True),
+               (_many_alloca_function(1, 0), False),  # The sole slot escapes.
+               (_many_alloca_function(12, 2), True), (_many_alloca_function(120, 1), True),
+               (_SCALAR_IR.replace("ret i64 %value", "; %value remains in a comment\n  ret i64 %value"), True),
+               (_SCALAR_IR.replace("%slot", '%"slot"'), False))
+    for source, reaches_guard in sources:
+        calls = []
+
+        def counted(lines, names):
+            calls.append((lines, names))
+            return current(lines, names)
+
+        monkeypatch.setattr(module, "_references_removed_definitions", counted)
+        actual = module.run_compiled_default_tier(source, ["mem2reg", "sroa"],
+                                                  strict_no_libpython=True)
+        monkeypatch.setattr(module, "_references_removed_definitions", _removed_definition_scan_reference)
+        expected = module.run_compiled_default_tier(source, ["mem2reg", "sroa"],
+                                                    strict_no_libpython=True)
+        assert actual.encode("utf-8") == expected.encode("utf-8")
+        assert bool(calls) is reaches_guard
+
+
+def test_removed_definition_scan_keeps_each_transform_fail_closed(monkeypatch):
+    module = compiled_default_passes
+    current = module._references_removed_definitions
+    monkeypatch.setattr(module, "_replace_ssa_names", lambda line, _names: line)
+    for transform, source in ((module._promote_entry_single_store, _SCALAR_IR),
+                              (module._mem2reg_single_block_function, _SCALAR_IR),
+                              (module._sroa_function, _STRUCT_IR)):
+        lines = source.splitlines(keepends=True)
+        calls = []
+
+        def counted(out, names):
+            result = current(out, names)
+            calls.append(result)
+            return result
+
+        monkeypatch.setattr(module, "_references_removed_definitions", counted)
+        assert transform(lines) is lines
+        assert calls == [True]
+        monkeypatch.setattr(module, "_references_removed_definitions", _removed_definition_scan_reference)
+        assert transform(lines) is lines

@@ -1,6 +1,6 @@
 """``dataclasses`` module full contract.
 
-The decorator already exists in ``pcc/py_stdlib/dataclasses.py`` but
+The decorator already exists in ``pcc/stdlib/dataclasses.py`` but
 the native class lowering now synthesizes the core dataclass methods
 used by this contract.
 
@@ -21,7 +21,7 @@ import subprocess
 import textwrap
 
 def _compile_and_run(tmp_path, source: str) -> subprocess.CompletedProcess[str]:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"

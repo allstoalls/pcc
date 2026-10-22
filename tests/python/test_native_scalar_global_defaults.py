@@ -5,11 +5,11 @@ import subprocess
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python_multi
+from pcc.frontends.python.pipeline import compile_python_multi
 
 
 @pytest.mark.parametrize("provider_name", ["defaults_provider", "pcc.defaults_provider"])
-def test_cross_module_scalar_global_defaults(tmp_path, pcc_py_runtime_archive, provider_name):
+def test_cross_module_scalar_global_defaults(tmp_path, pcc_runtime_archive, provider_name):
     provider = tmp_path / "provider.py"
     provider.write_text('''
 BASE = 131072
@@ -35,7 +35,7 @@ main()
                          module_names=[provider_name, "defaults_consumer"],
                          entry_module="defaults_consumer", recursive_stdlib=True,
                          backend="self", libpython_mode="off",
-                         runtime_archive=str(pcc_py_runtime_archive))
+                         runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         result = subprocess.run([str(output)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(gc)))

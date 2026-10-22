@@ -11,20 +11,20 @@ from pathlib import Path
 
 import pytest
 
-from pcc.cpython_replacement.contract import (
+from scripts.qualification.cpython_replacement.contract import (
     ReplacementContractError,
     contract_digest,
     load_contract,
     validate_contract,
     surfaces_for_level,
 )
-from pcc.cpython_replacement.evidence import (
+from scripts.qualification.cpython_replacement.evidence import (
     EVIDENCE_SCHEMA_VERSION,
     ReplacementEvidenceError,
     evidence_digest,
     validate_evidence_bundle,
 )
-from pcc.cpython_replacement.workloads import (
+from scripts.qualification.cpython_replacement.workloads import (
     WorkloadCatalogError,
     catalog_digest,
     load_workload_catalog,
@@ -44,7 +44,7 @@ def test_frozen_contract_has_one_exact_oracle_and_two_honest_platform_boundaries
     assert contract["baseline"] == {
         "language_version": "3.13",
         "oracle_implementation": "CPython",
-        "oracle_version": "3.15.0rc1",
+        "oracle_version": "3.15.0",
         "oracle_build": "standard-gil",
         "version_policy": "exact-oracle-version",
     }
@@ -143,7 +143,7 @@ def test_workload_catalog_is_unverified_cumulative_and_bound_to_the_same_matrix(
     assert validate_workload_catalog(catalog) is catalog
     assert catalog["python_baseline"] == {
         "language": "3.13",
-        "oracle": "CPython 3.15.0rc1",
+        "oracle": "CPython 3.15.0",
     }
     assert [row["level"] for row in catalog["levels"]] == [1, 2, 3]
     assert [row["final_product_goal"] for row in catalog["levels"]] == [
@@ -303,7 +303,7 @@ def _valid_evidence_bundle(level: int = 1):
                 },
                 {
                     "stage": "pcc3",
-                    "sha256": _sha("8"),
+                    "sha256": _sha("6"),
                     "normalized_sha256": _sha("7"),
                 },
             ],
@@ -327,7 +327,7 @@ def _valid_evidence_bundle(level: int = 1):
         ],
         "oracle": {
             "implementation": "CPython",
-            "version": "3.15.0rc1",
+            "version": "3.15.0",
             "build": "standard-gil",
             "execution_is_separate": True,
             "result_sha256": _sha("9"),
@@ -411,3 +411,10 @@ def test_replacement_evidence_requires_pcc2_pcc3_normalized_fixed_point():
     with pytest.raises(ReplacementEvidenceError) as error:
         validate_evidence_bundle(evidence)
     assert error.value.code == "PCC-CPY-EVIDENCE-FIXED-POINT"
+
+
+def test_replacement_evidence_rejects_raw_drift_even_with_equal_normalized_images():
+    evidence = _valid_evidence_bundle()
+    evidence["compiler_artifacts"]["stages"][-1]["sha256"] = _sha("9")
+    with pytest.raises(ReplacementEvidenceError, match="raw identities do not match"):
+        validate_evidence_bundle(evidence)

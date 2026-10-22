@@ -104,7 +104,7 @@ def _assert_transport_matches_oracle(source: str, expected, tmp_path) -> None:
             "pcc/backend/self_backend_precise_stackmaps.py",
             "pcc/backend/arm64_encode.py",
             "pcc/backend/arm64_asm_driver.py",
-            "pcc/py_frontend/pipeline_exports.py",
+            "pcc/frontends/python/pipeline_exports.py",
         ):
             assert manifest["files"][relative] == hashlib.sha256(
                 (repo / relative).read_bytes()

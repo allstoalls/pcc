@@ -1,6 +1,6 @@
 """Native float format-spec support under strict no-libpython (run-based).
 
-`format_float_builtin` in `pcc/py_runtime/src/py_format.c` previously parsed
+`format_float_builtin` in `pcc/runtime/src/py_format.c` previously parsed
 only `,`, `.precision`, and a bare `f`/`e` type — it raised
 ``ValueError: unsupported format specifier`` on ANY width/align/sign/zero-pad,
 so the extremely common ``f"{x:8.3f}"`` / ``f"{x:>10.2f}"`` / ``f"{x:08.2f}"``

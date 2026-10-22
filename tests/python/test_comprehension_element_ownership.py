@@ -12,8 +12,8 @@ import pytest
     '{row.text.strip() for row in rows}',
     '{row.text.strip(): row.text.upper() for row in rows}',
 ])
-def test_comprehension_elements_do_not_accumulate(tmp_path: Path, pcc_py_runtime_archive, expression):
-    from pcc.py_frontend.pipeline import compile_python
+def test_comprehension_elements_do_not_accumulate(tmp_path: Path, pcc_runtime_archive, expression):
+    from pcc.frontends.python.pipeline import compile_python
     source = tmp_path / "comp_elements.py"
     source.write_text('''from pcc.extern import c_int64, extern
 live_bytes = extern("pcc_os_heap_in_use_bytes", (), c_int64)
@@ -42,7 +42,7 @@ main()
 '''.replace("EXPRESSION", expression))
     binary = tmp_path / "comp_elements"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND="0"),
                          capture_output=True, text=True, timeout=15)
     assert ran.returncode == 0, ran.stdout + ran.stderr
@@ -51,8 +51,8 @@ main()
     assert growth1 < 16384 and growth2 < 16384, (growth1, growth2)
 
 
-def test_comprehension_failure_releases_elements(tmp_path: Path, pcc_py_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+def test_comprehension_failure_releases_elements(tmp_path: Path, pcc_runtime_archive):
+    from pcc.frontends.python.pipeline import compile_python
     source = tmp_path / "comp_errors.py"
     source.write_text('''import gc
 released = []
@@ -91,7 +91,7 @@ main()
 ''')
     binary = tmp_path / "comp_errors"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
                              capture_output=True, text=True, timeout=15)
@@ -99,8 +99,8 @@ main()
         assert ran.stdout.strip() == "['early-key', 'key', 'list', 'set', 'value']"
 
 
-def test_generic_comprehension_releases_iterator_and_current_item(tmp_path, pcc_py_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+def test_generic_comprehension_releases_iterator_and_current_item(tmp_path, pcc_runtime_archive):
+    from pcc.frontends.python.pipeline import compile_python
     source = tmp_path / "iterator_owners.py"
     source.write_text('''import gc
 released = []
@@ -140,7 +140,7 @@ main()
     assert expected.returncode == 0, expected.stderr
     binary = tmp_path / "iterator_owners"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=15,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(gc)))

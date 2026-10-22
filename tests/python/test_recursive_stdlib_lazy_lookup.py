@@ -4,7 +4,7 @@ import sys
 
 
 def test_lazy_lookup_does_not_execute_host_package(tmp_path, monkeypatch):
-    from pcc.py_frontend import pipeline_dependency_closure as closure
+    from pcc.frontends.python import pipeline_dependency_closure as closure
 
     package = tmp_path / "unrelated_lazy_dependency"
     package.mkdir()

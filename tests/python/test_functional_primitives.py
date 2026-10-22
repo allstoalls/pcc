@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from pcc.functional import Err, Left, Nothing, Ok, Right, Some, option
+from pcc.library.functional import Err, Left, Nothing, Ok, Right, Some, option
 
 
 def test_option_map_and_and_then_are_real_values():

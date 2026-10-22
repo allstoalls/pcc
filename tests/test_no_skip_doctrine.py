@@ -12,7 +12,7 @@ legitimate and look identical to a text search:
 - source-text fixtures — a test that feeds `"@pytest.mark.skipif(...)"` to the
   compiler as *input*
 - the compiler's own recognition of those decorator names
-  (`pcc/cli_bootstrap.py`, `pcc/py_frontend/codegen/decorator_lowering.py`)
+  (`pcc/driver/cli_bootstrap.py`, `pcc/frontends/python/codegen/decorator_lowering.py`)
 
 Parsing instead of grepping makes that distinction structural: a string
 literal is not a call, so only genuinely executed skips are reported.

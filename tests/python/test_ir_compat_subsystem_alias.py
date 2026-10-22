@@ -1,8 +1,8 @@
 """Bare ``ir.X`` values through the per-subsystem compat spellings.
 
-The C codegen imports ``from pcc.llvm_capi.compat import ir_c as ir``.  In ON
+The C codegen imports ``from pcc.ir.compat import ir_c as ir``.  In ON
 mode that import is a compile-time scaffold: compat is dropped from the
-closure and ``pcc.llvm_capi.ir`` is linked instead, so ``ir`` has no runtime
+closure and ``pcc.ir.ir`` is linked instead, so ``ir`` has no runtime
 binding.  Only the scaffold's recognised ``ir.X`` symbols were lowered;
 ``isinstance(t, ir.Type)``, ``ir.PhiInstr`` and the ``ir.Undefined``
 singleton fell through to a global lookup, which is how pcc1 delegating a C
@@ -14,7 +14,7 @@ import os
 import subprocess
 import sys
 
-_PROGRAM = '''from pcc.llvm_capi.compat import ir_c as ir
+_PROGRAM = '''from pcc.ir.compat import ir_c as ir
 
 
 def classify(value):
@@ -32,7 +32,7 @@ def _repo_root():
 
 
 def test_compat_subsystem_alias_exposes_every_provider_export(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     expected = subprocess.run(
         [sys.executable, "-c", _PROGRAM], capture_output=True, text=True,
@@ -48,7 +48,7 @@ def test_compat_subsystem_alias_exposes_every_provider_export(
     binary = tmp_path / "ir_alias"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     ran = subprocess.run([str(binary)], capture_output=True, text=True, timeout=60)
     assert ran.returncode == 0, ran.stderr

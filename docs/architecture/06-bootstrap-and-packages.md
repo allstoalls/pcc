@@ -19,7 +19,7 @@ flowchart LR
 | **pcc2** | compiler binary produced by pcc1 |
 | **pcc3** | compiler binary produced by pcc2 |
 
-The fixed point is reached when `pcc2` and `pcc3` are byte-identical — evidence that pcc's semantics, runtime, codegen, object model, and backend are coherent enough to reproduce themselves. Stage definitions: `scripts/bootstrap.sh:8`; execution `:306`.
+The fixed point is reached when `pcc2` and `pcc3` are byte-identical — evidence that pcc's semantics, runtime, codegen, object model, and backend are coherent enough to reproduce themselves. Driver: `scripts/bootstrap.py` (pure Python, no shell; the owned `self` backend is the default on every platform).
 
 ### Strict no-libpython invocation
 
@@ -43,12 +43,12 @@ Authoritative, frozen evidence (these JSON baselines are the source of truth, no
 
 - `tests/bootstrap_gate_baseline.json` — strict no-libpython fixed point (captured 2026-05-01); `links_libpython:false` for stage1/2/3, `byte_identical_pcc2_pcc3:true`.
 - `tests/fallback_baseline.json` — no-libpython fallback ratchet (closure metrics, 0 multi-file `py_cpy_*` fallbacks).
-- Gate test: `tests/python/test_pcc_bootstrap_full.py:29`. Verification (byte compare + signature normalize): `scripts/bootstrap.sh:329`.
+- Gate test: `tests/python/test_pcc_bootstrap_full.py:29`. Verification: `scripts/bootstrap.py` (`verify_fixed_point`, byte compare; ELF/PE metadata normalization is a labeled fallback only).
 
 ### Two CLIs
 
 - **Normal CLI** (`pcc/__main__.py` → `cli_core.py`): full C + Python + project dispatcher.
-- **Bootstrap CLI** (`pcc/cli_bootstrap.py:11`): Python-only entry baked into `pcc1/2/3`. It delegates C/project inputs back to a host `pcc` (`PCC_HOST_PCC`) and adds `-m <module>` (pip/pytest) support. The long-term goal is for `pcc1` to natively execute the C-frontend closure too; today that path delegates.
+- **Bootstrap CLI** (`pcc/driver/cli_bootstrap.py:11`): Python-only entry baked into `pcc1/2/3`. It delegates C/project inputs back to a host `pcc` (`PCC_HOST_PCC`) and adds `-m <module>` (pip/pytest) support. The long-term goal is for `pcc1` to natively execute the C-frontend closure too; today that path delegates.
 - Multi-file/closure builds go through `scripts/pcc_multi.py` (wraps `compile_python_multi`); each input is a `path` or `path=module.name` (needed for `__init__.py` / relative imports).
 
 Runtime archive used by the strict path: `libpy_runtime_pcc_py.a` (the pcc-Python ports). See [04-runtime-and-gc.md](04-runtime-and-gc.md).
@@ -69,7 +69,7 @@ flowchart TD
 ```
 
 - **PCC-PKG-004**: in `pcc-native` mode, a wheel whose artifact name declares a CPython extension ABI (`cpython-\d+`, `cp\d+-cp\d+`, `abi3`) is **rejected** so a CPython-ABI artifact is never misreported as native support. Raised in `pcc/package/linkage.py:64` (regex `:27`); also surfaced in `cli_bootstrap.py`. This rejection is a *feature*, not a failure.
-- **Compatibility levels** (`pcc/package_compat.py:6`): `LEVEL_COMPAT_PYTHON` (pure-py test deps) · `LEVEL_NOLIBPYTHON_PYTHON` (pure-py, no libpython) · `LEVEL_C_EXTENSION_ABI` (needs C-API/ABI — **numpy, cffi, pybind11**) · `LEVEL_PCC_COMPILED_EXTENSION` (future) · `LEVEL_ACCELERATED_EXTENSION` (future). `numpy` is mapped to `LEVEL_C_EXTENSION_ABI`.
+- **Compatibility levels** (`pcc/package/compat.py:6`): `LEVEL_COMPAT_PYTHON` (pure-py test deps) · `LEVEL_NOLIBPYTHON_PYTHON` (pure-py, no libpython) · `LEVEL_C_EXTENSION_ABI` (needs C-API/ABI — **numpy, cffi, pybind11**) · `LEVEL_PCC_COMPILED_EXTENSION` (future) · `LEVEL_ACCELERATED_EXTENSION` (future). `numpy` is mapped to `LEVEL_C_EXTENSION_ABI`.
 
 ### The NumPy L-ladder (multi-month program)
 
@@ -96,13 +96,13 @@ Current frontier (per `docs/current-goal-state.md`, hard data 2026-05-29): in `p
 
 | Path | Role |
 |---|---|
-| `scripts/bootstrap.sh` | three-stage bootstrap (`--backend self/llvm`, `--stage N`) |
-| `pcc/cli_bootstrap.py` | bootstrap-stage CLI for `pcc1/2/3` |
+| `scripts/bootstrap.py` | three-stage bootstrap (`--stage N`, `--from-stage N`, `--reuse-stage1`); pure Python, owned `self` backend only |
+| `pcc/driver/cli_bootstrap.py` | bootstrap-stage CLI for `pcc1/2/3` |
 | `scripts/pcc_multi.py` | multi-file / closure compile entry |
 | `tests/bootstrap_gate_baseline.json` | authoritative fixed-point evidence |
 | `tests/fallback_baseline.json` | authoritative no-libpython fallback ratchet |
 | `tests/python/test_pcc_bootstrap_full.py` | full stage1→2→3 gate |
 | `pcc/package/linkage.py` | linkage scan + PCC-PKG-004 |
 | `pcc/package/extension_abi.py`, `metadata.py`, `wheel_repo.py` | extension-ABI planning, wheel metadata/repo |
-| `pcc/package_compat.py` | per-package compatibility levels |
+| `pcc/package/compat.py` | per-package compatibility levels |
 | `docs/plans/numpy_plan.md` | the L0..L5 ladder |

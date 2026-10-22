@@ -1,7 +1,7 @@
 """The two CLI helper copies must stay identical.
 
-`pcc/cli_core.py` imports the FNV-1a hashing and `.py` source-walk helpers
-from `pcc/cli_shared_paths.py`. `pcc/cli_bootstrap.py` cannot: it compiles
+`pcc/driver/cli_core.py` imports the FNV-1a hashing and `.py` source-walk helpers
+from `pcc/driver/cli_shared_paths.py`. `pcc/driver/cli_bootstrap.py` cannot: it compiles
 with ZERO CPython fallbacks as a single translation unit
 (`tests/fallback_baseline.json`), and a cross-module import turns those calls
 into getattr bridges worth 47 fallbacks. So the bootstrap CLI keeps a
@@ -19,9 +19,9 @@ from pathlib import Path
 
 import pytest
 
-import pcc.cli_bootstrap as cli_bootstrap
-import pcc.cli_core as cli_core
-import pcc.cli_shared_paths as shared
+import pcc.driver.cli_bootstrap as cli_bootstrap
+import pcc.driver.cli_core as cli_core
+import pcc.driver.cli_shared_paths as shared
 
 HELPERS = ("_fnv1a_update_u64", "_fnv1a_update_bytes_u64", "_iter_py_sources_under")
 FNV_OFFSET = 1469598103934665603
@@ -47,15 +47,15 @@ def test_bootstrap_copy_is_source_identical_to_the_shared_module(name):
     ours = ast.dump(ast.parse(inspect.getsource(getattr(shared, name))))
     theirs = ast.dump(ast.parse(inspect.getsource(getattr(cli_bootstrap, name))))
     assert ours == theirs, (
-        f"{name} has drifted between pcc/cli_shared_paths.py and the "
-        "self-contained copy in pcc/cli_bootstrap.py; keep them identical or "
+        f"{name} has drifted between pcc/driver/cli_shared_paths.py and the "
+        "self-contained copy in pcc/driver/cli_bootstrap.py; keep them identical or "
         "the two CLIs will compute different run-cache keys"
     )
 
 
 @pytest.mark.parametrize(
     "text",
-    ["", "a", "pcc/cli_core.py", "x" * 100, "é中文", "0" * 4096],
+    ["", "a", "pcc/driver/cli_core.py", "x" * 100, "é中文", "0" * 4096],
 )
 def test_text_hash_matches_across_both_copies(text):
     expected = shared._fnv1a_update_u64(FNV_OFFSET, text)
@@ -73,7 +73,7 @@ def test_bytes_hash_matches_across_both_copies(data):
 
 
 def test_source_walk_matches_across_both_copies():
-    for root in ("pcc/backend", "pcc/py_frontend/codegen", "pcc/cli_core.py"):
+    for root in ("pcc/backend", "pcc/frontends/python/codegen", "pcc/driver/cli_core.py"):
         target = str(_repo_root() / root)
         expected = shared._iter_py_sources_under(target)
         assert expected, f"walk of {root} returned nothing"

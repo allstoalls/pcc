@@ -5,7 +5,7 @@ import textwrap
 
 
 def test_list_unpack_assignment_target_self_backend(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "list_unpack_assign.py"
     src.write_text(textwrap.dedent(

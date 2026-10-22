@@ -1,0 +1,89 @@
+--- a/tests/python/test_class_init_outlining.py
++++ b/tests/python/test_class_init_outlining.py
+@@ -109,6 +109,72 @@
+     assert branch.group(3) == "err.exit", (helper, branch.groups())
+     assert re.search(r"(?m)^" + re.escape(branch.group(3)) + r":", body)
+     assert not re.search(r"\bcall\b", boundary), "outline call added a TLS poll/frame/activation before its status branch"
++
++
++def _assert_definition_order_cfg(body, first, second):
++    # Function.blocks is insertion ordered; a join may be printed before the
++    # slow-path blocks that eventually branch back to it. Follow CFG edges.
++    blocks = dict(re.findall(r"^([-\w.$]+):\n(.*?)(?=^[-\w.$]+:|^})", body, re.M | re.S))
++    rows = {name: [line.strip() for line in text.splitlines() if line.strip()] for name, text in blocks.items()}
++    assert "entry" in blocks
++    successors = {name: re.findall(r"label %([-\w.$]+)", lines[-1]) for name, lines in rows.items()}
++    assert all(target in blocks for targets in successors.values() for target in targets)
++
++    def reachable(start, omitted=()):
++        seen, pending = set(), [start]
++        while pending:
++            name = pending.pop()
++            if name in seen or name in omitted:
++                continue
++            seen.add(name)
++            pending.extend(successors[name])
++        return seen
++
++    def site(*tokens):
++        found = [(name, index) for name, lines in rows.items() for index, line in enumerate(lines)
++                 if all(token in line for token in tokens)]
++        assert len(found) == 1, (tokens, found)
++        assert found[0][0] in reachable("entry"), found
++        return found[0]
++
++    def precedes(before, after):
++        owner, index = before
++        use, use_index = after
++        if owner == use:
++            assert index < use_index, (before, after)
++        else:
++            assert use not in reachable("entry", (owner,)), (before, after)
++
++    first_site = site("call i32", "@" + first + "(")
++    binding = site("@py_module_attr_set(", "@.pyattr.between,")
++    second_site = site("call i32", "@" + second + "(")
++    constructor = site("@py_func_new_signature_slots(", "@user_outline_probe_between_native_adapter,")
++    precedes(first_site, binding)
++    precedes(binding, second_site)
++    precedes(first_site, constructor)
++    assert binding[0] in reachable(constructor[0])
++    assert constructor[0] not in reachable(binding[0])
++
++    def conditional(block):
++        branch = re.fullmatch(r"br i1 (%[-\w.$]+), label %([-\w.$]+), label %([-\w.$]+)", rows[block][-1])
++        assert branch, (block, rows[block][-1])
++        return branch.groups()
++
++    cache = site(" = load ptr, ptr @__pcc_native_func_value_cache_outline_probe_between")
++    cache_value = rows[cache[0]][cache[1]].split(" = ", 1)[0]
++    condition, cached, created = conditional(cache[0])
++    assert condition + " = icmp ne ptr " + cache_value + ", null" in rows[cache[0]]
++    # Reuse legitimately bypasses construction, but both successful routes
++    # must reach the same binding before the second class definition.
++    assert binding[0] in reachable(cached, (constructor[0],))
++    assert binding[0] in reachable(created)
++    assert binding[0] not in reachable(created, (constructor[0],))
++    status = rows[constructor[0]][constructor[1]].split(" = ", 1)[0]
++    condition, failed, ready = conditional(constructor[0])
++    assert condition + " = icmp slt i64 " + status + ", 0" in rows[constructor[0]]
++    assert binding[0] in reachable(ready)
++    assert binding[0] not in reachable(failed)
++    assert second_site[0] not in reachable(failed)
+ 
+ 
+ def _reachable_integer_returns(body, entry):
+@@ -252,8 +318,11 @@
+     expected = [(type(stmt).__name__, getattr(stmt, "name", ""), stmt.span.line) for stmt in parsed.body]
+     assert seen == expected
+     top = _bodies(text)[TOP]
+-    first, second = _outline_calls(top)
+-    assert top.index("@" + first + "(") < top.index("@user_outline_probe_between_native_adapter") < top.index("@" + second + "(")
++    # Bind helper identities to original class positions, not their text order.
++    first, second = [PREFIX + MODULE + "_" + str(index) for index, stmt in enumerate(parsed.body)
++                     if type(stmt).__name__ == "ClassDef"]
++    assert Counter(_outline_calls(top)) == Counter((first, second))
++    _assert_definition_order_cfg(top, first, second)
+     assert ".pcc.module.init.outline_probe" in top
+     assert ".pcc.module.init.outline_probe" not in _bodies(text)[INIT]
+ 

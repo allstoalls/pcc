@@ -30,7 +30,10 @@ import struct
 import sys
 from dataclasses import dataclass
 
-from pcc.unsafe import abi_constant, load_i8, load_i32, null, ptr_is_null, store_i32
+from pcc.unsafe import (
+    abi_constant, darwin_libsystem_symbol, free, load_i8, load_i32, malloc,
+    null, ptr_is_null, store_i8, store_i32,
+)
 
 from . import macho_spec as spec
 from .macho_codesign import _CD_HEADER_SIZE as _CD_FIXED
@@ -42,6 +45,7 @@ from .macho_link import (
     LinkError,
     _coerce_link_object,
     _coerce_link_objects,
+    _symbol_is_weak_reference,
     link_relocatable_native,
 )
 from .macho_parallel import (
@@ -53,12 +57,17 @@ from .macho_parallel import (
 from .native_object import (
     NativeObject,
     NativeObjectView,
+    NativeSymbol,
     OwnedMergedSourceView,
     PackedNativeObject,
+    PackedNativeSymbol,
 )
 from .precise_stackmap import (
     ARCH_AARCH64,
+    PRECISE_STACKMAP_TABLE_SYMBOL,
+    RUNTIME_TABLE_VERSION,
     PreciseStackMapError,
+    precise_stackmap_runtime_format,
     validate_stack_map_payload,
 )
 
@@ -69,6 +78,13 @@ _DROPPED_UNWIND_SECTIONS = {
     ("__LD", "__compact_unwind"),
     ("__TEXT", "__eh_frame"),
 }
+# An arm64 compact-unwind row is {function, length, encoding, personality,
+# lsda}; the last two pointers sit at these row offsets.
+_COMPACT_UNWIND_ROW_SIZE = 32
+_COMPACT_UNWIND_HANDLER_OFFSETS = (16, 24)
+# A __text span is reported on every link only once its margin to the
+# +-128 MiB branch reach falls under a quarter of that reach.
+_TEXT_SPAN_REPORT_MARGIN = 32 * 1024 * 1024
 
 DYLD_CHAINED_PTR_64_OFFSET = 6
 # dyld enforces this on __DATA_CONST: the segment is made read-only
@@ -108,6 +124,63 @@ def _native_patch_words_available() -> bool:
 _NATIVE_PATCH_WORDS = _native_patch_words_available()
 
 
+def _libsystem_exports_symbol(symbol: str) -> bool:
+    """Resolve only against the dylib ordinal this image actually loads.
+
+    Native compilers use the owned loader intrinsic; CPython uses its standard
+    library FFI. No compiler, assembler, linker or symbol-list subprocess is used.
+    A different host cannot establish the target library's exported symbols.
+    """
+    name = symbol[1:] if symbol.startswith("_") else symbol
+    if _NATIVE_PATCH_WORDS:
+        encoded = name.encode("ascii")
+        buffer = malloc(len(encoded) + 1)
+        if ptr_is_null(buffer):
+            raise MemoryError("libSystem symbol name allocation failed")
+        try:
+            for index in range(len(encoded)):
+                store_i8(buffer, index, encoded[index])
+            store_i8(buffer, len(encoded), 0)
+            return not ptr_is_null(darwin_libsystem_symbol(buffer))
+        finally:
+            free(buffer)
+    if sys.platform != "darwin":
+        raise LinkError(
+            "cannot resolve undefined Mach-O symbol " + repr(symbol)
+            + ": target libSystem is unavailable on this host"
+        )
+    import ctypes
+    try:
+        library = ctypes.CDLL(LIBSYSTEM.decode("ascii"))
+        lookup = library.dlsym
+        lookup.argtypes = (ctypes.c_void_p, ctypes.c_char_p)
+        lookup.restype = ctypes.c_void_p
+        return bool(lookup(library._handle, name.encode("ascii")))
+    except OSError as exc:
+        raise LinkError("cannot load target libSystem to resolve " + repr(symbol)) from exc
+
+
+def _validate_import_names(imports, weak_imports) -> None:
+    missing = [name for name in imports
+               if name not in weak_imports and not _libsystem_exports_symbol(name)]
+    if missing:
+        raise LinkError(
+            "undefined Mach-O symbol(s): " + ", ".join(repr(name) for name in missing)
+            + " (not exported by " + LIBSYSTEM.decode("ascii") + ")"
+        )
+
+
+def validate_executable_imports(image: bytes) -> None:
+    """Recheck target providers before publishing a cached executable."""
+    symbols = spec.parse_object(image).symbols()
+    imports = sorted(s["name"] for s in symbols
+                     if (s["n_type"] & spec.N_TYPE) == spec.N_UNDF)
+    weak_imports = {s["name"] for s in symbols
+                    if (s["n_type"] & spec.N_TYPE) == spec.N_UNDF
+                    and s["n_desc"] & spec.N_WEAK_REF}
+    _validate_import_names(imports, weak_imports)
+
+
 def _read_patch_word(data: bytearray, offset: int) -> int:
     if not _NATIVE_PATCH_WORDS or offset < 0 or offset > len(data) - 4:
         return struct.unpack_from("<I", data, offset)[0]
@@ -124,8 +197,161 @@ def _write_patch_word(data: bytearray, offset: int, value: int) -> None:
     store_i32(data, abi_constant("object.bytearray.data_offset") + offset, value)
 
 
+def _text_span_report_wanted(setting, margin: int) -> bool:
+    """PCC_LINK_REPORT_TEXT_SPAN: "0", "off" or "" never reports, any other
+    value always does, and unset reports only a margin under a quarter of
+    the branch reach."""
+    if setting is None:
+        return margin < _TEXT_SPAN_REPORT_MARGIN
+    return setting not in ("0", "off", "")
+
+
+def _unwind_rows_name_handlers(
+    obj, sec, source_view: bool, _owned_output=None,
+) -> bool:
+    """True when a compact-unwind row points at a personality routine or LSDA.
+
+    Every row pcc's backend emits describes a frame-pointer frame, which the
+    frame chain already describes, and relocates only its function address.
+    """
+    rows = relocations = row_window = row_error = None
+    try:
+        if source_view:
+            import sys as execution_runtime
+            if execution_runtime.implementation.name == "cpython":
+                if _owned_output is not None:
+                    row_window = _owned_output.row_window(obj, sec)
+                    if row_window is not None:
+                        try:
+                            rows = row_window.__enter__()
+                        except BaseException:
+                            row_window = None
+                            raise
+                        relocations = OwnedMergedSourceView._section_relocation_index_list(
+                            obj, rows, ordered=False,
+                        )
+            if relocations is None:
+                rows = OwnedMergedSourceView.compact_relocation_rows(obj, sec)
+                relocations = OwnedMergedSourceView.compact_relocation_index_list(
+                    obj, sec, ordered=False,
+                )
+        else:
+            relocations = obj.iter_relocations(sec, ordered=False)
+        for r in relocations:
+            if source_view:
+                start = r * 12  # _COMPACT_RELOCATION: <IIBBBB
+                if _NATIVE_PATCH_WORDS:
+                    address = load_i32(rows, abi_constant("object.bytes.data_offset") + start) & 0xFFFFFFFF
+                else:
+                    address = _COMPACT_RELOCATION.unpack_from(rows, start)[0]
+            else:
+                address = r["r_address"]
+            if address % _COMPACT_UNWIND_ROW_SIZE in _COMPACT_UNWIND_HANDLER_OFFSETS:
+                return True
+        return False
+    except BaseException:
+        import sys as execution_runtime
+        if execution_runtime.implementation.name == "cpython":
+            if row_window is not None:
+                row_error = execution_runtime.exc_info()
+        raise
+    finally:
+        import sys as execution_runtime
+        if execution_runtime.implementation.name == "cpython":
+            if row_window is not None:
+                try:
+                    if relocations is not None:
+                        relocations = None  # an index list holds nothing to release
+                except BaseException:
+                    if row_error is None:
+                        row_error = execution_runtime.exc_info()
+                        raise
+                finally:
+                    rows = relocations = None
+                    try:
+                        if row_error is None:
+                            row_window.__exit__(None, None, None)
+                        else:
+                            row_window.__exit__(*row_error)
+                    finally:
+                        row_window = row_error = None
+
+
 def _align(value: int, alignment: int) -> int:
     return (value + alignment - 1) & ~(alignment - 1)
+
+
+def _build_seg_info(fixups, seg_vmaddr, seg_size, seg_file_off, _owned_output=None):
+    """Encode only the file-backed page prefix that contains chained sites."""
+    if not fixups:
+        raise LinkError("chained-fixup segment has no sites")
+    DYLD_CHAINED_PTR_START_NONE = 0xFFFF
+    last_page = -1
+    by_page: dict[int, list] = {}
+    seen_sites: set[int] = set()
+    for site in sorted(fixups, key=lambda item: item[0]):
+        vmaddr, out, off, _base_word = site
+        if vmaddr in seen_sites:
+            raise LinkError(f"duplicate chained-fixup site at {vmaddr:#x}")
+        seen_sites.add(vmaddr)
+        if not seg_vmaddr <= vmaddr <= seg_vmaddr + seg_size - 8:
+            raise LinkError(
+                f"chained-fixup site {vmaddr:#x} is outside its segment"
+            )
+        if vmaddr % 4 or off < 0 or off + 8 > len(out.data):
+            raise LinkError(
+                f"chained-fixup site {vmaddr:#x} is not a complete, "
+                "four-byte-aligned pointer"
+            )
+        segment_offset = vmaddr - seg_vmaddr
+        page_offset = segment_offset % PAGE
+        if page_offset > PAGE - 8:
+            raise LinkError(
+                f"chained-fixup pointer at {vmaddr:#x} crosses a "
+                f"{PAGE:#x}-byte page boundary"
+            )
+        page = segment_offset // PAGE
+        by_page.setdefault(page, []).append(site)
+        last_page = max(last_page, page)
+    # ld64/dyld allow file-backed trailing pages without fixups to be absent
+    # from this table. Keep every hole before the last site, and reject an
+    # unrepresentable actual site before allocating starts or patching words.
+    page_count = last_page + 1
+    if page_count > 0xFFFF:
+        raise LinkError(
+            f"chained-fixup page count {page_count} exceeds uint16; "
+            f"last fixup page {last_page} needs a different segment layout"
+        )
+    page_starts = [DYLD_CHAINED_PTR_START_NONE] * page_count
+    for page, plist in by_page.items():
+        page_starts[page] = (plist[0][0] - seg_vmaddr) % PAGE
+        for i, (vmaddr, out, off, base_word) in enumerate(plist):
+            # `next` is the 4-byte stride to the next fixup in this page;
+            # a chained pointer can only reach 4095*4 bytes, so a page
+            # denser than that would need splitting (not hit here).
+            if i + 1 < len(plist):
+                delta = plist[i + 1][0] - vmaddr
+                if delta <= 0 or delta % 4:
+                    raise LinkError(
+                        "chained-fixup sites must increase in four-byte units"
+                    )
+                stride = delta // 4
+                if stride > 0xFFF:
+                    raise LinkError("fixup chain stride exceeds 12 bits")
+                nxt = stride
+            else:
+                nxt = 0
+            import sys as execution_runtime
+            if execution_runtime.implementation.name == "cpython":
+                if _owned_output is not None:
+                    _owned_output.patch_word(out, off, base_word | (nxt << 51))
+                    continue
+            struct.pack_into("<Q", out.data, off, base_word | (nxt << 51))
+    info = struct.pack("<IHHQIH", 22 + page_count * 2, PAGE,
+                       DYLD_CHAINED_PTR_64_OFFSET, seg_file_off, 0,
+                       page_count)
+    info += b"".join(struct.pack("<H", ps) for ps in page_starts)
+    return info
 
 
 def _adrp_imm(word: int, delta_page: int) -> int:
@@ -267,6 +493,66 @@ class _Out:
         return self.zerofill_size if self.zerofill_size else len(self.data)
 
 
+def _compact_source_raw_bytes(merged) -> int:
+    """Known retained source buffers, without projecting any payloads."""
+    if isinstance(merged, OwnedMergedSourceView):
+        size = (sum(len(payload) for payload in merged._payloads)
+                + sum(len(rows) for rows in merged._raw_relocations))
+        import sys as execution_runtime
+        if execution_runtime.implementation.name == "cpython":
+            storage = getattr(merged, "_host_row_store", None)
+            if storage is not None:
+                size += storage.active_bytes + storage.public_copy_bytes
+        return size
+    if isinstance(merged, NativeObject):
+        # The ordinary link view can normalize section-target pointers into
+        # independent mutable payloads while retaining the source object.
+        return 2 * sum(len(section.data) for section in merged.sections)
+    return 0
+
+
+def _check_compact_copy_peak(compact_budget, raw_bytes: int, label: str) -> None:
+    # A conservative sum of known buffers supplements the factory's sampled
+    # baseline. It is not a census or proof of all Python allocations/RSS.
+    try:
+        compact_budget.check_peak(raw_bytes, label=label)
+    except PreciseStackMapError as exc:
+        sizes = getattr(compact_budget, "last_rejection", "")
+        raise LinkError(
+            f"Mach-O compact stack-map budget rejected: {exc}" + ("; " + sizes if sizes else "")
+        ) from exc
+
+
+def _accumulate_external_symbol_state(
+    symbols, defined: set[str], undefined: set[str],
+) -> None:
+    """Borrow one validated table and retain only its external symbol names.
+
+    ``undefined`` accumulates strong references, including already satisfied
+    ones. The caller subtracts ``defined`` when asking for pending archive
+    references, so a definition in a later input cancels an earlier request.
+    Neither the table nor its object/payload owner escapes this call.
+    """
+    for symbol in symbols:
+        if isinstance(symbol, PackedNativeSymbol):
+            if symbol.section_index and symbol.external:
+                defined.add(symbol.name)
+            elif not symbol.section_index and symbol.external and not symbol.weak_reference:
+                undefined.add(symbol.name)
+            continue
+        if isinstance(symbol, NativeSymbol):
+            if symbol.section_index and symbol.external:
+                defined.add(symbol.name)
+            elif not symbol.section_index and symbol.external and not symbol.weak_reference:
+                undefined.add(symbol.name)
+            continue
+        kind = symbol["n_type"] & spec.N_TYPE
+        if kind == spec.N_SECT and (symbol["n_type"] & spec.N_EXT):
+            defined.add(symbol["name"])
+        elif kind == spec.N_UNDF and (symbol["n_type"] & spec.N_EXT) and not _symbol_is_weak_reference(symbol):
+            undefined.add(symbol["name"])
+
+
 def _external_symbol_state(
     objects: list[LinkInput],
 ) -> tuple[set[str], set[str]]:
@@ -274,25 +560,11 @@ def _external_symbol_state(
     for index, data in enumerate(objects):
         obj = _coerce_link_object(data, index)
         if isinstance(obj, PackedNativeObject):
-            for symbol in obj.symbols:
-                if symbol.section_index and symbol.external:
-                    defined.add(symbol.name)
-                elif not symbol.section_index and symbol.external:
-                    undefined.add(symbol.name)
-            continue
-        if isinstance(obj, NativeObject):
-            for symbol in obj.symbols:
-                if symbol.section_index and symbol.external:
-                    defined.add(symbol.name)
-                elif not symbol.section_index and symbol.external:
-                    undefined.add(symbol.name)
-            continue
-        for sym in obj.symbols():
-            kind = sym["n_type"] & spec.N_TYPE
-            if kind == spec.N_SECT and (sym["n_type"] & spec.N_EXT):
-                defined.add(sym["name"])
-            elif kind == spec.N_UNDF and (sym["n_type"] & spec.N_EXT):
-                undefined.add(sym["name"])
+            _accumulate_external_symbol_state(obj.symbols, defined, undefined)
+        elif isinstance(obj, NativeObject):
+            _accumulate_external_symbol_state(obj.symbols, defined, undefined)
+        else:
+            _accumulate_external_symbol_state(obj.symbols(), defined, undefined)
     return defined, undefined - defined
 
 
@@ -303,6 +575,8 @@ def prepare_executable_object(
     semantic_manifest=None,
     _consume_inputs: bool = False,
     _source_view: bool = False,
+    archive_selections=None,
+    compact_budget=None,
 ):
     """Resolve a final link job into its reusable relocatable state.
 
@@ -319,6 +593,14 @@ def prepare_executable_object(
 
     if _source_view and (not _consume_inputs or semantic_manifest is not None):
         raise LinkError("source view requires an owned final link without semantic layout")
+    # Semantic layout decodes and re-encodes a version 2 table after the merge,
+    # so only a link without it can emit the version 3 runtime table.
+    try:
+        runtime_stack_map_format = precise_stackmap_runtime_format()
+    except PreciseStackMapError as exc:
+        raise LinkError(str(exc)) from exc
+    if semantic_manifest is not None and runtime_stack_map_format == RUNTIME_TABLE_VERSION:
+        raise LinkError("semantic layout cannot emit a version 3 runtime stack-map table")
 
     # Archives are pools, not inputs: pull only the members that satisfy
     # something still undefined, repeatedly (see macho_archive).
@@ -338,11 +620,23 @@ def prepare_executable_object(
                 raise LinkError(
                     f"archive {archive_index} is outside the proven subset: {exc}"
                 ) from exc
+            selected_members = [] if archive_selections is not None else None
             pulled, pending = select_members(
                 members,
                 pending,
                 already_defined=already_defined,
+                selected_members=selected_members,
             )
+            if archive_selections is not None:
+                import hashlib
+                archive_hash = hashlib.sha256(archive).hexdigest()
+                for member in selected_members:
+                    archive_selections.append({
+                        "archive_index": archive_index,
+                        "member": member.name,
+                        "archive_sha256": archive_hash,
+                        "member_sha256": hashlib.sha256(member.data).hexdigest(),
+                    })
             resolved_objects.extend(_coerce_link_objects(
                 list(pulled),
                 start_index=len(resolved_objects),
@@ -355,11 +649,21 @@ def prepare_executable_object(
     # Even one input goes through the relocatable core: that is where CPU,
     # symbol-provenance, companion-relocation, and section-target contracts
     # are normalized and checked. A one-object fast path must not bypass them.
-    merged = link_relocatable_native(
-        resolved_objects,
-        _consume_inputs=_consume_inputs,
-        _source_view=_source_view,
-    )
+    if compact_budget is None:
+        merged = link_relocatable_native(
+            resolved_objects,
+            _consume_inputs=_consume_inputs,
+            _source_view=_source_view,
+            _final_executable=semantic_manifest is None,
+        )
+    else:
+        merged = link_relocatable_native(
+            resolved_objects,
+            _consume_inputs=_consume_inputs,
+            _source_view=_source_view,
+            compact_budget=compact_budget,
+            _final_executable=semantic_manifest is None,
+        )
     if semantic_manifest is not None:
         # Imported lazily so the ordinary linker path and compiled-stage
         # closure do not acquire semantic-layout policy or JSON machinery.
@@ -384,22 +688,33 @@ def link_executable(
     semantic_manifest=None,
     _consume_inputs: bool = False,
     _direct_source_view: bool = False,
+    link_receipt=None,
 ) -> bytes:
     # Finish only after the preparation frame has returned. In a compiled
     # caller, temporary arguments may stay owned until that frame exits.
+    receipt = {} if link_receipt is not None else None
     plan = _prepare_executable_inputs(
         objects, archives, entry, minos, identifier, semantic_manifest,
-        _consume_inputs, _direct_source_view,
+        _consume_inputs, _direct_source_view, receipt,
     )
-    return _finish_executable_image(plan, identifier, None)
+    image = _finish_executable_image(plan, identifier, None)
+    if link_receipt is not None:
+        import hashlib
+        receipt["image_sha256"] = hashlib.sha256(image).hexdigest()
+        link_receipt.clear()
+        link_receipt.update(receipt)
+    return image
 
 
 def _prepare_executable_inputs(objects, archives, entry, minos, identifier,
                                semantic_manifest, consume_inputs,
-                               direct_source_view):
+                               direct_source_view, link_receipt=None):
     # Preserve fail-closed option validation before parsing potentially large
     # inputs.  ``link_prepared_executable`` validates again for direct users.
     minos = _validate_minos(minos)
+    selections = [] if link_receipt is not None else None
+    if link_receipt is not None:
+        link_receipt["archive_members"] = selections
     return _prepare_executable_image(
         prepare_executable_object(
             objects,
@@ -407,10 +722,12 @@ def _prepare_executable_inputs(objects, archives, entry, minos, identifier,
             semantic_manifest=semantic_manifest,
             _consume_inputs=consume_inputs,
             _source_view=direct_source_view,
+            archive_selections=selections,
         ),
         entry=entry,
         minos=minos,
         identifier=identifier,
+        link_receipt=link_receipt,
     )
 
 
@@ -421,6 +738,7 @@ def link_prepared_executable(
     minos: tuple[int, int] = (12, 0),
     identifier: bytes = b"pcc-linked",
     phase_callback=None,
+    compact_budget=None,
 ) -> bytes:
     """Finalize one validated, already-merged object as an executable.
 
@@ -428,9 +746,21 @@ def link_prepared_executable(
     ``NativeObject``: external Mach-O and archive validation must happen in
     :func:`prepare_executable_object`, never be bypassed by a cache hit.
     """
-    plan = _prepare_executable_image(merged, entry=entry, minos=minos,
-                                     identifier=identifier)
-    return _finish_executable_image(plan, identifier, phase_callback)
+    if compact_budget is None:
+        plan = _prepare_executable_image(merged, entry=entry, minos=minos,
+                                         identifier=identifier)
+        return _finish_executable_image(plan, identifier, phase_callback)
+    plan = _prepare_executable_image(
+        merged, entry=entry, minos=minos, identifier=identifier,
+        compact_budget=compact_budget,
+    )
+    # An owned source view retires its payloads while the image is prepared,
+    # so measure what the source still keeps alive afterwards.
+    retained_source_bytes = _compact_source_raw_bytes(merged)
+    return _finish_executable_image(
+        plan, identifier, phase_callback, compact_budget=compact_budget,
+        retained_source_bytes=retained_source_bytes,
+    )
 
 
 def _prepare_executable_image(
@@ -439,12 +769,26 @@ def _prepare_executable_image(
     entry: str = "_main",
     minos: tuple[int, int] = (12, 0),
     identifier: bytes = b"pcc-linked",
+    link_receipt=None,
+    compact_budget=None,
+    _owned_output=None,
 ):
     """Resolve addresses into immutable output regions, without allocating an image."""
+
+    import sys as execution_runtime
+    if execution_runtime.implementation.name == "cpython":
+        if isinstance(merged, OwnedMergedSourceView):
+            if getattr(merged, "_host_row_store", None) is not None and _owned_output is None:
+                from .macho_host_prepare import close_staged_source_rows
+                close_staged_source_rows(merged)
+                raise LinkError("staged relocation rows require owned output")
 
     minos = _validate_minos(minos)
     if not isinstance(merged, (NativeObject, OwnedMergedSourceView)):
         raise LinkError("prepared executable input must be a NativeObject")
+    source_raw_bytes = 0
+    if compact_budget is not None:
+        source_raw_bytes = _compact_source_raw_bytes(merged)
     # The owned source view already implements the linker-facing interface.
     # Keep the two concrete routes explicit for native codegen: a union-typed
     # method call can otherwise bind NativeObject.link_view to the source view.
@@ -469,27 +813,24 @@ def _prepare_executable_image(
         s["name"] for s in symbols
         if (s["n_type"] & spec.N_TYPE) == spec.N_UNDF
     )
-    # An undefined symbol is bound as a dylib import.  A pcc-generated name
-    # can only come from the image itself, so importing one produces a binary
-    # that links and then dies at startup with a dyld "Symbol not found"
-    # instead of a link error naming the gap.  That is exactly what a missing
-    # ``user_pcc_llvm_capi_ir_LiteralStructType___init__0`` did to the first
-    # pcc1 carrying the C frontend.
-    internal_undefined = sorted(
-        name for name in imports
-        if name.lstrip("_").startswith(("user_", "pcc_", "py_"))
-    )
-    if internal_undefined:
-        raise LinkError(
-            "undefined pcc-internal symbol(s) would be bound as dylib "
-            "imports: "
-            + ", ".join(repr(name) for name in internal_undefined[:8])
-            + (
-                " (and " + str(len(internal_undefined) - 8) + " more)"
-                if len(internal_undefined) > 8
-                else ""
-            )
-        )
+    weak_imports = {
+        s["name"] for s in symbols
+        if (s["n_type"] & spec.N_TYPE) == spec.N_UNDF and s["n_desc"] & spec.N_WEAK_REF
+    }
+    # The linker owns the stack-map table's start symbol: the GC runtime
+    # references it weakly, and an executable defines it exactly when it has a
+    # table (an input stack-map section may not define symbols).
+    table_symbol = "_" + PRECISE_STACKMAP_TABLE_SYMBOL
+    if table_symbol in defined:
+        raise LinkError(f"input defines the linker-owned symbol {table_symbol!r}")
+    for index, section in enumerate(sections, start=1):
+        if (section["segname_str"], section["sectname_str"]) == ("__DATA", "__pcc_stackmaps"):
+            defined[table_symbol] = {
+                "name": table_symbol, "n_type": spec.N_SECT | spec.N_EXT,
+                "n_sect": index, "n_desc": 0, "n_value": section["addr"],
+            }
+            imports = [name for name in imports if name != table_symbol]
+            weak_imports.discard(table_symbol)
     if entry not in defined:
         raise LinkError(f"entry symbol {entry!r} is not defined by the inputs")
     entry_symbol = defined[entry]
@@ -527,45 +868,87 @@ def _prepare_executable_image(
     imports_set = set(imports)
     for sec in sections:
         # Reference classification is set-based and does not depend on address order.
-        if source_view:
-            rows = OwnedMergedSourceView.compact_relocation_rows(obj, sec)
-            relocations = OwnedMergedSourceView.iter_compact_relocation_indices(
-                obj, sec, ordered=False,
-            )
-        else:
-            relocations = obj.iter_relocations(sec, ordered=False)
-        for r in relocations:
+        rows = relocations = row_window = row_error = None
+        try:
             if source_view:
-                start = r * 12  # _COMPACT_RELOCATION: <IIBBBB
-                if _NATIVE_PATCH_WORDS:
-                    cursor = abi_constant("object.bytes.data_offset") + start
-                    reloc_symbolnum = load_i32(rows, cursor + 4) & 0xFFFFFFFF
-                    reloc_extern = load_i8(rows, cursor + 10) & 0xFF
-                    reloc_type = load_i8(rows, cursor + 11) & 0xFF
-                else:
-                    (
-                        _address, reloc_symbolnum, _pcrel, _length,
-                        reloc_extern, reloc_type,
-                    ) = _COMPACT_RELOCATION.unpack_from(rows, start)
+                import sys as execution_runtime
+                if execution_runtime.implementation.name == "cpython":
+                    if _owned_output is not None:
+                        row_window = _owned_output.row_window(obj, sec)
+                        if row_window is not None:
+                            try:
+                                rows = row_window.__enter__()
+                            except BaseException:
+                                row_window = None
+                                raise
+                            relocations = OwnedMergedSourceView._section_relocation_index_list(
+                                obj, rows, ordered=False,
+                            )
+                if relocations is None:
+                    rows = OwnedMergedSourceView.compact_relocation_rows(obj, sec)
+                    relocations = OwnedMergedSourceView.compact_relocation_index_list(
+                        obj, sec, ordered=False,
+                    )
             else:
-                reloc_symbolnum = r["r_symbolnum"]
-                reloc_extern = r["r_extern"]
-                reloc_type = r["r_type"]
-            if not reloc_extern:
-                continue
-            nm = names_all[reloc_symbolnum]
-            if nm in imports_set:
-                relocated_imports.add(nm)
-            if reloc_type == spec.ARM64_RELOC_BRANCH26:
-                # Every call target is a candidate for a range-extension
-                # thunk; which ones need one is only known once addresses
-                # exist, and sizing the island from the candidates avoids a
-                # second layout pass (an unused slot is 12 zero bytes).
-                branch_targets_set.add(nm)
-            if reloc_type in (spec.ARM64_RELOC_BRANCH26,
-                              spec.ARM64_RELOC_GOT_LOAD_PAGE21,
-                              spec.ARM64_RELOC_GOT_LOAD_PAGEOFF12):
-                code_imports_set.add(nm)
+                relocations = obj.iter_relocations(sec, ordered=False)
+            for r in relocations:
+                if source_view:
+                    start = r * 12  # _COMPACT_RELOCATION: <IIBBBB
+                    if _NATIVE_PATCH_WORDS:
+                        cursor = abi_constant("object.bytes.data_offset") + start
+                        reloc_symbolnum = load_i32(rows, cursor + 4) & 0xFFFFFFFF
+                        reloc_extern = load_i8(rows, cursor + 10) & 0xFF
+                        reloc_type = load_i8(rows, cursor + 11) & 0xFF
+                    else:
+                        (
+                            _address, reloc_symbolnum, _pcrel, _length,
+                            reloc_extern, reloc_type,
+                        ) = _COMPACT_RELOCATION.unpack_from(rows, start)
+                else:
+                    reloc_symbolnum = r["r_symbolnum"]
+                    reloc_extern = r["r_extern"]
+                    reloc_type = r["r_type"]
+                if not reloc_extern:
+                    continue
+                nm = names_all[reloc_symbolnum]
+                if nm in imports_set:
+                    relocated_imports.add(nm)
+                if reloc_type == spec.ARM64_RELOC_BRANCH26:
+                    # Every call target is a candidate for a range-extension
+                    # thunk; which ones need one is only known once addresses
+                    # exist, and sizing the island from the candidates avoids a
+                    # second layout pass (an unused slot is 12 zero bytes).
+                    branch_targets_set.add(nm)
+                if reloc_type in (spec.ARM64_RELOC_BRANCH26,
+                                  spec.ARM64_RELOC_GOT_LOAD_PAGE21,
+                                  spec.ARM64_RELOC_GOT_LOAD_PAGEOFF12):
+                    code_imports_set.add(nm)
+        except BaseException:
+            import sys as execution_runtime
+            if execution_runtime.implementation.name == "cpython":
+                if row_window is not None:
+                    row_error = execution_runtime.exc_info()
+            raise
+        finally:
+            import sys as execution_runtime
+            if execution_runtime.implementation.name == "cpython":
+                if row_window is not None:
+                    try:
+                        if relocations is not None:
+                            relocations = None  # an index list holds nothing to release
+                    except BaseException:
+                        if row_error is None:
+                            row_error = execution_runtime.exc_info()
+                            raise
+                    finally:
+                        rows = relocations = None
+                        try:
+                            if row_error is None:
+                                row_window.__exit__(None, None, None)
+                            else:
+                                row_window.__exit__(*row_error)
+                        finally:
+                            row_window = row_error = None
     branch_targets = sorted(branch_targets_set)
     veneer_index = {name: i for i, name in enumerate(branch_targets)}
     unreferenced_imports = sorted(set(imports) - relocated_imports)
@@ -574,6 +957,7 @@ def _prepare_executable_image(
             "undefined symbol(s) have no relocation naming an import: "
             + ", ".join(repr(name) for name in unreferenced_imports)
         )
+    _validate_import_names(imports, weak_imports)
     code_imports = [n for n in imports if n in code_imports_set]
 
     # Thread block: __thread_data then __thread_bss, concatenated with each
@@ -596,6 +980,7 @@ def _prepare_executable_image(
     # --- section layout ----------------------------------------------------
     text_out: list[_Out] = []
     data_out: list[_Out] = []
+    debug_out: list[_Out] = []
     dropped_unwind = []
     for sec in sections:
         segname = sec["segname_str"]
@@ -607,9 +992,15 @@ def _prepare_executable_image(
         # unwinding THROUGH these frames (C++ exceptions, backtraces), which
         # LINK-P1-MACHO-LINK-DYLD already scopes out; ordinary control flow
         # and the runtime's own py_err_occurred error model are unaffected.
-        # Dropped, not silently ignored: recorded and reported.
+        # Rows that only describe frame-pointer frames (all pcc emits) lose
+        # nothing the frame chain does not keep, so their drop is quiet; a
+        # personality, LSDA or __eh_frame carries exception handling, so its
+        # drop is reported.
         if (segname, sectname) in _DROPPED_UNWIND_SECTIONS:
-            dropped_unwind.append(f"{segname},{sectname}")
+            if (segname, sectname) != ("__LD", "__compact_unwind") or (
+                _unwind_rows_name_handlers(obj, sec, source_view, _owned_output)
+            ):
+                dropped_unwind.append(f"{segname},{sectname}")
             continue
         stype = sec["flags"] & spec.SECTION_TYPE
         is_zf = stype in (0x1, 0x12)  # S_ZEROFILL / S_THREAD_LOCAL_ZEROFILL
@@ -617,20 +1008,50 @@ def _prepare_executable_image(
         # obj.data[0:size] for it would splice the mach header + __text into
         # __bss and the section's globals would read instruction bytes. It
         # occupies vm space only; dyld zeroes it.
-        if source_view:
-            payload = OwnedMergedSourceView.section_data(obj, sec)
-        else:
+        out = None
+        import sys as execution_runtime
+        if execution_runtime.implementation.name == "cpython":
+            if _owned_output is not None:
+                out = _Out(
+                    segname, sectname, sec["flags"], sec["align"],
+                    _owned_output.layout_data(obj, sec, is_zf),
+                )
+                if source_view and not is_zf:
+                    source_raw_bytes -= min(source_raw_bytes, len(out.data))
+        if out is None and compact_budget is not None and not is_zf:
+            # Count the original buffers, mutable output accumulated so far,
+            # and both a possible payload slice and its new mutable copy.
+            _check_compact_copy_peak(
+                compact_budget,
+                source_raw_bytes
+                + sum(len(part.data) for part in text_out + data_out + debug_out)
+                + 2 * sec["size"],
+                "Mach-O mutable section output",
+            )
+        if out is None and source_view:
+            # The owned view is single-use: retire each source payload once
+            # it is copied, so the image is not held twice at its peak.
+            payload = OwnedMergedSourceView.take_section_data(obj, sec)
+        elif out is None:
             payload = obj.section_data(sec)
-        out = _Out(
-            segname, sectname, sec["flags"], sec["align"],
-            bytearray() if is_zf
-            else bytearray(payload),
-        )
+        if out is None:
+            out = _Out(
+                segname, sectname, sec["flags"], sec["align"],
+                bytearray() if is_zf
+                else bytearray(payload),
+            )
+            if source_view and not is_zf:
+                source_raw_bytes -= min(source_raw_bytes, len(payload))
+        payload = None
         out.zerofill_size = sec["size"] if is_zf else 0
         if segname == "__TEXT":
             text_out.append(out)
         elif segname == "__DATA":
             data_out.append(out)
+        elif segname == "__DWARF":
+            if sec["flags"] != spec.S_ATTR_DEBUG or not sectname.startswith("__debug_"):
+                raise LinkError("unsupported executable DWARF section flags/name")
+            debug_out.append(out)
         else:
             raise LinkError(
                 f"segment {segname} is outside the proven layout"
@@ -640,15 +1061,16 @@ def _prepare_executable_image(
     # immediately by virtual-only __thread_bss.  Input objects commonly put
     # ordinary __bss/__common before __thread_bss; preserving that order in
     # the final image makes dyld's TLS template offsets disagree with the
-    # compact offsets stored in __thread_vars descriptors.  Keep all ordinary
-    # file-backed DATA first, then descriptors and TLS data, then TLS
-    # zerofill, and only then ordinary zerofill.  Python's sort is stable, so
-    # relative order within each semantic class (including multiple TLS
+    # compact offsets stored in __thread_vars descriptors. Descriptors are
+    # not part of the TLS template: put their fixups before potentially huge
+    # ordinary DATA (including pointer-free stack-map location tails). Keep
+    # TLS data followed by TLS zerofill, then ordinary zerofill. Stable sorting
+    # preserves relative order within each semantic class (including multiple TLS
     # sections) remains the merged-object order used by thread_block_offset.
     def _data_layout_rank(out):
         stype = out.flags & spec.SECTION_TYPE
         if stype == _S_THREAD_LOCAL_VARIABLES:
-            return 1
+            return -1
         if stype == _S_THREAD_LOCAL_REGULAR:
             return 2
         if stype == _S_THREAD_LOCAL_ZEROFILL:
@@ -672,6 +1094,10 @@ def _prepare_executable_image(
     # stubs and GOT are plain sections and no indirect table is emitted.
     # (Measured: with the special types and no indirect table the process is
     # SIGKILLed with no diagnostic; as plain sections the same binary runs.)
+    import sys as execution_runtime
+    if execution_runtime.implementation.name == "cpython":
+        if _owned_output is not None:
+            _owned_output.reserve_buffers((_STUB_SIZE + 8) * len(code_imports), 2)
     stubs = _Out("__TEXT", "__stubs", spec.S_REGULAR
                  | spec.S_ATTR_PURE_INSTRUCTIONS | spec.S_ATTR_SOME_INSTRUCTIONS,
                  2, bytearray(b"\0" * (_STUB_SIZE * len(code_imports))))
@@ -706,6 +1132,13 @@ def _prepare_executable_image(
             veneer_island_count = _needed
     else:
         veneer_island_count = 0
+    import sys as execution_runtime
+    if execution_runtime.implementation.name == "cpython":
+        if _owned_output is not None:
+            _owned_output.reserve_buffers(
+                _veneer_table_bytes * veneer_island_count,
+                max(1, veneer_island_count),
+            )
     veneer_islands = [_make_veneer_island() for _ in range(veneer_island_count)]
     veneers = veneer_islands[0] if veneer_islands else _make_veneer_island()
 
@@ -720,6 +1153,7 @@ def _prepare_executable_image(
         )
         + seg_cmd_size(1 if code_imports else 0)          # __DATA_CONST
         + (seg_cmd_size(len(data_out)) if data_out else 0)
+        + (seg_cmd_size(len(debug_out)) if debug_out else 0)
         + seg_cmd_size(0)                                 # __LINKEDIT
         + 16   # LC_DYLD_CHAINED_FIXUPS
         + spec.SYMTAB_COMMAND.size
@@ -732,7 +1166,7 @@ def _prepare_executable_image(
         + 16                                              # LC_CODE_SIGNATURE
     )
     ncmds = (
-        1 + 1 + 1 + (1 if data_out else 0) + 1  # segments
+        1 + 1 + 1 + (1 if data_out else 0) + (1 if debug_out else 0) + 1  # segments
         + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1     # the nine others
     )
 
@@ -765,9 +1199,9 @@ def _prepare_executable_image(
     # -- before any of that work -- so a build that cannot fit says so up
     # front instead of after the whole codegen phase.
     _text_span = cursor - (spec.MACH_HEADER_64.size + sizeofcmds)
-    if os.environ.get("PCC_LINK_REPORT_TEXT_SPAN", "1") not in ("0", "off", ""):
-        _reach = 1 << 27
-        _margin = _reach - _text_span
+    _reach = 1 << 27
+    _margin = _reach - _text_span
+    if _text_span_report_wanted(os.environ.get("PCC_LINK_REPORT_TEXT_SPAN"), _margin):
         sys.stderr.write(
             "pcc link: __text span "
             + str(_text_span)
@@ -799,14 +1233,30 @@ def _prepare_executable_image(
     file_cursor = data_off
     vm_cursor = data_off
     data_content_end = data_off
+    # Descriptor offsets align within a template starting at zero. Align its
+    # actual base to every template section's requirement so later absolute
+    # alignment has exactly the same padding, even after descriptor reordering.
+    tls_alignment = 1
     for out in data_out:
+        if (out.flags & spec.SECTION_TYPE) in (
+            _S_THREAD_LOCAL_REGULAR, _S_THREAD_LOCAL_ZEROFILL,
+        ):
+            tls_alignment = max(tls_alignment, 1 << out.align_log2)
+    tls_started = False
+    for out in data_out:
+        alignment = 1 << out.align_log2
+        if not tls_started and (out.flags & spec.SECTION_TYPE) in (
+            _S_THREAD_LOCAL_REGULAR, _S_THREAD_LOCAL_ZEROFILL,
+        ):
+            alignment = max(alignment, tls_alignment)
+            tls_started = True
         if out.zerofill_size:
-            vm_cursor = _align(vm_cursor, 1 << out.align_log2)
+            vm_cursor = _align(vm_cursor, alignment)
             out.addr = TEXT_BASE + vm_cursor
             out.fileoff = 0
             vm_cursor += out.zerofill_size
         else:
-            file_cursor = _align(file_cursor, 1 << out.align_log2)
+            file_cursor = _align(file_cursor, alignment)
             vm_cursor = file_cursor
             out.fileoff = file_cursor
             out.addr = TEXT_BASE + file_cursor
@@ -822,12 +1272,35 @@ def _prepare_executable_image(
     # offsets to be page-congruent, not equal; both ends are PAGE-aligned.
     # Binding the file offset to data_end would materialize the entire BSS as
     # zero padding and make executable size grow with virtual-only storage.
-    linkedit_off = data_file_end
+    # Debug data is a read-only, non-executable segment. Code addresses in
+    # its DWARF are image addresses interpreted/slid by the debugger, not
+    # runtime pointers for dyld's chained-fixup walker.
+    debug_file_off, debug_vm_off, debug_size = data_file_end, data_end, 0
+    if debug_out:
+        debug_alignment = max(PAGE, max(1 << out.align_log2 for out in debug_out))
+        debug_file_off = _align(data_file_end, debug_alignment)
+        debug_vm_off = _align(data_end, debug_alignment)
+        debug_cursor = 0
+        for out in debug_out:
+            debug_cursor = _align(debug_cursor, 1 << out.align_log2)
+            out.fileoff = debug_file_off + debug_cursor
+            out.addr = TEXT_BASE + debug_vm_off + debug_cursor
+            debug_cursor += len(out.data)
+        debug_size = _align(debug_cursor, PAGE)
+    linkedit_off = debug_file_off + debug_size
+    linkedit_vm_off = debug_vm_off + debug_size
+
+    import sys as execution_runtime
+    if execution_runtime.implementation.name == "cpython":
+        if _owned_output is not None:
+            _owned_output.reserve_pages(
+                2 + (data_const_end - data_const_off + data_file_end - data_off + debug_size) // PAGE,
+            )
 
     # --- symbol addresses --------------------------------------------------
     section_addr = {}
     for index, sec in enumerate(sections, start=1):
-        for out in text_out + data_out:
+        for out in text_out + data_out + debug_out:
             if (out.segname, out.sectname) == (sec["segname_str"], sec["sectname_str"]):
                 section_addr[index] = (out, sec["addr"])
     sym_addr: dict[str, int] = {}
@@ -877,204 +1350,333 @@ def _prepare_executable_image(
     # field is an import pointer in __DATA that dyld binds. Collected here,
     # emitted into the fixups chain below.
     tlv_bind_sites: list[tuple] = []  # (_Out, offset_in_out, ordinal)
+    # Ordinary data pointers to imports (``void *(*f)() = memset;``): a
+    # chained BIND with the inline addend, in whichever data segment holds
+    # the pointer. (_Out, offset_in_out, ordinal, addend)
+    data_bind_sites: list[tuple] = []
     # In-image data pointers (UNSIGNED to a defined symbol) hold absolute
     # addresses that must follow the ASLR slide, so each needs a REBASE
     # chained fixup. (_Out, offset_in_out, target_offset_from_image_base)
     rebase_sites: list[tuple] = []
+    import sys as execution_runtime
+    if execution_runtime.implementation.name == "cpython":
+        if _owned_output is not None:
+            _owned_output.phase("relocations_begin")
     _S_TLV_VARS = 0x13
+    # Read once: under pcc1 each spec.X and abi_constant(...) in the per-relocation
+    # loop below was a module-dictionary lookup or call (a seventh of a link).
+    reloc_addend = spec.ARM64_RELOC_ADDEND
+    reloc_branch26 = spec.ARM64_RELOC_BRANCH26
+    reloc_page21 = spec.ARM64_RELOC_PAGE21
+    reloc_got_page21 = spec.ARM64_RELOC_GOT_LOAD_PAGE21
+    reloc_pageoff12 = spec.ARM64_RELOC_PAGEOFF12
+    reloc_got_pageoff12 = spec.ARM64_RELOC_GOT_LOAD_PAGEOFF12
+    reloc_unsigned = spec.ARM64_RELOC_UNSIGNED
+    patch_data_offset = abi_constant("object.bytes.data_offset") if _NATIVE_PATCH_WORDS else 0
     for sec_index, sec in enumerate(sections, start=1):
         mapping = section_addr.get(sec_index)
         if mapping is None:
             continue  # a dropped unwind section carries no live relocations
         out, sec_addr = mapping
+        import sys as execution_runtime
+        if execution_runtime.implementation.name == "cpython":
+            if _owned_output is not None:
+                _owned_output.begin_section(obj, sec, out)
         pending_addend = 0
-        if source_view:
-            rows = OwnedMergedSourceView.compact_relocation_rows(obj, sec)
-            relocations = OwnedMergedSourceView.iter_compact_relocation_indices(
-                obj, sec,
-            )
-        else:
-            relocations = obj.iter_relocations(sec)
-        for entry_r in relocations:
+        rows = relocations = row_window = row_error = None
+        try:
             if source_view:
-                start = entry_r * 12  # _COMPACT_RELOCATION: <IIBBBB
-                if _NATIVE_PATCH_WORDS:
-                    cursor = abi_constant("object.bytes.data_offset") + start
-                    reloc_address = load_i32(rows, cursor) & 0xFFFFFFFF
-                    reloc_symbolnum = load_i32(rows, cursor + 4) & 0xFFFFFFFF
-                    reloc_extern = load_i8(rows, cursor + 10) & 0xFF
-                    reloc_type = load_i8(rows, cursor + 11) & 0xFF
-                else:
-                    (
-                        reloc_address, reloc_symbolnum, _pcrel, _length,
-                        reloc_extern, reloc_type,
-                    ) = _COMPACT_RELOCATION.unpack_from(rows, start)
-            else:
-                reloc_address = entry_r["r_address"]
-                reloc_symbolnum = entry_r["r_symbolnum"]
-                reloc_extern = entry_r["r_extern"]
-                reloc_type = entry_r["r_type"]
-            if reloc_type == spec.ARM64_RELOC_ADDEND:
-                pending_addend = reloc_symbolnum
-                continue
-            if not reloc_extern:
-                target_index = reloc_symbolnum
-                if 1 <= target_index <= len(sections):
-                    target_sec = sections[target_index - 1]
-                    target_key = (
-                        target_sec["segname_str"],
-                        target_sec["sectname_str"],
+                import sys as execution_runtime
+                if execution_runtime.implementation.name == "cpython":
+                    if _owned_output is not None:
+                        row_window = _owned_output.row_window(obj, sec)
+                        if row_window is not None:
+                            try:
+                                rows = row_window.__enter__()
+                            except BaseException:
+                                row_window = None
+                                raise
+                            relocations = OwnedMergedSourceView._section_relocation_index_list(
+                                obj, rows, ordered=True,
+                            )
+                if relocations is None:
+                    rows = OwnedMergedSourceView.compact_relocation_rows(obj, sec)
+                    relocations = OwnedMergedSourceView.compact_relocation_index_list(
+                        obj, sec, ordered=True,
                     )
-                    if target_key in _DROPPED_UNWIND_SECTIONS:
-                        raise LinkError(
-                            "live section targets dropped unwind metadata "
-                            f"{target_key[0]},{target_key[1]} — not safe "
-                            "to drop"
-                        )
-                raise LinkError(
-                    "section-target relocations must be normalized to a "
-                    "defined symbol before executable linking"
-                )
-            symbol_index = reloc_symbolnum
-            if not 0 <= symbol_index < len(names_all):
-                raise LinkError(
-                    f"relocation names symbol index {symbol_index}, but the "
-                    f"merged object has {len(names_all)} symbols"
-                )
-            name = names_all[symbol_index]
-            addend, pending_addend = pending_addend, 0
-            at_off = reloc_address
-            at = out.addr + at_off
-            rtype = reloc_type
-            if name in sym_addr:
-                target = sym_addr[name] + addend
-            elif name in dropped_symbols:
-                raise LinkError(
-                    f"live section references {name!r}, which lives in "
-                    "dropped unwind metadata — not safe to drop"
-                )
-            elif name in imports:
-                target = None  # resolved through stub/GOT below
             else:
-                raise LinkError(f"unresolved symbol {name!r}")
-
-            if rtype == spec.ARM64_RELOC_BRANCH26:
-                dest = stub_addr[name] if target is None else target
-                word = _read_patch_word(out.data, at_off)
-                delta = dest - at
-                if not -(1 << 27) <= delta < (1 << 27):
-                    # Out of b/bl reach: branch to this symbol's thunk in the
-                    # __veneers island instead, and record the real target so
-                    # the thunk body can be emitted below.
-                    thunk = veneer_addr_for(name, at)
-                    veneer_used[name] = dest
-                    delta = thunk - at
-                    if not -(1 << 27) <= delta < (1 << 27):
-                        unreachable_veneers.append((name, at, thunk, delta))
-                        continue
-                _write_patch_word(out.data, at_off, _branch26(word, delta))
-            elif rtype in (spec.ARM64_RELOC_PAGE21,
-                           spec.ARM64_RELOC_GOT_LOAD_PAGE21):
-                # GOT relaxation: a GOT load of a DEFINED symbol needs no GOT
-                # slot — the target is in-image, so adrp points at the
-                # symbol's own page (and the paired PAGEOFF12 rewrites the
-                # ldr into an add below). Only true imports keep a GOT slot.
-                # This is exactly what ld does, and it avoids a multi-page
-                # GOT with rebase chained-fixups whose stride/page-start math
-                # would be a silent-SIGKILL hazard.
-                if rtype == spec.ARM64_RELOC_GOT_LOAD_PAGE21 and target is None:
-                    dest = got_addr[name]
+                relocations = obj.iter_relocations(sec, ordered=True)
+            import sys as execution_runtime
+            if execution_runtime.implementation.name == "cpython":
+                if source_view and _owned_output is not None:
+                    _owned_output.reserve_order(len(rows) // 12)
+            out_data = out.data
+            out_addr = out.addr
+            in_tlv_section = (sec["flags"] & spec.SECTION_TYPE) == _S_TLV_VARS
+            for entry_r in relocations:
+                if source_view:
+                    start = entry_r * 12  # _COMPACT_RELOCATION: <IIBBBB
+                    if _NATIVE_PATCH_WORDS:
+                        cursor = patch_data_offset + start
+                        reloc_address = load_i32(rows, cursor) & 0xFFFFFFFF
+                        reloc_symbolnum = load_i32(rows, cursor + 4) & 0xFFFFFFFF
+                        reloc_extern = load_i8(rows, cursor + 10) & 0xFF
+                        reloc_type = load_i8(rows, cursor + 11) & 0xFF
+                    else:
+                        (
+                            reloc_address, reloc_symbolnum, _pcrel, _length,
+                            reloc_extern, reloc_type,
+                        ) = _COMPACT_RELOCATION.unpack_from(rows, start)
                 else:
-                    dest = target
-                if dest is None:
-                    raise LinkError(f"{name!r} needs a GOT slot for PAGE21")
-                word = _read_patch_word(out.data, at_off)
-                _write_patch_word(
-                    out.data, at_off,
-                    _adrp_imm(word, (dest >> 12) - (at >> 12)),
-                )
-            elif rtype == spec.ARM64_RELOC_PAGEOFF12:
-                if target is None:
-                    raise LinkError(f"{name!r} needs a GOT slot for PAGEOFF12")
-                word = _read_patch_word(out.data, at_off)
-                _write_patch_word(out.data, at_off, _pageoff12(word, target & 0xFFF))
-            elif rtype == spec.ARM64_RELOC_GOT_LOAD_PAGEOFF12:
-                if target is not None:
-                    # Relax: ldr xt,[xn,#imm]  ->  add xt,xn,#imm, so the
-                    # value is the symbol's address directly, not loaded
-                    # from a GOT slot. `ldr (unsigned) x` is 0xF94xxxxx;
-                    # `add (imm) x` is 0x91000000 with the same Rt/Rn.
-                    word = _read_patch_word(out.data, at_off)
+                    reloc_address = entry_r["r_address"]
+                    reloc_symbolnum = entry_r["r_symbolnum"]
+                    reloc_extern = entry_r["r_extern"]
+                    reloc_type = entry_r["r_type"]
+                if reloc_type == reloc_addend:
+                    pending_addend = reloc_symbolnum
+                    continue
+                if out.segname == "__DWARF":
+                    if source_view:
+                        if _NATIVE_PATCH_WORDS:
+                            _pcrel = load_i8(rows, patch_data_offset + start + 8) & 0xFF
+                            _length = load_i8(rows, patch_data_offset + start + 9) & 0xFF
+                    else:
+                        _pcrel, _length = entry_r["r_pcrel"], entry_r["r_length"]
+                    if reloc_type != reloc_unsigned or _pcrel or _length != 3 or pending_addend:
+                        raise LinkError("unsupported DWARF code-address relocation")
+                if not reloc_extern:
+                    target_index = reloc_symbolnum
+                    if 1 <= target_index <= len(sections):
+                        target_sec = sections[target_index - 1]
+                        target_key = (
+                            target_sec["segname_str"],
+                            target_sec["sectname_str"],
+                        )
+                        if target_key in _DROPPED_UNWIND_SECTIONS:
+                            raise LinkError(
+                                "live section targets dropped unwind metadata "
+                                f"{target_key[0]},{target_key[1]} — not safe "
+                                "to drop"
+                            )
+                    if out.segname == "__DWARF":
+                        if target_index not in section_addr:
+                            raise LinkError("DWARF address targets an absent code section")
+                        target_out, old_address = section_addr[target_index]
+                        if not target_out.flags & spec.S_ATTR_PURE_INSTRUCTIONS:
+                            raise LinkError("DWARF address relocation does not target code")
+                        stored, = struct.unpack_from("<Q", out_data, reloc_address)
+                        relative = stored - old_address
+                        if not 0 <= relative < len(target_out.data):
+                            raise LinkError("DWARF address is outside its code section")
+                        struct.pack_into("<Q", out_data, reloc_address, target_out.addr + relative)
+                        continue
+                    raise LinkError(
+                        "section-target relocations must be normalized to a "
+                        "defined symbol before executable linking"
+                    )
+                symbol_index = reloc_symbolnum
+                if not 0 <= symbol_index < len(names_all):
+                    raise LinkError(
+                        f"relocation names symbol index {symbol_index}, but the "
+                        f"merged object has {len(names_all)} symbols"
+                    )
+                name = names_all[symbol_index]
+                addend, pending_addend = pending_addend, 0
+                at_off = reloc_address
+                at = out_addr + at_off
+                rtype = reloc_type
+                if name in sym_addr:
+                    target = sym_addr[name] + addend
+                elif name in dropped_symbols:
+                    raise LinkError(
+                        f"live section references {name!r}, which lives in "
+                        "dropped unwind metadata — not safe to drop"
+                    )
+                elif name in imports_set:
+                    target = None  # resolved through stub/GOT below
+                else:
+                    raise LinkError(f"unresolved symbol {name!r}")
+
+                if rtype == reloc_branch26:
+                    dest = stub_addr[name] if target is None else target
+                    word = _read_patch_word(out_data, at_off)
+                    delta = dest - at
+                    if not -(1 << 27) <= delta < (1 << 27):
+                        # Out of b/bl reach: branch to this symbol's thunk in the
+                        # __veneers island instead, and record the real target so
+                        # the thunk body can be emitted below.
+                        thunk = veneer_addr_for(name, at)
+                        veneer_used[name] = dest
+                        delta = thunk - at
+                        if not -(1 << 27) <= delta < (1 << 27):
+                            import sys as execution_runtime
+                            if execution_runtime.implementation.name == "cpython":
+                                if _owned_output is not None:
+                                    _owned_output.reserve_fixup()
+                            unreachable_veneers.append((name, at, thunk, delta))
+                            continue
+                    _write_patch_word(out_data, at_off, _branch26(word, delta))
+                elif rtype in (reloc_page21,
+                               reloc_got_page21):
+                    # GOT relaxation: a GOT load of a DEFINED symbol needs no GOT
+                    # slot — the target is in-image, so adrp points at the
+                    # symbol's own page (and the paired PAGEOFF12 rewrites the
+                    # ldr into an add below). Only true imports keep a GOT slot.
+                    # This is exactly what ld does, and it avoids a multi-page
+                    # GOT with rebase chained-fixups whose stride/page-start math
+                    # would be a silent-SIGKILL hazard.
+                    if rtype == reloc_got_page21 and target is None:
+                        dest = got_addr[name]
+                    else:
+                        dest = target
+                    if dest is None:
+                        raise LinkError(f"{name!r} needs a GOT slot for PAGE21")
+                    word = _read_patch_word(out_data, at_off)
+                    _write_patch_word(
+                        out_data, at_off,
+                        _adrp_imm(word, (dest >> 12) - (at >> 12)),
+                    )
+                elif rtype == reloc_pageoff12:
+                    if target is None:
+                        raise LinkError(f"{name!r} needs a GOT slot for PAGEOFF12")
+                    word = _read_patch_word(out_data, at_off)
+                    _write_patch_word(out_data, at_off, _pageoff12(word, target & 0xFFF))
+                elif rtype == reloc_got_pageoff12:
+                    if target is not None:
+                        # Relax: ldr xt,[xn,#imm]  ->  add xt,xn,#imm, so the
+                        # value is the symbol's address directly, not loaded
+                        # from a GOT slot. `ldr (unsigned) x` is 0xF94xxxxx;
+                        # `add (imm) x` is 0x91000000 with the same Rt/Rn.
+                        word = _read_patch_word(out_data, at_off)
+                        rt = word & 0x1F
+                        rn = (word >> 5) & 0x1F
+                        add = 0x91000000 | ((target & 0xFFF) << 10) | (rn << 5) | rt
+                        _write_patch_word(out_data, at_off, add)
+                    else:
+                        word = _read_patch_word(out_data, at_off)
+                        _write_patch_word(
+                            out_data, at_off,
+                            _ldr_uimm12(word, got_addr[name] & 0xFFF, 8),
+                        )
+                elif rtype == reloc_unsigned:
+                    in_tlv_desc = in_tlv_section
+                    if target is None:
+                        if in_tlv_desc and name in import_ordinal:
+                            # Descriptor thunk: a chained-fixup bind to the import
+                            # (e.g. __tlv_bootstrap). Field is zeroed; dyld fills
+                            # it via the chain.
+                            struct.pack_into("<Q", out_data, at_off, 0)
+                            import sys as execution_runtime
+                            if execution_runtime.implementation.name == "cpython":
+                                if _owned_output is not None:
+                                    _owned_output.reserve_fixup()
+                            tlv_bind_sites.append(
+                                (out, at_off, import_ordinal[name]))
+                        elif (
+                            name in import_ordinal
+                            and out.segname in ("__DATA", "__DATA_CONST")
+                        ):
+                            addend, = struct.unpack_from("<q", out_data, at_off)
+                            if not 0 <= addend < (1 << 8):
+                                raise LinkError(
+                                    f"import {name!r} data pointer addend {addend} "
+                                    "does not fit a chained bind"
+                                )
+                            struct.pack_into("<Q", out_data, at_off, 0)
+                            import sys as execution_runtime
+                            if execution_runtime.implementation.name == "cpython":
+                                if _owned_output is not None:
+                                    _owned_output.reserve_fixup()
+                            data_bind_sites.append(
+                                (out, at_off, import_ordinal[name], addend))
+                        else:
+                            raise LinkError(f"import {name!r} in a data pointer")
+                    elif in_tlv_desc and name in thread_block_offset:
+                        # Descriptor offset field: the variable's offset within
+                        # the thread block, not its vmaddr.
+                        struct.pack_into("<Q", out_data, at_off,
+                                         thread_block_offset[name])
+                    else:
+                        inline, = struct.unpack_from("<q", out_data, at_off)
+                        absolute = target + inline
+                        # Store the offset from the image base; the rebase fixup
+                        # below adds the runtime base back (surviving ASLR). Only
+                        # data sections carry rebases — a pointer in __TEXT would
+                        # be in a read-only, non-fixup segment.
+                        if out.segname == "__DWARF":
+                            struct.pack_into("<Q", out_data, at_off, absolute)
+                        elif out.segname in ("__DATA", "__DATA_CONST"):
+                            import sys as execution_runtime
+                            if execution_runtime.implementation.name == "cpython":
+                                if _owned_output is not None:
+                                    _owned_output.reserve_fixup()
+                            rebase_sites.append(
+                                (out, at_off, absolute - TEXT_BASE))
+                            struct.pack_into("<Q", out_data, at_off,
+                                             absolute - TEXT_BASE)
+                        else:
+                            raise LinkError(
+                                f"absolute pointer relocation in "
+                                f"{out.segname},{out.sectname} requires a "
+                                "chained rebase in a writable data segment"
+                            )
+                elif rtype == spec.ARM64_RELOC_TLVP_LOAD_PAGE21:
+                    # The TLV descriptor is a defined symbol in __thread_vars, so
+                    # this adrp points at its own page exactly like a relaxed GOT
+                    # load. (`target` is the descriptor address.)
+                    if target is None:
+                        raise LinkError(f"TLV descriptor {name!r} is not defined")
+                    word = _read_patch_word(out_data, at_off)
+                    _write_patch_word(
+                        out_data, at_off,
+                        _adrp_imm(word, (target >> 12) - (at >> 12)),
+                    )
+                elif rtype == spec.ARM64_RELOC_TLVP_LOAD_PAGEOFF12:
+                    # Relax `ldr xt,[xn,#off]` to `add xt,xn,#off`: the value is
+                    # the descriptor's address directly (ld does the same).
+                    if target is None:
+                        raise LinkError(f"TLV descriptor {name!r} is not defined")
+                    word = _read_patch_word(out_data, at_off)
                     rt = word & 0x1F
                     rn = (word >> 5) & 0x1F
-                    add = 0x91000000 | ((target & 0xFFF) << 10) | (rn << 5) | rt
-                    _write_patch_word(out.data, at_off, add)
-                else:
-                    word = _read_patch_word(out.data, at_off)
                     _write_patch_word(
-                        out.data, at_off,
-                        _ldr_uimm12(word, got_addr[name] & 0xFFF, 8),
+                        out_data, at_off,
+                        0x91000000 | ((target & 0xFFF) << 10) | (rn << 5) | rt,
                     )
-            elif rtype == spec.ARM64_RELOC_UNSIGNED:
-                in_tlv_desc = (sec["flags"] & spec.SECTION_TYPE) == _S_TLV_VARS
-                if target is None:
-                    if in_tlv_desc and name in import_ordinal:
-                        # Descriptor thunk: a chained-fixup bind to the import
-                        # (e.g. __tlv_bootstrap). Field is zeroed; dyld fills
-                        # it via the chain.
-                        struct.pack_into("<Q", out.data, at_off, 0)
-                        tlv_bind_sites.append(
-                            (out, at_off, import_ordinal[name]))
-                    else:
-                        raise LinkError(f"import {name!r} in a data pointer")
-                elif in_tlv_desc and name in thread_block_offset:
-                    # Descriptor offset field: the variable's offset within
-                    # the thread block, not its vmaddr.
-                    struct.pack_into("<Q", out.data, at_off,
-                                     thread_block_offset[name])
                 else:
-                    inline, = struct.unpack_from("<q", out.data, at_off)
-                    absolute = target + inline
-                    # Store the offset from the image base; the rebase fixup
-                    # below adds the runtime base back (surviving ASLR). Only
-                    # data sections carry rebases — a pointer in __TEXT would
-                    # be in a read-only, non-fixup segment.
-                    if out.segname in ("__DATA", "__DATA_CONST"):
-                        rebase_sites.append(
-                            (out, at_off, absolute - TEXT_BASE))
-                        struct.pack_into("<Q", out.data, at_off,
-                                         absolute - TEXT_BASE)
-                    else:
-                        raise LinkError(
-                            f"absolute pointer relocation in "
-                            f"{out.segname},{out.sectname} requires a "
-                            "chained rebase in a writable data segment"
-                        )
-            elif rtype == spec.ARM64_RELOC_TLVP_LOAD_PAGE21:
-                # The TLV descriptor is a defined symbol in __thread_vars, so
-                # this adrp points at its own page exactly like a relaxed GOT
-                # load. (`target` is the descriptor address.)
-                if target is None:
-                    raise LinkError(f"TLV descriptor {name!r} is not defined")
-                word = _read_patch_word(out.data, at_off)
-                _write_patch_word(
-                    out.data, at_off,
-                    _adrp_imm(word, (target >> 12) - (at >> 12)),
-                )
-            elif rtype == spec.ARM64_RELOC_TLVP_LOAD_PAGEOFF12:
-                # Relax `ldr xt,[xn,#off]` to `add xt,xn,#off`: the value is
-                # the descriptor's address directly (ld does the same).
-                if target is None:
-                    raise LinkError(f"TLV descriptor {name!r} is not defined")
-                word = _read_patch_word(out.data, at_off)
-                rt = word & 0x1F
-                rn = (word >> 5) & 0x1F
-                _write_patch_word(
-                    out.data, at_off,
-                    0x91000000 | ((target & 0xFFF) << 10) | (rn << 5) | rt,
-                )
-            else:
-                raise LinkError(f"relocation type {rtype} not applied")
+                    raise LinkError(f"relocation type {rtype} not applied")
+
+        except BaseException:
+            import sys as execution_runtime
+            if execution_runtime.implementation.name == "cpython":
+                if row_window is not None:
+                    row_error = execution_runtime.exc_info()
+            raise
+        finally:
+            import sys as execution_runtime
+            if execution_runtime.implementation.name == "cpython":
+                if row_window is not None:
+                    try:
+                        if relocations is not None:
+                            relocations = None  # an index list holds nothing to release
+                    except BaseException:
+                        if row_error is None:
+                            row_error = execution_runtime.exc_info()
+                            raise
+                    finally:
+                        rows = relocations = None
+                        try:
+                            if row_error is None:
+                                row_window.__exit__(None, None, None)
+                            else:
+                                row_window.__exit__(*row_error)
+                        finally:
+                            row_window = row_error = None
+
+        import sys as execution_runtime
+        if execution_runtime.implementation.name == "cpython":
+            if _owned_output is not None:
+                _owned_output.end_section(out)
 
     # All addresses now live in the output sections and fixup tables. The
     # indexed view is a separate owned object and can be retired here. The
@@ -1082,6 +1684,16 @@ def _prepare_executable_image(
     # the release after this function returns.
     if not source_view:
         del obj
+    import sys as execution_runtime
+    if execution_runtime.implementation.name == "cpython":
+        if _owned_output is not None:
+            # Every ordered iterator has exhausted and closed its integer
+            # arena. Retire the final local row/generator aliases as well.
+            rows = relocations = None
+            _owned_output.retire_payloads(obj)
+            _owned_output.retire_relocations(obj)
+            _owned_output.phase("relocations_end")
+            _owned_output.phase("stackmap_validate_begin")
 
     # The relocatable linker rebuilds stack-map tables semantically.  Check
     # the resolved table once more after native address relocations, before
@@ -1091,13 +1703,50 @@ def _prepare_executable_image(
         if (out.segname, out.sectname) != ("__DATA", "__pcc_stackmaps"):
             continue
         try:
-            validate_stack_map_payload(
-                bytes(out.data),
-                expected_arch=ARCH_AARCH64,
-                final_image=True,
-            )
+            import sys as execution_runtime
+            if execution_runtime.implementation.name == "cpython":
+                if _owned_output is not None:
+                    _owned_output.validate(out)
+                    continue
+            if compact_budget is None:
+                validate_stack_map_payload(
+                    bytes(out.data),
+                    expected_arch=ARCH_AARCH64,
+                    final_image=True,
+                )
+            else:
+                surrounding_raw_bytes = (
+                    source_raw_bytes
+                    + sum(len(part.data) for part in text_sections + data_out + debug_out)
+                    + len(got.data)
+                )
+                compact_budget.check_peak(
+                    surrounding_raw_bytes + len(out.data),
+                    label="Mach-O final stack-map validation snapshot",
+                )
+                previous_retained_bytes = compact_budget.retained_bytes
+                # The validator charges its new immutable snapshot once;
+                # add the already-live source and mutable output buffers so
+                # they share one allowance with the global ID-set/cache peak.
+                compact_budget.retained_bytes = (
+                    previous_retained_bytes + surrounding_raw_bytes
+                )
+                try:
+                    validate_stack_map_payload(
+                        bytes(out.data),
+                        expected_arch=ARCH_AARCH64,
+                        final_image=True,
+                        compact_budget=compact_budget,
+                    )
+                finally:
+                    compact_budget.retained_bytes = previous_retained_bytes
         except PreciseStackMapError as exc:
             raise LinkError(f"final stack-map table is invalid: {exc}") from exc
+
+    import sys as execution_runtime
+    if execution_runtime.implementation.name == "cpython":
+        if _owned_output is not None:
+            _owned_output.phase("stackmap_validate_end")
 
     if unreachable_veneers:
         # The island itself is out of reach, which means __text exceeds what
@@ -1133,10 +1782,9 @@ def _prepare_executable_image(
     # descriptor thunks in __DATA. Each segment with binds gets its own
     # dyld_chained_starts_in_segment with per-page starts; within a page the
     # `next` field is the 4-byte stride to the following bind (0 = end).
-    DYLD_CHAINED_PTR_START_NONE = 0xFFFF
     dc_index = 2  # __PAGEZERO, __TEXT, __DATA_CONST
     data_index = 3  # __DATA (only present when data_out)
-    seg_count = 4 + (1 if data_out else 0)
+    seg_count = 4 + (1 if data_out else 0) + (1 if debug_out else 0)
 
     # Collect fixup sites per segment index. Each site carries its
     # `base_word` — the 64-bit chained pointer WITHOUT the `next` field, which
@@ -1154,17 +1802,57 @@ def _prepare_executable_image(
         high8 = 0  # our addresses fit in 36 bits from the image base
         return (high8 << 36) | (image_off & ((1 << 36) - 1))
 
+    import sys as execution_runtime
+    if execution_runtime.implementation.name == "cpython":
+        if _owned_output is not None:
+            _owned_output.phase("fixups_begin")
     seg_fixups: dict[int, list] = {}
+    import sys as execution_runtime
+    if execution_runtime.implementation.name == "cpython":
+        if _owned_output is not None:
+            _owned_output.reserve_fixup(len(code_imports))
     if code_imports:
         seg_fixups[dc_index] = [
             (got.addr + i * 8, got, i * 8, _bind_word(import_ordinal[name]))
             for i, name in enumerate(code_imports)
         ]
+    has_tlv_bind_sites = bool(tlv_bind_sites)
+    import sys as execution_runtime
+    if execution_runtime.implementation.name == "cpython":
+        if _owned_output is not None:
+            # These private lists have no reader after conversion except the
+            # saved TLV flag. Retire each old tuple only after its replacement
+            # has been appended; keep the public/native path as the oracle.
+            for index in range(len(tlv_bind_sites)):
+                out, off, ordinal = tlv_bind_sites[index]
+                seg_fixups.setdefault(data_index, []).append(
+                    (out.addr + off, out, off, _bind_word(ordinal)))
+                tlv_bind_sites[index] = None
+            tlv_bind_sites.clear()
+            for index in range(len(data_bind_sites)):
+                out, off, ordinal, addend = data_bind_sites[index]
+                seg_index = dc_index if out.segname == "__DATA_CONST" else data_index
+                seg_fixups.setdefault(seg_index, []).append(
+                    (out.addr + off, out, off, _bind_word(ordinal) | (addend << 24)))
+                data_bind_sites[index] = None
+            data_bind_sites.clear()
+            for index in range(len(rebase_sites)):
+                out, off, image_off = rebase_sites[index]
+                seg_index = dc_index if out.segname == "__DATA_CONST" else data_index
+                seg_fixups.setdefault(seg_index, []).append(
+                    (out.addr + off, out, off, _rebase_word(image_off)))
+                rebase_sites[index] = None
+            rebase_sites.clear()
     if tlv_bind_sites:
         seg_fixups.setdefault(data_index, []).extend(
             (out.addr + off, out, off, _bind_word(ordinal))
             for out, off, ordinal in tlv_bind_sites
         )
+    for out, off, ordinal, addend in data_bind_sites:
+        # DYLD_CHAINED_PTR_64(_OFFSET) bind: addend is bits 24..31.
+        seg_index = dc_index if out.segname == "__DATA_CONST" else data_index
+        seg_fixups.setdefault(seg_index, []).append(
+            (out.addr + off, out, off, _bind_word(ordinal) | (addend << 24)))
     for out, off, image_off in rebase_sites:
         seg_index = dc_index if out.segname == "__DATA_CONST" else data_index
         seg_fixups.setdefault(seg_index, []).append(
@@ -1178,8 +1866,8 @@ def _prepare_executable_image(
         # __DATA vmsize here makes the starts table claim BSS pages whose
         # numeric offsets overlap compact __LINKEDIT bytes.  dyld can then
         # expose those bytes through __common/__bss instead of zero-fill.
-        # Apple's linker likewise emits page_count from __DATA.filesize when
-        # a segment contains both rebased pointers and a larger BSS tail.
+        # The file extent bounds every site; the starts table below covers
+        # only through the last actual fixup, as in Apple's linker.
         data_index: (
             TEXT_BASE + data_off,
             data_file_end - data_off,
@@ -1187,71 +1875,32 @@ def _prepare_executable_image(
         ),
     }
 
-    def _build_seg_info(fixups, seg_vmaddr, seg_size, seg_file_off):
-        page_count = max(1, (seg_size + PAGE - 1) // PAGE)
-        page_starts = [DYLD_CHAINED_PTR_START_NONE] * page_count
-        by_page: dict[int, list] = {}
-        seen_sites: set[int] = set()
-        for site in sorted(fixups, key=lambda item: item[0]):
-            vmaddr, out, off, _base_word = site
-            if vmaddr in seen_sites:
-                raise LinkError(f"duplicate chained-fixup site at {vmaddr:#x}")
-            seen_sites.add(vmaddr)
-            if not seg_vmaddr <= vmaddr <= seg_vmaddr + seg_size - 8:
-                raise LinkError(
-                    f"chained-fixup site {vmaddr:#x} is outside its segment"
-                )
-            if vmaddr % 4 or off < 0 or off + 8 > len(out.data):
-                raise LinkError(
-                    f"chained-fixup site {vmaddr:#x} is not a complete, "
-                    "four-byte-aligned pointer"
-                )
-            segment_offset = vmaddr - seg_vmaddr
-            page_offset = segment_offset % PAGE
-            if page_offset > PAGE - 8:
-                raise LinkError(
-                    f"chained-fixup pointer at {vmaddr:#x} crosses a "
-                    f"{PAGE:#x}-byte page boundary"
-                )
-            page = segment_offset // PAGE
-            by_page.setdefault(page, []).append(site)
-        for page, plist in by_page.items():
-            page_starts[page] = (plist[0][0] - seg_vmaddr) % PAGE
-            for i, (vmaddr, out, off, base_word) in enumerate(plist):
-                # `next` is the 4-byte stride to the next fixup in this page;
-                # a chained pointer can only reach 4095*4 bytes, so a page
-                # denser than that would need splitting (not hit here).
-                if i + 1 < len(plist):
-                    delta = plist[i + 1][0] - vmaddr
-                    if delta <= 0 or delta % 4:
-                        raise LinkError(
-                            "chained-fixup sites must increase in four-byte units"
-                        )
-                    stride = delta // 4
-                    if stride > 0xFFF:
-                        raise LinkError("fixup chain stride exceeds 12 bits")
-                    nxt = stride
-                else:
-                    nxt = 0
-                struct.pack_into("<Q", out.data, off, base_word | (nxt << 51))
-        info = struct.pack("<IHHQIH", 22 + page_count * 2, PAGE,
-                           DYLD_CHAINED_PTR_64_OFFSET, seg_file_off, 0,
-                           page_count)
-        info += b"".join(struct.pack("<H", ps) for ps in page_starts)
-        return info
-
     seg_infos = {}
     for seg_index, fixups in seg_fixups.items():
         seg_vmaddr, seg_size, seg_file_off = seg_vm[seg_index]
+        import sys as execution_runtime
+        if execution_runtime.implementation.name == "cpython":
+            if _owned_output is not None:
+                seg_infos[seg_index] = _owned_output._build_seg_info(
+                    fixups, seg_vmaddr, seg_size, seg_file_off)
+                fixups.clear()
+                continue
         seg_infos[seg_index] = _build_seg_info(
-            fixups, seg_vmaddr, seg_size, seg_file_off)
+            fixups, seg_vmaddr, seg_size, seg_file_off, _owned_output)
+    import sys as execution_runtime
+    if execution_runtime.implementation.name == "cpython":
+        if _owned_output is not None:
+            seg_fixups.clear()
+            fixups = None
 
     sym_blob = bytearray(b"\0")
     import_entries = []
     for name in imports:
         if len(sym_blob) >= (1 << 23):
             raise LinkError("chained-import symbol string offset exceeds 23 bits")
-        import_entries.append((1 << 0) | (len(sym_blob) << 9))
+        import_entries.append(
+            1 | ((1 if name in weak_imports else 0) << 8) | (len(sym_blob) << 9)
+        )
         sym_blob += name.encode() + b"\0"
     while len(sym_blob) % 8:
         sym_blob += b"\0"
@@ -1284,6 +1933,11 @@ def _prepare_executable_image(
     symtab_off = _align(fixups_off + len(fixups), 8)
 
     # --- symbol table ------------------------------------------------------
+    import sys as execution_runtime
+    if execution_runtime.implementation.name == "cpython":
+        if _owned_output is not None:
+            _owned_output.phase("fixups_end")
+            _owned_output.phase("symbols_begin")
     nlist_parts: list[bytes] = []
     # Symbols in dropped unwind sections have no address; they are not in
     # sym_addr and must not appear in the symbol table either.
@@ -1310,33 +1964,44 @@ def _prepare_executable_image(
     string_offsets, strtab = _build_string_table(
         [name for name, _sym in ordered] + imports,
     )
+    # Section numbers follow the emitted section order, derived from
+    # text_sections so the two orders cannot drift. Index by identity once:
+    # a per-symbol list.index compared _Out records through their dataclass
+    # __eq__, a measurable share of a native link with many symbols.
+    section_numbers = {
+        id(out): number
+        for number, out in enumerate(
+            text_sections + ([got] if code_imports else []) + data_out + debug_out, start=1,
+        )
+    }
     for name, sym in ordered:
         strx = string_offsets[name]
         out, sec_addr = section_addr[sym["n_sect"]]
-        # Derived from text_sections so the two orders cannot drift.
-        n_sect = 1 + (
-            text_sections + ([got] if code_imports else []) + data_out
-        ).index(out)
-        nlist_parts.append(spec.NLIST_64.pack({
-            "n_strx": strx,
-            "n_type": (
+        n_sect = section_numbers[id(out)]
+        nlist_parts.append(spec.NLIST_64_STRUCT.pack(
+            strx,
+            (
                 spec.N_SECT
                 | (spec.N_EXT if sym["n_type"] & spec.N_EXT else 0)
                 | (spec.N_PEXT if sym["n_type"] & spec.N_PEXT else 0)
             ),
-            "n_sect": n_sect, "n_desc": 0, "n_value": sym_addr[name],
-        }))
+            n_sect, 0, sym_addr[name],
+        ))
     n_local = len(local_defs)
     n_extdef = len(external_defs)
     n_defined = n_local + n_extdef
     for name in imports:
         strx = string_offsets[name]
-        nlist_parts.append(spec.NLIST_64.pack({
-            "n_strx": strx, "n_type": spec.N_UNDF | spec.N_EXT,
-            "n_sect": spec.NO_SECT, "n_desc": 1 << 8, "n_value": 0,
-        }))
+        nlist_parts.append(spec.NLIST_64_STRUCT.pack(
+            strx, spec.N_UNDF | spec.N_EXT, spec.NO_SECT,
+            (1 << 8) | (spec.N_WEAK_REF if name in weak_imports else 0), 0,
+        ))
     nlists = b"".join(nlist_parts)
     nlist_parts.clear()
+    import sys as execution_runtime
+    if execution_runtime.implementation.name == "cpython":
+        if _owned_output is not None:
+            _owned_output.phase("symbols_end")
     strtab_off = symtab_off + len(nlists)
     sig_off = _align(strtab_off + len(strtab), 16)
     # __LINKEDIT must COVER the code signature: dyld's strict validation
@@ -1393,7 +2058,10 @@ def _prepare_executable_image(
         # dyld zero-fills everything beyond the file payload inside vmsize.
         cmds += segment("__DATA", TEXT_BASE + data_off, data_end - data_off,
                         data_off, data_content_end - data_off, RW, RW, data_out)
-    cmds += segment("__LINKEDIT", TEXT_BASE + data_end,
+    if debug_out:
+        cmds += segment("__DWARF", TEXT_BASE + debug_vm_off, debug_size,
+                        debug_file_off, debug_size, spec.VM_PROT_READ, spec.VM_PROT_READ, debug_out)
+    cmds += segment("__LINKEDIT", TEXT_BASE + linkedit_vm_off,
                     _align(linkedit_size, PAGE), linkedit_off, linkedit_size,
                     spec.VM_PROT_READ, spec.VM_PROT_READ, [])
     cmds += struct.pack("<IIII", spec.LC_DYLD_CHAINED_FIXUPS, 16,
@@ -1430,6 +2098,16 @@ def _prepare_executable_image(
     cmds += struct.pack("<IIIIII", spec.LC_LOAD_DYLIB, dylib_size, 24,
                         0, 0x10000, 0x10000)
     cmds += LIBSYSTEM.ljust(dylib_size - 24, b"\0")
+    if link_receipt is not None:
+        # Describe the load command and ordinal actually emitted. libSystem
+        # may reexport these names; this makes no physical symbol-owner claim.
+        link_receipt["dynamic_libraries"] = [
+            {"ordinal": 1, "install_name": LIBSYSTEM.decode("ascii")},
+        ]
+        link_receipt["imports"] = [
+            {"symbol": name, "library_ordinal": 1, "weak": name in weak_imports}
+            for name in imports
+        ]
     cmds += struct.pack("<IIII", spec.LC_CODE_SIGNATURE, 16, sig_off, sig_size)
 
     if len(cmds) != sizeofcmds:
@@ -1443,7 +2121,7 @@ def _prepare_executable_image(
     # is inert and the first TLV access calls the raw __tlv_bootstrap thunk,
     # which aborts.
     mh_flags = 0x00200085
-    if tlv_bind_sites:
+    if has_tlv_bind_sites:
         mh_flags |= 0x00800000
     header = spec.MACH_HEADER_64.pack({
         "magic": spec.MH_MAGIC_64, "cputype": spec.CPU_TYPE_ARM64,
@@ -1452,8 +2130,35 @@ def _prepare_executable_image(
         "flags": mh_flags, "reserved": 0,
     })
 
+    import sys as execution_runtime
+    if execution_runtime.implementation.name == "cpython":
+        if _owned_output is not None:
+            return _owned_output.plan(
+                sig_off,
+                text_sections + ([got] if code_imports else []) + data_out + debug_out,
+                ((0, header + bytes(cmds), "header/load commands"),
+                 (fixups_off, fixups, "chained fixups"),
+                 (symtab_off, nlists, "symbol table"),
+                 (strtab_off, strtab, "string table")),
+                sig_size, text_filesize,
+            )
+    if compact_budget is not None:
+        # The mutable output and all immutable OutputRegion snapshots coexist
+        # until this preparation frame returns. Source buffers are borrowed.
+        output_raw_bytes = sum(
+            len(out.data)
+            for out in text_sections + ([got] if code_imports else []) + data_out + debug_out
+        )
+        metadata_raw_bytes = (
+            len(header) + len(cmds) + len(fixups) + len(nlists) + len(strtab)
+        )
+        _check_compact_copy_peak(
+            compact_budget,
+            source_raw_bytes + 2 * output_raw_bytes + 3 * metadata_raw_bytes,
+            "Mach-O OutputRegion snapshots",
+        )
     regions = [OutputRegion(0, header + bytes(cmds), "header/load commands")]
-    for out in text_sections + ([got] if code_imports else []) + data_out:
+    for out in text_sections + ([got] if code_imports else []) + data_out + debug_out:
         if out.zerofill_size:
             continue  # zerofill occupies vm only; nothing in the file
         regions.append(OutputRegion(
@@ -1469,7 +2174,10 @@ def _prepare_executable_image(
     return sig_off, regions, sig_size, text_filesize
 
 
-def _finish_executable_image(plan, identifier, phase_callback) -> bytes:
+def _finish_executable_image(
+    plan, identifier, phase_callback, *, compact_budget=None,
+    retained_source_bytes: int = 0,
+) -> bytes:
     """Materialise, sign and return the image in one buffer.
 
     ``sig_size`` is predicted before layout is frozen -- the check below is
@@ -1481,6 +2189,13 @@ def _finish_executable_image(plan, identifier, phase_callback) -> bytes:
     the exact moment the link is already at its high-water mark.
     """
     sig_off, regions, sig_size, text_filesize = plan
+    if compact_budget is not None:
+        _check_compact_copy_peak(
+            compact_budget,
+            retained_source_bytes + 2 * sum(len(region.data) for region in regions)
+            + sig_off + sig_size,
+            "Mach-O image materialization",
+        )
     try:
         image = materialize_output_buffer(sig_off, regions, reserve=sig_size)
     except ParallelLinkError as exc:
@@ -1489,6 +2204,13 @@ def _finish_executable_image(plan, identifier, phase_callback) -> bytes:
     # allocating hash pages and the signature.
     regions.clear()
 
+    if compact_budget is not None:
+        # Do not rely on memoryview slicing being zero-copy in native code.
+        _check_compact_copy_peak(
+            compact_budget,
+            retained_source_bytes + 2 * len(image) + sig_size,
+            "Mach-O signature input snapshot",
+        )
     if phase_callback is not None:
         phase_callback("sign_begin")
     try:
@@ -1509,4 +2231,10 @@ def _finish_executable_image(plan, identifier, phase_callback) -> bytes:
     # allocation plus copy at the link's high-water mark.  Returning bytes
     # keeps the public contract -- parse_signature and spec.parse_object
     # downstream both require it.
+    if compact_budget is not None:
+        _check_compact_copy_peak(
+            compact_budget,
+            retained_source_bytes + 2 * len(image) + len(blob),
+            "Mach-O final image bytes freeze",
+        )
     return bytes(image)

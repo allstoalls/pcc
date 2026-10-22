@@ -71,10 +71,10 @@ unused ABI:
 
 | backend | integration point |
 |---|---|
-| `#0 refcount-cycle` | `pcc/py_runtime/src/py_obj_gc.c::py_gc_collect` (around the update_refs / subtract_refs / mark / dealloc cycle, ~L400-L475) and `pcc/py_runtime/py/py_obj_gc.py::py_gc_collect` (~L405-L485) wrap collection with `pcc_stop_the_world()` / `pcc_resume_world()`. |
-| `#1 incremental-tricolor` | `pcc/py_runtime/src/py_gc_backend.c::pcc_gc_step_trace_cycle` and `pcc/py_runtime/py/py_gc_backend.py::_step_tracing` poll safepoints while processing gray objects; the final white-to-sweep cut runs under STW. |
+| `#0 refcount-cycle` | `pcc/runtime/src/py_obj_gc.c::py_gc_collect` (around the update_refs / subtract_refs / mark / dealloc cycle, ~L400-L475) and `pcc/runtime/py/py_obj_gc.py::py_gc_collect` (~L405-L485) wrap collection with `pcc_stop_the_world()` / `pcc_resume_world()`. |
+| `#1 incremental-tricolor` | `pcc/runtime/src/py_gc_backend.c::pcc_gc_step_trace_cycle` and `pcc/runtime/py/py_gc_backend.py::_step_tracing` poll safepoints while processing gray objects; the final white-to-sweep cut runs under STW. |
 | `#2 concurrent-mark-sweep` | Currently shares the #1 tracing core plus unconditional barrier graying. It has substrate-safe mark/sweep phases but not a real background worker yet. |
-| `#3 generational-minor-major` | `pcc/py_runtime/src/py_gc_backend.c::pcc_gc_step` (~L455-L505) and `pcc/py_runtime/py/py_gc_backend.py::pcc_gc_step` backend-3 branch (~L540-L575) poll `pcc_thread_safepoint()` between bounded promotion batches. |
+| `#3 generational-minor-major` | `pcc/runtime/src/py_gc_backend.c::pcc_gc_step` (~L455-L505) and `pcc/runtime/py/py_gc_backend.py::pcc_gc_step` backend-3 branch (~L540-L575) poll `pcc_thread_safepoint()` between bounded promotion batches. |
 | `#4 colored-relocating / GenZGC target` | `pcc_gc_load_ptr` / `pcc_gc_note_relocation_read` cover the current pcc read-barrier/relocation substrate, and `pcc_gc_store_ptr` now records GenZGC-style old-to-young owner+slot+value store-buffer entries with drain/backlog/duplicate-skip/high-water/owner-fanout/owner-count telemetry and reset reseeding. Backend #4 also exposes first small/medium page-class evacuation-selector count/bytes/page-pressure plus evacuation-backlog telemetry with pending relocation-set reset reseeding / clear semantics and telemetry-epoch idempotent large-object defer count/bytes seams. The upstream reference is OpenJDK `jdk-27+21` GenZGC under `docs/refs_docs/gc-research/zgc/`; pcc still needs full young/old policy, remembered-set bitmap / act-once policy, true store-buffer batching, real ZPage evacuation, fragmentation policy, and complete reference-updating coverage before backend #4 is production-complete. |
 
 These are intentionally backend-internal uses of the one shared substrate.
@@ -131,19 +131,19 @@ side effect of adding pthread support.
 Default single-threaded build:
 
 ```bash
-make -C pcc/py_runtime
+make -C pcc/runtime
 ```
 
 Thread substrate build:
 
 ```bash
-make -C pcc/py_runtime PCC_WITH_THREADS=1
+make -C pcc/runtime PCC_WITH_THREADS=1
 ```
 
 Explicit atomic refcount without enabling pthread wrappers:
 
 ```bash
-make -C pcc/py_runtime PCC_REFCOUNT_KIND=1
+make -C pcc/runtime PCC_REFCOUNT_KIND=1
 ```
 
 When `PCC_WITH_THREADS=1` and no explicit `PCC_REFCOUNT_KIND` is set,

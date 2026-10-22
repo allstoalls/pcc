@@ -19,7 +19,7 @@ from pathlib import Path
 
 
 def _compile(monkeypatch, src: Path, exe: Path) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     compile_python(
         str(src), str(exe),
@@ -183,8 +183,7 @@ def test_list_clear(tmp_path, monkeypatch):
 def test_typed_void_list_mutators_lower_to_none_singleton():
     source = (
         Path(__file__).absolute().parents[2]
-        / "pcc"
-        / "py_frontend"
+        / "pcc" / "frontends" / "python"
         / "codegen"
         / "list_method_lowering.py"
     ).read_text(encoding="utf-8")

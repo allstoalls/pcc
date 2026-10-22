@@ -1,4 +1,4 @@
-from pcc.evaluater.c_evaluator import CEvaluator
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
 
 
 def test_sync_fetch_and_add_returns_previous_value():

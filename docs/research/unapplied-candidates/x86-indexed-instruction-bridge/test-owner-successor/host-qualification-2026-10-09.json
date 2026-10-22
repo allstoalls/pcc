@@ -1,0 +1,85 @@
+{
+  "base_full_source_relation": "Retained cold-slot compiler snapshot; complete pcc tree matches published02b9. Full source is not a02b9 checkout: older unrelated native test f391 and docs/bootstrap remain.",
+  "base_pcc_git_tree": "d234174fbac80575ea822f6100f65fe914dd4498",
+  "by_file": {
+    "tests/python/test_stackmap_retirement.py": 2,
+    "tests/python/test_x86_64_emission_lifetime.py": 11,
+    "tests/python/test_x86_64_indexed_instruction_bridge.py": 96
+  },
+  "candidate_pcc_git_tree": "5882f6f16ccfd1d9cbe55c06426e8888f51e9ab7",
+  "codegen_checksum": "610f289ab84407149dbe231ac35e1b190079366bf852ccbafd0bdcc5ec85ddab",
+  "correction": "Only the new test snapshots changed to the actual emitter-entry owner boundary. All identity, emptiness, output, error and cleanup assertions retained. Production unchanged.",
+  "counts": {
+    "collected": 109,
+    "errors": 0,
+    "failed": 0,
+    "passed": 109,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  },
+  "denied_audit_events": 0,
+  "full_base_and_old_failed_source_after": "PASS: complete inventories unchanged",
+  "guard": {
+    "cleanup": "CLEAN",
+    "continuous_minimum_free_bytes": 4294967296,
+    "echild": true,
+    "elapsed_seconds": 5.652387759997509,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "outer_timeout_seconds": 300,
+    "peak_sampled_root_rss_bytes": 99512320,
+    "returncode": 0,
+    "root_reaped": true,
+    "status": "COMPLETE"
+  },
+  "guard_cleanup": "CLEAN/reaped/ECHILD",
+  "guard_sha256": "8e709cd7b986cc72ade4f41862ea3dedb848bf34deacf4388d4ca250d69007d3",
+  "imported_source_closure": "PASS",
+  "limits": [
+    "All-kind adapter cases use mocked selectors; actual assembly/object equality is separately exercised by selected fixtures",
+    "Multiply-invalid diagnostic precedence can differ because decoding is delayed",
+    "No speed claim"
+  ],
+  "lock_released": true,
+  "native_deselected": [
+    "tests/python/test_x86_64_emission_lifetime.py::test_retired_indexed_functions_link_and_execute_owned_elf"
+  ],
+  "old_failure_qualification_sha256": "ee3cdf9b81857869c7f9eb1102cace0bd91809e8b76fc1ecf15dfa8e7990d53e",
+  "original_gate": {
+    "failed": 1,
+    "passed": 0,
+    "preserved_as_failure": true,
+    "result_sha256": "b637801f2055ee0abadbb57847dd8c44d792a05cd7e257dc57ff449604d38225",
+    "selected_unrun": 108
+  },
+  "packet_manifest_sha256": "871eadf0bf54042154dc05e38c7a9564e8abf0f0a0e015cd4c812adada2bd723",
+  "preservation_commit": "cdba63bc2650eaa551dc5c18c3d7e666aad760cb",
+  "qualification_sha256": "87aa814515ee1ab1e38f58e928fc60a534994c8a5a2f00d4f28b4009477cc774",
+  "real_module_and_native": "UNRUN",
+  "result_sha256": "17b3f25f926f0250e7f5cce18a7040d81f13bd8c29cffedaa0a1fbb7379e15b9",
+  "schema": "pcc.x86_bridge_public_host_qualification.v3",
+  "scope": "Host-only actual in-process owned object emission/equality plus mocked adapter controls; no runtime/link/native execution",
+  "selected_unrun": 0,
+  "source_after": {
+    "bytes": 390480049,
+    "files": 30025,
+    "status": "PASS"
+  },
+  "source_before": {
+    "bytes": 390480049,
+    "files": 30025,
+    "status": "PASS"
+  },
+  "source_manifest_sha256": "febc3d325420f81ee7d4510e372c7bde1ce9266d827d645027c9b059253114b0",
+  "status": "PASS",
+  "test_successor_manifest_sha256": "ba6c06d542eade1fd7231c0567295c2a332bce32247a18955296552edda01489",
+  "unrun": [
+    "Excluded native ELF testcase",
+    "Real c_ast object comparison",
+    "Native compiler callback/ABI",
+    "Windows device execution",
+    "Full Stage1",
+    "Performance qualification"
+  ]
+}

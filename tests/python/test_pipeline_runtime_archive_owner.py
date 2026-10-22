@@ -7,8 +7,8 @@ import json
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend import pipeline_runtime_archive as runtime_archive
+from pcc.frontends.python import pipeline
+from pcc.frontends.python import pipeline_runtime_archive as runtime_archive
 
 
 def test_runtime_archive_path_and_mode_helpers_have_one_owner():

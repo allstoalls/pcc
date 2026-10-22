@@ -431,8 +431,8 @@ def test_fails_closed_when_entry_is_data_or_import_shape_is_unsupported():
         link_executable([unsupported_import])
 
 
-def test_fails_closed_on_an_import_in_an_ordinary_data_pointer():
-    obj = macho_obj.emit_object([
+def _import_data_pointer_object(segname, sectname, addend):
+    return macho_obj.emit_object([
         macho_obj.Section(
             sectname="__text",
             segname="__TEXT",
@@ -442,17 +442,26 @@ def test_fails_closed_on_an_import_in_an_ordinary_data_pointer():
             symbols=(macho_obj.TextSymbol("_main", 0),),
         ),
         macho_obj.Section(
-            sectname="__data",
-            segname="__DATA",
-            data=b"\0" * 8,
+            sectname=sectname,
+            segname=segname,
+            data=struct.pack("<q", addend),
             relocations=(macho_obj.Relocation(
                 0, "_puts", spec.ARM64_RELOC_UNSIGNED,
                 pcrel=False, length=3,
             ),),
         ),
     ], undefined=("_puts",))
+
+
+def test_binds_an_import_in_a_data_pointer_and_fails_closed_otherwise():
+    """50889ccd binds an import in a __DATA/__DATA_CONST pointer with a chained
+    bind whose addend field holds 8 bits; anything else still refuses."""
+    image = link_executable([_import_data_pointer_object("__DATA", "__data", 7)])
+    assert b"_puts" in image
+    with pytest.raises(LinkError, match=r"import '_puts' data pointer addend 256 does not fit a chained bind"):
+        link_executable([_import_data_pointer_object("__DATA", "__data", 256)])
     with pytest.raises(LinkError, match=r"import '_puts' in a data pointer"):
-        link_executable([obj])
+        link_executable([_import_data_pointer_object("__TEXT", "__const", 0)])
 
 
 def test_links_against_an_archive_pulling_only_what_is_needed(tmp_path):

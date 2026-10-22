@@ -1,11 +1,11 @@
 import pytest
 
-from pcc.ast import c_ast
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.parse.c_parser import CParser
-from pcc.passes import PassContext, PassPipeline
-from pcc.passes.dce import DCEPass
-from pcc.project import TranslationUnit
+from pcc.frontends.c.ast import c_ast
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.frontends.c.parse.c_parser import CParser
+from pcc.frontends.c.passes import PassContext, PassPipeline
+from pcc.frontends.c.passes.dce import DCEPass
+from pcc.driver.project import TranslationUnit
 
 
 def _transformed_function(code: str):

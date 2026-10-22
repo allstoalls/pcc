@@ -1,89 +1,37 @@
-from __future__ import annotations
+"""Owned optimization levels are independent of the retired LLVM vectorizer."""
 
 import os
 import subprocess
 import sys
-from pathlib import Path
 
-from pcc1_gate import repo_root as _repo_root
-
-from pcc import cli_core
+import pytest
+from pcc.driver import cli_core
 
 
-def test_self_backend_clamps_vectorizing_opt_levels_by_default(monkeypatch):
+@pytest.mark.parametrize("level", [0, 1, 2, 3])
+def test_self_backend_honours_requested_optimization_level(monkeypatch, level):
     monkeypatch.delenv("PCC_BACKEND", raising=False)
-    monkeypatch.delenv("PCC_SELF_BACKEND_VECTORIZE", raising=False)
-
-    assert cli_core._effective_self_backend_opt_level("self", 2) == 0
-    assert cli_core._effective_self_backend_opt_level("self", 3) == 0
-    assert cli_core._effective_self_backend_opt_level("llvm", 2) == 2
+    assert cli_core._effective_self_backend_opt_level("self", level) == level
 
 
-def test_self_backend_clamp_honors_backend_env(monkeypatch):
-    monkeypatch.setenv("PCC_BACKEND", "self")
-    monkeypatch.delenv("PCC_SELF_BACKEND_VECTORIZE", raising=False)
-
-    assert cli_core._effective_self_backend_opt_level(None, 2) == 0
-
-
-def test_self_backend_vectorizers_can_be_explicitly_reenabled(monkeypatch):
-    monkeypatch.setenv("PCC_SELF_BACKEND_VECTORIZE", "on")
-
+@pytest.mark.parametrize("value", ["", "off", "on"])
+def test_retired_vectorizer_switch_cannot_change_owned_optimization(monkeypatch, value):
+    monkeypatch.setenv("PCC_SELF_BACKEND_VECTORIZE", value)
     assert cli_core._effective_self_backend_opt_level("self", 2) == 2
 
 
-def test_self_backend_clamp_warning_is_visible(monkeypatch, capsys):
-    monkeypatch.delenv("PCC_BACKEND", raising=False)
-    monkeypatch.delenv("PCC_SELF_BACKEND_VECTORIZE", raising=False)
-
-    effective = cli_core._effective_self_backend_opt_level("self", 2)
-    cli_core._warn_if_self_backend_opt_level_clamped("self", 2, effective)
-
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert "--backend=self requested -O2 but is using -O0" in captured.err
-    assert "LLVM vectorizer output safely" in captured.err
-    assert "PCC_SELF_BACKEND_VECTORIZE=1" in captured.err
+def test_owned_optimization_emits_no_llvm_clamp_warning(capsys):
+    cli_core._warn_if_self_backend_opt_level_clamped("self", 2, 2)
+    assert capsys.readouterr().err == ""
 
 
-def test_self_backend_clamp_warning_is_suppressed_when_not_clamped(monkeypatch, capsys):
-    monkeypatch.setenv("PCC_SELF_BACKEND_VECTORIZE", "on")
-
-    effective = cli_core._effective_self_backend_opt_level("self", 2)
-    cli_core._warn_if_self_backend_opt_level_clamped("self", 2, effective)
-
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert captured.err == ""
-
-
-def test_self_backend_clamp_warning_reaches_c_cli(tmp_path):
-    repo_root = _repo_root()
+def test_owned_c_cli_o2_emits_ir_and_honours_requested_level(tmp_path):
     source = tmp_path / "main.c"
     output = tmp_path / "main.ll"
-    source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
-    env = os.environ.copy()
+    source.write_text("int helper(void) {return 42;} int main(void) {return helper();}\n")
+    env = dict(os.environ)
     env.pop("PCC_BACKEND", None)
-    env.pop("PCC_SELF_BACKEND_VECTORIZE", None)
-
-    proc = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pcc",
-            "--backend",
-            "self",
-            "-O2",
-            f"--emit-llvm={output}",
-            str(source),
-        ],
-        cwd=repo_root,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-
-    assert proc.returncode == 0, proc.stderr
-    assert output.is_file()
-    assert "--backend=self requested -O2 but is using -O0" in proc.stderr
+    result = subprocess.run([sys.executable, "-m", "pcc", "--backend", "self", "-O2", "--emit-llvm=" + str(output), str(source)], env=env, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    assert output.is_file() and "define" in output.read_text()
+    assert "is using -O0" not in result.stderr

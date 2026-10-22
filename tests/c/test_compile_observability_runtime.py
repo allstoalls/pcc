@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-from pcc.compile_observability import ObservabilityOptions, ObservedCompileError, observed_compile
+from pcc.diagnostics.compile_observability import ObservabilityOptions, ObservedCompileError, observed_compile
 from pcc.diagnostics import DiagnosticSpan
-from pcc.py_frontend.codegen.errors import CodegenDiagnosticError
+from pcc.frontends.python.codegen.errors import CodegenDiagnosticError
 
 
 def test_observed_compile_writes_profile_json(tmp_path):

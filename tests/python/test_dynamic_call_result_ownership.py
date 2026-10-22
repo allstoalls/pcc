@@ -12,7 +12,7 @@ import pytest
     "drain(source())",
 ])
 def test_optional_generator_callback_does_not_retain_receiver(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, monkeypatch, consume,
+    tmp_path, pcc_runtime_archive, python_program_compiler, monkeypatch, consume,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = tmp_path / "callback_owner.py"
@@ -44,7 +44,7 @@ main()
 '''.replace("BODY", consume))
     binary = tmp_path / "callback_owner"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         run = subprocess.run([str(binary)], capture_output=True, text=True, timeout=15,
                              env=dict(os.environ, PCC_GC_BACKEND=str(backend)))
@@ -53,7 +53,7 @@ main()
 
 
 def test_callable_expression_result_releases_fresh_object(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, monkeypatch,
+    tmp_path, pcc_runtime_archive, python_program_compiler, monkeypatch,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = tmp_path / "expression_result.py"
@@ -77,7 +77,7 @@ main()
 ''')
     binary = tmp_path / "expression_result"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         run = subprocess.run([str(binary)], capture_output=True, text=True, timeout=15,
                              env=dict(os.environ, PCC_GC_BACKEND=str(backend)))

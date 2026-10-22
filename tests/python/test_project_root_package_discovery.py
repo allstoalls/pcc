@@ -15,8 +15,8 @@ import subprocess
 import textwrap
 from pathlib import Path
 
-from pcc.py_frontend.pipeline import compile_python
-from pcc.py_frontend.pipeline_packages import project_root_search_dirs
+from pcc.frontends.python.pipeline import compile_python
+from pcc.frontends.python.pipeline_packages import project_root_search_dirs
 
 
 def _project(tmp_path: Path) -> Path:

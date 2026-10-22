@@ -2,11 +2,11 @@
 import os
 import subprocess
 import pytest
-from pcc.py_frontend.pipeline import compile_python_multi
+from pcc.frontends.python.pipeline import compile_python_multi
 
 
 @pytest.mark.parametrize("alias_and_transitive", [False, True])
-def test_cross_module_annotated_pass_list_keeps_overrides(tmp_path, pcc_py_runtime_archive,
+def test_cross_module_annotated_pass_list_keeps_overrides(tmp_path, pcc_runtime_archive,
                                                        alias_and_transitive):
     base = tmp_path / 'pass_base.py'
     base.write_text('''from abc import ABC, abstractmethod
@@ -51,7 +51,7 @@ main()
     compile_python_multi([str(base), str(derived), str(entry)], str(binary),
                          module_names=['pass_base', 'pass_impl', 'pass_entry'],
                          entry_module='pass_entry', backend='self', libpython_mode='off',
-                         runtime_archive=str(pcc_py_runtime_archive))
+                         runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(gc)))
@@ -59,7 +59,7 @@ main()
         assert result.stdout == 'value-first-second\n', f'GC{gc}: {result.stdout}'
 
 
-def test_mixin_calls_helper_supplied_by_runtime_subclass(tmp_path, pcc_py_runtime_archive):
+def test_mixin_calls_helper_supplied_by_runtime_subclass(tmp_path, pcc_runtime_archive):
     mixin = tmp_path / 'helper_mixin.py'
     mixin.write_text('''events = []
 def argument(value):
@@ -89,7 +89,7 @@ main()
     binary = tmp_path / 'mixin_helpers'
     compile_python_multi([str(mixin), str(entry)], str(binary),
                          module_names=['helper_mixin', 'helper_entry'], entry_module='helper_entry',
-                         backend='self', libpython_mode='off', runtime_archive=str(pcc_py_runtime_archive))
+                         backend='self', libpython_mode='off', runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(gc)))

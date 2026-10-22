@@ -18,7 +18,7 @@ import textwrap
 
 
 def test_class_attr_subclass_override_matches_cpython(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "clsattr.py"
     exe = tmp_path / "clsattr.out"

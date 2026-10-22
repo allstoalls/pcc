@@ -219,7 +219,7 @@ This is a **CPU-only research oracle**. It does **NOT**:
   metadata transition that retires a source page after the model has migrated
   its live slots; no real object is copied;
 - integrate with pcc's **five production GC backends**
-  (`PCC_GC_KIND_*` 0..4 in `pcc/py_runtime`); it only *borrows their vocabulary*
+  (`PCC_GC_KIND_*` 0..4 in `pcc/runtime`); it only *borrows their vocabulary*
   so a later integration has a shared state model to target. It does not touch
   the C runtime, the pcc-Python ports, or any GC backend selection;
 - claim **MLX / vLLM / vLLM-Metal / Mooncake** interoperability — those are the

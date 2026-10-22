@@ -26,7 +26,7 @@ pcc's situation is structurally different:
 | dimension | CPython | pcc |
 |---|---|---|
 | extension API | `Py_INCREF` is public ABI | no public extension API |
-| refcount call sites | thousands of `.c` files | codegen + `pcc/py_runtime/` only |
+| refcount call sites | thousands of `.c` files | codegen + `pcc/runtime/` only |
 | compatibility constraint | numpy etc. cannot break | only Python language semantics |
 
 We control the entire stack — codegen, runtime, link strategy. The
@@ -86,8 +86,8 @@ store ptr %v, ptr %local_slot
 ```
 
 These are scattered across hundreds of codegen sites in
-`pcc/py_frontend/codegen/layer1.py` and the runtime in
-`pcc/py_runtime/src/*.c` + `pcc/py_runtime/py/*.py`. Each site
+`pcc/frontends/python/codegen/layer1.py` and the runtime in
+`pcc/runtime/src/*.c` + `pcc/runtime/py/*.py`. Each site
 hand-codes the refcount discipline.
 
 This is **the inlined refcount baked into IR** — the exact
@@ -179,9 +179,9 @@ The migration is a **rename + indirection**, not a rewrite. Behavior
 is preserved at every step.
 
 **Step 1: introduce abstraction without changing behavior**
-- Add `pcc/py_runtime/include/py_gc_abstract.h` declaring the hook
+- Add `pcc/runtime/include/py_gc_abstract.h` declaring the hook
   interface.
-- Add `pcc/py_runtime/src/gc_refcount.c` whose implementations are
+- Add `pcc/runtime/src/gc_refcount.c` whose implementations are
   trivial wrappers around the existing `py_incref` / `py_decref` /
   `py_obj_alloc`. e.g. `pcc_gc_assign_field` is the inlined sequence
   pcc emits today.
@@ -189,7 +189,7 @@ is preserved at every step.
   rename).
 
 **Step 2: switch codegen to call the abstraction**
-- `pcc/py_frontend/codegen/layer1.py` emits `pcc_gc_assign_*` calls
+- `pcc/frontends/python/codegen/layer1.py` emits `pcc_gc_assign_*` calls
   instead of inlined `py_incref` / `py_decref` / `store` triples.
 - Same byte-identical bootstrap requirement: with `gc_refcount.c`
   selected, output should be functionally equivalent (small IR text
@@ -542,7 +542,7 @@ filled in.
 1. **Hook granularity.** Is `assign_field` enough, or do we need
    separate hooks for tuple set / list set / dict set / instance
    field? Probably enough at the layer1 level, but the runtime ports
-   in `pcc/py_runtime/py/*.py` may need finer-grained barriers.
+   in `pcc/runtime/py/*.py` may need finer-grained barriers.
 
 2. **LTO assumption.** The abstraction collapses into inlined
    refcount only with LTO. Without LTO (e.g. `-O0` self-host

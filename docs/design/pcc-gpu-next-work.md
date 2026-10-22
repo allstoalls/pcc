@@ -167,7 +167,7 @@ The canonical route is:
   -> launch plan / package / runtime
 ```
 
-`pcc.gpu_kernel` has no direct AST-to-Metal path. Its finite scalar/indexed
+`pcc.kernel_ir.entry` has no direct AST-to-Metal path. Its finite scalar/indexed
 subset is imported as validated structured Kernel IR, and unsupported Python
 syntax fails closed before TIRx/Metal finalization.
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -57,7 +57,7 @@ def test_init_copy_rhs_preserves_field_type_in_ir(tmp_path):
     compile_python(
         str(src),
         str(ll),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
         emit_llvm_only=True,
@@ -129,7 +129,7 @@ def test_class_self_call_argument_types_reach_literal_dispatch_target(tmp_path):
     compile_python(
         str(src),
         str(ll),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
         emit_llvm_only=True,
@@ -192,7 +192,7 @@ def test_full_context_method_ints_follow_emitted_abi(
     compile_python(
         str(src),
         str(ll),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
         emit_llvm_only=True,
@@ -201,11 +201,14 @@ def test_full_context_method_ints_follow_emitted_abi(
     body = _function_body(ir_text, "ContextualFillApp_fill")
     extern_call = next(line for line in body.splitlines() if "@memset" in line)
 
-    # The emitted method ABI itself is the scalar projection, so the three
-    # business values never become tagged pointers and need no box/unbox
-    # round-trip before the extern call.  Passing pointer bits as integers is
-    # the historical 0x4000000000 leak.
-    assert body.count("@py_int_to_i64") == 0
+    # Unannotated Python arguments use the object ABI. The extern edge must
+    # decode these Python ints to its declared machine widths.
+    assert "@py_int_to_i64_lane(" in body
+    header = next(
+        line for line in ir_text.splitlines()
+        if line.startswith("define ") and "ContextualFillApp_fill(" in line
+    )
+    assert re.search(r"\(ptr %self, ptr %byte_value, ptr %count, ptr %offset\)", header)
     assert re.search(
         r"@memset\(ptr\s+[^,]+,\s+i32\s+[^,]+,\s+i64\s+[^)]+\)",
         extern_call,
@@ -219,22 +222,22 @@ def test_full_context_method_ints_follow_emitted_abi(
     )
     assert re.search(
         r"ContextualFillApp_fill\(ptr\s+[^,]+,\s*"
-        r"i64\s+[^,]+,\s*i64\s+[^,]+,\s*i64\s+[^)]+\)",
+        r"ptr\s+[^,]+,\s*ptr\s+[^,]+,\s*ptr\s+[^)]+\)",
         method_call,
     ), method_call
 
 
-@pytest.mark.parametrize("backend", ["llvm", "self"])
+@pytest.mark.parametrize("backend", [pytest.param(None, id="default-self"), pytest.param("self", id="explicit-self")])
 def test_full_context_class_method_never_exposes_boxed_int_tag(
     backend,
     tmp_path,
     monkeypatch,
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
 ):
     src = tmp_path / f"contextual_method_{backend}.py"
     exe = tmp_path / f"contextual_method_{backend}.out"
     src.write_text(_contextual_method_source(), encoding="utf-8")
-    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_py_runtime_archive))
+    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_runtime_archive))
 
     compile_python(
         str(src),
@@ -258,16 +261,16 @@ def test_method_argument_provenance_pins_managed_but_not_raw_pointer(tmp_path):
     compile_python(
         str(src),
         str(ll),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
         emit_llvm_only=True,
     )
     body = _function_body(ll.read_text(encoding="utf-8"), "ProvenanceProbe_run")
-    # Outside runtime-port mode ``stack_alloc`` is typed ``int`` (a raw
-    # address), so it crosses the call as i64 and can never enter the GC.
+    # An unannotated Python argument receives an int object representing the
+    # address. That object is managed; the original machine address is not.
     call_match = re.search(
-        r"call\s+(?:void|ptr)\s+@[^(\n]*ProvenanceProbe_record\("
+        r"call\s+(?:void|ptr)(?: \([^\n)]*\))?\s+@[^(\n]*ProvenanceProbe_record\("
         r"ptr\s+(?P<receiver>%[^, ]+),\s*"
         r"(?:ptr|i64)\s+(?P<raw>%[^, ]+),\s*"
         r"ptr\s+(?P<boxed>%[^, ]+),\s*"
@@ -277,23 +280,42 @@ def test_method_argument_provenance_pins_managed_but_not_raw_pointer(tmp_path):
 
     assert call_match is not None, body
     raw = call_match.group("raw")
+    box_match = re.search(
+        re.escape(raw)
+        + r" = call ptr(?: \(i64\))? @py_int_from_i64\(i64 (?P<address>%[^) ]+)\)",
+        body,
+    )
+    assert box_match is not None, body
+    address = box_match.group("address")
     for operation in ("pin", "unpin", "release"):
-        assert f"@pcc_gc_{operation}(ptr {raw})" not in body
-    # Receiver + boxed-int object + allocating list are managed values.  The
-    # latter two must stay pinned while subsequent arguments and the call run.
-    for group in ("receiver", "boxed", "allocating"):
+        assert f"@pcc_gc_{operation}(ptr {address})" not in body
+    # Receiver, address-int object, ordinary boxed int, and allocating list
+    # retain their managed-value leases across argument evaluation and call.
+    for group in ("receiver", "raw", "boxed", "allocating"):
         managed = call_match.group(group)
-        assert f"call void @pcc_gc_pin(ptr {managed})" in body
+        assert re.search(
+            r"call void(?: \(ptr\))? @pcc_gc_pin\(ptr " + re.escape(managed) + r"\)",
+            body,
+        ), body
         # One unpin is the success edge and another is the call-error edge.
-        assert body.count(f"call void @pcc_gc_unpin(ptr {managed})") >= 2
-    for group in ("boxed", "allocating"):
+        assert len(re.findall(
+            r"call void(?: \(ptr\))? @pcc_gc_unpin\(ptr " + re.escape(managed) + r"\)",
+            body,
+        )) >= 2
+    for group in ("raw", "boxed", "allocating"):
         owned = call_match.group(group)
-        assert body.count(f"call void @pcc_gc_release(ptr {owned})") >= 2
+        assert len(re.findall(
+            r"call void(?: \(ptr\))? @pcc_gc_release\(ptr " + re.escape(owned) + r"\)",
+            body,
+        )) >= 2
     receiver = call_match.group("receiver")
-    assert f"call void @pcc_gc_release(ptr {receiver})" not in body
+    assert not re.search(
+        r"call void(?: \(ptr\))? @pcc_gc_release\(ptr " + re.escape(receiver) + r"\)",
+        body,
+    )
 
 
-@pytest.mark.parametrize("backend", ["llvm", "self"])
+@pytest.mark.parametrize("backend", [pytest.param(None, id="default-self"), pytest.param("self", id="explicit-self")])
 def test_method_argument_provenance_runs_no_libpython(backend, tmp_path):
     src = tmp_path / f"method_argument_provenance_{backend}.py"
     exe = tmp_path / f"method_argument_provenance_{backend}.out"

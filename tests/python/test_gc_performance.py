@@ -24,7 +24,7 @@ import time
 
 def _compile_program(tmp_path, source: str):
     """Compile a pcc-Python program and return the executable path."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"

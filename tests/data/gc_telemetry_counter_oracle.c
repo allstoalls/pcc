@@ -1,5 +1,5 @@
 /* Frozen metric -> counter mapping of the retired C runtime's
- * pcc_gc_telemetry() (pcc/py_runtime/src/py_gc_backend.c, removed 2026-09-25).
+ * pcc_gc_telemetry() (pcc/runtime/src/py_gc_backend.c, removed 2026-09-25).
  * tests/python/test_freestanding_gc_telemetry.py links it as the reference
  * oracle that the pcc-Python py_gc_telemetry.py must keep matching for every
  * metric id.  Change it only together with a deliberate counter ABI change. */

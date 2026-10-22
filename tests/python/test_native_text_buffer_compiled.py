@@ -19,10 +19,10 @@ from pcc.backend.self_backend_parse import parse_self_backend_module
 
 
 @pytest.mark.integration
+# requires an explicitly receipt-selected pcc1
+@pytest.mark.pcc_gate(env="PCC_INDEXED_EMIT_TEST_COMPILER")
 def test_receipt_pcc1_executes_current_native_text_buffer(tmp_path, monkeypatch):
     compiler_name = os.environ.get("PCC_INDEXED_EMIT_TEST_COMPILER")
-    if not compiler_name:
-        pytest.skip("requires an explicitly receipt-selected pcc1")
     compiler = Path(compiler_name).resolve(strict=True)
     repo = Path(__file__).resolve().parents[2]
     source_manifest = json.loads((compiler.parent / "source-manifest.json").read_text())
@@ -33,7 +33,7 @@ def test_receipt_pcc1_executes_current_native_text_buffer(tmp_path, monkeypatch)
         "pcc/backend/self_backend_precise_stackmaps.py",
         "pcc/backend/self_backend_target_passes.py",
         "pcc/backend/self_backend_indexed_emit.py",
-        "pcc/py_frontend/pipeline_frontend_worker_execution.py",
+        "pcc/frontends/python/pipeline_frontend_worker_execution.py",
     ):
         assert source_manifest["files"][relative] == hashlib.sha256(
             (repo / relative).read_bytes()

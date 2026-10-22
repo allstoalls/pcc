@@ -1,4 +1,4 @@
-from pcc.buffer_protocol import BufferView, PyBUF_ND, PyBUF_WRITABLE
+from pcc.library.buffer_protocol import BufferView, PyBUF_ND, PyBUF_WRITABLE
 
 
 def test_readonly_rejects_writable_flag():

@@ -13,7 +13,7 @@ from pathlib import Path
 import sys
 
 from pcc.package.uv_lock_sync import sync_uv_lock
-from pcc.package_environment import resolve_package_environment
+from pcc.package.environment import resolve_package_environment
 
 IDENTITY_FIELDS = (
     "root",

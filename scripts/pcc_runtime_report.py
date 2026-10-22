@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from pcc.runtime_report import format_runtime_report
+from pcc.diagnostics.runtime_report import format_runtime_report
 
 
 def main(argv: list[str] | None = None) -> int:

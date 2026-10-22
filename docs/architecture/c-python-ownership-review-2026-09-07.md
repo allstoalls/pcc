@@ -35,13 +35,13 @@ C as the implementation language.
 
 ## Existing C/Python sharing and the real C gap
 
-- `pcc/codegen/c_codegen.py:11` imports `llvm_capi.compat.ir_c`;
-  `pcc/py_frontend/codegen/generation_lowering.py:11` imports `compat.ir`.
-  `pcc/llvm_capi/compat.py:55` selects the common native IR implementation by
+- `pcc/frontends/c/codegen/c_codegen.py:11` imports `llvm_capi.compat.ir_c`;
+  `pcc/frontends/python/codegen/generation_lowering.py:11` imports `compat.ir`.
+  `pcc/ir/compat.py:55` selects the common native IR implementation by
   default, with separate opt-out controls.
 - Both paths can invoke `llvm_capi.binding.run_passes_on_ir`:
-  `pcc/evaluater/c_evaluator.py:585` and
-  `pcc/py_frontend/ir_pass_pipeline.py:602`.
+  `pcc/frontends/c/evaluator/c_evaluator.py:585` and
+  `pcc/frontends/python/ir_pass_pipeline.py:602`.
 - C self emission is implemented in `c_evaluator.py:2339`; Python uses the
   same emitter family through `pipeline_self_backend_host.py:19`.
 - C translation-unit linking exists at `c_evaluator.py:1936`, and Python
@@ -113,7 +113,7 @@ Windows. Directory rearrangement would not repair it.
 
 The full investigation `bootstrap-types-rsplit-libpython-fallback.md` really
 records replacing `rsplit` with a manual scan; that scan remains in
-`pcc/py_frontend/types.py:157`. Generic native rsplit lowering and both runtime
+`pcc/frontends/python/types.py:157`. Generic native rsplit lowering and both runtime
 implementations now exist. The existing differential test uses the C runtime,
 so a current pcc1/pcc-Python gate is still needed before restoring the ordinary
 source spelling. The fallback ratchet should stay, accompanied by a separate

@@ -9,7 +9,7 @@ recorded ``ops`` in source order, so the restriction outlived what it
 described.
 
 The gap blocked three modules in the C-frontend self-host closure:
-``pcc.evaluater.c_evaluator``, ``pcc.backend.self_backend_aarch64_darwin`` and
+``pcc.frontends.c.evaluator.c_evaluator``, ``pcc.backend.self_backend_aarch64_darwin`` and
 ``pcc.backend.x86_64_asm_driver`` (``[ElfSymbol.null(), *local, *global]``).
 
 CPython is the oracle, including for evaluation order: the operands are
@@ -94,7 +94,7 @@ _EXPECTED = [
 
 
 def test_splat_before_other_operands_matches_cpython(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "literal_splat_positions.py"
     exe = tmp_path / "literal_splat_positions.out"
@@ -124,7 +124,7 @@ def test_splat_before_other_operands_matches_cpython(tmp_path):
 )
 def test_splat_shapes_lower_without_libpython(tmp_path, shape):
     """The native builder path takes the same shapes with no CPython arm."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "shape.py"
     out = tmp_path / "shape.ll"
@@ -153,13 +153,13 @@ def test_the_three_closure_modules_lower_under_strict_no_libpython():
     """The modules the restriction blocked, compiled the way pcc1 compiles."""
     import os
 
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
     repo_root = Path(__file__).resolve().parents[2]
     for rel, mod in (
-        ("pcc/evaluater/c_evaluator.py", "pcc.evaluater.c_evaluator"),
+        ("pcc/frontends/c/evaluator/c_evaluator.py", "pcc.frontends.c.evaluator.c_evaluator"),
         (
             "pcc/backend/self_backend_aarch64_darwin.py",
             "pcc.backend.self_backend_aarch64_darwin",

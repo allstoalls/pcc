@@ -1,4 +1,4 @@
-"""Differential tests for the pcc/py_stdlib modules added for the build-tool
+"""Differential tests for the pcc/stdlib modules added for the build-tool
 import closure (STDLIB-P1-BUILD-TOOL-CLOSURE).
 
 Every assertion compares the pcc port against CPython's own module on the same
@@ -35,26 +35,26 @@ import uuid as host_uuid
 
 import pytest
 
-from pcc.py_stdlib import codecs as port_codecs
-from pcc.py_stdlib import configparser as port_configparser
-from pcc.py_stdlib import difflib as port_difflib
-from pcc.py_stdlib import errno as port_errno
-from pcc.py_stdlib import filecmp as port_filecmp
-from pcc.py_stdlib import fnmatch as port_fnmatch
-from pcc.py_stdlib import glob as port_glob
-from pcc.py_stdlib import gettext as port_gettext
-from pcc.py_stdlib import locale as port_locale
-from pcc.py_stdlib import netrc as port_netrc
-from pcc.py_stdlib import ntpath as port_ntpath
-from pcc.py_stdlib import posixpath as port_posixpath
-from pcc.py_stdlib import pprint as port_pprint
-from pcc.py_stdlib import pwd as port_pwd
-from pcc.py_stdlib import runpy as port_runpy
-from pcc.py_stdlib import signal as port_signal
-from pcc.py_stdlib import stat as port_stat
-from pcc.py_stdlib import sysconfig as port_sysconfig
-from pcc.py_stdlib import textwrap as port_textwrap
-from pcc.py_stdlib import uuid as port_uuid
+from pcc.stdlib import codecs as port_codecs
+from pcc.stdlib import configparser as port_configparser
+from pcc.stdlib import difflib as port_difflib
+from pcc.stdlib import errno as port_errno
+from pcc.stdlib import filecmp as port_filecmp
+from pcc.stdlib import fnmatch as port_fnmatch
+from pcc.stdlib import glob as port_glob
+from pcc.stdlib import gettext as port_gettext
+from pcc.stdlib import locale as port_locale
+from pcc.stdlib import netrc as port_netrc
+from pcc.stdlib import ntpath as port_ntpath
+from pcc.stdlib import posixpath as port_posixpath
+from pcc.stdlib import pprint as port_pprint
+from pcc.stdlib import pwd as port_pwd
+from pcc.stdlib import runpy as port_runpy
+from pcc.stdlib import signal as port_signal
+from pcc.stdlib import stat as port_stat
+from pcc.stdlib import sysconfig as port_sysconfig
+from pcc.stdlib import textwrap as port_textwrap
+from pcc.stdlib import uuid as port_uuid
 
 
 MEASURED_BUILD_TOOL_GAP = frozenset(
@@ -1090,16 +1090,16 @@ def test_pwd_lookup_input_validation_matches_cpython():
     ],
 )
 def test_build_tool_ports_are_selected_by_recursive_stdlib_registry(module_name):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     source = pipeline._locate_native_stdlib_module_source(module_name)
     assert source is not None
-    assert source.endswith("/pcc/py_stdlib/" + module_name + ".py")
+    assert source.endswith("/pcc/stdlib/" + module_name + ".py")
     assert module_name not in pipeline._NATIVE_BUILTIN_IMPORTS
 
 
 def test_windows_msvcrt_provider_is_compile_owned_but_non_windows_fail_closed(tmp_path):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     source = pipeline._locate_native_stdlib_module_source("msvcrt")
     assert source is not None
@@ -1125,7 +1125,7 @@ def test_windows_msvcrt_provider_is_compile_owned_but_non_windows_fail_closed(tm
 
 
 def test_type_checking_http_client_is_not_a_runtime_stdlib_dependency(tmp_path):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     source = (
         "import typing as T\n"
@@ -1171,7 +1171,7 @@ def test_type_checking_http_client_is_not_a_runtime_stdlib_dependency(tmp_path):
 
 
 def test_measured_build_tool_gap_has_exact_owned_or_excluded_disposition():
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     assert len(MEASURED_BUILD_TOOL_GAP) == 34
     excluded = {"http"}
@@ -1180,7 +1180,7 @@ def test_measured_build_tool_gap_has_exact_owned_or_excluded_disposition():
         source = pipeline._locate_native_stdlib_module_source(module_name)
         assert source is not None, module_name
         normalized = source.replace("\\", "/")
-        assert "/pcc/py_stdlib/" in normalized, (module_name, source)
+        assert "/pcc/stdlib/" in normalized, (module_name, source)
     assert pipeline._locate_native_stdlib_module_source("http") is None
 
 

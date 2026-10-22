@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.corpus_manifest import runtime_cases_except
 from tests.c_testsuite_cases import read_expected_output, run_native, run_pcc
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
@@ -15,6 +16,13 @@ C_TESTSUITE_RUNTIME_EXACT_MATCH_CASES = C_TESTSUITE_MANIFEST.get(
 )
 C_TESTSUITE_RUNTIME_RETURNCODE_CASES = C_TESTSUITE_MANIFEST.get(
     "runtime_returncode_match_only", []
+)
+C_TESTSUITE_RUNTIME_COMPARISON_CASES = (
+    C_TESTSUITE_RUNTIME_EXACT_MATCH_CASES
+    + runtime_cases_except(
+        C_TESTSUITE_MANIFEST,
+        {"runtime_exact_match", "runtime_returncode_match_only", "runtime_native_pass_pcc_fail"},
+    )
 )
 C_TESTSUITE_RUNTIME_NATIVE_PASS_PCC_FAIL_CASES = C_TESTSUITE_MANIFEST.get(
     "runtime_native_pass_pcc_fail", []
@@ -50,13 +58,16 @@ if C_TESTSUITE_RUNTIME_RETURNCODE_CASES:
         native_result = run_native(case_path, REPO_ROOT)
         pcc_result = run_pcc(case_path, REPO_ROOT)
 
+        native_result.require_execution("host reference")
+        pcc_result.require_execution("owned pcc")
+
         assert (
             pcc_result.returncode == native_result.returncode
         ), f"{filename} return code mismatch:\nnative={native_result.returncode}\npcc={pcc_result.returncode}\npcc stderr:\n{pcc_result.stderr}"
 
 
 @pytest.mark.parametrize(
-    "filename", _case_params(C_TESTSUITE_RUNTIME_EXACT_MATCH_CASES)
+    "filename", _case_params(C_TESTSUITE_RUNTIME_COMPARISON_CASES)
 )
 def test_c_testsuite_runtime_matches_native_exactly(filename):
     case_path = _case_path(filename)
@@ -64,6 +75,9 @@ def test_c_testsuite_runtime_matches_native_exactly(filename):
 
     native_result = run_native(case_path, REPO_ROOT)
     pcc_result = run_pcc(case_path, REPO_ROOT)
+
+    native_result.require_execution("host reference")
+    pcc_result.require_execution("owned pcc")
 
     assert (
         pcc_result.returncode == native_result.returncode
@@ -93,6 +107,9 @@ if C_TESTSUITE_RUNTIME_NATIVE_PASS_PCC_FAIL_CASES:
 
         native_result = run_native(case_path, REPO_ROOT)
         pcc_result = run_pcc(case_path, REPO_ROOT)
+
+        native_result.require_execution("host reference")
+        pcc_result.require_execution("owned pcc")
 
         assert (
             native_result.returncode == 0

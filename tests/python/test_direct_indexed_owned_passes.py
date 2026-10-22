@@ -10,12 +10,12 @@ from pcc.backend.macho_exec import link_executable
 from pcc.backend.native_object import decode_packed_native_object
 from pcc.backend.self_backend_ir import PARSED_INSTRUCTION_KINDS
 from pcc.backend.self_backend_kernel import get_indexed_function_kernel
-from pcc.py_frontend import pipeline
-from pcc.llvm_capi import ir
+from pcc.frontends.python import pipeline
+from pcc.ir import ir
 
 
 def test_direct_worker_promotes_memory_before_pco_emission(
-    tmp_path, monkeypatch, pcc_py_runtime_archive,
+    tmp_path, monkeypatch, pcc_runtime_archive,
 ):
     source = tmp_path / "probe.py"
     source.write_text('''def choose(flag):
@@ -38,7 +38,7 @@ print(choose(True), choose(False))
     import_original = builtins.__import__
 
     def reject_llvm(name, *args, **kwargs):
-        if name == "llvmlite" or name.startswith("llvmlite.") or name == "pcc.llvm_capi.binding":
+        if name == "llvmlite" or name.startswith("llvmlite.") or name == "pcc.ir.binding":
             raise AssertionError("unexpected external optimizer: " + name)
         return import_original(name, *args, **kwargs)
 
@@ -90,7 +90,7 @@ print(choose(True), choose(False))
         pco = output / "module_0.direct.pco"
         image = link_executable(
             [decode_packed_native_object(pco.read_bytes())],
-            archives=[Path(pcc_py_runtime_archive).read_bytes()],
+            archives=[Path(pcc_runtime_archive).read_bytes()],
         )
         binary = output / "program"
         binary.write_bytes(image)

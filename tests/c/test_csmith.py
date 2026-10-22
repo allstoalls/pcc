@@ -23,10 +23,11 @@ from pathlib import Path
 
 import pytest
 
-from pcc.dependency_verdict import probe_executable_dependency
+from pcc.diagnostics.dependency_verdict import probe_executable_dependency
 
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.project import TranslationUnit
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.driver.project import TranslationUnit
+from tests.owned_c_corpus import run_owned_c_corpus
 from tests.worker_process import run_worker_process
 
 # ---------------------------------------------------------------------------
@@ -115,17 +116,8 @@ def _generate(seed: int, outpath: str) -> None:
     )
 
 
-def _preprocess(src_path: str, pp_path: str) -> None:
-    cc = _host_cc()
-    subprocess.run(
-        [cc, "-E", f"-I{CSMITH_INCLUDE}", "-w", src_path, "-o", pp_path],
-        check=True,
-        capture_output=True,
-        timeout=DEFAULT_TIMEOUT,
-    )
-
-
 def _run_native(src_path: str, timeout: int = DEFAULT_TIMEOUT) -> subprocess.CompletedProcess:
+    """External C compiler reference oracle; never a product build step."""
     cc = _host_cc()
     with tempfile.TemporaryDirectory(prefix="csmith_native_") as tmpdir:
         binary = Path(tmpdir) / "a.out"
@@ -150,15 +142,16 @@ def _run_native(src_path: str, timeout: int = DEFAULT_TIMEOUT) -> subprocess.Com
             )
 
 
-def _pcc_worker_entry(pp_path: str, timeout: int, conn) -> None:
-    with open(pp_path) as f:
+def _pcc_worker_entry(src_path: str, timeout: int, conn) -> None:
+    with open(src_path) as f:
         source = f.read()
-    unit = TranslationUnit("csmith_test.c", pp_path, source)
+    unit = TranslationUnit("csmith_test.c", src_path, source)
     try:
         ev = CEvaluator()
-        result = ev.run_translation_units_with_system_cc(
+        result = run_owned_c_corpus(ev,
             [unit],
-            base_dir=str(Path(pp_path).parent),
+            base_dir=str(Path(src_path).parent),
+            include_dirs=[CSMITH_INCLUDE] if CSMITH_INCLUDE else None,
             timeout=timeout,
         )
         conn.send({
@@ -174,10 +167,10 @@ def _pcc_worker_entry(pp_path: str, timeout: int, conn) -> None:
         })
 
 
-def _run_pcc(pp_path: str, timeout: int = DEFAULT_TIMEOUT):
+def _run_pcc(src_path: str, timeout: int = DEFAULT_TIMEOUT):
     result = run_worker_process(
         _pcc_worker_entry,
-        (pp_path, timeout),
+        (src_path, timeout),
         timeout + 10,
     )
     if result.timed_out:
@@ -190,13 +183,10 @@ def _run_pcc(pp_path: str, timeout: int = DEFAULT_TIMEOUT):
 def _run_seed(seed: int) -> CsmithResult:
     with tempfile.TemporaryDirectory(prefix=f"csmith_{seed}_") as tmpdir:
         src = os.path.join(tmpdir, "test.c")
-        pp = os.path.join(tmpdir, "test_pp.c")
-
         _generate(seed, src)
-        _preprocess(src, pp)
 
         native = _run_native(src)
-        pcc_rc, pcc_out, pcc_err = _run_pcc(pp)
+        pcc_rc, pcc_out, pcc_err = _run_pcc(src)
 
         return CsmithResult(
             seed=seed,

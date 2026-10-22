@@ -16,9 +16,9 @@ def test_find_current_pcc1_rejects_candidate_older_than_frontend_sources(
     tmp_path, monkeypatch
 ):
     monkeypatch.delenv("PCC_CURRENT_PCC1", raising=False)
-    _write_with_mtime(tmp_path / "pcc" / "cli_bootstrap.py", "# cli\n", 10.0)
+    _write_with_mtime(tmp_path / "pcc" / "driver" / "cli_bootstrap.py", "# cli\n", 10.0)
     _write_with_mtime(tmp_path / "pcc" / "__main__.py", "# main\n", 20.0)
-    _write_with_mtime(tmp_path / "pcc" / "py_frontend" / "type_infer.py", "# infer\n", 30.0)
+    _write_with_mtime(tmp_path / "pcc" / "frontends" / "python" / "type_infer.py", "# infer\n", 30.0)
     _write_with_mtime(tmp_path / "pcc1", "fake pcc1\n", 25.0)
 
     assert pcc1_freshness_cutoff(tmp_path) == 30.0
@@ -29,7 +29,7 @@ def test_find_current_pcc1_accepts_candidate_newer_than_frontend_sources(
     tmp_path, monkeypatch
 ):
     monkeypatch.delenv("PCC_CURRENT_PCC1", raising=False)
-    _write_with_mtime(tmp_path / "pcc" / "cli_bootstrap.py", "# cli\n", 10.0)
+    _write_with_mtime(tmp_path / "pcc" / "driver" / "cli_bootstrap.py", "# cli\n", 10.0)
     _write_with_mtime(tmp_path / "pcc" / "__main__.py", "# main\n", 20.0)
     _write_with_mtime(tmp_path / "pcc" / "backend" / "self_backend_parse.py", "# parse\n", 30.0)
     pcc1 = tmp_path / "pcc1"
@@ -42,7 +42,7 @@ def test_find_current_pcc1_accepts_newer_bootstrap_build_candidate(
     tmp_path, monkeypatch
 ):
     monkeypatch.delenv("PCC_CURRENT_PCC1", raising=False)
-    _write_with_mtime(tmp_path / "pcc" / "cli_bootstrap.py", "# cli\n", 10.0)
+    _write_with_mtime(tmp_path / "pcc" / "driver" / "cli_bootstrap.py", "# cli\n", 10.0)
     _write_with_mtime(tmp_path / "pcc1", "stale root pcc1\n", 9.0)
     build_pcc1 = tmp_path / "build" / "bootstrap-new-host" / "pcc1"
     _write_with_mtime(build_pcc1, "fresh build pcc1\n", 20.0)
@@ -66,8 +66,8 @@ def test_find_current_pcc1_rejects_candidate_older_than_runtime_sources(
     tmp_path, monkeypatch
 ):
     monkeypatch.delenv("PCC_CURRENT_PCC1", raising=False)
-    _write_with_mtime(tmp_path / "pcc" / "cli_bootstrap.py", "# cli\n", 10.0)
-    _write_with_mtime(tmp_path / "pcc" / "py_runtime" / "src" / "py_obj.c", "/* runtime */\n", 40.0)
+    _write_with_mtime(tmp_path / "pcc" / "driver" / "cli_bootstrap.py", "# cli\n", 10.0)
+    _write_with_mtime(tmp_path / "pcc" / "runtime" / "src" / "py_obj.c", "/* runtime */\n", 40.0)
     _write_with_mtime(tmp_path / "pcc1", "fake pcc1\n", 35.0)
 
     assert pcc1_freshness_cutoff(tmp_path) == 40.0
@@ -78,9 +78,9 @@ def test_find_current_pcc1_ignores_cache_and_build_sources(
     tmp_path, monkeypatch
 ):
     monkeypatch.delenv("PCC_CURRENT_PCC1", raising=False)
-    _write_with_mtime(tmp_path / "pcc" / "cli_bootstrap.py", "# cli\n", 10.0)
+    _write_with_mtime(tmp_path / "pcc" / "driver" / "cli_bootstrap.py", "# cli\n", 10.0)
     _write_with_mtime(tmp_path / "pcc" / "__pycache__" / "stale.py", "# cache\n", 90.0)
-    _write_with_mtime(tmp_path / "pcc" / "py_runtime" / "build_py" / "generated.py", "# build\n", 80.0)
+    _write_with_mtime(tmp_path / "pcc" / "runtime" / "build_py" / "generated.py", "# build\n", 80.0)
     pcc1 = tmp_path / "pcc1"
     _write_with_mtime(pcc1, "fake pcc1\n", 15.0)
 

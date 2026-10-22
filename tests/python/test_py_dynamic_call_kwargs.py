@@ -1,7 +1,7 @@
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def test_dynamic_call_merges_explicit_kwargs_and_starstar_for_codegen(tmp_path):

@@ -8,7 +8,7 @@ import textwrap
 from pathlib import Path
 
 
-RUNTIME_DIR = Path(__file__).absolute().parents[2] / "pcc" / "py_runtime"
+RUNTIME_DIR = Path(__file__).absolute().parents[2] / "pcc" / "runtime"
 
 
 def _compile_harness(tmp_path: Path, archive: Path, source: str) -> Path:
@@ -48,8 +48,8 @@ def _run_with_log(exe: Path, tmp_path: Path, channel: str) -> list[dict[str, obj
     return [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def test_exception_runtime_log_channel_records_lifecycle(tmp_path, pcc_py_runtime_archive):
-    exe = _compile_harness(tmp_path, pcc_py_runtime_archive, r'''
+def test_exception_runtime_log_channel_records_lifecycle(tmp_path, pcc_runtime_archive):
+    exe = _compile_harness(tmp_path, pcc_runtime_archive, r'''
         #include "py_runtime.h"
 
         int main(void) {
@@ -67,7 +67,7 @@ def test_exception_runtime_log_channel_records_lifecycle(tmp_path, pcc_py_runtim
     ''')
     events = _run_with_log(exe, tmp_path, "exception")
     names = {(event["category"], event["event"]) for event in events}
-    assert {event["schema"] for event in events} == {"pcc.runtime_log.v1"}
+    assert {event["schema"] for event in events} == {"pcc.diagnostics.runtime_log.v1"}
     assert ("exception", "alloc") in names
     assert ("exception", "new") in names
     assert ("exception", "set_cause") in names
@@ -77,8 +77,8 @@ def test_exception_runtime_log_channel_records_lifecycle(tmp_path, pcc_py_runtim
     assert ("exception", "dealloc") in names
 
 
-def test_dispatch_runtime_log_channel_records_generic_operations(tmp_path, pcc_py_runtime_archive):
-    exe = _compile_harness(tmp_path, pcc_py_runtime_archive, r'''
+def test_dispatch_runtime_log_channel_records_generic_operations(tmp_path, pcc_runtime_archive):
+    exe = _compile_harness(tmp_path, pcc_runtime_archive, r'''
         #include "py_runtime.h"
 
         int main(void) {

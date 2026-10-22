@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[2]
-RUNTIME = REPO / "pcc" / "py_runtime"
+RUNTIME = REPO / "pcc" / "runtime"
 
 
 def test_runtime_has_one_exact_managed_pointer_provenance_decision():
@@ -225,8 +225,8 @@ def _assert_all_backends(executable: Path) -> None:
 
 
 def test_pointer_provenance_pcc_python_runtime_gc0_through_gc4(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ):
     _assert_all_backends(
-        _link_harness(tmp_path, pcc_py_runtime_archive, "pcc_python")
+        _link_harness(tmp_path, pcc_runtime_archive, "pcc_python")
     )

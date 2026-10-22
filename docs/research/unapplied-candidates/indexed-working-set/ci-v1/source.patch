@@ -1,0 +1,739 @@
+--- a/.github/workflows/pcc1-package-parity.yml
++++ b/.github/workflows/pcc1-package-parity.yml
+@@ -16,6 +16,8 @@
+       - "tests/python/test_native_worker_state_clock.py"
+       - "tests/python/test_worker_resource_setpgid.py"
+       - "tests/python/test_worker_resource_plan.py"
++      - "tests/python/test_indexed_process_split_real.py"
++      - "tests/python/test_indexed_handoff_closed_world.py"
+       - "tests/python/test_worker_memory_budget_selection.py"
+       - "tests/python/test_process_tree_sample_tool.py"
+       - "tests/python/test_valueclass_aggregate_ownership_native.py"
+@@ -51,6 +53,8 @@
+       - "tests/python/test_native_worker_state_clock.py"
+       - "tests/python/test_worker_resource_setpgid.py"
+       - "tests/python/test_worker_resource_plan.py"
++      - "tests/python/test_indexed_process_split_real.py"
++      - "tests/python/test_indexed_handoff_closed_world.py"
+       - "tests/python/test_worker_memory_budget_selection.py"
+       - "tests/python/test_process_tree_sample_tool.py"
+       - "tests/python/test_valueclass_aggregate_ownership_native.py"
+@@ -177,6 +181,56 @@
+           # Complete compressed logs/receipts only; no archives, objects or IR.
+           path: build/macos-float-doc/evidence/
+ 
++  macos-pcc0-indexed-split:
++    name: macOS arm64 pcc0 indexed-stage bridge gate
++    runs-on: macos-15
++    timeout-minutes: 25
++    # Real host child/object and compiler-owned helper lowering evidence.
++    # No runtime build or native helper execution is claimed by this gate.
++    steps:
++      - uses: actions/checkout@v4
++
++      - name: Set up Python
++        uses: actions/setup-python@v5
++        with:
++          python-version: "3.13"
++
++      - name: Set up uv
++        uses: astral-sh/setup-uv@v5
++
++      - name: Install dependencies
++        run: uv sync --dev
++
++      - name: Verify real split objects and helper closed-world lowering
++        run: |
++          uv run python scripts/run_process_tree_sample.py \
++            --result build/macos-indexed-split/work/supervisor/result.json \
++            --samples build/macos-indexed-split/work/supervisor/samples.tsv \
++            --stdout build/macos-indexed-split/work/supervisor/target.stdout \
++            --stderr build/macos-indexed-split/work/supervisor/target.stderr \
++            --timeout 1200 --interval 1 --progress-interval 30 \
++            --auto-tree-rss-ceiling-bytes 4294967296 \
++            --min-tree-rss-bytes 2147483648 \
++            --darwin-preflight-reserve-bytes 536870912 \
++            -- uv run python scripts/ci_macos_regression_gate.py \
++            --out-dir build/macos-indexed-split --profile indexed-split
++
++      - name: Collect complete bounded indexed-stage receipts
++        if: always()
++        run: |
++          uv run python scripts/ci_macos_regression_gate.py \
++            --out-dir build/macos-indexed-split --profile indexed-split --collect-evidence
++
++      - name: Preserve indexed-stage receipts
++        if: always()
++        uses: actions/upload-artifact@v4
++        with:
++          name: macos-pcc0-indexed-split-receipts
++          retention-days: 7
++          compression-level: 0
++          if-no-files-found: warn
++          path: build/macos-indexed-split/evidence/
++
+   other-platform-native-wheel:
+     name: Native wheel / ${{ matrix.platform }}
+     runs-on: ${{ matrix.runner }}
+@@ -262,6 +316,7 @@
+         run: python scripts/ci_native_wheel_gate.py dist
+ 
+   pcc1-package-parity:
++    needs: macos-pcc0-indexed-split
+     name: macOS arm64 native pcc1 and installed wheel
+     runs-on: macos-15
+     timeout-minutes: 45
+@@ -302,6 +357,9 @@
+         run: uv sync --dev
+ 
+       - name: Build current pcc1
++        env:
++          # Opt in only this Stage1 build, after the independent gate passed.
++          PCC_HOST_INDEXED_PROCESS_SPLIT: "1"
+         run: |
+           env -u LC_ALL uv run python scripts/bootstrap.py \
+             --backend self \
+--- a/scripts/ci_macos_regression_gate.py
++++ b/scripts/ci_macos_regression_gate.py
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
+-"""Focused Darwin pcc0 execution gates; never certify Stage1 or a fixed point.
++"""Focused Darwin pcc0 gates; never certify Stage1 or a fixed point.
+ 
+ Run under scripts/run_process_tree_sample.py. The workflow bounds the complete
+ process tree, then collects small receipts even after a timeout. Runtime and
+@@ -64,6 +64,20 @@
+             "original-direct-payload", "original-valuebox",
+         )
+     )),
++    ("indexed-worker-lifetime", (
++        "tests/python/test_worker_resource_plan.py::"
++        "test_failure_retires_running_peers_and_does_not_launch_tail",
++        "tests/python/test_worker_resource_plan.py::"
++        "test_progressive_retry_drains_peers_then_restores_concurrency",
++    )),
++    ("indexed-split", (
++        "tests/python/test_indexed_process_split_real.py::"
++        "test_real_split_and_unsplit_match_complete_objects",
++    )),
++    ("indexed-handoff-closure", (
++        "tests/python/test_indexed_handoff_closed_world.py::"
++        "test_handoff_provider_closed_world_aarch64",
++    )),
+     ("float-protocol", (
+         "tests/python/test_native_float_protocol.py::"
+         "test_float_protocol_native_five_gc[pcc0]",
+@@ -81,6 +95,9 @@
+     "default": (
+         "clock", "runtime-build", "oserror", "time", "native-worker-clock",
+         "worker-handles", "root-joins",
++    ),
++    "indexed-split": (
++        "indexed-worker-lifetime", "indexed-split", "indexed-handoff-closure",
+     ),
+     "float-doc": (
+         "runtime-build", "float-protocol", "class-docstrings", "float-callback-movement",
+@@ -92,6 +109,7 @@
+     "live.jsonl", "junit.xml", "ownership-regression.json", "execution.json",
+     "darwin-resource-handles.json", "native-worker-clock.json", "reference.json",
+     "float-callback-movement.json",
++    "indexed-process-split.json", "indexed-handoff-closed-world.json",
+     *(f"gc{backend}.json" for backend in range(5)),
+ }
+ 
+@@ -166,6 +184,11 @@
+     environment = dict(os.environ)
+     environment.pop("LC_ALL", None)
+     environment.update(PCC_NO_AUTO_PCC1="1", PCC_TEST_COMPILER_STRICT="1")
++    if profile == "indexed-split":
++        # The pair toggles only its own compiler children. No runtime is needed
++        # for PCO equality or actual provider closed-world lowering/emission.
++        environment.update(PCC_HOST_INDEXED_PROCESS_SPLIT="0",
++                           PCC_TEST_NO_NATIVE_PROVISIONING="1")
+     receipt = {
+         "schema": "pcc.macos-regression-ci.v1", "status": "RUNNING",
+         "profile": profile,
+@@ -176,6 +199,12 @@
+     }
+     if profile == "default":
+         receipt["clock_scope"] = "real host/native clock epoch; simulated suspend; emitted native worker-state reader"
++    elif profile == "indexed-split":
++        receipt["scope"] = (
++            "host pcc0 split/unsplit complete object equality and real worker lifetime; "
++            "actual handoff provider no-libpython ARM lowering/emission; "
++            "no native helper execution, runtime or GC qualification"
++        )
+     else:
+         receipt["collector_scope"] = (
+             "float protocol and class docstrings request GC0-4 without collector-selection telemetry; "
+--- /dev/null
++++ b/tests/python/test_indexed_handoff_closed_world.py
+@@ -0,0 +1,179 @@
++"""Compile the real handoff provider, verify its closure, and emit AArch64.
++
++This is a host-pcc0 compile-only gate. It builds no runtime, links no program,
++executes no emitted code, and makes no Stage1 or native-behavior claim.
++"""
++
++import ast
++from collections import Counter
++import hashlib
++import json
++from pathlib import Path
++import platform
++import re
++import sys
++
++import pytest
++
++
++ROOT = Path(__file__).resolve().parents[2]
++PROVIDER = "pcc.frontends.python.pipeline_indexed_handoff"
++SOURCE = ROOT / "pcc/frontends/python/pipeline_indexed_handoff.py"
++SECTION = re.compile(r"^; ---- module: ([A-Za-z_][\w.]*) ----$", re.M)
++DEFINITION = re.compile(r'^define[^\n]*@"?([A-Za-z_][\w.$]*)"?\(', re.M)
++CPY_CALL = re.compile(r'\b(?:call|invoke)\b[^\n]*@"?py_cpy_')
++NOT_IMPLEMENTED = re.compile(r'@"?py_exc_new"?\(\s*i64\s+11\s*,')
++
++
++def _sha256(data):
++    return hashlib.sha256(data).hexdigest()
++
++
++def _function(text, symbol):
++    # A header must name THIS function. Never consume a later definition when
++    # the requested function was reduced to a declaration or omitted entirely.
++    pattern = (r'^define[^\n]*@"?' + re.escape(symbol)
++               + r'"?\([^\n]*\)[^\n]*\{\n(?P<body>.*?)^\}')
++    matches = list(re.finditer(pattern, text, re.M | re.S))
++    assert len(matches) == 1, (symbol, "missing or duplicate definition")
++    match = matches[0]
++    body = match.group("body")
++    assert not re.search(r"^define\b", body, re.M), (symbol, "unterminated definition")
++    assert "strict.nolib" not in body, (symbol, "strict no-libpython stub")
++    assert "@py_cpy_" not in body and '@"py_cpy_' not in body, symbol
++    assert "NotImplementedError" not in body and not NOT_IMPLEMENTED.search(body), (
++        symbol, "NotImplementedError fallback")
++    assert re.search(r"\bcall\b", body), (symbol, "empty/return-only helper")
++    return match
++
++
++def _check_body_guard(provider_text, symbol):
++    """Negative controls mutate an actual emitted helper, not a fake export."""
++    original = _function(provider_text, symbol)
++    header = original.group(0).split("\n", 1)[0]
++    replacements = (
++        "",  # Must not accidentally match the following helper.
++        "declare ptr @" + symbol + "()\n",
++        header + "\nentry:\n  ret ptr null\n}",
++        header + "\nstrict.nolib.stub:\n  call void @py_raise(ptr null)\n  ret ptr null\n}",
++        header + "\nentry:\n  call ptr @py_cpy_import(ptr null)\n  ret ptr null\n}",
++        # The native fallback stores exception kind 11, not necessarily the
++        # human-readable exception name inside the function's IR body.
++        header + "\nentry:\n  call ptr @py_exc_new(i64 11, ptr null)\n  ret ptr null\n}",
++    )
++    for replacement in replacements:
++        mutated = (provider_text[:original.start()] + replacement
++                   + provider_text[original.end():])
++        with pytest.raises(AssertionError):
++            _function(mutated, symbol)
++    return len(replacements)
++
++
++def test_handoff_provider_closed_world_aarch64(tmp_path, monkeypatch):
++    assert sys.platform == "darwin" and platform.machine() == "arm64", (
++        "this independent gate requires the Darwin arm64 CI runner")
++    from pcc.backend.self_backend_aarch64_darwin import emit_aarch64_darwin_indexed_module
++    from pcc.frontends.python.pipeline import compile_python_multi
++    from pcc.frontends.python.pipeline_targets import host_target_triple
++    from pcc.frontends.python import pipeline_import_policy as policy
++    from pcc.tools.runtime_archive_provenance import codegen_checksum
++    from tests.owned_ir_validation import verify_ir_text
++
++    source = SOURCE.read_bytes()
++    tree = ast.parse(source, filename=str(SOURCE))
++    declared = [node.name for node in tree.body if isinstance(node, ast.FunctionDef)]
++    assert declared and len(declared) == len(set(declared))
++    assert not any(isinstance(node, ast.AsyncFunctionDef) for node in tree.body)
++    imports = {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import)
++               for alias in node.names}
++    assert imports == {"hashlib", "json", "os"}, "review the changed import closure"
++    assert not any(isinstance(node, ast.ImportFrom) for node in ast.walk(tree))
++    assert {"json", "os"} <= policy.REQUIRED_COMPILED_STDLIB_PROVIDERS
++    assert {"json", "os"} <= policy.NATIVE_BUILTIN_IMPORTS_WITH_COMPILED_PROVIDER
++    assert "hashlib" not in policy.NATIVE_BUILTIN_IMPORTS
++    sources = {PROVIDER: SOURCE, **{name: ROOT / "pcc/stdlib" / (name + ".py")
++                                  for name in sorted(imports)}}
++    source_hashes = {name: _sha256(path.read_bytes()) for name, path in sources.items()}
++    target = host_target_triple()
++    assert target.startswith(("arm64-apple-darwin", "aarch64-apple-darwin")), target
++    options = dict(emit_llvm_only=True, target_triple=target, libpython_mode="off",
++                   ir_scaffold_mode="on", backend="self", recursive_stdlib=False)
++    # One in-process frontend path, with owned default passes. These are env
++    # settings only: no fake exports, private reassembly, or compiler patching.
++    monkeypatch.setenv("PCC_PY_FRONTEND_JOBS", "1")
++    monkeypatch.setenv("PCC_PYTHON_IR_PASS_JOBS", "1")
++    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_EMIT", "0")
++    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "0")
++    monkeypatch.delenv("PCC_PYTHON_IR_PASSES", raising=False)
++    monkeypatch.delenv("PCC_PYTHON_IR_PASS_SKIP_MODULE_PREFIXES", raising=False)
++    receipt = {
++        "schema": "pcc.indexed-handoff-closed-world.v1", "status": "RUNNING",
++        "scope": "host pcc0 public closed-world IR; owned whole-output verification; "
++                 "real helper indexed AArch64 assembly emission only",
++        "native_execution": False, "runtime_built": False,
++        "provider": PROVIDER, "options": options,
++        "source_sha256": source_hashes, "test_sha256": _sha256(Path(__file__).read_bytes()),
++        "declared_functions": declared, "verified_functions": [],
++        "codegen_sha256": codegen_checksum(), "phase": "compile",
++    }
++    output = tmp_path / "indexed-handoff-closure.ll"
++    try:
++        assert re.fullmatch(r"[0-9a-f]{64}", receipt["codegen_sha256"]), "unknown codegen identity"
++        # ONLY the real helper is supplied. Public import policy must admit
++        # all owned providers itself; nothing is reconstructed by the test.
++        compile_python_multi([str(SOURCE)], str(output), module_names=[PROVIDER],
++                             entry_module=PROVIDER, **options)
++        text = output.read_text(encoding="utf-8")
++        receipt["ir_sha256"] = _sha256(output.read_bytes())
++        receipt["phase"] = "closure-and-bodies"
++        markers = list(SECTION.finditer(text))
++        assert markers and not text[:markers[0].start()].strip()
++        names = [match.group(1) for match in markers]
++        assert len(names) == len(set(names)), "duplicate provider sections"
++        assert set(names) == set(sources), ("unexpected/missing owned provider", names)
++        sections = {match.group(1): text[match.end():markers[index + 1].start()
++                    if index + 1 < len(markers) else len(text)]
++                    for index, match in enumerate(markers)}
++        receipt["closure_modules"] = names
++        # Reject native fallback stubs and executed CPython dependencies in
++        # the entire closure. Legitimate provider exception branches remain
++        # legal; NotImplementedError rejection is specific to helper bodies.
++        assert "strict.nolib.stub" not in text, "closure contains native fallback stub"
++        assert not CPY_CALL.search(text), "closure contains a CPython fallback call"
++        provider_text = sections[PROVIDER]
++        for name in declared:
++            symbol = "user_" + PROVIDER.replace(".", "_") + "_" + name
++            _function(provider_text, symbol)
++            receipt["verified_functions"].append(name)
++        receipt["body_guard_negative_controls"] = _check_body_guard(
++            provider_text, "user_" + PROVIDER.replace(".", "_") + "_" + declared[0])
++        receipt["phase"] = "owned-whole-output-verification"
++        whole = verify_ir_text(text)
++        assert Counter(function.name for function in whole.functions) == Counter(
++            DEFINITION.findall(text)), "owned parser omitted or duplicated a definition"
++        receipt["verified_closure_definition_count"] = len(whole.functions)
++        del whole
++        receipt["phase"] = "indexed-aarch64-emission"
++        provider_module = verify_ir_text(provider_text)
++        assert provider_module.triple == target
++        assert Counter(function.name for function in provider_module.functions) == Counter(
++            DEFINITION.findall(provider_text)), "owned parser omitted a helper definition"
++        assert all(function.indexed_kernel is not None for function in provider_module.functions)
++        # Direct real emitter call: BackendUnavailable or any other failure
++        # propagates. There is no text-emitter, external-tool, or skip fallback.
++        assembly = emit_aarch64_darwin_indexed_module(provider_module, optimize=False)
++        for name in declared:
++            label = "_user_" + PROVIDER.replace(".", "_") + "_" + name + ":"
++            assert re.search(r"^" + re.escape(label) + r"\s*$", assembly, re.M), label
++        (tmp_path / "indexed-handoff-closure.s").write_text(assembly, encoding="utf-8")
++        receipt["assembly_sha256"] = _sha256(assembly.encode("utf-8"))
++        receipt["provider_ir_sha256"] = _sha256(provider_text.encode("utf-8"))
++        assert source_hashes == {name: _sha256(path.read_bytes()) for name, path in sources.items()}
++        assert receipt["verified_functions"] == declared
++        receipt.update(status="PASS", phase="complete")
++    except Exception as error:
++        receipt.update(status="FAIL", error=type(error).__name__ + ": " + str(error))
++        raise
++    finally:
++        (tmp_path / "indexed-handoff-closed-world.json").write_text(
++            json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+--- /dev/null
++++ b/tests/python/test_indexed_process_split_real.py
+@@ -0,0 +1,234 @@
++"""Real pcc0 split/unsplit PCO parity; no native-runtime or timing claim.
++
++Run explicitly in the guarded Darwin ARM CI job. The sole call-boundary
++observer delegates unchanged to the production pool and retains ephemeral
++evidence. It does not replace exports, workers, admission, or compilation.
++"""
++
++import hashlib
++import json
++import os
++from pathlib import Path
++import platform
++import sys
++
++import pytest
++
++
++def _sha256(path):
++    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
++
++
++def _compiler_sources(root):
++    digest = hashlib.sha256()
++    paths = sorted(root.rglob("*.py"))
++    for path in paths:
++        digest.update(path.relative_to(root).as_posix().encode() + b"\0")
++        digest.update(bytes.fromhex(_sha256(path)))
++    return dict(py_files=len(paths), path_and_file_sha256=digest.hexdigest())
++
++
++@pytest.mark.integration
++@pytest.mark.pcc_gate(probe=lambda: sys.platform == "darwin" and platform.machine() == "arm64")
++def test_real_split_and_unsplit_match_complete_objects(tmp_path, monkeypatch):
++    from pcc.frontends.python import pipeline
++    from pcc.frontends.python import pipeline_frontend_workers as workers
++    from pcc.frontends.python import worker_process_pool as pool
++    from pcc.frontends.python import worker_resource_plan as policy
++    from pcc.frontends.python.pipeline_targets import host_target_triple
++
++    assert sys.implementation.name == "cpython"
++    assert sys.platform == "darwin" and platform.machine() == "arm64"
++    assert not os.environ.get("PCC_TEST_COMPILER"), "host pcc0 is required"
++    # Keep the enclosing watchdog and its synchronized admission budget intact.
++    budget = int(os.environ.get("PCC_WORKER_TREE_BUDGET_BYTES", "0"))
++    state_path = os.environ.get(policy.TREE_STATE_ENV, "")
++    assert budget > 0 and state_path and Path(state_path).is_file()
++    target = host_target_triple()
++    assert target == "arm64-apple-darwin"
++    prefix = pipeline._python_frontend_worker_command_prefix()
++    assert prefix == [sys.executable, "-m", "pcc"]
++
++    root = tmp_path.resolve() / "indexed-process-split"
++    root.mkdir()  # Never reuse or remove another test's output.
++    source_dir = root / "source"
++    source_dir.mkdir()
++    names = ["indexed_split_leaf", "indexed_split_entry"]
++    texts = [
++        "def bump(value: int) -> int:\n    return value + 1\n",
++        "from indexed_split_leaf import bump\n\n"
++        "def answer() -> int:\n    return bump(41)\n",
++    ]
++    sources = [source_dir / (name + ".py") for name in names]
++    for path, source in zip(sources, texts):
++        path.write_text(source, encoding="utf-8")
++    source_hashes = [_sha256(path) for path in sources]
++    options = dict(jobs=1, entry_module=names[1], sibling_inits=(names[0],),
++                   libpython_mode="off", ir_scaffold_mode="on", verbose=False)
++    environment = {
++        "PCC_NO_AUTO_PCC1": "1", "PCC_PY_FRONTEND_JOBS": "1",
++        "PCC_PYTHON_IR_PASSES": "off", "PCC_BACKEND": "self",
++        "PCC_DIRECT_INDEXED_KERNEL_CAPTURE": "1",
++        "PCC_DIRECT_INDEXED_KERNEL_EMIT": "1",
++        "PCC_DIRECT_INDEXED_KERNEL_REQUIRE_ZERO_FALLBACK": "1",
++        "PCC_DIRECT_INDEXED_KERNEL_RELEASE_FRONTEND": "1",
++        "PCC_DIRECT_INDEXED_NATIVE_OBJECT": "1", "PYTHONHASHSEED": "0",
++    }
++    for key, value in environment.items():
++        monkeypatch.setenv(key, value)
++    for key in (
++        "PCC_DIRECT_INDEXED_KERNEL_VALIDATE", "PCC_TEXT_INDEXED_KERNEL_EMIT",
++        "PCC_DIRECT_INDEXED_SIDECAR", "PCC_PY_FRONTEND_IN_PROCESS_CODEGEN",
++        "PCC_DEFER_FRONTEND_CODEGEN_PLAN", "PCC_STAGE1_CHECKPOINT_DIR",
++        "PCC_INDEXED_HANDOFF_REQUEST", "PCC_INDEXED_HANDOFF_SEAL_SHA256",
++        "PCC_TARGET_TRIPLE", "PCC_TARGET_ARCH",
++    ):
++        monkeypatch.delenv(key, raising=False)
++
++    compiler_root = Path(pipeline.__file__).resolve().parents[2]
++    compiler_sources = _compiler_sources(compiler_root)
++    original_pool = pool.run_resource_worker_processes
++    evidence, contexts, seen_pids = {}, {}, set()
++    mode = ""
++    object_bytes, object_receipts = {}, {}
++    receipt = dict(
++        schema="pcc.host-indexed-process-split.real.v1", status="RUNNING",
++        scope="host pcc0/self/off ARM PCO parity and process retirement; passes off; no runtime execution",
++        target=target, compiler_prefix=prefix, host_python_sha256=_sha256(sys.executable),
++        compiler_sources=compiler_sources, options=options, environment=environment,
++        tree_budget_bytes=budget,
++        modules=[dict(index=index, module=name, source_sha256=source_hashes[index])
++                 for index, name in enumerate(names)],
++        contexts=contexts, objects=object_receipts, pools=evidence,
++    )
++
++    def save_receipt():
++        (root / "indexed-process-split.json").write_text(
++            json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8",
++        )
++
++    save_receipt()
++
++    def observe_pool(commands, tasks, width, tree_budget, **kwargs):
++        assert width == 1 and tree_budget == budget
++        manifests = {}
++        for index, command in enumerate(commands):
++            argv, _env = pool._command_spec(command)
++            assert argv[:3] == prefix
++            if argv[3] == "--pcc-python-multi-codegen-worker":
++                manifest = workers.read_worker_manifest(argv[4])
++                manifests[index] = (_sha256(argv[4]), manifest)
++                if manifest["job_kind"] == "codegen":
++                    for ordinal in manifest["assigned_indices"]:
++                        assert manifest["src_paths"] == [str(path) for path in sources]
++                        assert manifest["module_names"] == names
++                        contexts[mode][ordinal] = {
++                            "source_sha256": _sha256(sources[ordinal]),
++                            "ast_sha256": _sha256(Path(manifest["ast_dir"]) /
++                                                   ("module_" + str(ordinal) + ".json")),
++                            "exports_sha256": _sha256(manifest["exports_path"]),
++                        }
++        result = original_pool(commands, tasks, width, tree_budget, **kwargs)
++        trace = [line.split("\t") for line in
++                 Path(kwargs["trace_path"]).read_text(encoding="utf-8").splitlines()]
++        reports = [Path(task["report_path"]).read_text(encoding="utf-8").splitlines()
++                   for task in tasks]
++        retained = []
++        evidence[mode].append(dict(trace=trace, rss_reports=reports, workers=retained))
++        save_receipt()  # Preserve real ephemeral outputs even if a later assertion fails.
++        assert not any(row[0] in ("failed", "cancel", "unverified-retire") for row in trace)
++        for index, task in enumerate(tasks):
++            starts = [row for row in trace if row[0] in ("start", "calibrate")
++                      and int(row[1]) == index]
++            retires = [row for row in trace if row[0] == "retire" and int(row[1]) == index]
++            assert len(starts) == len(retires) == 1
++            pid = int(starts[0][2])
++            assert pid > 0 and pid != os.getpid() and pid not in seen_pids
++            seen_pids.add(pid)
++            assert int(retires[0][2]) == pid and trace.index(starts[0]) < trace.index(retires[0])
++            assert pid not in pool._HOST_WORKERS
++            with pytest.raises(ChildProcessError):
++                os.waitpid(pid, os.WNOHANG)  # The real pool has already reaped it.
++            report = reports[index]
++            assert len(report) == 6 and report[0] == policy.RESOURCE_REPORT_SCHEMA
++            assert int(report[1]) == pid and report[2] == "complete"
++            assert int(report[4]) >= int(report[3]) > 0 and len(report[5]) == 64
++            row = dict(phase=task["diagnostic_phase"], modules=task["diagnostic_modules"],
++                       indices=task["diagnostic_indices"], pid=pid, exit_code=0, reaped=True,
++                       resource_token=report[5])
++            if task.get("handoff_request"):
++                request_path = Path(task["handoff_request"])
++                request = json.loads(request_path.read_text(encoding="utf-8"))
++                receipt_path = Path(request["receipt_path"])
++                receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
++                assert request["target"] == target and request["passes"] == []
++                assert request["module"] == names[request["index"]]
++                assert request["manifest_sha256"] == manifests[task["depends_on"]][0]
++                assert task["input_ready"] is True and len(task["inputs"]) == 47
++                assert request["source_identity"] == task["handoff_source_identity"]
++                assert receipt["schema"] == "pcc.indexed-handoff.receipt.v1"
++                assert receipt["request_sha256"] == _sha256(request_path)
++                assert receipt["seal_sha256"] == task["handoff_seal_sha256"]
++                assert receipt["pidx_sha256"] == task["source_identity"]
++                assert receipt["pidx_size"] > 0 and receipt["backend_token"] == report[5]
++                output = Path(request["output_path"])
++                assert receipt["output_sha256"] == _sha256(output)
++                assert receipt["output_size"] == output.stat().st_size > 0
++                assert not Path(request["sidecar_path"]).exists()
++                assert not Path(request["seal_path"]).exists()
++                assert request_path.is_file() and receipt_path.is_file() and output.is_file()
++                row.update(request=request, receipt=receipt,
++                           pidx_retired=True, seal_retired=True, receipt_retained=True)
++            retained.append(row)
++        save_receipt()
++        return result  # Preserve the exact production return object.
++
++    monkeypatch.setattr(pool, "run_resource_worker_processes", observe_pool)
++    for mode in ("unsplit", "split"):
++        evidence[mode], contexts[mode] = [], {}
++        artifacts = root / mode
++        artifacts.mkdir()
++        monkeypatch.setenv("PCC_HOST_INDEXED_PROCESS_SPLIT", "1" if mode == "split" else "0")
++        result = pipeline._compile_python_multi_codegen_parallel(
++            [str(path) for path in sources], names, artifact_dir=str(artifacts), **options,
++        )
++        assert result is not None and len(result) == 8
++        assert [name for name, _ir in result[0]] == names
++        assert result[1] is False and result[4] == [] and result[5] is None
++        assert [(name, kind) for name, kind, _path in result[7]] == [(name, "PCO") for name in names]
++        assert result[6] == [(name, path) for name, _kind, path in result[7]]
++        object_bytes[mode], object_receipts[mode] = [], []
++        for index, (name, path) in enumerate(result[6]):
++            path = Path(path)
++            assert path.parent == artifacts and path.name == "module_" + str(index) + ".direct.pco"
++            data = path.read_bytes()
++            assert data.startswith(b"PCCNOBJ\x01")
++            object_bytes[mode].append(data)
++            object_receipts[mode].append(dict(index=index, module=name, size=len(data),
++                                               sha256=hashlib.sha256(data).hexdigest()))
++        assert [_sha256(path) for path in sources] == source_hashes
++        assert os.environ[policy.TREE_STATE_ENV] == state_path
++        assert int(os.environ["PCC_WORKER_TREE_BUDGET_BYTES"]) == budget
++        assert _compiler_sources(compiler_root) == compiler_sources
++        save_receipt()
++
++    assert contexts["unsplit"] == contexts["split"] and set(contexts["split"]) == {0, 1}
++    assert object_bytes["unsplit"] == object_bytes["split"]  # Complete ordered bytes, not only hashes.
++    for mode in evidence:
++        assert any(worker["phase"] == "export" for batch in evidence[mode] for worker in batch["workers"])
++    split_batches = [batch for batch in evidence["split"]
++                     if any(worker["phase"] == "indexed-backend" for worker in batch["workers"])]
++    assert len(split_batches) == 1
++    batch = split_batches[0]
++    assert [worker["phase"] for worker in batch["workers"]] == ["indexed-frontend", "indexed-backend"] * 2
++    assert sorted(worker["indices"][0] for worker in batch["workers"][::2]) == [0, 1]
++    # jobs=1 must finish and reap each FE -> BE before the next module starts.
++    lifecycle = [(row[0], int(row[1])) for row in batch["trace"]
++                 if row[0] in ("start", "calibrate", "retire")]
++    assert [("start" if event == "calibrate" else event, index) for event, index in lifecycle] == [
++        (event, index) for index in range(4) for event in ("start", "retire")
++    ]
++    assert not any(worker["phase"].startswith("indexed-")
++                   for batch in evidence["unsplit"] for worker in batch["workers"])
++    receipt["status"] = "PASS"
++    save_receipt()
+--- a/tests/test_ci_macos_regression_gate.py
++++ b/tests/test_ci_macos_regression_gate.py
+@@ -284,6 +284,9 @@
+         "float-doc": (
+             "runtime-build", "float-protocol", "class-docstrings", "float-callback-movement",
+         ),
++        "indexed-split": (
++            "indexed-worker-lifetime", "indexed-split", "indexed-handoff-closure",
++        ),
+     }
+     assert {name: dict(gate.GATES)[name] for name in FLOAT_DOC_NODES} == FLOAT_DOC_NODES
+ 
+@@ -384,7 +387,7 @@
+     assert not (tmp_path / "absent").exists()
+ 
+ 
+-@pytest.mark.parametrize("profile", ("default", "float-doc"))
++@pytest.mark.parametrize("profile", ("default", "float-doc", "indexed-split"))
+ def test_cli_selects_profile_without_changing_default(tmp_path, monkeypatch, profile):
+     seen = []
+     monkeypatch.setattr(gate, "run", lambda out, **kwargs: seen.append((out, kwargs)))
+@@ -433,3 +436,130 @@
+     for name in FLOAT_DOC_NODES:
+         path = FLOAT_DOC_NODES[name][0].split("::", 1)[0]
+         assert workflow.count('      - "' + path + '"') == 2
++
++
++INDEXED_SPLIT_NODES = {
++    "indexed-worker-lifetime": (
++        "tests/python/test_worker_resource_plan.py::"
++        "test_failure_retires_running_peers_and_does_not_launch_tail",
++        "tests/python/test_worker_resource_plan.py::"
++        "test_progressive_retry_drains_peers_then_restores_concurrency",
++    ),
++    "indexed-split": (
++        "tests/python/test_indexed_process_split_real.py::"
++        "test_real_split_and_unsplit_match_complete_objects",
++    ),
++    "indexed-handoff-closure": (
++        "tests/python/test_indexed_handoff_closed_world.py::"
++        "test_handoff_provider_closed_world_aarch64",
++    ),
++}
++
++
++def test_indexed_split_profile_runs_exact_real_nodes_without_runtime_build(tmp_path, monkeypatch):
++    _mock_macos(monkeypatch)
++    calls = []
++    monkeypatch.setattr(gate, "_command", lambda *args: pytest.fail("runtime build was reached"))
++    monkeypatch.setenv("PCC_WORKER_TREE_BUDGET_BYTES", "2147483648")
++    monkeypatch.setenv("PCC_WORKER_TREE_STATE_PATH", str(tmp_path / "tree-state.tsv"))
++
++    def execute(name, nodes, out, environment):
++        calls.append(name)
++        assert nodes == INDEXED_SPLIT_NODES[name]
++        assert out == tmp_path
++        assert environment["PCC_HOST_INDEXED_PROCESS_SPLIT"] == "0"
++        assert environment["PCC_TEST_NO_NATIVE_PROVISIONING"] == "1"
++        assert environment["PCC_NO_AUTO_PCC1"] == "1"
++        assert environment["PCC_TEST_COMPILER_STRICT"] == "1"
++        assert environment["PCC_WORKER_TREE_BUDGET_BYTES"] == "2147483648"
++        assert environment["PCC_WORKER_TREE_STATE_PATH"] == str(tmp_path / "tree-state.tsv")
++        return list(nodes)
++
++    monkeypatch.setattr(gate, "_pytest_gate", execute)
++    gate.run(tmp_path, profile="indexed-split")
++    assert calls == list(gate.PROFILES["indexed-split"]) == list(INDEXED_SPLIT_NODES)
++    assert {name: dict(gate.GATES)[name] for name in calls} == INDEXED_SPLIT_NODES
++    receipt = json.loads((tmp_path / "work/qualification.json").read_text())
++    assert receipt["status"] == "PASS" and receipt["profile"] == "indexed-split"
++    assert "no native helper execution, runtime or GC qualification" in receipt["scope"]
++    assert "collector_scope" not in receipt and "clock_scope" not in receipt
++    for name, nodes in INDEXED_SPLIT_NODES.items():
++        assert receipt["gates"][name] == {
++            "status": "PASS", "expected_nodes": list(nodes), "executed_nodes": list(nodes),
++        }
++
++
++@pytest.mark.parametrize("failed", tuple(INDEXED_SPLIT_NODES))
++def test_indexed_split_failure_stops_later_gates(tmp_path, monkeypatch, failed):
++    _mock_macos(monkeypatch)
++    calls = []
++    monkeypatch.setattr(gate, "_command", lambda *args: pytest.fail("runtime build was reached"))
++
++    def execute(name, nodes, out, environment):
++        calls.append(name)
++        if name == failed:
++            raise AssertionError("selected indexed gate failed")
++        return list(nodes)
++
++    monkeypatch.setattr(gate, "_pytest_gate", execute)
++    with pytest.raises(AssertionError, match="selected indexed gate failed"):
++        gate.run(tmp_path, profile="indexed-split")
++    order = list(INDEXED_SPLIT_NODES)
++    index = order.index(failed)
++    assert calls == order[:index + 1]
++    receipt = json.loads((tmp_path / "work/qualification.json").read_text())
++    assert receipt["status"] == "FAIL"
++    for position, name in enumerate(order):
++        expected = "PASS" if position < index else "FAIL" if position == index else "NOT_RUN"
++        assert receipt["gates"][name]["status"] == expected
++        if position >= index:
++            assert "executed_nodes" not in receipt["gates"][name]
++
++
++def test_indexed_receipts_are_retained_without_assembly_or_objects(tmp_path):
++    work = tmp_path / "work/indexed-split/tests"
++    work.mkdir(parents=True)
++    names = ("indexed-process-split.json", "indexed-handoff-closed-world.json")
++    for name in names:
++        (work / name).write_text('{"status": "PASS"}\n')
++    (work / "module.pco").write_bytes(b"owned object stays on runner")
++    (work / "provider.ll").write_text("real IR stays on runner")
++    gate.collect_evidence(tmp_path)
++    index = json.loads((tmp_path / "evidence/index.json").read_text())
++    assert index["status"] == "COMPLETE"
++    assert {row["source"] for row in index["files"]} == {
++        "indexed-split/tests/" + name for name in names
++    }
++    for name in names:
++        actual = tmp_path / "evidence/indexed-split/tests" / (name + ".gz")
++        assert gzip.decompress(actual.read_bytes()) == (work / name).read_bytes()
++
++
++def test_indexed_split_workflow_gates_only_macos_stage1_opt_in():
++    workflow = (ROOT / ".github/workflows/pcc1-package-parity.yml").read_text()
++    job = _workflow_job(workflow, "macos-pcc0-indexed-split")
++    stage1 = _workflow_job(workflow, "pcc1-package-parity")
++    other = _workflow_job(workflow, "other-platform-native-wheel")
++    assert "runs-on: macos-15" in job
++    assert "timeout-minutes: 25" in job and "--timeout 1200" in job
++    assert "--auto-tree-rss-ceiling-bytes 4294967296" in job
++    assert "--min-tree-rss-bytes 2147483648" in job
++    assert "--darwin-preflight-reserve-bytes 536870912" in job
++    assert job.count("--out-dir build/macos-indexed-split --profile indexed-split") == 2
++    assert "path: build/macos-indexed-split/evidence/" in job
++    assert "name: macos-pcc0-indexed-split-receipts" in job
++    assert job.count("if: always()") == 2
++    assert "needs:" not in job and "actions/download-artifact" not in job
++    assert "env -u LC_ALL" not in job
++    assert "needs: macos-pcc0-indexed-split" in stage1
++    assert stage1.count('PCC_HOST_INDEXED_PROCESS_SPLIT: "1"') == 1
++    assert ('      - name: Build current pcc1\n        env:\n'
++            '          # Opt in only this Stage1 build, after the independent gate passed.\n'
++            '          PCC_HOST_INDEXED_PROCESS_SPLIT: "1"\n        run: |') in stage1
++    assert 'PCC_BOOTSTRAP_STAGE_TIMEOUT: "2400"' in stage1
++    assert "timeout-minutes: 45" in stage1
++    assert "PCC_HOST_INDEXED_PROCESS_SPLIT" not in other
++    assert "needs:" not in other
++    for name in ("indexed-split", "indexed-handoff-closure"):
++        path = INDEXED_SPLIT_NODES[name][0].split("::", 1)[0]
++        assert workflow.count('      - "' + path + '"') == 2

@@ -8,8 +8,8 @@ import sys
 
 import pytest
 
-from pcc.native_ir.driver import optimize_ir
-from pcc.py_frontend.compiled_owned_passes import run_owned_passes
+from pcc.ir.optimization.driver import optimize_ir
+from pcc.frontends.python.compiled_owned_passes import run_owned_passes
 
 
 _BRANCH = """declare void @observe(ptr)
@@ -58,14 +58,14 @@ def test_standalone_memory_cli_without_llvm(tmp_path):
 import sys
 class RejectLLVM(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname == "llvmlite" or fullname.startswith("llvmlite.") or fullname == "pcc.llvm_capi.binding":
+        if fullname == "llvmlite" or fullname.startswith("llvmlite.") or fullname == "pcc.ir.binding":
             raise AssertionError("external LLVM import: " + fullname)
 sys.meta_path.insert(0, RejectLLVM())
 ''')
     root = Path(__file__).resolve().parents[2]
     environment = dict(os.environ, PYTHONPATH=os.pathsep.join((str(tmp_path), str(root))))
     ran = subprocess.run(
-        [sys.executable, "-m", "pcc.native_ir.driver", "mem2reg,sroa", str(source), str(output)],
+        [sys.executable, "-m", "pcc.ir.optimization.driver", "mem2reg,sroa", str(source), str(output)],
         cwd=tmp_path, env=environment, text=True, capture_output=True, timeout=20,
     )
     assert ran.returncode == 0, ran.stdout + ran.stderr
@@ -78,8 +78,8 @@ def test_driver_rejects_unknown_pass():
         optimize_ir(_BRANCH, "unknown")
 
 
-@pytest.mark.skipif(sys.platform != "darwin" or platform.machine() != "arm64",
-                    reason="executes owned Mach-O/AArch64 output")
+# executes owned Mach-O/AArch64 output
+@pytest.mark.pcc_gate(probe=lambda: not (sys.platform != "darwin" or platform.machine() != "arm64"))
 def test_memory_driver_output_executes_with_self_emission(tmp_path):
     from pcc.backend.self_backend_aarch64_darwin import emit_aarch64_darwin_asm
 

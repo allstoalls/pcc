@@ -11,7 +11,7 @@ import pytest
 
 from pcc1_gate import find_current_pcc1, skip_or_fail_no_current_pcc1
 
-from pcc.array_core import (
+from pcc.package.array_model import (
     array_arange,
     array_arg_reduce,
     array_argwhere,

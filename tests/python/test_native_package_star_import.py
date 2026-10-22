@@ -2,7 +2,7 @@
 
 ``from pkg import *`` fell back to libpython under
 ``--backend self --python-libpython=off``: the textual import-discovery
-(``_append_source_import_from_spec`` in pcc/py_frontend/pipeline.py) dropped any
+(``_append_source_import_from_spec`` in pcc/frontends/python/pipeline.py) dropped any
 ``*``-only from-import statement entirely (it filtered ``*`` out of the imported
 names and then skipped the spec because no names remained), so the package was
 never added to the native compile set and the import lowered through

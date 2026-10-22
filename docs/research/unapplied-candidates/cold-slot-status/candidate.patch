@@ -1,0 +1,839 @@
+--- a/pcc/frontends/python/codegen/_l1_codegen_static_methods.py
++++ b/pcc/frontends/python/codegen/_l1_codegen_static_methods.py
+@@ -712,6 +712,7 @@
+     _append_method(out, '_valueclass_indexed_element_type', (('self', 'pos', False), ('ty', 'pos', False)))
+     _append_method(out, '_emit_rooted_valueclass_indexed_loop', (('self', 'pos', False), ('iterable', 'pos', False), ('target', 'pos', False), ('statement', 'pos', True), ('comprehension', 'pos', True)))
+     _append_method(out, '_emit_direct_method_receiver', (('self', 'pos', False), ('expression', 'pos', False), ('info', 'pos', False), ('method_name', 'pos', False)))
++    _append_method(out, '_slot_call_status_report_helper', (('self', 'pos', False),))
+ 
+ 
+ def _build_static_methods():
+--- a/pcc/frontends/python/codegen/call_object_lowering.py
++++ b/pcc/frontends/python/codegen/call_object_lowering.py
+@@ -55,6 +55,7 @@
+ 
+ _I1 = ir.IntType(1)
+ _I8 = ir.IntType(8)
++_I32 = ir.IntType(32)
+ _I64 = ir.IntType(64)
+ _CSTR = _I8.as_pointer()
+ 
+@@ -350,23 +351,102 @@
+         )
+         return cleanup
+ 
++    def _slot_call_status_report_helper(self) -> ir.Function:
++        # Keep this private generated function in the existing module-owned
++        # declaration map. A new generation replaces that map together with
++        # its IR module; no native host-layout field or runtime ABI is added.
++        key = "__pcc_slot_call_status_report"
++        existing = self.runtime.get(key)
++        if existing is not None:
++            if existing.module is not self.module:
++                raise L1CodegenError("slot-status reporter belongs to another module")
++            return existing
++        name = self._fresh("_pcc_slot_call_status_report")
++        while name in self.module.globals:
++            name = self._fresh("_pcc_slot_call_status_report")
++        helper: ir.Function = ir.Function(
++            self.module,
++            ir.FunctionType(ir.VoidType(), [_CSTR, _CSTR, _CSTR, _CSTR, _I32, _I1]),
++            name=name,
++        )
++        helper.linkage = "internal"
++        # Both ordinary owned inlining modes honor this attribute. Without
++        # it, later optimization could recreate the per-site cold expansion.
++        helper.attributes.add("noinline")
++        message: ir.Value = helper.args[0]
++        function_name: ir.Value = helper.args[1]
++        filename: ir.Value = helper.args[2]
++        source_line: ir.Value = helper.args[3]
++        line: ir.Value = helper.args[4]
++        has_frame: ir.Value = helper.args[5]
++        entry = helper.append_basic_block("entry")
++        report = helper.append_basic_block("report")
++        frame = helper.append_basic_block("frame")
++        done = helper.append_basic_block("done")
++        saved_builder: ir.IRBuilder = self.builder
++        self.builder = ir.IRBuilder(entry)
++        try:
++            pending = self.builder.call(self.runtime["py_err_occurred"], [])
++            self.builder.cbranch(
++                self.builder.icmp_signed("!=", pending, ir.Constant(_I64, 0)),
++                done, report,
++            )
++            self.builder.position_at_end(report)
++            exception = self.builder.call(
++                self.runtime["py_exc_new"], [ir.Constant(_I64, 7), message],
++            )
++            # Preserve the original borrowed py_raise protocol and call order.
++            # py_runtime_error_if_unset uses py_raise_owned and adds its own
++            # runtime traceback frame, so it is not an equivalent substitute.
++            self.builder.call(self.runtime["py_raise"], [exception])
++            current = self.builder.call(self.runtime["py_current_exception"], [])
++            self.builder.cbranch(has_frame, frame, done)
++            self.builder.position_at_end(frame)
++            self.builder.call(
++                self.runtime["py_exc_append_frame_source"],
++                [current, function_name, filename, source_line, line],
++            )
++            self.builder.branch(done)
++            self.builder.position_at_end(done)
++            self.builder.ret_void()
++        finally:
++            self.builder = saved_builder
++        # Only publish a complete helper. Its parameters are static C strings
++        # and fixed scalars. Caller roots stay registered across this call;
++        # no managed owner or lease is transferred to the helper.
++        self.runtime[key] = helper
++        return helper
++
+     def _slot_call_check_status(self, status, operation: str, span=None) -> None:
+         failed = self.builder.icmp_signed("<", status, ir.Constant(_I64, 0))
+         error = self.current_function.append_basic_block(self._fresh("call.slot.error"))
+         ready = self.current_function.append_basic_block(self._fresh("call.slot.ready"))
+         self.builder.cbranch(failed, error, ready)
+         self.builder.position_at_end(error)
+-        pending = self.builder.call(self.runtime["py_err_occurred"], [])
+-        has_error = self.builder.icmp_signed("!=", pending, ir.Constant(_I64, 0))
+-        report = self.current_function.append_basic_block(self._fresh("call.slot.report"))
+         target = self._current_try_err_block()
+         if target is None:
+             target = self._ensure_fn_err_exit()
+-        self.builder.cbranch(has_error, target, report)
+-        self.builder.position_at_end(report)
+-        self._emit_builtin_exception_and_branch(
+-            "RuntimeError", "slot-call " + operation + " failed", span,
++        helper: ir.Function = self._slot_call_status_report_helper()
++        message = self._pooled_cstr_ptr("slot-call " + operation + " failed", ".exc.msg")
++        function_name = ir.Constant(_CSTR, None)
++        filename = ir.Constant(_CSTR, None)
++        source_line = ir.Constant(_CSTR, None)
++        line = ir.Constant(_I32, 0)
++        if span is not None:
++            name = "<module>" if self.current_func_def is None else self.current_func_def.name
++            function_name = self._pooled_cstr_ptr(name, ".tb.func")
++            filename = self._pooled_cstr_ptr(span.file or "<unknown>", ".tb.file")
++            source_line = self._pooled_cstr_ptr(self._traceback_source_text(span), ".tb.source")
++            line = ir.Constant(_I32, int(span.line))
++        # Only the already-cold status failure edge calls the reporter. It
++        # returns with the selected TLS exception intact; each site keeps its
++        # exact cleanup successor and its existing registered root/lease state.
++        self.builder.call(
++            helper,
++            [message, function_name, filename, source_line, line,
++             ir.Constant(_I1, 1 if span is not None else 0)],
+         )
++        self.builder.branch(target)
+         self.builder.position_at_end(ready)
+ 
+     def _slot_call_copy_source(self, destination, source, borrowed=False, span=None) -> None:
+--- a/pcc/frontends/python/codegen/host_contract.py
++++ b/pcc/frontends/python/codegen/host_contract.py
+@@ -738,6 +738,7 @@
+     "_valueclass_indexed_element_type",
+     "_emit_rooted_valueclass_indexed_loop",
+     "_emit_direct_method_receiver",
++    "_slot_call_status_report_helper",
+ )
+ 
+ 
+--- /dev/null
++++ b/tests/python/test_slot_call_status_reporting.py
+@@ -0,0 +1,447 @@
++"""Shared cold status reporting keeps the original runtime/cleanup protocol.
++
++These host checks inspect and interpret actual emitted IR. The tiny interpreter
++models call ordering and identity only; it does not qualify a native GC backend.
++"""
++from __future__ import annotations
++
++import re
++
++import pytest
++
++from pcc.frontends.python.codegen.errors import L1CodegenError
++from pcc.frontends.python.codegen.layer1 import L1CodeGen
++from pcc.frontends.python.py_ast import FuncDef, Module, SourceSpan
++from pcc.ir.compat import ir
++from tests.owned_ir_validation import verify_ir_text
++
++
++_I64 = ir.IntType(64)
++_KEY = "__pcc_slot_call_status_report"
++
++
++def test_reporter_method_has_matching_native_host_exports():
++    from inspect import signature
++    from pcc.frontends.python.codegen.host_contract import L1_CODEGEN_HOST_METHODS
++    from pcc.frontends.python.codegen._l1_codegen_static_methods import L1_CODEGEN_STATIC_METHODS
++    from pcc.frontends.python.codegen.layer1_support import _default_native_module_exports
++
++    name = "_slot_call_status_report_helper"
++    assert tuple(entry["name"] for entry in L1_CODEGEN_STATIC_METHODS) == L1_CODEGEN_HOST_METHODS
++    static = {entry["name"]: entry for entry in L1_CODEGEN_STATIC_METHODS}
++    exports = _default_native_module_exports("pcc.frontends.python.codegen.layer1")
++    native = {entry["name"]: entry for entry in exports["pcc.frontends.python.codegen.layer1"]["L1CodeGen"]["methods"]}
++    assert static[name] == native[name]
++    assert tuple(signature(getattr(L1CodeGen, name)).parameters) == ("self",)
++    assert tuple(item["name"] for item in static[name]["call_sig"]) == ("self",)
++    assert all(item["kind"] == "pos" and not item["has_default"] for item in static[name]["call_sig"])
++
++
++def test_generated_static_method_table_is_current(monkeypatch):
++    import runpy
++    import sys
++    from pathlib import Path
++
++    script = Path(__file__).resolve().parents[2] / "scripts/regen_l1_codegen_static_methods.py"
++    monkeypatch.setattr(sys, "argv", [str(script), "--check"])
++    namespace = runpy.run_path(str(script))
++    assert namespace["main"]() == 0
++
++
++class _InlineReference(L1CodeGen):
++    """The former per-site control flow, using unchanged real raise lowering."""
++
++    def _slot_call_check_status(self, status, operation, span=None):
++        failed = self.builder.icmp_signed("<", status, ir.Constant(_I64, 0))
++        error = self.current_function.append_basic_block(self._fresh("call.slot.error"))
++        ready = self.current_function.append_basic_block(self._fresh("call.slot.ready"))
++        self.builder.cbranch(failed, error, ready)
++        self.builder.position_at_end(error)
++        pending = self.builder.call(self.runtime["py_err_occurred"], [])
++        has_error = self.builder.icmp_signed("!=", pending, ir.Constant(_I64, 0))
++        report = self.current_function.append_basic_block(self._fresh("call.slot.report"))
++        target = self._current_try_err_block()
++        if target is None:
++            target = self._ensure_fn_err_exit()
++        self.builder.cbranch(has_error, target, report)
++        self.builder.position_at_end(report)
++        self._emit_builtin_exception_and_branch(
++            "RuntimeError", "slot-call " + operation + " failed", span,
++        )
++        self.builder.position_at_end(ready)
++
++
++@pytest.fixture(autouse=True)
++def _explicit_text_route(monkeypatch):
++    # The instruction interpreter needs text. Direct/no-text is tested below
++    # by an explicitly separate route, rather than inheriting runner flags.
++    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "0")
++    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_EMIT", "0")
++    monkeypatch.setenv("PCC_SELF_TARGET_PASSES", "off")
++
++
++def _sites(cls=L1CodeGen, *, spans=(None,), function_name="caller", target=True, symbol="probe"):
++    codegen = cls(Module(name="slot_status", body=()))
++    codegen.module.triple = "aarch64-apple-darwin"
++    function = ir.Function(codegen.module, ir.FunctionType(_I64, [_I64] * len(spans)), symbol)
++    entry = function.append_basic_block("entry")
++    codegen.current_function = function
++    codegen.current_func_def = (
++        None if function_name is None else FuncDef(
++            span=SourceSpan("source.py", 1, 0, 1, 2), name=function_name,
++            args=(), return_ty=None, body=(),
++        )
++    )
++    codegen._current_entry_block = entry
++    codegen.builder = ir.IRBuilder(entry)
++    for index, span in enumerate(spans):
++        if span is not None:
++            codegen._source_file_lines_cache[span.file] = ["  call(value='雪')  "]
++        error = function.append_basic_block("cleanup." + str(index)) if target else None
++        codegen._try_err_block = error
++        codegen._slot_call_check_status(function.args[index], "operation " + str(index), span)
++        if error is not None:
++            saved = codegen.builder.block
++            codegen.builder.position_at_end(error)
++            codegen.builder.ret(ir.Constant(_I64, -index - 1))
++            codegen.builder.position_at_end(saved)
++    codegen.builder.ret(ir.Constant(_I64, 17))
++    return codegen, function
++
++
++class _RuntimeTrace:
++    def __init__(self, pending, new_exception, current_after_raise):
++        self.current = pending
++        self.new_exception = new_exception
++        self.current_after_raise = current_after_raise
++        self.events = []
++
++    def call(self, name, arguments):
++        self.events.append((name, tuple(arguments)))
++        if name == "py_err_occurred":
++            return int(self.current is not None)
++        if name == "py_exc_new":
++            return self.new_exception
++        if name == "py_raise":
++            self.current = self.current_after_raise
++            return None
++        if name == "py_current_exception":
++            return self.current
++        if name == "py_exc_append_frame_source":
++            return None
++        raise AssertionError("unexpected runtime call: " + name)
++
++
++def _execute(function, arguments, runtime):
++    """Fail-closed evaluator for only the emitted reporter's five opcodes."""
++    module = function.module
++    values = {str(arg): value for arg, value in zip(function.args, arguments)}
++
++    def value(token):
++        token = token.strip()
++        if token in values:
++            return values[token]
++        if token == "null":
++            return None
++        if token in ("true", "false"):
++            return token == "true"
++        if token.startswith("@"):
++            global_ = module.globals[token[1:]]
++            return bytes(global_.initializer.value).decode("utf-8").removesuffix("\0")
++        return int(token)
++
++    blocks = {block.name: block for block in function.blocks}
++    block = function.blocks[0]
++    for _ in range(200):
++        for record in block.instructions:
++            instruction = str(record)
++            result = None
++            if " = " in instruction:
++                result, instruction = instruction.split(" = ", 1)
++            if instruction.startswith("call "):
++                match = re.fullmatch(r"call (?:void|ptr|i64)(?: \([^()]*\))? @([^()]+)\((.*)\)", instruction)
++                assert match is not None, instruction
++                name, raw = match.groups()
++                args = [] if not raw else [value(arg.split(" ", 1)[1]) for arg in raw.split(", ")]
++                callee = module.globals[name]
++                answer = _execute(callee, args, runtime) if callee.blocks else runtime.call(name, args)
++                if result is not None:
++                    values[result] = answer
++            elif instruction.startswith("icmp "):
++                match = re.fullmatch(r"icmp (slt|ne) i64 ([^,]+), (.+)", instruction)
++                assert match is not None, instruction
++                operation, left, right = match.groups()
++                left, right = value(left), value(right)
++                values[result] = left < right if operation == "slt" else left != right
++            elif instruction.startswith("br label %"):
++                block = blocks[instruction.removeprefix("br label %")]
++                break
++            elif instruction.startswith("br i1 "):
++                match = re.fullmatch(r"br i1 ([^,]+), label %([^,]+), label %(.+)", instruction)
++                assert match is not None, instruction
++                condition, yes, no = match.groups()
++                block = blocks[yes if value(condition) else no]
++                break
++            elif instruction == "ret void":
++                return None
++            elif instruction.startswith("ret i64 "):
++                return value(instruction.removeprefix("ret i64 "))
++            else:
++                raise AssertionError("unexpected instruction: " + instruction)
++        else:
++            raise AssertionError("unterminated interpreted block")
++    raise AssertionError("unexpected reporter loop")
++
++
++@pytest.mark.parametrize("status", [-(1 << 63), -1, 0, 1, (1 << 63) - 1])
++@pytest.mark.parametrize("pending", [False, True])
++@pytest.mark.parametrize("span", [None, SourceSpan("source.py", 1, 0, 1, 2),
++                                  SourceSpan("", 0, 0, 0, 0),
++                                  SourceSpan("<generated>", -7, 0, -7, 0)])
++def test_status_and_existing_exception_have_identical_runtime_trace(status, pending, span):
++    original, allocated, current = object(), object(), object()
++    traces = []
++    for cls in (_InlineReference, L1CodeGen):
++        codegen, function = _sites(cls, spans=(span,))
++        verify_ir_text(str(codegen.module))
++        trace = _RuntimeTrace(original if pending else None, allocated, current)
++        result = _execute(function, [status], trace)
++        traces.append((result, trace.current, trace.events))
++    assert traces[0] == traces[1]
++    result, selected, events = traces[1]
++    assert result == (-1 if status < 0 else 17)
++    if status >= 0:
++        assert events == []
++        assert selected is (original if pending else None)
++    elif pending:
++        assert events == [("py_err_occurred", ())]
++        assert selected is original
++    else:
++        assert events[:4] == [
++            ("py_err_occurred", ()),
++            ("py_exc_new", (7, "slot-call operation 0 failed")),
++            ("py_raise", (allocated,)),
++            ("py_current_exception", ()),
++        ]
++        assert selected is current
++        assert len(events) == (4 if span is None else 5)
++        if span is not None:
++            assert events[4] == ("py_exc_append_frame_source", (
++                current, "caller", span.file or "<unknown>",
++                "call(value='雪')" if span.line == 1 else "", span.line,
++            ))
++
++
++@pytest.mark.parametrize("function_name", [None, "named"])
++@pytest.mark.parametrize("new_exception", [None, "allocated-exception"])
++def test_null_allocation_module_frame_and_fallback_exit(function_name, new_exception):
++    span = SourceSpan("source.py", 1, 0, 1, 9)
++    traces = []
++    for cls in (_InlineReference, L1CodeGen):
++        codegen, function = _sites(cls, spans=(span,), function_name=function_name, target=False)
++        verify_ir_text(str(codegen.module))
++        trace = _RuntimeTrace(None, new_exception, new_exception)
++        result = _execute(function, [-1], trace)
++        traces.append((result, trace.events))
++    assert traces[0] == traces[1]
++    assert traces[1][0] == 0
++    assert traces[1][1][-1][1][1] == (function_name or "<module>")
++
++
++def test_distinct_operations_and_cleanup_targets_keep_site_order():
++    spans = (None, SourceSpan("source.py", 1, 0, 1, 2), None)
++    for fail_at in range(3):
++        traces = []
++        exception = object()
++        for cls in (_InlineReference, L1CodeGen):
++            codegen, function = _sites(cls, spans=spans)
++            trace = _RuntimeTrace(None, exception, exception)
++            result = _execute(function, [0] * fail_at + [-1] + [0] * (2 - fail_at), trace)
++            traces.append((result, trace.events))
++        assert traces[0] == traces[1]
++        assert traces[1][0] == -fail_at - 1
++        assert traces[1][1][1][1] == (7, "slot-call operation " + str(fail_at) + " failed")
++
++
++def test_one_module_helper_preserves_builder_and_rejects_cross_module_owner():
++    first, function = _sites(spans=(None,) * 12)
++    helper = first.runtime[_KEY]
++    builder, block = first.builder, first.builder.block
++    assert first._slot_call_status_report_helper() is helper
++    assert first.builder is builder and first.builder.block is block
++    assert first.current_function is function
++    assert helper.linkage == "internal"
++    assert "noinline" in helper.render()
++    assert not any(word in helper.render() for word in ("noreturn", "nounwind", "readnone", "readonly"))
++    assert len([f for f in first.module.functions if "slot_call_status_report" in f.name]) == 1
++    assert len([b for b in function.blocks if b.name.startswith("call.slot.error")]) == 12
++    assert not any(b.name.startswith(("call.slot.report", "raise.cont")) for b in function.blocks)
++    for error in (b for b in function.blocks if b.name.startswith("call.slot.error")):
++        assert [r.opname for r in error.instructions] == ["call", "br"]
++    second, _ = _sites()
++    assert second.runtime[_KEY] is not helper
++    second.runtime[_KEY] = helper
++    with pytest.raises(L1CodegenError, match="^slot-status reporter belongs to another module$"):
++        second._slot_call_status_report_helper()
++
++
++def test_helper_build_failure_restores_caller_builder_and_is_not_cached(monkeypatch):
++    codegen = L1CodeGen(Module(name="failed_helper", body=()))
++    function = ir.Function(codegen.module, ir.FunctionType(ir.VoidType(), []), "caller")
++    codegen.current_function = function
++    builder = ir.IRBuilder(function.append_basic_block("entry"))
++    codegen.builder = builder
++    real_call = ir.IRBuilder.call
++
++    def fail_helper(self, callee, args, *a, **kw):
++        if callee.name == "py_raise":
++            raise RuntimeError("injected helper construction failure")
++        return real_call(self, callee, args, *a, **kw)
++
++    monkeypatch.setattr(ir.IRBuilder, "call", fail_helper)
++    with pytest.raises(RuntimeError, match="^injected helper construction failure$"):
++        codegen._slot_call_status_report_helper()
++    assert codegen.builder is builder and codegen.current_function is function
++    assert _KEY not in codegen.runtime
++
++
++def test_helper_symbol_collision_and_module_replacement():
++    codegen = L1CodeGen(Module(name="collision", body=()))
++    counter = codegen._tmp_counter
++    name = codegen._fresh("_pcc_slot_call_status_report")
++    codegen._tmp_counter = counter
++    unrelated = ir.Function(codegen.module, ir.FunctionType(ir.VoidType(), []), name)
++    caller = ir.Function(codegen.module, ir.FunctionType(ir.VoidType(), []), "caller")
++    codegen.current_function = caller
++    codegen.builder = ir.IRBuilder(caller.append_basic_block("entry"))
++    codegen.builder.ret_void()
++    helper = codegen._slot_call_status_report_helper()
++    assert helper.name != name and codegen.module.globals[name] is unrelated
++    old_module = codegen.module
++    codegen.generate(Module(name="replacement", body=()))
++    assert codegen.module is not old_module
++    assert _KEY not in codegen.runtime
++    assert codegen._slot_call_status_report_helper() is not helper
++
++
++def test_live_roots_leases_and_cleanup_are_not_moved_into_reporter():
++    codegen = L1CodeGen(Module(name="rooted_status", body=()))
++    function = ir.Function(codegen.module, ir.FunctionType(_I64, [_I64]), "probe")
++    entry = function.append_basic_block("entry")
++    target = function.append_basic_block("outer.error")
++    codegen.current_function = function
++    codegen._current_entry_block = entry
++    codegen.builder = ir.IRBuilder(entry)
++    roots = [codegen._new_slot_call_root("operand." + str(i)) for i in range(2)]
++    leases = ((roots[0], ir.Constant(_I64, 19)),)
++    cleanup = codegen._slot_call_cleanup_block(roots, target, leases)
++    cleanup_before = tuple(str(r) for r in cleanup.instructions)
++    records = tuple(codegen._slot_call_root_records)
++    cache = dict(codegen._slot_call_cleanup_blocks)
++    codegen._try_err_block = cleanup
++    codegen._slot_call_check_status(function.args[0], "rooted operand")
++    assert tuple(codegen._slot_call_root_records) == records
++    assert codegen._slot_call_cleanup_blocks == cache
++    assert tuple(str(r) for r in cleanup.instructions) == cleanup_before
++    error = next(b for b in function.blocks if b.name.startswith("call.slot.error"))
++    assert str(error.instructions[-1]) == "br label %" + cleanup.name
++    helper = codegen.runtime[_KEY].render()
++    assert not any(name in helper for name in ("pcc_gc_", "py_tls_exc_swap_slot", "py_clear_exception"))
++    # Both allocation/raising safepoints remain ordinary calls. Their caller's
++    # root retirement, exception-preserving cleanup and lease order are intact.
++    assert "@py_exc_new(" in helper and "@py_raise(" in helper
++    codegen.builder.ret(ir.Constant(_I64, 17))
++    codegen.builder.position_at_end(target)
++    codegen.builder.ret(ir.Constant(_I64, -1))
++    verify_ir_text(str(codegen.module))
++
++
++@pytest.mark.parametrize("mode", ["inline", "inline-defined", "always-inline", "pipeline"])
++def test_actual_owned_inlining_never_recreates_per_site_reporter(mode):
++    from pcc.frontends.python.compiled_owned_passes import run_owned_passes
++    from pcc.ir.optimization.inline import inline_module
++
++    codegen, _ = _sites(spans=(SourceSpan("source.py", 1, 0, 1, 2),) * 8)
++    helper = codegen.runtime[_KEY]
++    text = str(codegen.module)
++    if mode == "pipeline":
++        result = run_owned_passes(text, ["instsimplify", "simplifycfg", "inline", "inline-defined", "dce"], True)
++    else:
++        result, _ = inline_module(text, include_definitions=mode == "inline-defined",
++                                  require_alwaysinline=mode == "always-inline")
++    verify_ir_text(result)
++    assert len(re.findall(r"\bcall void[^\n@]*@" + re.escape(helper.name) + r"\(", result)) == 8
++    assert len(re.findall(r"\bcall\b[^\n]*@py_exc_new\(", result)) == 1
++    assert len(re.findall(r"\bcall\b[^\n]*@py_raise\(", result)) == 1
++    assert "noinline" in result
++
++
++def test_noinline_is_effective_and_module_instruction_reduction_is_structural():
++    from pcc.ir.optimization.inline import inline_module
++
++    owners = [_sites(cls, spans=(SourceSpan("source.py", 1, 0, 1, 2),) * 8)[0]
++              for cls in (_InlineReference, L1CodeGen)]
++    counts = [sum(len(b.instructions) for f in c.module.functions for b in f.blocks)
++              for c in owners]
++    assert counts[1] < counts[0], counts
++    helper = owners[1].runtime[_KEY]
++    text = str(owners[1].module)
++    # Negative control: without the attribute the ordinary defined inliner
++    # must actually consider and expand this real helper shape.
++    expanded, changed = inline_module(text.replace(" noinline", ""), include_definitions=True)
++    assert changed
++    assert not re.search(r"\bcall void[^\n@]*@" + re.escape(helper.name) + r"\(", expanded)
++    assert len(re.findall(r"\bcall\b[^\n]*@py_exc_new\(", expanded)) > 1
++
++
++@pytest.mark.parametrize("target", ["x86_64-linux", "aarch64-darwin"])
++@pytest.mark.parametrize("body", [
++    "    try:\n        return callee(value=[value], later=[1, 2])\n"
++    "    except RuntimeError:\n        return value\n",
++    "    yield callee(value=[value])\n    yield callee(value=[value])\n",
++])
++def test_real_caller_roots_and_generator_flags_pass_precise_stackmaps(target, body):
++    from pcc.backend.self_backend_precise_stackmaps import build_stack_map_plans
++    from pcc.backend.self_backend_prepare import prepare_module_for_target
++    from pcc.backend.self_backend_x86_64_linux import _aggregate_returned_indirect
++    from pcc.frontends.python.py_lift import parse_and_lift
++    from pcc.frontends.python.type_infer import infer_module
++
++    module = infer_module(parse_and_lift("def probe(callee, value):\n" + body, "status.py", "status"))
++    for cls in (_InlineReference, L1CodeGen):
++        codegen = cls(module, ir_scaffold_mode="on")
++        codegen._strict_no_libpython = True
++        codegen._prefer_native_callable_values = True
++        text = str(codegen.generate(module))
++        assert codegen._slot_call_root_records
++        prepared = prepare_module_for_target(text, aggregate_returned_indirect=_aggregate_returned_indirect)
++        plans = build_stack_map_plans(prepared.functions, prepared.globals_, target=target)
++        assert len(plans) == len(prepared.functions)
++        if cls is L1CodeGen:
++            assert _KEY in codegen.runtime
++
++
++@pytest.mark.parametrize("target", ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu",
++                                    "aarch64-apple-darwin", "x86_64-pc-windows-msvc"])
++def test_direct_no_text_helper_capture_verifies_and_emits_all_targets(monkeypatch, target):
++    from pcc.backend.self_backend_verify import verify_parsed_module
++    from pcc.backend.self_backend_parse import parse_self_backend_module
++    from pcc.backend.target_objects import emit_indexed_assembly, encode_assembly_object
++
++    text_owner, _ = _sites(spans=(None, SourceSpan("source.py", 1, 0, 1, 2)))
++    text_owner.module.triple = target
++    parsed = parse_self_backend_module(str(text_owner.module))
++    verify_parsed_module(parsed)
++    expected = encode_assembly_object(emit_indexed_assembly(parsed), target)
++    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "1")
++    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_EMIT", "1")
++    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_REQUIRE_ZERO_FALLBACK", "1")
++    owner, _ = _sites(spans=(None, SourceSpan("source.py", 1, 0, 1, 2)))
++    owner.module.triple = target
++    direct = owner.module.direct_indexed_module()
++    assert owner.module._direct_indexed_fallback_records == 0
++    records = [r for f in owner.module.functions for b in f.blocks for r in b.instructions]
++    assert records and all(r._direct_record_id >= 0 and not r.text for r in records)
++    verify_parsed_module(direct)
++    actual = encode_assembly_object(emit_indexed_assembly(direct), target)
++    assert actual == expected
+--- /dev/null
++++ b/tests/python/test_slot_call_status_reporting_native.py
+@@ -0,0 +1,246 @@
++"""Actual generated status helper versus its former inline runtime protocol.
++
++Host pcc0 owns IR construction, C compilation, object emission and linking.
++This exercises the real runtime, not a modeled exception provider or pcc1.
++An explicit source-matched runtime is mandatory; this test never builds one.
++"""
++from __future__ import annotations
++
++import json
++import os
++import hashlib
++from pathlib import Path
++from unittest.mock import patch
++
++import pytest
++
++from pcc.diagnostics.gc_log import parse_log_lines
++from pcc.driver.project import TranslationUnit
++from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
++from pcc.frontends.python.codegen.layer1 import L1CodeGen
++from pcc.frontends.python.pipeline_targets import host_target_triple
++from pcc.frontends.python.py_ast import SourceSpan
++from tests.python.owned_regression_support import (
++    assert_reference_program,
++    explicit_owned_runtime,
++)
++from tests.python.process_timeout import run_process_group_timeout
++from tests.python.test_slot_call_status_reporting import _InlineReference, _sites
++
++
++_HARNESS = r'''
++#include "py_runtime.h"
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++extern int64_t baseline_probe(int64_t, int64_t);
++extern int64_t candidate_probe(int64_t, int64_t);
++extern int64_t pcc_refcount_load(void *);
++
++static int64_t invoke(int arm, int64_t first, int64_t second) {
++    if (arm == 0) return baseline_probe(first, second);
++    return candidate_probe(first, second);
++}
++
++int main(int argc, char **argv) {
++    if (argc != 2 || pcc_gc_set_backend(atoi(argv[1])) != 0) return 1;
++    if (pcc_gc_backend() != atoi(argv[1])) return 16;
++    PyObject *roots[4] = {NULL, NULL, NULL, NULL};
++    int32_t map[1] = {4};
++    pcc_gc_frame_enter(map, roots);
++    int64_t root_count = pcc_gc_frame_root_slot_count();
++    int64_t owners[2] = {0, 0};
++
++    for (int mode = 0; mode < 2; ++mode) {
++        for (int arm = 0; arm < 2; ++arm) {
++            py_clear_exception();
++            if (invoke(arm, 0, 0) != 17 || py_err_occurred()) return 2;
++            int64_t first = mode == 0 ? -1 : 0;
++            int64_t second = mode == 0 ? 0 : -1;
++            if (invoke(arm, first, second) != -mode - 1) return 3;
++            pcc_gc_store_root(&roots[0], py_current_exception());
++            if (!roots[0]) return 4;
++            if (!py_exc_matches(roots[0], (PyObject *)py_exc_builtin_class(PY_EXC_RUNTIMEERROR))) return 5;
++            if (py_exc_traceback_len(roots[0]) != mode) return 6;
++            owners[arm] = pcc_refcount_load(roots[0]);
++            pcc_gc_store_root_take(&roots[arm + 1], py_exc_traceback_format_exc(roots[0]));
++            if (!roots[arm + 1]) return 7;
++            py_clear_exception();
++            pcc_gc_store_root(&roots[0], NULL);
++            py_gc_collect();
++            if (pcc_gc_frame_root_slot_count() != root_count) return 8;
++        }
++        /* Exact message and source-frame order, including no helper frame. */
++        if (!py_str_eq(roots[1], roots[2])) return 9;
++        /* Preserve the existing borrowed py_raise ownership convention. */
++        if (owners[0] != owners[1]) return 10;
++        pcc_gc_store_root(&roots[1], NULL);
++        pcc_gc_store_root(&roots[2], NULL);
++    }
++
++    pcc_gc_store_root_take(&roots[0], py_exc_new(PY_EXC_VALUEERROR, "original"));
++    py_exc_append_frame_source(roots[0], "original_owner", "original.py", "raise original", 23);
++    py_raise(roots[0]);
++    for (int arm = 0; arm < 2; ++arm) {
++        if (invoke(arm, 0, 0) != 17 || py_current_exception() != roots[0]) return 11;
++        if (invoke(arm, -1, 0) != -1 || py_current_exception() != roots[0]) return 12;
++        if (invoke(arm, 0, -1) != -2 || py_current_exception() != roots[0]) return 13;
++        if (py_exc_traceback_len(roots[0]) != 1) return 14;
++        if (pcc_gc_frame_root_slot_count() != root_count) return 15;
++    }
++    py_clear_exception();
++    pcc_gc_store_root(&roots[0], NULL);
++    py_gc_collect();
++    pcc_gc_frame_leave(roots);
++    puts("slot-status-runtime-equal");
++    return 0;
++}
++'''
++
++
++def _run_native(executable, arguments, tmp_path, backend, expected):
++    log = tmp_path / ("gc" + str(backend) + ".gc.jsonl")
++    environment = dict(os.environ, PCC_GC_BACKEND=str(backend), PCC_LOG="gc",
++                       PCC_LOG_FORMAT="json", PCC_LOG_FILE=str(log), PATH="")
++    result = run_process_group_timeout([str(executable)] + arguments, env=environment, timeout=10)
++    (tmp_path / ("gc" + str(backend) + ".stdout")).write_text(result.stdout)
++    (tmp_path / ("gc" + str(backend) + ".stderr")).write_text(result.stderr)
++    events = parse_log_lines(log.read_text().splitlines()) if log.exists() else []
++    observed = sorted({event.fields["value1"] for event in events
++                       if event.fields.get("category") == "gc"
++                       and event.event in ("collect_start", "collect_stop", "collect_end")})
++    row = {"requested_gc": backend, "observed_gc": observed,
++           "returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
++    (tmp_path / ("gc" + str(backend) + ".json")).write_text(json.dumps(row, indent=2) + "\n")
++    assert (result.returncode, result.stdout, result.stderr) == (0, expected, ""), row
++    assert observed == [backend], row
++
++
++@pytest.mark.integration
++def test_generated_status_helper_matches_inline_real_runtime_all_gc(
++    tmp_path, explicit_owned_runtime, monkeypatch,
++):
++    root = Path(__file__).resolve().parents[2]
++    target = host_target_triple()
++    for key in ("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "PCC_DIRECT_INDEXED_KERNEL_EMIT"):
++        monkeypatch.setenv(key, "0")
++    monkeypatch.setenv("PCC_SELF_TARGET_PASSES", "off")
++    spans = (None, SourceSpan("source.py", 1, 0, 1, 2))
++    generated = []
++    for cls, symbol in ((_InlineReference, "baseline_probe"), (L1CodeGen, "candidate_probe")):
++        owner, _ = _sites(cls, spans=spans, symbol=symbol)
++        owner.module.triple = target
++        text = str(owner.module)
++        path = tmp_path / (symbol + ".ll")
++        path.write_text(text)
++        generated.append((path.name, text, None, ()))
++    source = tmp_path / "status.c"
++    source.write_text(_HARNESS)
++    executable = tmp_path / "status-runtime"
++    evaluator = CEvaluator(backend="self", target_triple=target)
++    with patch("subprocess.Popen", side_effect=AssertionError("external build process")):
++        units = evaluator.compile_translation_units(
++            [TranslationUnit(source.name, str(source), _HARNESS)],
++            use_system_cpp=False, use_compile_cache=False,
++            include_dirs=[str(root / "pcc/runtime/include"), str(root / "utils/fake_libc_include")],
++        )
++        evaluator.emit_executable(
++            units + generated, str(executable), optimize=False,
++            link_args=[str(explicit_owned_runtime)],
++        )
++    assert executable.is_file()
++    (tmp_path / "identity.json").write_text(json.dumps({
++        "compiler_mode": "host-pcc0-generated-IR/owned-C",
++        "runtime_sha256": hashlib.sha256(explicit_owned_runtime.read_bytes()).hexdigest(),
++        "binary_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
++        "baseline_ir_sha256": hashlib.sha256((tmp_path / "baseline_probe.ll").read_bytes()).hexdigest(),
++        "candidate_ir_sha256": hashlib.sha256((tmp_path / "candidate_probe.ll").read_bytes()).hexdigest(),
++    }, indent=2) + "\n")
++    for backend in range(5):
++        _run_native(executable, [str(backend)], tmp_path, backend, "slot-status-runtime-equal\n")
++
++
++_PROGRAM = '''import gc
++events = []
++original = ValueError('original')
++
++class Temporary:
++    def __init__(self, label):
++        self.label = label
++    def __del__(self):
++        events.append(self.label)
++
++def fails(*, value):
++    gc.collect()
++    assert value == [1, 2, 3]
++    raise original
++
++def takes(*, value):
++    gc.collect()
++    return value[0]
++
++def main():
++    assert takes(value=[11]) == 11
++    try:
++        fails(value=[1, 2, 3])
++    except ValueError as caught:
++        assert caught is original
++        assert str(caught) == 'original'
++    else:
++        raise AssertionError('missing original exception')
++    try:
++        takes(unexpected=Temporary('argument'))
++    except TypeError:
++        pass
++    else:
++        raise AssertionError('missing binding exception')
++    gc.collect()
++    assert events == ['argument']
++    print('slot-status-owned-callsite-ok')
++
++main()
++'''
++
++
++@pytest.mark.integration
++@pytest.mark.parametrize("python_program_compiler", ("pcc0",), indirect=True)
++def test_production_callsite_temporaries_exception_and_gc(
++    tmp_path, explicit_owned_runtime, python_program_compiler, monkeypatch, capfd,
++):
++    source, _ = assert_reference_program(_PROGRAM, "slot-status-owned-callsite-ok\n", tmp_path)
++    for key in ("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "PCC_DIRECT_INDEXED_KERNEL_EMIT"):
++        monkeypatch.setenv(key, "0")
++    generated = []
++    original_generate = L1CodeGen.generate
++
++    def capture(self, module=None):
++        text = original_generate(self, module)
++        if "__pcc_slot_call_status_report" in self.runtime:
++            generated.append(str(text))
++        return text
++
++    monkeypatch.setattr(L1CodeGen, "generate", capture)
++    executable = tmp_path / "ordinary-callsite"
++    try:
++        python_program_compiler(str(source), str(executable), backend="self", libpython_mode="off",
++                                ir_scaffold_mode="on", runtime_archive=str(explicit_owned_runtime))
++    finally:
++        captured = capfd.readouterr()
++        (tmp_path / "compiler.stdout").write_text(captured.out)
++        (tmp_path / "compiler.stderr").write_text(captured.err)
++    assert generated, "No actual host compiler-generated helper was observed"
++    text = "\n".join(generated)
++    (tmp_path / "actual-generated.ll").write_text(text)
++    assert "@py_obj_call_slots(" in text
++    assert "@pcc_gc_frame_enter_lifo(" in text
++    assert "@py_cleanup_one_root_preserving_exception(" in text or "@py_tls_exc_swap_slot(" in text
++    assert executable.is_file()
++    (tmp_path / "identity.json").write_text(json.dumps({
++        "compiler_mode": "host-pcc0-production-pipeline",
++        "program_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
++        "runtime_sha256": hashlib.sha256(explicit_owned_runtime.read_bytes()).hexdigest(),
++        "binary_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
++        "generated_ir_sha256": hashlib.sha256(text.encode()).hexdigest(),
++    }, indent=2) + "\n")
++    for backend in range(5):
++        _run_native(executable, [], tmp_path, backend, "slot-status-owned-callsite-ok\n")

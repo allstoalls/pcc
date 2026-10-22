@@ -2,7 +2,7 @@
 then run small Python programs.
 
 The other ``test_python_*_parity.py`` files import
-``pcc.py_frontend.pipeline.compile_python`` and call it from host CPython.
+``pcc.frontends.python.pipeline.compile_python`` and call it from host CPython.
 That tests "CPython hosting pcc the library". This file tests the
 stricter contract: **the bootstrapped ``pcc1`` binary** (a
 no-libpython native executable) compiles ``.py`` programs into native
@@ -82,25 +82,25 @@ def _smoke_pcc1_present():
     if PCC1 is None:
         pytest.fail(
             "no pcc1 binary found even after session auto-provisioning; "
-            "run scripts/bootstrap.sh --stage 1 and read its error output"
+            "run scripts/bootstrap.py --stage 1 and read its error output"
         )
     yield
 
 
 @pytest.fixture(scope="module", autouse=True)
-def _smoke_pcc_py_runtime(pcc_py_runtime_archive):
+def _smoke_pcc_runtime(pcc_runtime_archive):
     """Build the pcc-Python runtime archive pcc1 links before the smoke tests.
 
-    The build/check lives in the shared ``pcc_py_runtime_archive`` fixture
+    The build/check lives in the shared ``pcc_runtime_archive`` fixture
     (tests/python/conftest.py). Without it, a tree missing
     ``libpy_runtime_pcc_py.a`` makes every smoke test fail the final link with
     ``Undefined symbols: _py_list_append, ...`` — a build-environment artifact,
     not a pcc1 codegen regression.
     """
     previous = os.environ.get("PCC_RUNTIME_ARCHIVE")
-    os.environ["PCC_RUNTIME_ARCHIVE"] = str(pcc_py_runtime_archive)
+    os.environ["PCC_RUNTIME_ARCHIVE"] = str(pcc_runtime_archive)
     try:
-        yield pcc_py_runtime_archive
+        yield pcc_runtime_archive
     finally:
         if previous is None:
             os.environ.pop("PCC_RUNTIME_ARCHIVE", None)
@@ -1038,7 +1038,7 @@ def test_pcc1_pcc_python_runtime_keeps_py_lex_token_constructor_args(tmp_path):
         "--emit-llvm",
         "--python-libpython=off",
         "--ir-scaffold=on",
-        str(REPO / "pcc" / "parse" / "py_lex.py"),
+        str(REPO / "pcc" / "frontends" / "python" / "py_lex.py"),
         "-o",
         str(ll_out),
     ]

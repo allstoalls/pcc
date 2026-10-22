@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend import pipeline_modes
+from pcc.frontends.python import pipeline
+from pcc.frontends.python import pipeline_modes
 
 
 def test_pipeline_facade_reexports_mode_contracts():
@@ -32,11 +32,11 @@ def test_pipeline_facade_reexports_mode_contracts():
     )
 
 
-def test_backend_aliases_and_unsupported_capi_mode_are_stable():
-    assert pipeline_modes.normalize_native_backend_name("llvmlite") == "llvm"
-    assert pipeline_modes.normalize_native_backend_name("llvm-capi") == "llvm_capi"
-    with pytest.raises(pipeline_modes.PyPipelineError, match="not supported"):
-        pipeline_modes.resolve_native_backend("llvm-capi")
+@pytest.mark.parametrize("backend", ["llvm", "llvmlite", "llvm_capi", "llvm-capi"])
+def test_removed_backends_are_rejected_without_aliasing(backend):
+    assert pipeline_modes.normalize_native_backend_name(backend) == backend
+    with pytest.raises(pipeline_modes.PyPipelineError, match="expected self"):
+        pipeline_modes.resolve_native_backend(backend)
 
 
 def test_default_api_backend_is_owned_self(monkeypatch):

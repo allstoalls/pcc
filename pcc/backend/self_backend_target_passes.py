@@ -30,7 +30,7 @@ from .self_backend_ir import (
     text_key_names_equal,
 )
 from .self_backend_kernel import TYPE_KIND_INT, get_indexed_function_kernel
-from .self_backend_value_arena import CompilerInt4
+from .self_backend_value_arena import CompilerInt2, CompilerInt4
 
 
 PCC_SELF_TARGET_PASSES_ENV = "PCC_SELF_TARGET_PASSES"
@@ -753,7 +753,13 @@ def _aarch64_register_dead_in_block(
     the scan: the old value cannot be observed after it.
     """
 
-    pattern = re.compile(r"\b" + re.escape(register) + r"\b")
+    # A W write zero-extends into its X alias, and either spelling may read
+    # bits supplied by an earlier definition of the other spelling.
+    if re.fullmatch(r"[wx]\d+", register):
+        register_pattern = r"[wx]" + register[1:]
+    else:
+        register_pattern = re.escape(register)
+    pattern = re.compile(r"\b" + register_pattern + r"\b")
     for index in range(start, len(lines)):
         line = lines[index]
         stripped = line.strip()
@@ -763,7 +769,7 @@ def _aarch64_register_dead_in_block(
             return True
         opcode, _separator, operands = stripped.partition(" ")
         if opcode in ("b", "br", "ret"):
-            return True
+            return pattern.search(operands) is None
         if not pattern.search(operands):
             if opcode in ("bl", "blr"):
                 return True
@@ -771,8 +777,10 @@ def _aarch64_register_dead_in_block(
         # A plain destination write kills the old value; anything else reads it.
         destination, _comma, remainder = operands.partition(",")
         if (
-            destination.strip() == register
+            pattern.fullmatch(destination.strip()) is not None
             and opcode not in _AARCH64_STORE_LIKE_OPCODES
+            # Partial destination writes read the bits they preserve.
+            and opcode not in ("movk", "bfi", "bfxil")
             and not pattern.search(remainder)
         ):
             return True
@@ -783,6 +791,7 @@ def _aarch64_register_dead_in_block(
 _AARCH64_STORE_LIKE_OPCODES = frozenset(
     {
         "str", "stur", "strb", "sturb", "strh", "sturh", "stp",
+        "stlr", "stlrb", "stlrh",
         "cmp", "cmn", "tst", "cbz", "cbnz", "tbz", "tbnz",
         "b", "bl", "blr", "br", "ret",
     }

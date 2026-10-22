@@ -30,9 +30,9 @@ _BUILD.mkdir(parents=True, exist_ok=True)
 def _build_codegen(source: str, *, mode: str):
     """Parse + type-infer ``source`` and return a fresh L1CodeGen
     instance configured with the given ir_scaffold_mode."""
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen import layer1
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen import layer1
 
     ast_mod = parse_and_lift(source, "<test>", "test_module")
     typed = type_infer.infer_module(ast_mod)
@@ -56,7 +56,7 @@ def _function_body(ir_text: str, fn_name_suffix: str) -> str | None:
 
 
 def _compile_pipeline_ir(source: str, name: str, *, mode: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -70,25 +70,25 @@ def _compile_pipeline_ir(source: str, name: str, *, mode: str) -> str:
 
 
 def _zero_span():
-    from pcc.py_frontend.py_ast import SourceSpan
+    from pcc.frontends.python.py_ast import SourceSpan
 
     return SourceSpan(file="<test>", line=1, col=1, end_line=1, end_col=1)
 
 
 def _dyn():
-    from pcc.py_frontend.py_ast import DynType
+    from pcc.frontends.python.py_ast import DynType
 
     return DynType(name="dyn")
 
 
 def _name(ident: str):
-    from pcc.py_frontend.py_ast import Name
+    from pcc.frontends.python.py_ast import Name
 
     return Name(span=_zero_span(), ty=_dyn(), ident=ident)
 
 
 def _attr(obj, name: str):
-    from pcc.py_frontend.py_ast import Attr
+    from pcc.frontends.python.py_ast import Attr
 
     return Attr(span=_zero_span(), ty=_dyn(), obj=obj, name=name)
 
@@ -155,7 +155,7 @@ def test_ir_module_symbol_target():
 def test_llvm_capi_compat_import_is_runtime_binding_in_off_mode():
     source = textwrap.dedent(
         """
-        from pcc.llvm_capi.compat import ir
+        from pcc.ir.compat import ir
 
         def make(n):
             return ir.IntType(n)
@@ -171,7 +171,7 @@ def test_llvm_capi_compat_import_is_runtime_binding_in_off_mode():
 def test_llvm_capi_compat_import_is_scaffold_in_on_mode():
     source = textwrap.dedent(
         """
-        from pcc.llvm_capi.compat import ir
+        from pcc.ir.compat import ir
 
         def make(n):
             return ir.IntType(n)
@@ -180,7 +180,7 @@ def test_llvm_capi_compat_import_is_scaffold_in_on_mode():
 
     ir_text = _compile_pipeline_ir(source, "compat_import_on", mode="on")
 
-    assert "@user_pcc_llvm_capi_ir_scaffold_IntType" in ir_text
+    assert "@user_pcc_ir_ir_scaffold_IntType" in ir_text
     assert not re.search(r"\bcall [^\n]*@py_cpy_import\b", ir_text)
 
 
@@ -217,7 +217,7 @@ def test_unimplemented_method_raises_via_dispatch(monkeypatch):
     Tests the dispatcher directly so it stays meaningful even after
     every method in ``_IR_BUILDER_METHODS`` has a lowering.
     """
-    from pcc.py_frontend.codegen import ir_scaffold_lowering as layer1
+    from pcc.frontends.python.codegen import ir_scaffold_lowering as layer1
 
     # Pick any recognised method, then temporarily evict it from IMPL
     # to simulate the "added to recognition but not yet implemented"
@@ -231,10 +231,10 @@ def test_unimplemented_method_raises_via_dispatch(monkeypatch):
         layer1._IR_SCAFFOLD_METHOD_IMPL - {method},
     )
 
-    cg = _build_codegen("from pcc.llvm_capi.compat import ir\nx = 1\n", mode="on")
+    cg = _build_codegen("from pcc.ir.compat import ir\nx = 1\n", mode="on")
     cg._ir_builder_env_flags = {"builder": "IRBuilder"}
     self_builder = _attr(_name("builder"), method)
-    from pcc.py_frontend.py_ast import Call
+    from pcc.frontends.python.py_ast import Call
 
     fake_call = Call(
         span=_zero_span(),
@@ -252,7 +252,7 @@ def test_unimplemented_method_raises_via_dispatch(monkeypatch):
 
 def test_unimplemented_symbol_raises_via_dispatch(monkeypatch):
     """Same property for ``ir.X`` symbol detection."""
-    from pcc.py_frontend.codegen import ir_scaffold_lowering as layer1
+    from pcc.frontends.python.codegen import ir_scaffold_lowering as layer1
 
     symbol = "IntType"
     assert symbol in layer1._IR_MODULE_SYMBOLS
@@ -263,9 +263,9 @@ def test_unimplemented_symbol_raises_via_dispatch(monkeypatch):
         layer1._IR_SCAFFOLD_SYMBOL_IMPL - {symbol},
     )
 
-    cg = _build_codegen("from pcc.llvm_capi.compat import ir\nx = 1\n", mode="on")
+    cg = _build_codegen("from pcc.ir.compat import ir\nx = 1\n", mode="on")
     ir_attr = _attr(_name("ir"), symbol)
-    from pcc.py_frontend.py_ast import Call, IntLit
+    from pcc.frontends.python.py_ast import Call, IntLit
 
     fake_call = Call(
         span=_zero_span(),
@@ -289,7 +289,7 @@ def test_off_mode_method_call_still_routes_to_py_cpy():
     IRBuilder set at all, so OFF can compile it and route via
     py_cpy_*.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _REPO_ROOT / "build" / "ir_scaffold_offcheck_method.py"
     src.parent.mkdir(parents=True, exist_ok=True)

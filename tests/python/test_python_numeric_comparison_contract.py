@@ -9,7 +9,7 @@ import sys
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 from tests.runtime_build_cache import cached_pcc_python_runtime
 
 
@@ -170,9 +170,9 @@ print(compare_bool(value, value, 2), compare_bool(value, value, 3))
 
 
 def test_python_port_float_truth_matches_ieee_values():
-    from pcc.py_runtime.py.py_abi_constants import PY_TYPE_FLOAT, PY_TYPE_INT
+    from pcc.runtime.py.py_abi_constants import PY_TYPE_FLOAT, PY_TYPE_INT
 
-    path = Path(__file__).resolve().parents[2] / "pcc/py_runtime/py/py_obj_ops_dispatch.py"
+    path = Path(__file__).resolve().parents[2] / "pcc/runtime/py/py_obj_ops_dispatch.py"
     tree = ast.parse(path.read_text())
     function = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
                     and node.name == "py_obj_truthy")

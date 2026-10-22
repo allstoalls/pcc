@@ -109,7 +109,7 @@ def test_native_pcc1_compiles_package_identity_helpers(tmp_path, pcc1_self_host_
     # unchanged helper source as a local module to exercise its native body;
     # the rebuilt CLI has a separate package-install integration gate.
     (tmp_path / "candidate_schema.py").write_bytes(
-        (REPO / "pcc/package_schema.py").read_bytes()
+        (REPO / "pcc/package/schema.py").read_bytes()
     )
     app = tmp_path / "identity.py"
     app.write_text(
@@ -129,7 +129,7 @@ def test_native_pcc1_compiles_package_identity_helpers(tmp_path, pcc1_self_host_
 
 def test_native_pcc1_reads_only_artifact_metadata(tmp_path, pcc1_self_host_binary):
     (tmp_path / "candidate_metadata_paths.py").write_bytes(
-        (REPO / "pcc/package_metadata_paths.py").read_bytes()
+        (REPO / "pcc/package/metadata_paths.py").read_bytes()
     )
     package = tmp_path / "package"
     own = package / "example_tools.egg-info/PKG-INFO"

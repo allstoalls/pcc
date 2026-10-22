@@ -1,0 +1,1078 @@
+diff --git a/pcc/backend/coff_x86_64.py b/pcc/backend/coff_x86_64.py
+--- a/pcc/backend/coff_x86_64.py
++++ b/pcc/backend/coff_x86_64.py
+@@ -323,5 +323,13 @@
+     sections.append(CoffSection(".pdata", bytes(pdata), 0x40000040, 4, tuple(relocations)))
+ 
+ 
+-def assemble_object(text: str) -> bytes:
+-    return emit_object(assemble(text))
++def assemble_object(text: str, *, phase_timing=None) -> bytes:
++    if phase_timing is None:
++        return emit_object(assemble(text))
++    started = phase_timing.start()
++    obj = assemble(text)
++    phase_timing.add(9, started)
++    started = phase_timing.start()
++    encoded = emit_object(obj)
++    phase_timing.add(10, started)
++    return encoded
+diff --git a/pcc/backend/indexed_phase_timing.py b/pcc/backend/indexed_phase_timing.py
+new file mode 100644
+--- /dev/null
++++ b/pcc/backend/indexed_phase_timing.py
+@@ -0,0 +1,88 @@
++"""Bounded diagnostics for the isolated frontend worker's indexed path.
++
++Enabled only by the caller's existing worker-timing policy.  The emitter never
++reads an environment variable or retains an IR/function object for these totals.
++Indexes are stable, with two explicitly inclusive parents (2 and 6).
++"""
++
++import time
++
++
++_PHASE_NAMES = (
++    "frontend_generate_ns",          # 0
++    "frontend_release_pre_ns",       # 1
++    "backend_call_inclusive_ns",     # 2: contains 3..7 and 12
++    "prepare_verify_ns",             # 3
++    "prepare_layout_ns",             # 4
++    "stackmap_plan_ns",              # 5
++    "function_emit_inclusive_ns",    # 6: contains 12
++    "backend_finalize_ns",           # 7
++    "frontend_release_post_ns",      # 8
++    "object_assemble_ns",            # 9
++    "object_encode_ns",              # 10
++    "object_write_ns",               # 11
++    "function_setup_ns",             # 12: child of 6
++)
++
++
++class ModulePhaseTiming:
++    """Thirteen scalar aggregates, one best-effort report per module attempt."""
++
++    def __init__(self, module_name: str):
++        self.module_name = module_name
++        self.target = "unselected"
++        self.route = "not-direct"
++        self.totals_ns = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
++        self.failed = False
++        self.reported = False
++
++    def start(self) -> int:
++        if self.failed:
++            return 0
++        try:
++            started_ns = time.perf_counter_ns()
++            # Owned native clock failure uses zero rather than raising.
++            if started_ns <= 0:
++                self.failed = True
++                return 0
++            return started_ns
++        except Exception:
++            self.failed = True
++            return 0
++
++    def add(self, phase: int, started_ns: int) -> None:
++        if self.failed or started_ns == 0:
++            return
++        try:
++            elapsed_ns = time.perf_counter_ns() - started_ns
++            if elapsed_ns < 0 or phase < 0 or phase >= 13:
++                self.failed = True
++                return
++            self.totals_ns[phase] += elapsed_ns
++        except Exception:
++            self.failed = True
++
++    def report(self, stream, complete: bool) -> None:
++        # Reporting happens after the worker's existing codegen timer stops,
++        # including on its normal exception path.  A killed process may emit no
++        # summary; incomplete scopes are deliberately not invented or estimated.
++        if self.reported:
++            return
++        self.reported = True
++        try:
++            parts = [
++                "pcc indexed phase totals",
++                "module=" + self.module_name,
++                "target=" + self.target,
++                "route=" + self.route,
++                "codegen_complete=" + str(int(complete)),
++                "clock_ok=" + str(int(not self.failed)),
++            ]
++            index = 0
++            while index < 13:
++                parts.append(_PHASE_NAMES[index] + "=" + str(self.totals_ns[index]))
++                index += 1
++            stream.write(" ".join(parts) + "\n")
++        except Exception:
++            # Optional diagnostics must not replace a compiler result/error.
++            pass
+diff --git a/pcc/backend/self_backend_aarch64_darwin.py b/pcc/backend/self_backend_aarch64_darwin.py
+--- a/pcc/backend/self_backend_aarch64_darwin.py
++++ b/pcc/backend/self_backend_aarch64_darwin.py
+@@ -454,7 +454,9 @@
+     )
+ 
+ 
+-def emit_aarch64_darwin_indexed_module(module, optimize: bool = True) -> str:
++def emit_aarch64_darwin_indexed_module(
++    module, optimize: bool = True, *, phase_timing=None,
++) -> str:
+     """Emit an already-indexed module through the ordinary verified backend."""
+     prepared = prepare_parsed_module_for_target(
+         module,
+@@ -463,17 +465,21 @@
+             _aggregate_returned_indirect_indexed
+         ),
+         materialize_legacy_slots=False,
++        phase_timing=phase_timing,
+     )
+     return _emit_prepared_aarch64_darwin_module(
+         prepared,
+         optimize,
+         profile_ir_text="",
++        phase_timing=phase_timing,
+     )
+ 
+ 
+ def emit_aarch64_darwin_indexed_lines(
+     module,
+     optimize: bool = True,
++    *,
++    phase_timing=None,
+ ) -> list[str]:
+     """Emit the indexed module without materializing a joined text string."""
+ 
+@@ -484,11 +490,13 @@
+             _aggregate_returned_indirect_indexed
+         ),
+         materialize_legacy_slots=False,
++        phase_timing=phase_timing,
+     )
+     return _emit_prepared_aarch64_darwin_lines(
+         prepared,
+         optimize,
+         profile_ir_text="",
++        phase_timing=phase_timing,
+     )
+ 
+ 
+@@ -496,6 +504,8 @@
+     module,
+     optimize: bool = True,
+     structured_instructions: bool = True,
++    *,
++    phase_timing=None,
+ ) -> StructuredAArch64Module:
+     """Emit indexed code plus final structured section payloads."""
+ 
+@@ -506,6 +516,7 @@
+             _aggregate_returned_indirect_indexed
+         ),
+         materialize_legacy_slots=False,
++        phase_timing=phase_timing,
+     )
+     structured_sections = []
+     native_text = structured_instructions and not optimize
+@@ -530,6 +541,7 @@
+         ),
+         native_undefined=native_undefined if native_text else None,
+         native_fallback_lines=native_fallback_lines if native_text else None,
++        phase_timing=phase_timing,
+     )
+     if not structured_instructions:
+         structured_counts = [0, 0, 0, 0, 0, 0, 0]
+@@ -568,6 +580,7 @@
+     structured_counts: list[int] | None = None,
+     native_undefined: list[str] | None = None,
+     native_fallback_lines: list[str] | None = None,
++    phase_timing=None,
+ ) -> list[str]:
+     global _AARCH64_EMISSION_ACTIVE
+     direct_instruction_capture = (
+@@ -599,6 +612,7 @@
+                 native_sink=native_sink,
+                 native_undefined=native_undefined,
+                 native_fallback_lines=native_fallback_lines,
++                phase_timing=phase_timing,
+             )
+         finally:
+             if native_sink is not None:
+@@ -622,6 +636,7 @@
+     native_sink: _NativeAArch64Emission | None = None,
+     native_undefined: list[str] | None = None,
+     native_fallback_lines: list[str] | None = None,
++    phase_timing=None,
+ ) -> list[str]:
+     global _MODULE_SYMBOLS
+     direct_instruction_capture = encoded_line_records is not None and not optimize
+@@ -654,6 +669,8 @@
+     for func in functions:
+         func.aarch64_tail_call_ids = []
+     _emit_trace("stack map plans begin funcs=" + str(len(functions)))
++    if phase_timing is not None:
++        phase_start = phase_timing.start()
+     stack_map_plans = {
+         plan.function_name: plan
+         for plan in build_stack_map_plans(
+@@ -663,6 +680,8 @@
+             function_symbol=_function_symbol,
+         )
+     }
++    if phase_timing is not None:
++        phase_timing.add(5, phase_start)
+ 
+     _emit_trace("stack map plans end")
+     lines = _emit_globals(globals_, _MODULE_SYMBOLS)
+@@ -684,10 +703,14 @@
+             plan_aarch64_tail_calls(func, stack_map_plans[func.name], enabled=optimize)
+             if func.aarch64_tail_call_ids:
+                 previous_plan = stack_map_plans[func.name]
++                if phase_timing is not None:
++                    phase_start = phase_timing.start()
+                 stack_map_plans[func.name] = build_function_stack_map_plan(
+                     func, globals_, target="aarch64-darwin",
+                     identity_name=_function_symbol(func.name),
+                 )
++                if phase_timing is not None:
++                    phase_timing.add(5, phase_start)
+                 if previous_plan.packed_records is not None:
+                     previous_plan.packed_records.close()
+             plan_aarch64_madd_fusions(func, enabled=optimize)
+@@ -705,11 +728,22 @@
+                         _block_label(func.name, success_block),
+                     )
+                 )
++            if phase_timing is not None:
++                phase_start = phase_timing.start()
+             if native_sink is None:
+-                lines.extend(_emit_function(func, stack_map_plans[func.name]))
++                lines.extend(_emit_function(
++                    func, stack_map_plans[func.name], phase_timing=phase_timing,
++                ))
+             else:
+-                _emit_function(func, stack_map_plans[func.name], native_sink=native_sink)
++                _emit_function(
++                    func, stack_map_plans[func.name], native_sink=native_sink,
++                    phase_timing=phase_timing,
++                )
+                 native_sink.release_captured_function()
++            if phase_timing is not None:
++                phase_timing.add(6, phase_start)
++    if phase_timing is not None:
++        phase_start = phase_timing.start()
+     if native_sink is not None:
+         if (
+             optimize or structured_sections is None or structured_counts is None
+@@ -744,6 +778,8 @@
+             native_sink.call_count, native_sink.direct_count,
+             native_sink.fragment_record_count,
+         ])
++        if phase_timing is not None:
++            phase_timing.add(7, phase_start)
+         return []
+     if optimize:
+         lines = _forward_adjacent_stack_store_load(lines)
+@@ -938,6 +974,8 @@
+         structured_counts.append(structured_call_count)
+         structured_counts.append(direct_instruction_index)
+         structured_counts.append(0)
++    if phase_timing is not None:
++        phase_timing.add(7, phase_start)
+     return lines
+ 
+ 
+@@ -947,14 +985,21 @@
+     *,
+     profile_ir_text: str = "",
+     close_native_tables: bool = True,
++    phase_timing=None,
+ ) -> str:
+     lines = _emit_prepared_aarch64_darwin_lines(
+         prepared,
+         optimize,
+         profile_ir_text=profile_ir_text,
+         close_native_tables=close_native_tables,
++        phase_timing=phase_timing,
+     )
+-    return "\n".join(lines) + "\n"
++    if phase_timing is not None:
++        phase_start = phase_timing.start()
++    result = "\n".join(lines) + "\n"
++    if phase_timing is not None:
++        phase_timing.add(7, phase_start)
++    return result
+ 
+ 
+ def _parse_stack_transfer(line: str, opcode: str) -> tuple[str, str] | None:
+@@ -2145,13 +2190,19 @@
+     func: ParsedFunction,
+     stack_map_plan: FunctionStackMapPlan,
+     native_sink: _NativeAArch64Emission | None = None,
++    *,
++    phase_timing=None,
+ ) -> list[str]:
++    if phase_timing is not None:
++        phase_start = phase_timing.start()
+     note_aarch64_reload_destinations(func, stack_map_plan)
+     lines = _prologue_emit_function_prologue(func, _MODULE_SYMBOLS)
+     if native_sink is not None:
+         native_sink.extend(lines)
+         lines = []
+     kernel = get_indexed_function_kernel(func)
++    if phase_timing is not None:
++        phase_timing.add(12, phase_start)
+     if stack_map_plan.packed_records is not None and (
+         not func.blocks or direct_instruction_capture_active()
+     ):
+diff --git a/pcc/backend/self_backend_prepare.py b/pcc/backend/self_backend_prepare.py
+--- a/pcc/backend/self_backend_prepare.py
++++ b/pcc/backend/self_backend_prepare.py
+@@ -36,6 +36,7 @@
+     aggregate_returned_indirect,
+     aggregate_returned_indirect_indexed=None,
+     materialize_legacy_slots: bool = True,
++    phase_timing=None,
+ ) -> PreparedSelfBackendModule:
+     module = parse_self_backend_module(ir_text)
+     return prepare_parsed_module_for_target(
+@@ -43,6 +44,7 @@
+         aggregate_returned_indirect=aggregate_returned_indirect,
+         aggregate_returned_indirect_indexed=aggregate_returned_indirect_indexed,
+         materialize_legacy_slots=materialize_legacy_slots,
++        phase_timing=phase_timing,
+     )
+ 
+ 
+@@ -52,11 +54,17 @@
+     aggregate_returned_indirect,
+     aggregate_returned_indirect_indexed=None,
+     materialize_legacy_slots: bool = True,
++    phase_timing=None,
+ ) -> PreparedSelfBackendModule:
+     """Prepare an already-final parsed/indexed module without reparsing text."""
+     # The verifier constructs each function's indexed kernel at its definition
+     # boundary.  Every later migrated pass then observes the same stable IDs.
++    if phase_timing is not None:
++        phase_start = phase_timing.start()
+     verify_parsed_module(module)
++    if phase_timing is not None:
++        phase_timing.add(3, phase_start)
++        phase_start = phase_timing.start()
+     globals_ = list(module.globals_)
+     functions = list(module.functions)
+     prepare_parsed_functions(functions)
+@@ -72,9 +80,12 @@
+             materialize_legacy_slots=materialize_legacy_slots,
+         )
+     module_symbols = prepare_module_symbols("", globals_, functions, module.triple)
+-    return PreparedSelfBackendModule(
++    prepared = PreparedSelfBackendModule(
+         triple=module.triple,
+         globals_=globals_,
+         functions=functions,
+         module_symbols=module_symbols,
+     )
++    if phase_timing is not None:
++        phase_timing.add(4, phase_start)
++    return prepared
+diff --git a/pcc/backend/self_backend_x86_64_linux.py b/pcc/backend/self_backend_x86_64_linux.py
+--- a/pcc/backend/self_backend_x86_64_linux.py
++++ b/pcc/backend/self_backend_x86_64_linux.py
+@@ -2923,14 +2923,20 @@
+ def _emit_function(
+     func: ParsedFunction,
+     stack_map_plan: FunctionStackMapPlan,
++    *,
++    phase_timing=None,
+ ) -> list[str]:
+     global _WINDOWS_SCRATCH_BASE
++    if phase_timing is not None:
++        phase_start = phase_timing.start()
+     if _WINDOWS_ABI:
+         from .self_backend_win64_abi import outgoing_size
+         _WINDOWS_SCRATCH_BASE = outgoing_size(func)
+     symbol = _asm_symbol(func.name)
+     lines = _emit_prologue(func)
+     kernel = get_indexed_function_kernel(func)
++    if phase_timing is not None:
++        phase_timing.add(12, phase_start)
+     # Indexed input owns no legacy block graph. Keep the compatibility view
+     # alive only while this function emits; retaining it on every function
+     # duplicates the whole module's instructions alongside the indexed arenas.
+@@ -2974,6 +2980,7 @@
+ def _emit_x86_64_module(
+     ir_text: str, *, windows: bool = False, module=None,
+     stack_map_plans_out=None,
++    phase_timing=None,
+ ) -> str:
+     global _WINDOWS_ABI, _X86_EMISSION_ACTIVE
+     if _X86_EMISSION_ACTIVE:
+@@ -2984,10 +2991,18 @@
+     _WINDOWS_ABI = windows
+     try:
+         if module is None:
+-            prepared = prepare_module_for_target(ir_text, aggregate_returned_indirect=_aggregate_returned_indirect)
++            prepared = prepare_module_for_target(
++                ir_text,
++                aggregate_returned_indirect=_aggregate_returned_indirect,
++                phase_timing=phase_timing,
++            )
+         else:
+             from .self_backend_prepare import prepare_parsed_module_for_target
+-            prepared = prepare_parsed_module_for_target(module, aggregate_returned_indirect=_aggregate_returned_indirect)
++            prepared = prepare_parsed_module_for_target(
++                module,
++                aggregate_returned_indirect=_aggregate_returned_indirect,
++                phase_timing=phase_timing,
++            )
+         from .self_backend_target_match import is_x86_64_windows_triple
+         valid = is_x86_64_windows_triple(prepared.triple) if windows else is_x86_64_linux_triple(prepared.triple)
+         if not valid:
+@@ -2995,6 +3010,7 @@
+         prepared = run_self_target_memory_pass_pipeline(prepared, "self-x86_64-linux-v0")
+         return _emit_prepared_x86_64_module(
+             prepared, ir_text, stack_map_plans_out=stack_map_plans_out,
++            phase_timing=phase_timing,
+         )
+     finally:
+         _WINDOWS_ABI = False
+@@ -3019,7 +3035,7 @@
+ 
+ 
+ def _emit_prepared_x86_64_module(
+-    prepared, ir_text: str, *, stack_map_plans_out=None,
++    prepared, ir_text: str, *, stack_map_plans_out=None, phase_timing=None,
+ ) -> str:
+     global _MODULE_SYMBOLS, _VARARG_FUNCTIONS, _TLS_GLOBALS
+     triple = prepared.triple
+@@ -3055,15 +3071,22 @@
+         _append_assembly_chunk(chunks, label_lines, global_lines)
+     del global_lines
+     for func in functions:
++        if phase_timing is not None:
++            phase_start = phase_timing.start()
+         plan = build_function_stack_map_plan(
+             func,
+             prepared.globals_,
+             target="x86_64-linux",
+             identity_name=_asm_symbol(func.name),
+         )
++        if phase_timing is not None:
++            phase_timing.add(5, phase_start)
+         stack_map_plans[func.name] = plan
++        if phase_timing is not None:
++            phase_start = phase_timing.start()
+         _append_assembly_chunk(
+-            chunks, label_lines, _emit_function(func, plan),
++            chunks, label_lines,
++            _emit_function(func, plan, phase_timing=phase_timing),
+         )
+         # The stack-map plan retains scalar/root metadata, never the IR.
+         # Release completed functions before the next body adds assembly.
+@@ -3079,6 +3102,10 @@
+             clear_text_key_mapping(func.alloca_slots)
+             func.alloca_slot_buckets.clear()
+             clear_text_key_mapping(func.value_types)
++        if phase_timing is not None:
++            phase_timing.add(6, phase_start)
++    if phase_timing is not None:
++        phase_start = phase_timing.start()
+     if functions:
+         plans = tuple(stack_map_plans[func.name] for func in functions)
+         if stack_map_plans_out is None:
+@@ -3095,4 +3122,7 @@
+     # The empty final chunk supplies the newline without copying the full text.
+     chunks.append("")
+     reset_operand_intern()
+-    return "\n".join(chunks)
++    result = "\n".join(chunks)
++    if phase_timing is not None:
++        phase_timing.add(7, phase_start)
++    return result
+diff --git a/pcc/backend/target_objects.py b/pcc/backend/target_objects.py
+--- a/pcc/backend/target_objects.py
++++ b/pcc/backend/target_objects.py
+@@ -7,21 +7,26 @@
+ )
+ 
+ 
+-def emit_indexed_assembly(module, optimize=False, *, stack_map_plans_out=None):
++def emit_indexed_assembly(
++    module, optimize=False, *, stack_map_plans_out=None, phase_timing=None,
++):
+     if is_aarch64_darwin_triple(module.triple) or is_aarch64_linux_triple(module.triple):
+         from .self_backend_aarch64_darwin import emit_aarch64_darwin_indexed_module
+-        return emit_aarch64_darwin_indexed_module(module, optimize=optimize)
++        return emit_aarch64_darwin_indexed_module(
++            module, optimize=optimize, phase_timing=phase_timing,
++        )
+     if is_x86_64_linux_triple(module.triple) or is_x86_64_windows_triple(module.triple):
+         from .self_backend_x86_64_linux import _emit_x86_64_module
+         return _emit_x86_64_module(
+             "", module=module, windows=is_x86_64_windows_triple(module.triple),
+-            stack_map_plans_out=stack_map_plans_out,
++            stack_map_plans_out=stack_map_plans_out, phase_timing=phase_timing,
+         )
+     raise BackendUnavailable("indexed emission target is unavailable: " + module.triple)
+ 
+ 
+ def encode_assembly_object(
+     assembly, target, *, stack_map_plans=None, consume_stack_map_plans=False,
++    phase_timing=None,
+ ):
+     if stack_map_plans is not None:
+         if not is_x86_64_linux_triple(target):
+@@ -29,21 +34,48 @@
+         from .x86_64_asm_driver import assemble_file_with_stack_maps
+         from .self_backend_x86_64_linux import _asm_symbol, _block_label
+         from .elf_x86_64 import emit_relocatable
+-        return emit_relocatable(assemble_file_with_stack_maps(
++        if phase_timing is None:
++            return emit_relocatable(assemble_file_with_stack_maps(
++                assembly, stack_map_plans,
++                function_symbol=_asm_symbol, block_label=_block_label,
++                consume_stack_map_plans=consume_stack_map_plans,
++            ))
++        started = phase_timing.start()
++        obj = assemble_file_with_stack_maps(
+             assembly, stack_map_plans,
+             function_symbol=_asm_symbol, block_label=_block_label,
+             consume_stack_map_plans=consume_stack_map_plans,
+-        ))
++        )
++        phase_timing.add(9, started)
++        started = phase_timing.start()
++        encoded = emit_relocatable(obj)
++        phase_timing.add(10, started)
++        return encoded
+     if is_aarch64_linux_triple(target) or is_x86_64_linux_triple(target):
+         from .owned_elf_link import assemble
+         from .elf_x86_64 import emit_relocatable
+-        return emit_relocatable(assemble(assembly, target))
++        if phase_timing is None:
++            return emit_relocatable(assemble(assembly, target))
++        started = phase_timing.start()
++        obj = assemble(assembly, target)
++        phase_timing.add(9, started)
++        started = phase_timing.start()
++        encoded = emit_relocatable(obj)
++        phase_timing.add(10, started)
++        return encoded
+     if is_x86_64_windows_triple(target):
+         from .coff_x86_64 import assemble_object
+-        return assemble_object(assembly)
++        return assemble_object(assembly, phase_timing=phase_timing)
+     if is_aarch64_darwin_triple(target):
+         from .arm64_asm_driver import assemble_file
+         from .native_object import encode_native_object_from_sections
++        started = phase_timing.start() if phase_timing is not None else 0
+         sections, undefined = assemble_file(assembly)
+-        return encode_native_object_from_sections(sections, undefined=undefined)
++        if phase_timing is not None:
++            phase_timing.add(9, started)
++            started = phase_timing.start()
++        encoded = encode_native_object_from_sections(sections, undefined=undefined)
++        if phase_timing is not None:
++            phase_timing.add(10, started)
++        return encoded
+     raise BackendUnavailable("object emission target is unavailable: " + target)
+diff --git a/pcc/frontends/python/pipeline_frontend_worker_execution.py b/pcc/frontends/python/pipeline_frontend_worker_execution.py
+--- a/pcc/frontends/python/pipeline_frontend_worker_execution.py
++++ b/pcc/frontends/python/pipeline_frontend_worker_execution.py
+@@ -627,6 +627,16 @@
+             if verbose:
+                 log(verbose, "worker codegen[" + module_name + "]")
+             codegen_ms = 0
++            phase_timing = None
++            phase_timing_complete = False
++            if worker_timing:
++                try:
++                    from pcc.backend.indexed_phase_timing import ModulePhaseTiming
++
++                    phase_timing = ModulePhaseTiming(module_name)
++                except Exception:
++                    # Optional diagnostics must not change compiler outcomes.
++                    pass
+             try:
+                 codegen_started = time.monotonic() if worker_timing else 0.0
+                 direct_path = ""
+@@ -686,7 +696,10 @@
+                     and not emit_text_control
+                     and not direct_passes
+                 )
++                phase_started = phase_timing.start() if phase_timing is not None else 0
+                 generated_module = codegen.generate(typed_module)
++                if phase_timing is not None:
++                    phase_timing.add(0, phase_started)
+                 publish_worker_resource("codegen:" + str(index))
+                 ir_text = str(generated_module) if render_ir_text else ""
+                 if direct_passes:
+@@ -740,6 +753,9 @@
+                                 direct_module, host_target_triple(),
+                             )
+                         direct_target = direct_module.triple
++                        if phase_timing is not None:
++                            phase_timing.target = direct_target
++                            phase_timing.route = "indexed-sidecar" if indexed_sidecar_output else "indexed-assembly"
+                         from pcc.ir.direct_indexed_kernel import (
+                             direct_indexed_module_first_libpython_edge,
+                         )
+@@ -786,7 +802,10 @@
+                             and not validate_direct
+                             and not indexed_sidecar_output
+                         ):
++                            phase_started = phase_timing.start() if phase_timing is not None else 0
+                             _release_direct_frontend_state(codegen)
++                            if phase_timing is not None:
++                                phase_timing.add(1, phase_started)
+                         direct_emit_started = (
+                             time.monotonic() if worker_timing else 0.0
+                         )
+@@ -807,6 +826,9 @@
+                             and is_x86_64_linux_triple(direct_target)
+                         )
+                         if direct_lines_output:
++                            if phase_timing is not None:
++                                phase_timing.route = "indexed-native-sections"
++                            phase_started = phase_timing.start() if phase_timing is not None else 0
+                             direct_transport = (
+                                 emit_aarch64_darwin_indexed_transport(
+                                     direct_module,
+@@ -814,8 +836,11 @@
+                                     # Both host and native workers emit final
+                                     # machine records through the owned encoder.
+                                     structured_instructions=True,
++                                    phase_timing=phase_timing,
+                                 )
+                             )
++                            if phase_timing is not None:
++                                phase_timing.add(2, phase_started)
+                             if worker_timing:
+                                 sys.stderr.write(
+                                     "pcc structured instructions module="
+@@ -835,6 +860,7 @@
+                                     + "\n"
+                                 )
+                         elif not indexed_sidecar_output:
++                            phase_started = phase_timing.start() if phase_timing is not None else 0
+                             direct_asm = emit_indexed_assembly(
+                                 direct_module,
+                                 optimize=False,
+@@ -842,7 +868,10 @@
+                                     direct_stack_map_plans
+                                     if direct_packed_stack_maps else None
+                                 ),
+-                            )
++                                phase_timing=phase_timing,
++                            )
++                            if phase_timing is not None:
++                                phase_timing.add(2, phase_started)
+                         if (
+                             release_direct_frontend
+                             and emit_direct
+@@ -857,6 +886,7 @@
+                             # Section/Relocation/NativeObject graph; pcc's
+                             # allocator can reuse freed cells even though it
+                             # cannot yet unmap whole slabs.
++                            phase_started = phase_timing.start() if phase_timing is not None else 0
+                             parsed_modules[index] = None
+                             del ast_module
+                             del typed_module
+@@ -870,6 +900,8 @@
+                             gc.collect()
+                             if lazy_ast_dir:
+                                 _freeze_worker_survivors()
++                            if phase_timing is not None:
++                                phase_timing.add(8, phase_started)
+                         if worker_timing:
+                             sys.stderr.write(
+                                 "pcc direct indexed emit module="
+@@ -907,18 +939,25 @@
+                                             if direct_packed_stack_maps else None
+                                         ),
+                                         consume_stack_map_plans=direct_packed_stack_maps,
++                                        phase_timing=phase_timing,
+                                     )
+                                     direct_stack_map_plans.clear()
+                                     if not validate_direct:
+                                         direct_asm = ""
+                                 else:
+                                     if direct_lines_output:
++                                        phase_started = phase_timing.start() if phase_timing is not None else 0
+                                         sections, undefined = direct_transport.assemble_sections()
++                                        if phase_timing is not None:
++                                            phase_timing.add(9, phase_started)
+                                         if direct_transport.encoded_line_records is not None:
+                                             direct_transport.encoded_line_records.close()
+                                         del direct_transport
+                                     else:
++                                        phase_started = phase_timing.start() if phase_timing is not None else 0
+                                         sections, undefined = assemble_file(direct_asm)
++                                        if phase_timing is not None:
++                                            phase_timing.add(9, phase_started)
+                                     # Parsing is complete. Unless the text oracle
+                                     # still needs it, drop the assembly text before
+                                     # validating and encoding the Section graph
+@@ -928,14 +967,20 @@
+                                     # graph.
+                                     if not validate_direct:
+                                         direct_asm = ""
++                                    phase_started = phase_timing.start() if phase_timing is not None else 0
+                                     encoded = encode_native_object_from_sections(
+                                         sections,
+                                         undefined=undefined,
+                                     )
++                                    if phase_timing is not None:
++                                        phase_timing.add(10, phase_started)
+                                     del sections
+                                     del undefined
++                                phase_started = phase_timing.start() if phase_timing is not None else 0
+                                 with open(direct_path, "wb") as stream:
+                                     stream.write(encoded)
++                                if phase_timing is not None:
++                                    phase_timing.add(11, phase_started)
+                                 if checkpoint_root:
+                                     # A large Stage1 object can itself be 174 MB.
+                                     # Release the emitter buffer before the
+@@ -996,6 +1041,7 @@
+                             direct_asm = ""
+                 if worker_timing:
+                     codegen_ms = int((time.monotonic() - codegen_started) * 1000)
++                phase_timing_complete = True
+             except Exception as exc:
+                 raise _worker_failure(
+                     "codegen["
+@@ -1005,6 +1051,10 @@
+                     + ": "
+                     + safe_exception_text(exc)
+                 ) from exc
++            finally:
++                if phase_timing is not None:
++                    # Outside timed scopes; never replace the original error.
++                    phase_timing.report(sys.stderr, phase_timing_complete)
+             ir_path = os.path.join(ir_dir, "module_" + str(index) + ".ll")
+             with open(ir_path, "w", encoding="utf-8") as stream:
+                 stream.write(ir_text)
+diff --git a/tests/python/test_indexed_phase_timing.py b/tests/python/test_indexed_phase_timing.py
+new file mode 100644
+--- /dev/null
++++ b/tests/python/test_indexed_phase_timing.py
+@@ -0,0 +1,314 @@
++"""Pure host timing/policy/dispatch tests; no compiler or native invocation."""
++
++import ast
++import io
++import sys
++import types
++from pathlib import Path
++
++import pytest
++
++from pcc.backend import BackendUnavailable
++from pcc.backend import indexed_phase_timing as timing_module
++from pcc.backend import target_objects
++from pcc.backend.indexed_phase_timing import ModulePhaseTiming
++
++
++TARGETS = (
++    "arm64-apple-darwin23.6.0",
++    "aarch64-unknown-linux-gnu",
++    "x86_64-unknown-linux-gnu",
++    "x86_64-pc-windows-msvc",
++)
++
++
++class Probe:
++    def __init__(self):
++        self.ids = []
++        self.starts = 0
++
++    def start(self):
++        self.starts += 1
++        return self.starts
++
++    def add(self, phase, started):
++        assert started > 0
++        self.ids.append(phase)
++
++
++def test_fixed_nanosecond_aggregates_keep_small_contributions(monkeypatch):
++    ticks = iter((100, 107, 200, 211))
++    monkeypatch.setattr(timing_module.time, "perf_counter_ns", lambda: next(ticks))
++    totals = ModulePhaseTiming("sample")
++    totals.add(5, totals.start())
++    totals.add(5, totals.start())
++    assert totals.totals_ns == [0, 0, 0, 0, 0, 18, 0, 0, 0, 0, 0, 0, 0]
++    assert len(timing_module._PHASE_NAMES) == 13
++    assert not totals.failed
++
++
++@pytest.mark.parametrize("failure", ("start", "end", "backwards", "invalid-phase", "zero"))
++def test_clock_failure_is_best_effort_and_disables_later_reads(monkeypatch, failure):
++    calls = []
++
++    def clock():
++        calls.append(1)
++        if failure == "zero":
++            return 0
++        if failure == "start" or (failure == "end" and len(calls) == 2):
++            raise RuntimeError("clock unavailable")
++        return 100 if len(calls) == 1 else (99 if failure == "backwards" else 120)
++
++    monkeypatch.setattr(timing_module.time, "perf_counter_ns", clock)
++    totals = ModulePhaseTiming("sample")
++    started = totals.start()
++    totals.add(13 if failure == "invalid-phase" else 0, started)
++    assert totals.failed
++    before = len(calls)
++    assert totals.start() == 0
++    totals.add(0, 100)
++    assert len(calls) == before
++    assert totals.totals_ns == [0] * 13
++
++
++@pytest.mark.parametrize("complete", (False, True))
++def test_report_is_once_bounded_and_marks_inclusive_fields(complete):
++    totals = ModulePhaseTiming("sample")
++    totals.target = TARGETS[0]
++    totals.route = "indexed-native-sections"
++    stream = io.StringIO()
++    totals.report(stream, complete)
++    totals.report(stream, complete)
++    lines = stream.getvalue().splitlines()
++    assert len(lines) == 1
++    assert "module=sample target=" + TARGETS[0] in lines[0]
++    assert "route=indexed-native-sections" in lines[0]
++    assert "codegen_complete=" + str(int(complete)) in lines[0]
++    assert "clock_ok=1" in lines[0]
++    assert "backend_call_inclusive_ns=0" in lines[0]
++    assert "function_emit_inclusive_ns=0" in lines[0]
++    assert lines[0].count("_ns=") == 13
++    assert set(vars(totals)) == {
++        "module_name", "target", "route", "totals_ns", "failed", "reported",
++    }
++
++
++def test_reporting_failure_never_replaces_error_and_is_not_retried():
++    calls = []
++
++    class BadStream:
++        def write(self, text):
++            calls.append(text)
++            raise OSError("diagnostic stream closed")
++
++    totals = ModulePhaseTiming("sample")
++    totals.report(BadStream(), False)
++    totals.report(BadStream(), False)
++    assert len(calls) == 1
++
++
++def _stub(monkeypatch, name, **attrs):
++    module = types.ModuleType(name)
++    for key, value in attrs.items():
++        setattr(module, key, value)
++    monkeypatch.setitem(sys.modules, name, module)
++
++
++@pytest.mark.parametrize("target", TARGETS)
++@pytest.mark.parametrize("enabled", (False, True))
++def test_indexed_dispatch_keeps_target_options_and_output_identity(monkeypatch, target, enabled):
++    output = object()
++    received = []
++    totals = Probe() if enabled else None
++    module = types.SimpleNamespace(triple=target)
++    plans = [] if target == TARGETS[2] else None
++
++    def arm(actual, **kwargs):
++        received.append((actual, kwargs))
++        return output
++
++    def x86(text, **kwargs):
++        assert text == ""
++        received.append((kwargs.pop("module"), kwargs))
++        return output
++
++    _stub(monkeypatch, "pcc.backend.self_backend_aarch64_darwin", emit_aarch64_darwin_indexed_module=arm)
++    _stub(monkeypatch, "pcc.backend.self_backend_x86_64_linux", _emit_x86_64_module=x86)
++    result = target_objects.emit_indexed_assembly(
++        module, optimize=False, stack_map_plans_out=plans, phase_timing=totals,
++    )
++    assert result is output
++    assert len(received) == 1 and received[0][0] is module
++    assert received[0][1]["phase_timing"] is totals
++    if target in TARGETS[:2]:
++        assert received[0][1]["optimize"] is False
++    else:
++        assert received[0][1]["windows"] == (target == TARGETS[3])
++        assert received[0][1]["stack_map_plans_out"] is plans
++
++
++@pytest.mark.parametrize("target", TARGETS)
++@pytest.mark.parametrize("enabled", (False, True))
++def test_object_dispatch_preserves_calls_and_exact_return(monkeypatch, target, enabled):
++    totals = Probe() if enabled else None
++    calls = []
++    obj = object()
++    payload = b"unchanged-object"
++
++    def assemble(text, *args):
++        assert text == "assembly"
++        calls.append("assemble")
++        return obj
++
++    def encode(actual):
++        assert actual is obj
++        calls.append("encode")
++        return payload
++
++    def arm_assemble(text):
++        assert text == "assembly"
++        calls.append("assemble")
++        return obj, ()
++
++    def arm_encode(actual, *, undefined):
++        assert undefined == ()
++        return encode(actual)
++
++    def coff(text, *, phase_timing=None):
++        assert phase_timing is totals
++        # The real COFF split is checked separately below.
++        result = encode(assemble(text))
++        if phase_timing is not None:
++            phase_timing.add(9, phase_timing.start())
++            phase_timing.add(10, phase_timing.start())
++        return result
++
++    _stub(monkeypatch, "pcc.backend.owned_elf_link", assemble=assemble)
++    _stub(monkeypatch, "pcc.backend.elf_x86_64", emit_relocatable=encode)
++    _stub(monkeypatch, "pcc.backend.arm64_asm_driver", assemble_file=arm_assemble)
++    _stub(monkeypatch, "pcc.backend.native_object", encode_native_object_from_sections=arm_encode)
++    _stub(monkeypatch, "pcc.backend.coff_x86_64", assemble_object=coff)
++    result = target_objects.encode_assembly_object("assembly", target, phase_timing=totals)
++    assert result is payload and calls == ["assemble", "encode"]
++    if enabled:
++        assert totals.ids == [9, 10]
++
++
++@pytest.mark.parametrize("enabled", (False, True))
++def test_packed_stackmap_route_keeps_consumption_and_symbols(monkeypatch, enabled):
++    totals = Probe() if enabled else None
++    plans = []
++    symbol = object()
++    label = object()
++    assembled = object()
++    encoded = b"packed"
++    calls = []
++
++    def assemble(text, actual_plans, **kwargs):
++        assert text == "assembly" and actual_plans is plans
++        assert kwargs == {
++            "function_symbol": symbol, "block_label": label,
++            "consume_stack_map_plans": True,
++        }
++        calls.append("assemble")
++        return assembled
++
++    def encode(actual):
++        assert actual is assembled
++        calls.append("encode")
++        return encoded
++
++    _stub(monkeypatch, "pcc.backend.x86_64_asm_driver", assemble_file_with_stack_maps=assemble)
++    _stub(monkeypatch, "pcc.backend.self_backend_x86_64_linux", _asm_symbol=symbol, _block_label=label)
++    _stub(monkeypatch, "pcc.backend.elf_x86_64", emit_relocatable=encode)
++    result = target_objects.encode_assembly_object(
++        "assembly", TARGETS[2], stack_map_plans=plans,
++        consume_stack_map_plans=True, phase_timing=totals,
++    )
++    assert result is encoded and calls == ["assemble", "encode"]
++    if enabled:
++        assert totals.ids == [9, 10]
++
++
++@pytest.mark.parametrize("failure", ("assemble", "encode"))
++@pytest.mark.parametrize("enabled", (False, True))
++def test_object_error_identity_and_order_are_preserved(monkeypatch, failure, enabled):
++    totals = Probe() if enabled else None
++    error = ValueError("original object failure")
++    calls = []
++    obj = object()
++
++    def assemble(text, target):
++        calls.append("assemble")
++        if failure == "assemble":
++            raise error
++        return obj
++
++    def encode(actual):
++        assert actual is obj
++        calls.append("encode")
++        raise error
++
++    _stub(monkeypatch, "pcc.backend.owned_elf_link", assemble=assemble)
++    _stub(monkeypatch, "pcc.backend.elf_x86_64", emit_relocatable=encode)
++    with pytest.raises(ValueError) as caught:
++        target_objects.encode_assembly_object("assembly", TARGETS[2], phase_timing=totals)
++    assert caught.value is error
++    assert calls == (["assemble"] if failure == "assemble" else ["assemble", "encode"])
++    if enabled:
++        assert totals.ids == ([] if failure == "assemble" else [9])
++
++
++@pytest.mark.parametrize("enabled", (False, True))
++def test_coff_boundary_is_ordinary_assemble_then_emit(monkeypatch, enabled):
++    from pcc.backend import coff_x86_64
++
++    totals = Probe() if enabled else None
++    obj = object()
++    payload = b"COFF"
++    calls = []
++
++    def assemble(text):
++        assert text == "text"
++        calls.append("assemble")
++        return obj
++
++    def emit(actual):
++        assert actual is obj
++        calls.append("emit")
++        return payload
++
++    monkeypatch.setattr(coff_x86_64, "assemble", assemble)
++    monkeypatch.setattr(coff_x86_64, "emit_object", emit)
++    assert coff_x86_64.assemble_object("text", phase_timing=totals) is payload
++    assert calls == ["assemble", "emit"]
++    if enabled:
++        assert totals.ids == [9, 10]
++
++
++@pytest.mark.parametrize("enabled", (False, True))
++def test_unsupported_target_error_is_unchanged(enabled):
++    totals = Probe() if enabled else None
++    with pytest.raises(BackendUnavailable, match="^object emission target is unavailable: invalid$"):
++        target_objects.encode_assembly_object("assembly", "invalid", phase_timing=totals)
++    if enabled:
++        assert totals.starts == 0 and totals.ids == []
++
++
++def test_worker_reuses_existing_gate_and_reports_after_codegen_timer():
++    source = Path(__file__).resolve().parents[2]
++    text = (source / "pcc/frontends/python/pipeline_frontend_worker_execution.py").read_text()
++    tree = ast.parse(text)
++    gated = []
++    reports = []
++    for node in ast.walk(tree):
++        if isinstance(node, ast.If) and isinstance(node.test, ast.Name) and node.test.id == "worker_timing":
++            if any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "ModulePhaseTiming" for n in ast.walk(node)):
++                gated.append(node)
++        if isinstance(node, ast.Try) and node.finalbody:
++            if any(isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "report" and isinstance(n.func.value, ast.Name) and n.func.value.id == "phase_timing" for n in node.finalbody for n in ast.walk(n)):
++                reports.append(node)
++    assert len(gated) == 1 and len(reports) == 1
++    assert 'PCC_INDEXED_PHASE_TIMING' not in text
++    assert 'codegen_ms = int((time.monotonic() - codegen_started) * 1000)' in ast.get_source_segment(text, reports[0])
++    assert not any(isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "report" for body in reports[0].body for n in ast.walk(body))

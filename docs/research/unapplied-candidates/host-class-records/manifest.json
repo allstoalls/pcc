@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "purpose": "Unapplied source/test candidate recovery artifact; no production activation or qualification.",
+  "repository": "ikshengmin/pcc",
+  "baseline": {
+    "commit": "818187ba7dfff54df589b93bc10594f87786fe22",
+    "tree": "603baabe2e9d6508b4af2d7e5c1f489d8f9b8562"
+  },
+  "original_frozen_manifest_sha256": "419f34ec30fbf37807393eed34a62155d79d8051450053172348e51cbeb12d5b",
+  "patch": {
+    "file": "candidate.patch",
+    "bytes": 57450,
+    "sha256": "5441b924b523ca8cae5b6b935c891d10ef3e8e3c638ce967983bad075cc4f7b0"
+  },
+  "files": [
+    {
+      "path": "pcc/frontends/python/pipeline.py",
+      "candidate_sha256": "0ad400fd6e8ee3bcb409aa3d08a9d68ddf2b9514a07dc105e51b0cec059562f2",
+      "candidate_bytes": 167905,
+      "candidate_git_blob": "a4b9b1c460bd7e9dae686fc4371661614d0eab6e",
+      "mode": "100644",
+      "base_sha256": "8fe68eeee47d158d63a7955fdb896d0e4652a7ef9faea45fc5eb618326572fed",
+      "base_git_blob": "721cc9044896b8ca9ea51f5fe2140dce9c357cd3",
+      "base_bytes": 167309
+    },
+    {
+      "path": "pcc/frontends/python/pipeline_exports.py",
+      "candidate_sha256": "470ce84dee5e24bc0d63c52eb535babfdb097976b6fa253359f5559465c4b25c",
+      "candidate_bytes": 79924,
+      "candidate_git_blob": "b8a1e728f8e2e311e0eb41b07359d53883db7307",
+      "mode": "100644",
+      "base_sha256": "c236fdc5fef72aa18307ac050deff84e81dfaa487452ba5d551cdf62b247b4b7",
+      "base_git_blob": "0f7e845d36cd3d43354a6f59b0466e568c85435f",
+      "base_bytes": 74065
+    },
+    {
+      "path": "pcc/frontends/python/pipeline_frontend_parallel.py",
+      "candidate_sha256": "762a3da547b30163d43d6d3e16a96e9063f885a25156f606d15e93676f011fd2",
+      "candidate_bytes": 77218,
+      "candidate_git_blob": "10cf8e2924ce121dc54f31ab39dec05a5202075e",
+      "mode": "100644",
+      "base_sha256": "e4166c66f66418c62b94914f4afb0835ec45188b4d643a900ee1ee8530662207",
+      "base_git_blob": "b948235b789c4bba24b5c41bc55dfa6720e51dc7",
+      "base_bytes": 72369
+    },
+    {
+      "path": "pcc/frontends/python/pipeline_frontend_worker_execution.py",
+      "candidate_sha256": "f41cb4a454dbc020112e416bdc4cab9fa1155aabb5edac74a7c3c47ff4f557d5",
+      "candidate_bytes": 52032,
+      "candidate_git_blob": "0c40087bc5d851facc7cea8ce75bccc47169e700",
+      "mode": "100644",
+      "base_sha256": "a2109b4670c369de7ac28bca5af991a6dbf93e9ea070d918a4eecabe6f4314e2",
+      "base_git_blob": "6de3041ed146c6abd8be82be3ec5b234b8146fc0",
+      "base_bytes": 51742
+    },
+    {
+      "path": "tests/python/test_host_class_record_exports.py",
+      "candidate_sha256": "ceb652bb630745ccb4fcaaef89834505b3a6c2af67a787bc45bfbc64461a2656",
+      "candidate_bytes": 37078,
+      "candidate_git_blob": "c5c7dcfef99914e786cbd56c3671b627371240bf",
+      "mode": "100644"
+    }
+  ],
+  "qualification": {
+    "integrated_candidate_and_tests": "UNRUN",
+    "production_native_and_bootstrap": "UNRUN",
+    "source_recovery": "All five postimages and regenerated patch match the original frozen identities. No tests, compiler or benchmark executed during recovery.",
+    "separate_historical_experiment": "External host metadata experiment only; does not qualify this integration. See README.md.",
+    "missing_evidence": "Original complete source/input wire, runtime/interpreter, raw logs and process samples are not restored by this artifact."
+  }
+}

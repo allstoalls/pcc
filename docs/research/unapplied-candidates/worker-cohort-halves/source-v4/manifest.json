@@ -1,0 +1,80 @@
+{
+  "apply_order": [
+    "../source-v3/candidate-v1.patch",
+    "../source-v3/v2-logging-order.patch",
+    "../source-v3/v3-scan-termination.patch",
+    "test-only.patch"
+  ],
+  "artifacts": [
+    {
+      "bytes": 742,
+      "mode": "100644",
+      "path": "test-only.patch",
+      "sha256": "d8367d2bddc87edee9f039c8fa98eaae35953251ae4ceec8c906ef77355dfacc"
+    },
+    {
+      "bytes": 1892,
+      "mode": "100644",
+      "path": "README.md",
+      "sha256": "d25cd7f8c44ab92948ba898cc412d402cb5a5992285c4ec15cbe281a10f3d1c8"
+    }
+  ],
+  "base_production_commit": "bf1bf82d8242a60a85a06322ceee97fab5346cc0",
+  "base_source_inventory_sha256": "7430a30766c11a59e7185758b725b289388ae131498ce6a8a568bdf10ff773ba",
+  "excluded_node": "tests/python/test_worker_codegen_cohorts.py::test_small_real_children_keep_cohort_barrier_and_original_outputs",
+  "excluded_status": "UNRUN; requires separately admitted process-capable lane",
+  "expected_host_excluded": 1,
+  "expected_host_selected": 56,
+  "files": [
+    {
+      "base_bytes": 13153,
+      "base_sha256": "85af67c5c4b678d77e63f408dbbf0c1519710c9960bd9e2fecb8ddf969272389",
+      "mode": "100644",
+      "path": "pcc/frontends/python/worker_resource_plan.py",
+      "post_bytes": 13550,
+      "post_sha256": "4dc69c18568b54c2096e092b843e6ecd16c9a021291bc0fa528b69a93889a149",
+      "v1_post_bytes": 13473,
+      "v1_post_sha256": "a19f441dc5b3d64903c736548daac15d9d230f36d487eb4eac1aabeb79b3b885",
+      "v2_post_bytes": 13473,
+      "v2_post_sha256": "a19f441dc5b3d64903c736548daac15d9d230f36d487eb4eac1aabeb79b3b885"
+    },
+    {
+      "base_bytes": 33309,
+      "base_sha256": "d7ff2ba46c2bce876ee2f4cbaf8607213c94428d28cfbae41b5f7ccbff848ff1",
+      "mode": "100644",
+      "path": "pcc/frontends/python/worker_process_pool.py",
+      "post_bytes": 33996,
+      "post_sha256": "070eca7616c96f3cb8aecf688cf2649a8b848a57795ac0855dc4f8aed9ff30b6",
+      "v1_post_bytes": 33996,
+      "v1_post_sha256": "63986bb7b6f8fa7fdda7365e2e334fd0699eb50ad8110ee8000b9897cbe5d421",
+      "v2_post_bytes": 33996,
+      "v2_post_sha256": "070eca7616c96f3cb8aecf688cf2649a8b848a57795ac0855dc4f8aed9ff30b6"
+    },
+    {
+      "base_bytes": 10079,
+      "base_sha256": "4e08c5d4024cd8155e7a64463ccea52715cb14285c7ed7be5324cdadec47003d",
+      "mode": "100644",
+      "path": "tests/python/test_worker_codegen_cohorts.py",
+      "post_bytes": 14987,
+      "post_sha256": "ae4b2aa1e7f8090071692f9622dd709ba80dde80293475bbb9f262f5302ac085",
+      "v1_post_bytes": 14413,
+      "v1_post_sha256": "353d0704f1c5a8609a3622e40a2d2764514045703f482b0d1f28d1a8b074fdd1",
+      "v2_post_bytes": 14413,
+      "v2_post_sha256": "353d0704f1c5a8609a3622e40a2d2764514045703f482b0d1f28d1a8b074fdd1"
+    },
+    {
+      "base_bytes": 6892,
+      "base_git_blob": "ea8593f6d5d9ed7f2cc31cf4cd76e061c2d0f2d3",
+      "base_sha256": "4f5bddf3aa20fef49f456132942d6a59e33a328107cd3d904fd667ac57c3e957",
+      "mode": "100644",
+      "path": "tests/python/test_worker_admission_diagnostics.py",
+      "post_bytes": 7105,
+      "post_sha256": "a8448d2735b293901867e5627a65009703e4e7cb0292d8e960f52af91b2deebd"
+    }
+  ],
+  "parent_artifact_commit": "92c787b62061611d5df755e8622c805e4444b6cb",
+  "parent_manifest_sha256": "17bebcdcc3e376c02acebd9d97c5b0931633be2aabd93928752e15a4485043e8",
+  "schema": "pcc.worker-cohort-halves.test-successor.v4",
+  "status": "source-only; final independent review pending; all execution UNRUN",
+  "unchanged_workflow_sha256": "5e28d557eb5b7030158d709d20901970c59797769049da025a7e7c61a63a01af"
+}

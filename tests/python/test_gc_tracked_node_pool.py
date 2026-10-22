@@ -6,7 +6,7 @@ import subprocess
 
 
 REPO = Path(__file__).resolve().parents[2]
-RUNTIME = REPO / "pcc" / "py_runtime"
+RUNTIME = REPO / "pcc" / "runtime"
 
 
 _SOURCE = r"""
@@ -67,9 +67,9 @@ def _build(tmp_path: Path, name: str, archive: Path) -> Path:
 
 def test_tracking_node_pool_is_bounded_and_reusable(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ):
-    port = _build(tmp_path, "tracked_pool_port", pcc_py_runtime_archive)
+    port = _build(tmp_path, "tracked_pool_port", pcc_runtime_archive)
     expected = "pool:4096,drain:0,reuse:1\n"
     for backend in range(5):
         env = {**os.environ, "PCC_GC_BACKEND": str(backend)}

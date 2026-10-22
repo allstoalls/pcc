@@ -22,7 +22,7 @@ class PyStartupArgsTests(unittest.TestCase):
         return dst
 
     def test_compiled_program_sees_host_argv(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "argv_prog.py",
@@ -52,7 +52,7 @@ class PyStartupArgsTests(unittest.TestCase):
         self.assertEqual(run.stdout, "3\nalpha\nbeta\n")
 
     def test_compiled_function_scope_sys_argv_is_native(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "argv_fn_prog.py",
@@ -91,7 +91,7 @@ class PyStartupArgsTests(unittest.TestCase):
         self.assertEqual(run.stdout, "3\n--entry\ndemo\n")
 
     def test_compiled_sys_argv_string_slice_is_native(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "argv_slice_prog.py",
@@ -126,7 +126,7 @@ class PyStartupArgsTests(unittest.TestCase):
         self.assertEqual(run.stdout, "self\nself\n")
 
     def test_compiled_os_path_subset_is_native(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "os_path_prog.py",
@@ -164,7 +164,7 @@ class PyStartupArgsTests(unittest.TestCase):
         self.assertEqual(run.stdout, "a/b/c.txt\ndemo.txt\nyes\n")
 
     def test_compiled_os_path_unsupported_methods_fall_back(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "os_path_fallback_prog.py",
@@ -192,7 +192,7 @@ class PyStartupArgsTests(unittest.TestCase):
         self.assertEqual(run.stdout, "/tmp\n/tmp\n")
 
     def test_compiled_os_path_join_bridges_cpython_path_values(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "os_path_join_cpython_prog.py",
@@ -220,7 +220,7 @@ class PyStartupArgsTests(unittest.TestCase):
         self.assertTrue(run.stdout.strip().endswith("/x.txt"))
 
     def test_compiled_os_env_subset_is_native(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "os_env_prog.py",
@@ -257,7 +257,7 @@ class PyStartupArgsTests(unittest.TestCase):
         self.assertEqual(run.stdout, "default\nhello\ngone\n")
 
     def test_compiled_sys_stream_write_is_native(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "sys_stream_write_prog.py",
@@ -291,7 +291,7 @@ class PyStartupArgsTests(unittest.TestCase):
         self.assertEqual(run.stderr, "err")
 
     def test_compiled_chr_builtin_is_native(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "chr_builtin_prog.py",
@@ -322,7 +322,7 @@ class PyStartupArgsTests(unittest.TestCase):
         self.assertEqual(run.stdout, "A♥\n")
 
     def test_compiled_heterogeneous_dict_literal_keeps_list_method_dispatch(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "hetero_dict_prog.py",
@@ -350,7 +350,7 @@ class PyStartupArgsTests(unittest.TestCase):
         self.assertEqual(run.stdout, "self\n1\n")
 
     def test_compiled_str_split_with_maxsplit_falls_back_cleanly(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "str_split_maxsplit_prog.py",
@@ -376,7 +376,7 @@ class PyStartupArgsTests(unittest.TestCase):
         self.assertEqual(run.stdout, "self\n")
 
     def test_compiled_argparse_entry_receives_cli_args(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         src = self._write(
             "argparse_prog.py",

@@ -5,7 +5,7 @@ import textwrap
 
 
 def test_local_cache_method_decorator_is_noop_self_backend(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "cache_method_decorator.py"
     src.write_text(textwrap.dedent(

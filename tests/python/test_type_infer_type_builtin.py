@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pcc.py_frontend import parser, type_infer
-from pcc.py_frontend.py_ast import Assign, Attr, Call, ClassType, StrType
+from pcc.frontends.python import parser, type_infer
+from pcc.frontends.python.py_ast import Assign, Attr, Call, ClassType, StrType
 
 
 def test_type_builtin_has_class_return_type():

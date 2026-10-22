@@ -117,7 +117,7 @@ def _configure(monkeypatch):
 
 @pytest.mark.parametrize("scaffold", ("on", "off"))
 def test_host_ir_global_reads_do_not_become_capture_values(tmp_path, monkeypatch, scaffold):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     _configure(monkeypatch)
     output = tmp_path / "scopes.ll"
@@ -132,22 +132,28 @@ def test_host_ir_global_reads_do_not_become_capture_values(tmp_path, monkeypatch
                  "explicit_global_read", "method_global_read"):
         matches = re.findall(
             r"^define[^\n]*@[^\n(]*__nested_" + name
-            + r"(?:_\d+)?\([^\n]*\)[^\n]*\{\n(.*?)^\}", text, re.M | re.S,
+            + r"(?:_\d+)?\(([^\n]*)\)[^\n]*\{\n(.*?)^\}", text, re.M | re.S,
         )
         assert len(matches) == 1, (name, len(matches))
-        assert "@.modvar.scope_entry.X" in matches[0], (name, matches[0])
+        params, body = matches[0]
+        # The global is read from the module when the function runs: its
+        # module variable, or the module attribute once an import statement
+        # made the binding live. It never arrives as a captured value.
+        assert ("@.modvar.scope_entry.X" in body
+                or ("@py_module_attr_get(" in body and "name.dynamic.X" in body)), (name, body)
+        assert "%X" not in params, (name, params)
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize("scaffold", ("on", "off"))
 def test_host_emitted_global_barrier_and_nonlocal_cells(tmp_path, monkeypatch, scaffold):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
     from pcc.tools.runtime_archive_provenance import verify_runtime_archive_manifest
 
     requested = os.environ.get("PCC_RUNTIME_ARCHIVE", "")
     assert requested, "set an explicit matching prebuilt runtime; no auto-build"
     runtime = Path(requested).resolve(strict=True)
-    verify_runtime_archive_manifest(runtime, runtime_root=ROOT / "pcc/py_runtime")
+    verify_runtime_archive_manifest(runtime, runtime_root=ROOT / "pcc/runtime")
     _configure(monkeypatch)
     binary = tmp_path / "scopes"
     compile_python_multi(

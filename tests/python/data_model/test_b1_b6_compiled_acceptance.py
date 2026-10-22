@@ -13,7 +13,7 @@ def _compile_and_run(
     extra_files: dict[str, str] | None = None,
     backend: str = "0",
 ) -> list[str]:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "probe.py"
     exe = tmp_path / "probe.out"

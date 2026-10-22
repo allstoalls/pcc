@@ -1,6 +1,10 @@
 """Select scalar ALU operands without redundant register round trips."""
 
+import platform
 import re
+import sys
+
+import pytest
 
 from pcc.backend.self_backend_aarch64_darwin import emit_aarch64_darwin_asm
 
@@ -49,8 +53,6 @@ def _execute(source, executable, optimize):
     from pcc.backend.self_backend_aarch64_darwin import emit_aarch64_darwin_indexed_transport
     from pcc.backend.self_backend_parse import parse_self_backend_module
 
-    if sys.platform != "darwin" or platform.machine() != "arm64":
-        pytest.skip("AArch64 Darwin execution")
     transport = emit_aarch64_darwin_indexed_transport(
         parse_self_backend_module(source), optimize=optimize,
     )
@@ -64,6 +66,8 @@ def _execute(source, executable, optimize):
     assert result.returncode == 0, result.stderr
 
 
+# AArch64 Darwin execution
+@pytest.mark.pcc_gate(probe=lambda: not (sys.platform != "darwin" or platform.machine() != "arm64"))
 def test_integer_alu_execution_and_aliases(tmp_path):
     for bits in (8, 16, 32, 64):
         mask = (1 << bits) - 1
@@ -111,6 +115,8 @@ entry:
             _execute(source, tmp_path / f'alu-{bits}-{optimize}', optimize)
 
 
+# AArch64 Darwin execution
+@pytest.mark.pcc_gate(probe=lambda: not (sys.platform != "darwin" or platform.machine() != "arm64"))
 def test_add_sub_immediate_boundaries_execute(tmp_path):
     for bits in (32, 64):
         mask = (1 << bits) - 1

@@ -16,7 +16,7 @@ from textwrap import dedent
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 _SOURCE = """
 import weakref

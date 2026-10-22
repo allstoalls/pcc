@@ -1,0 +1,81 @@
+{
+  "candidate_manifest_sha256": "871eadf0bf54042154dc05e38c7a9564e8abf0f0a0e015cd4c812adada2bd723",
+  "candidate_patch_sha256": "9132e8d5be54a4429d90350005f6021d6ce93d6a1126f761c42e9ac837f4cf29",
+  "comparison_contract": [
+    "same per-target input.pidx byte SHA256 for both arms",
+    "same CFG rows",
+    "same assembly SHA256",
+    "same object byte SHA256 and complete retained bytes",
+    "same decoded sections/symbols/relocations and stackmap contract",
+    "baseline instruction bridge and interning counts equal instruction count; candidate zero",
+    "both arms retain exactly one canonical arithmetic-flag read and one operand data decode per emitted instruction"
+  ],
+  "driver_sha256": "23a9f5320f25c61b7b9e889d4e265f5886dacbd31bcd9affd9c34e6e3f145c69",
+  "effective_environment": {
+    "PCC_CODE_PROFILE": "",
+    "PCC_DIRECT_INDEXED_KERNEL_CAPTURE": "1",
+    "PCC_DIRECT_INDEXED_KERNEL_EMIT": "1",
+    "PCC_DIRECT_INDEXED_KERNEL_FUSE_USES": "1",
+    "PCC_DIRECT_INDEXED_KERNEL_RELEASE_FRONTEND": "0",
+    "PCC_DIRECT_INDEXED_KERNEL_REQUIRE_ZERO_FALLBACK": "1",
+    "PCC_DIRECT_INDEXED_KERNEL_VALIDATE": "0",
+    "PCC_DIRECT_INLINE_ERROR_EDGE_CAPTURE": "0",
+    "PCC_PYTHON_IR_PASSES": "off",
+    "PCC_SELF_TARGET_PASSES": "off",
+    "PCC_SELF_TARGET_PASS_TRANSPORT": "text",
+    "PCC_TEXT_INDEXED_KERNEL_EMIT": "0"
+  },
+  "emitter_sha256": {
+    "baseline": "9c515249d01aa01a0baa6913f7e51c28d80555c90685160b9e5590a755677ec5",
+    "candidate": "145713c125d1d4e4e72c8d499646cd5c85874f4b6a83d3fd3c23dde934cea1ca"
+  },
+  "execution_status": "UNRUN",
+  "limits_per_process": {
+    "free_reserve_bytes": 4294967296,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "seconds": 300,
+    "shared_exclusive_lock": true
+  },
+  "planned_output_reservation_bytes": 1073741824,
+  "production_base_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "readme_sha256": "1799635cdf26df8efd6814d62aac01e53c0a080f3e3eef0af20dc17e5b5e4520",
+  "schema": "pcc.x86-indexed-bridge-real-module.v2",
+  "scope_limits": [
+    "single-source c_ast library with only genuinely owned sys import",
+    "Linux ELF/Windows COFF host cross-compilation",
+    "no native execution, runtime build, FFI, general subprocess, full Stage1 or speedup claim",
+    "observer-weighted durations are not performance benchmarks"
+  ],
+  "shared_source_files": {
+    "pcc/backend/coff_x86_64.py": "f564767a154adae848e53f1286833c08b618c9b6311a688096bfdd5548be1aeb",
+    "pcc/backend/elf_x86_64.py": "79db187fd9c19106d9730627dad5cf171daafd0429afd8a537179eb6df319b0c",
+    "pcc/backend/self_backend_emit.py": "e7500836fcd1cf3bf65acf99f1ad7001cbcbecde0021347b616450aadc8b891c",
+    "pcc/backend/self_backend_indexed_codec.py": "87bc72cbbab7029a1e7029b0831b54384d25803a6370f599714d99ca8b4a566c",
+    "pcc/backend/self_backend_instruction_dispatch.py": "1d8388770690d4091a92d10b46c0b45c94633d6820761271e84e695a37d9111d",
+    "pcc/backend/self_backend_ir.py": "0018e1fb981ac01cf5b7aa75e1c36d7b68261023efb04a49406e771980a2f268",
+    "pcc/backend/self_backend_kernel.py": "021d6add950632188eefa65195338f9ab7ec6aef0b396a71b5cc170a67fc822d",
+    "pcc/backend/self_backend_precise_stackmaps.py": "bfc3630f958d6c63a1c4f0677b2d55082dfb4d90960978df84cf2c83a72eaa64",
+    "pcc/backend/self_backend_prepare.py": "1b042b1297c67713513a764f8f47dea08b6afaed6b83f0f963034a90cca77837",
+    "pcc/backend/self_backend_stackprep.py": "fae5e2c2384caf652da26aa7f6e1dfe0fc48a1011e80c1e981ddae060df714f9",
+    "pcc/backend/self_backend_verify.py": "91f63f7a876b6dbf41f33e3d6c4a6f1bd8f54fd8c8ebada7421cf6ed548b708a",
+    "pcc/backend/self_backend_win64_abi.py": "8e7527e1a601e9fefcfd07d10d6db5f64999d06a794b980bae51e517e5a506a0",
+    "pcc/backend/target_objects.py": "43328564860270186bd597549c39a70d891715d388613353c1667f1f2265aba6",
+    "pcc/backend/x86_64_asm_driver.py": "cc71a7b5b5c5db56d665fc83afe670b021c20f76403fb5a381a085cdf37cf84d",
+    "pcc/backend/x86_64_encode.py": "b5f50803d5fee0da05accbd0e331cdfe5a6a6a6505a50480b10aef570b363a82",
+    "pcc/frontends/c/ast/c_ast.py": "21eacf1370cec218ea7ff97092ee47a96752505067caad2699f20239c74f2b58",
+    "pcc/frontends/python/codegen/_l1_codegen_static_methods.py": "49d41a9aef23e7c3df10d10d97ef1d2e3d8267fe6a6def75f230a0520942c451",
+    "pcc/frontends/python/codegen/call_object_lowering.py": "162c0a78aae28546fd4326f870e68295bb7b4c8555fa27ce648e5e17fbcd1bde",
+    "pcc/frontends/python/codegen/generation_lowering.py": "0982b9b0209b8785552b75cd552c3e18837ff39f92c289cf53df373eaa140904",
+    "pcc/frontends/python/codegen/host_contract.py": "23c09a811bf9e82a5804d6296a8662b3250f2464268f65ea2445b394b2d18dae",
+    "pcc/frontends/python/codegen/layer1.py": "863a85f30b3da3f04002a2c248957cc7aa0d7858d77eb4f9397190097040dc11",
+    "pcc/frontends/python/pipeline_import_policy.py": "ad5938c11e4e3a6df52488f4ef1829ae0f8cfc9b5c248c1403a8fe50c74436ca",
+    "pcc/frontends/python/py_lift.py": "94ebd0bd0c90e0abc0f49652419a75c9e3c538f0727e7301784e7686c805e413",
+    "pcc/frontends/python/type_infer.py": "dd7ec0ec772d574ea5712fc4af2eb54707d0d6b4492ab6349ba53ab65a2fbe22",
+    "pcc/ir/direct_indexed_kernel.py": "c522df0dacc0afa61f6a38aad957b8deb918bdd21a78d36b543c4c5dff33883c",
+    "pcc/ir/ir.py": "821d3c0232a8daeae7c63d927586b80f6775f6aa03c3147aa7e6b462707ed39b"
+  },
+  "source_inventory_contract": "Coordinator must verify the complete protected baseline inventory and one ordinary candidate copy differing only by the three candidate paths before and after; these targeted driver pins supplement that seal.",
+  "source_review_status": "Independent source review complete for V2. No blocking source issue found; execution/admission and cross-arm equality remain UNRUN.",
+  "supersedes_unexecuted_driver_sha256": "0fef14d79285a11232f0701e1ada04440ebb2cab9106ee0bb4f7fca1cfe28dc1"
+}

@@ -205,7 +205,7 @@ def test_strict_refcount_guards_accept_only_registry_proven_cext_tags() -> None:
     tags stay fail-closed. Prevents a regression back to a blanket >500 reject
     (which drops C-extension owners) or a tag-only exemption without the
     registry authority."""
-    py_obj = (REPO_ROOT / "pcc" / "py_runtime" / "py" / "py_obj.py").read_text(
+    py_obj = (REPO_ROOT / "pcc" / "runtime" / "py" / "py_obj.py").read_text(
         encoding="utf-8"
     )
     # The registry extern is the single acceptance authority.

@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 
 import pytest
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 @pytest.mark.parametrize("target", ["arm64-apple-darwin", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"])
@@ -51,7 +51,7 @@ def probe_lock(fd: i64) -> i64:
 
 def test_file_lock_runtime_exports_actual_locking_operations(tmp_path):
     root = Path(__file__).resolve().parents[2]
-    source = root / "pcc/py_runtime/py/py_file_lock.py"
+    source = root / "pcc/runtime/py/py_file_lock.py"
     output = tmp_path / "file_lock.ll"
     compile_python(str(source), str(output), emit_llvm_only=True, python_library=True,
                    libpython_mode="off", target_triple="arm64-apple-darwin")

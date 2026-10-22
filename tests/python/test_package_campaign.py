@@ -117,7 +117,7 @@ def test_numpy_core_l6_profile_selects_documented_subset(tmp_path):
     assert first["feature"] == "array-repr-print"
     assert report["dashboard"]["by_status"]["selected"] == 3
 
-    import pcc.cli_bootstrap as cb
+    import pcc.driver.cli_bootstrap as cb
 
     native = json.loads(
         cb._native_campaign_json(

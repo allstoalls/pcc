@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pcc.py_frontend.codegen.runtime_abi import RUNTIME_SIGNATURES
-from pcc.runtime_effects import (
+from pcc.frontends.python.codegen.runtime_abi import RUNTIME_SIGNATURES
+from pcc.diagnostics.contracts.runtime_effects import (
     CORRECTNESS_CRITICAL_RUNTIME_ABI_NAMES,
     RUNTIME_EFFECT_CATEGORY_OBJECT,
     RuntimeEffect,

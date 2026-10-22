@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 _ROOT = Path(__file__).absolute().parents[2]
-_CODEGEN = _ROOT / "pcc" / "py_frontend" / "codegen"
+_CODEGEN = _ROOT / "pcc" / "frontends" / "python" / "codegen"
 
 
 def _tree(name: str) -> ast.Module:
@@ -39,14 +39,14 @@ def test_hoist_pass_is_composed_outside_layer1_mro():
     assert isinstance(calls[0].args[0], ast.Name)
     assert calls[0].args[0].id == "self"
 
-    from pcc.py_frontend.codegen.host_contract import (
+    from pcc.frontends.python.codegen.host_contract import (
         PROBE_POLICY_CONTEXTUAL_MIXIN,
         per_module_probe_policy,
     )
 
     for suffix in ("hoist_boxing", "hoist_free_names", "hoist_predicates"):
         assert (
-            per_module_probe_policy("pcc.py_frontend.codegen." + suffix)
+            per_module_probe_policy("pcc.frontends.python.codegen." + suffix)
             == PROBE_POLICY_CONTEXTUAL_MIXIN
         )
 
@@ -107,7 +107,20 @@ def test_hoist_pass_keeps_analysis_and_boxing_out_of_orchestrator():
     # scan), and gives lambda-captured comprehension targets per-run cells.
     # +24: a hoisted closure's captured ``self`` keeps the enclosing method's
     # inferred type (mixin methods read the host class layout).
-    assert combined_lines <= 5209
+    # +418: function-local from-import aliases are scoped (0f6fa1d9c), classes
+    # nested in a class body are declared ahead of their outer class
+    # (8c7f55e4c), nested-def decorators apply where the definition executes
+    # (7c8158df1), the October remediation checkpoints (1a59d09df, 351c617eb,
+    # 1a891b352), and the module-scope name scan moved out of the
+    # orchestrator into ``_hoist_module_scope_names``.
+    # +222: function-local class methods are closures over the definition's
+    # cells (trailing capture parameters, one ``__class__`` cell per class
+    # statement execution, run-time base classification) instead of the
+    # hidden-instance-attribute approximation.
+    # +15: a nested def's imported or builtin decorators apply where the def
+    # executes too; which ones function declaration lowers itself is
+    # decorator_lowering.lowered_at_declaration.
+    assert combined_lines <= 5864
 
 
 def test_hoist_exception_handlers_use_stage_safe_field_access():

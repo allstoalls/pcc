@@ -1,0 +1,45 @@
+{
+  "base_commit": "d2334624197b5fc14aaca93bb916683fb1afcb79",
+  "base_pcc_tree": "ee02ba6bf0d79e9706c1791aa650093f5f91c338",
+  "base_source_inventory_sha256": "568c44d837939cde5ab4da2c2f0115ab30f978716bc423a40e07d9cf2bdc0185",
+  "candidate_patch_sha256": "c9aca5943d0c6b956b33edb07c3d27edf5b9f89d6ebe21885b567aa42666860d",
+  "changed_files": [
+    {
+      "mode": "100644",
+      "path": "pcc/backend/x86_64_asm_driver.py",
+      "postimage_bytes": 34692,
+      "postimage_sha256": "a85b7b1fcfa7cb6fec61e08b1cb8a95096cb03b9ebe38778d2d0de1472fc88b4",
+      "preimage_bytes": 33123,
+      "preimage_sha256": "cc71a7b5b5c5db56d665fc83afe670b021c20f76403fb5a381a085cdf37cf84d"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/python/test_x86_64_numeric_data_batching.py",
+      "postimage_bytes": 10897,
+      "postimage_sha256": "8c72053de26d96efac90e7f7713ea91c5f452eaa4d8c2c3fb8fcf253dfb0f3a5",
+      "preimage_bytes": null,
+      "preimage_sha256": null
+    }
+  ],
+  "executed": false,
+  "existing_host_cases_static": 9,
+  "expected_selected_host_cases": 46,
+  "native_closed_world": "UNRUN",
+  "new_host_cases_static": 37,
+  "performance": "UNRUN",
+  "prior_preserved_commit": "331bf644e031b7cbdb26d15ead8eb46f041e2ce1",
+  "prior_production_postimage_sha256": "96bd852adf28cbc92d72e9d8bceb5d6a29bbe3fe90fc18de92e1c85ebbb28938",
+  "public_files": [
+    "README.md",
+    "manifest.json",
+    "candidate.patch"
+  ],
+  "readme_sha256": "9cfe4635da03445a06f015f950b4f885db49450494ae70822c07a67f34a3d56b",
+  "schema": "pcc.x86-numeric-data-batching-source.v2",
+  "status": "UNAPPLIED_REVIEW_PENDING_ALL_EXECUTION_UNRUN",
+  "tests": "PREPARED_SOURCE_ONLY_ALL_UNRUN",
+  "unchanged_neighbor": {
+    "path": "tests/python/test_x86_64_assembler_lifetime.py",
+    "sha256": "9caa0fff39516f573d4265679a02c63b110ac5b46df053993cd9bfc6a05af26c"
+  }
+}

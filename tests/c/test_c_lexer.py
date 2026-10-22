@@ -4,7 +4,7 @@ import unittest
 
 sys.path.insert(0, "..")
 sys.path.insert(0, "../pcc")
-from pcc.lex.c_lexer import CLexer
+from pcc.frontends.c.lex.c_lexer import CLexer
 
 
 def token_list(clex):

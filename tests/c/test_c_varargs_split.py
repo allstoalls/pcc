@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 def test_c_varargs_split_rewrites_and_reports():
-    from pcc.codegen.c_varargs import build_report, postprocess_varargs_ir
+    from pcc.frontends.c.codegen.c_varargs import build_report, postprocess_varargs_ir
 
     ir = '''declare i32 @"__pcc_va_arg_1"(ptr %ap)
 define i32 @f(ptr %ap) {
@@ -21,7 +21,7 @@ entry:
 
 
 def test_c_codegen_exposes_postprocess_report():
-    from pcc.codegen.c_codegen import postprocess_ir_text_with_report
+    from pcc.frontends.c.codegen.c_codegen import postprocess_ir_text_with_report
 
     ir = '''declare i64 @__pcc_va_arg_2(ptr %ap)
 define i64 @f(ptr %ap) {
@@ -36,7 +36,7 @@ entry:
 
 
 def test_varargs_rewrite_handles_typed_calls_and_quoted_ssa_names():
-    from pcc.codegen.c_varargs import postprocess_varargs_ir
+    from pcc.frontends.c.codegen.c_varargs import postprocess_varargs_ir
 
     ir = '''declare double @__pcc_va_arg_17(ptr %ap)
 define double @f(ptr %ap) {
@@ -57,14 +57,14 @@ entry:
 
 
 def test_varargs_rewrite_leaves_non_helper_ir_byte_identical():
-    from pcc.codegen.c_varargs import postprocess_varargs_ir
+    from pcc.frontends.c.codegen.c_varargs import postprocess_varargs_ir
 
     ir = "define i64 @plain(i64 %x) {\n  ret i64 %x\n}\n"
     assert postprocess_varargs_ir(ir) == ir
 
 
 def test_varargs_rewrite_does_not_delete_similar_non_numeric_symbol():
-    from pcc.codegen.c_varargs import postprocess_varargs_ir
+    from pcc.frontends.c.codegen.c_varargs import postprocess_varargs_ir
 
     ir = "declare i64 @__pcc_va_arg_helper(ptr %x)\n"
     assert postprocess_varargs_ir(ir) == ir

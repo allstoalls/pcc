@@ -201,8 +201,9 @@ def test_list_sort_with_key_is_not_quadratic_and_is_stable(tmp_path):
         check=True, capture_output=True,
     )
     ir_text = ll.read_text(encoding="utf-8")
-    assert "@py_obj_sorted(" in ir_text, "keyed sort must use the merge sort"
-    assert "sortkey.pairs" in ir_text, "expected the Schwartzian transform"
+    # A callable key sorts in the runtime's rooted merge sort, which calls
+    # each key once and keeps equal keys in input order.
+    assert "@py_list_sort_keyed(" in ir_text, "keyed sort must use the runtime merge sort"
 
     out = subprocess.run([str(exe)], check=True, capture_output=True, text=True)
     # CPython's stable order for keys 0,1,2,0,1,2,...

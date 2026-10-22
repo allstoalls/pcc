@@ -3,12 +3,12 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.pipeline_targets import host_target_triple
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.pipeline_targets import host_target_triple
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 INDEX_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_index_table.py"
 
 PUBLIC_SYMBOLS = {
@@ -666,10 +666,10 @@ def test_production_archive_plan_owns_gc_indexes_in_freestanding_python():
 
 def test_built_production_archive_attributes_and_runs_gc_index_python_object(
     tmp_path,
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
 ):
     members = subprocess.run(
-        ["ar", "-t", str(pcc_py_runtime_archive)],
+        ["ar", "-t", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -680,7 +680,7 @@ def test_built_production_archive_attributes_and_runs_gc_index_python_object(
     assert "py_gc_index_table.o" not in member_names
 
     symbols = subprocess.run(
-        ["nm", "-A", str(pcc_py_runtime_archive)],
+        ["nm", "-A", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -701,7 +701,7 @@ def test_built_production_archive_attributes_and_runs_gc_index_python_object(
     result = _build_and_run_harness(
         tmp_path,
         "gc_index_production_archive",
-        [str(pcc_py_runtime_archive)],
+        [str(pcc_runtime_archive)],
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout == "gc-index-ok\n"

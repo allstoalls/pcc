@@ -106,7 +106,7 @@ def test_compiler_int_arena_host_oracle_grows_reads_writes_and_closes() -> None:
 
 def test_compiler_int_arena_self_backend_lowers_native_payload(tmp_path) -> None:
     from pcc.backend.self_backend_dispatch import emit_self_asm
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     arena_source = Path(__file__).parents[2] / "pcc" / "backend" / (
         "self_backend_value_arena.py"

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pcc.py_frontend import parser
-from pcc.py_frontend.py_ast import ImportFrom, ClassDef, FuncDef
+from pcc.frontends.python import parser
+from pcc.frontends.python.py_ast import ImportFrom, ClassDef, FuncDef
 
 
 def test_dataclasses_functools_itertools_collections_import_shapes():

@@ -1,0 +1,79 @@
+{
+  "artifacts": {
+    "README.md": {
+      "bytes": 5481,
+      "mode": "100644",
+      "sha256": "94aff634648d930b505866c80751d6b874c121d4dadd91abfa376f74905a6b4e"
+    },
+    "successor.patch": {
+      "bytes": 7285,
+      "mode": "100644",
+      "sha256": "f89c5c84572dfb1cd5026e2226b4c3c9e9d701d9196e9c2d94a63849e123a103"
+    }
+  },
+  "base_pcc_git_tree": "d234174fbac80575ea822f6100f65fe914dd4498",
+  "base_production_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "base_source_container_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "changed_files": {
+    "pcc/frontends/python/codegen/class_gen.py": {
+      "base_bytes": 343221,
+      "base_sha256": "d4ec2c4ccc6a9123ed502108fbaf32cdc1dd1a979169ba4628506cb902f4b53e",
+      "mode": "100644",
+      "postimage_bytes": 367376,
+      "postimage_sha256": "6aa9e4222f4822d764db192c57dec23ff8b6a06aa7f132b5090c6e84c99e56de",
+      "v1_postimage_sha256": "48393d5aab839b083fc3d7a59e78e0c63b0fd430e12fd85378ccf70b96dacfcc"
+    },
+    "pcc/frontends/python/codegen/generation_lowering.py": {
+      "base_bytes": 50484,
+      "base_sha256": "0982b9b0209b8785552b75cd552c3e18837ff39f92c289cf53df373eaa140904",
+      "mode": "100644",
+      "postimage_bytes": 50542,
+      "postimage_sha256": "30d38936b4f4dbc1259de9993557c7ccfeca491f3f0546820382185858d56c5b",
+      "v1_postimage_sha256": "30d38936b4f4dbc1259de9993557c7ccfeca491f3f0546820382185858d56c5b"
+    },
+    "tests/python/test_class_init_outlining.py": {
+      "base_bytes": null,
+      "base_sha256": null,
+      "mode": "100644",
+      "postimage_bytes": 17910,
+      "postimage_sha256": "89fbde057cdc8950195d7d607eeb0e8786f90b4d1c0143fdc977149f11c9b28e",
+      "v1_postimage_sha256": "60e2b813a84d10a2bf78c89ee72ecb2b86b6e9264e2372d676228b199d07f04b"
+    }
+  },
+  "execution": {
+    "actual_heavy_module": "UNRUN",
+    "collection": "UNRUN",
+    "compiler_native_closed_world": "UNRUN",
+    "focused_host": "UNRUN",
+    "native": "UNRUN",
+    "performance": "UNRUN"
+  },
+  "intended_host_nodes": 27,
+  "predecessor_artifacts": {
+    "production.patch": {
+      "bytes": 25965,
+      "mode": "100644",
+      "sha256": "26b902d228d02bc4aa5227dc60197b8ff3fa2b0159b25938a196cee2cd1cb9c6"
+    },
+    "tests.patch": {
+      "bytes": 17137,
+      "mode": "100644",
+      "sha256": "81a1a1957ac50de5c799e45de16b74bd9f37a42dbde1785158a4ed3b89da4930"
+    }
+  },
+  "predecessor_commit": "8ee714b914a1a70cd8e6950389f7fb38fbe3c370",
+  "proposed_guard": {
+    "address_space_bytes": 4294967296,
+    "execution_owner": "coordinator",
+    "minimum_free_bytes": 4294967296,
+    "nproc": 0,
+    "seconds": 300
+  },
+  "review": "independent source review complete for final production/test bytes; no execution performed",
+  "schema": 1,
+  "status": "UNAPPLIED_SOURCE_REVIEW_CLEAR_EXECUTION_UNRUN",
+  "unchanged_method_source_sha256": {
+    "ClassLowering._emit_class_init": "2327dcd53c10dadcc37fd99b43744ed2ae8e063e4d50c51e569d018c81e2aaba",
+    "ClassLowering.emit_local_class_statement_init": "9982de05e00a903ba2cbf2ebf952264afa8ac624f99d3ad9749ed97c99e1eb7a"
+  }
+}

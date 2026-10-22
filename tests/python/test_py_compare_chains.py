@@ -6,7 +6,7 @@ import textwrap
 
 
 def test_chained_comparison_uses_python_and_semantics(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"

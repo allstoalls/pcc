@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def test_top_level_lru_cache_user_function_is_not_noop(tmp_path: Path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"

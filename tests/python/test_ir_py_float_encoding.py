@@ -10,7 +10,7 @@ import struct
 
 import pytest
 
-from pcc.llvm_capi.ir import Constant, DoubleType, FloatType, HalfType
+from pcc.ir.ir import Constant, DoubleType, FloatType, HalfType
 
 
 _DOUBLE = DoubleType()

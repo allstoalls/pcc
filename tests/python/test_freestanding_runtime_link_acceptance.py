@@ -19,7 +19,7 @@ from tests.python.test_pcc_native_extension_loader import _compile_demo_extensio
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_ROOT = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_ROOT = REPO_ROOT / "pcc" / "runtime"
 DARWIN_BOUNDARY = REPO_ROOT / "tests" / "darwin_python_runtime_libsystem_boundary.json"
 
 
@@ -190,10 +190,11 @@ def test_darwin_owner_classifier_rejects_foreign_tbd_and_unknown_symbol_owner(
         _classify_darwin_link_map_owners(unknown_symbol_text, archive)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Darwin link-map boundary")
+# Darwin link-map boundary
+@pytest.mark.pcc_gate(probe=lambda: not (sys.platform != "darwin"))
 def test_darwin_python_runtime_final_link_has_only_documented_libsystem_boundary(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     site = _compile_demo_extension(tmp_path)
     source = tmp_path / "runtime_closure.py"
@@ -216,7 +217,7 @@ def test_darwin_python_runtime_final_link_has_only_documented_libsystem_boundary
     env.pop("LC_ALL", None)
     env["PCC_PACKAGE_SITE"] = str(site)
     env["PCC_RUNTIME_CC"] = "pcc"
-    env["PCC_RUNTIME_ARCHIVE"] = str(pcc_py_runtime_archive)
+    env["PCC_RUNTIME_ARCHIVE"] = str(pcc_runtime_archive)
     # This gate consumes the system linker's attributed map as its Darwin
     # ownership oracle.  The pcc-owned Mach-O linker deliberately rejects
     # arbitrary ``-Wl`` arguments, including ``-map``; select the cc link
@@ -253,11 +254,11 @@ def test_darwin_python_runtime_final_link_has_only_documented_libsystem_boundary
     assert run.stdout.splitlines() == ["42", "True"]
 
     manifest = verify_runtime_archive_manifest(
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
         # The fixture is an immutable content-addressed snapshot.  Verify the
         # archive against the sources copied into that same snapshot rather
         # than the concurrently mutable repository tree.
-        runtime_root=pcc_py_runtime_archive.parent,
+        runtime_root=pcc_runtime_archive.parent,
     )
     assert manifest["policy"] == PRODUCTION_POLICY
     manifested_members = {record["member"] for record in manifest["members"]}
@@ -274,7 +275,7 @@ def test_darwin_python_runtime_final_link_has_only_documented_libsystem_boundary
     sdk_usr_lib = Path(sdk_probe.stdout.strip()) / "usr" / "lib"
     runtime_members, system_owner_ids = _classify_darwin_link_map_owners(
         ownership,
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
         system_library_roots=(sdk_usr_lib,),
     )
     assert runtime_members <= manifested_members

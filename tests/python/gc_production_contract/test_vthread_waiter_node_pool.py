@@ -34,7 +34,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).absolute().parents[3]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 
 
 # Number of worker vthreads that contend for the single lock per round, and the
@@ -197,7 +197,7 @@ int main(int argc, char **argv) {
 @pytest.fixture(scope="module", params=["py"])
 def _vthread_waiter_pool_exe(tmp_path_factory, request):
     tmp = tmp_path_factory.mktemp("gc_vthread_waiter_pool")
-    archive = request.getfixturevalue("pcc_py_runtime_archive")
+    archive = request.getfixturevalue("pcc_runtime_archive")
     work_runtime = archive.parent
 
     src = tmp / "vthread_waiter_node_pool.c"

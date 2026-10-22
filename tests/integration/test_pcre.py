@@ -1,3 +1,4 @@
+from tests.owned_ir_validation import verify_ir_text
 """PCRE compilation test suite.
 
 Tests each PCRE .c file through pcc's full pipeline:
@@ -11,12 +12,11 @@ import re
 import subprocess
 import tempfile
 import pytest
-import llvmlite.ir as ir
-import llvmlite.binding as llvm
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.parse.c_parser import CParser
-from pcc.codegen.c_codegen import LLVMCodeGenerator, postprocess_ir_text
-from pcc.project import TranslationUnit
+from pcc.ir import ir
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.frontends.c.parse.c_parser import CParser
+from pcc.frontends.c.codegen.c_codegen import CCodeGenerator, postprocess_ir_text
+from pcc.driver.project import TranslationUnit
 from tests.parallel_jobs import translation_unit_jobs
 
 this_dir = os.path.dirname(__file__)
@@ -26,8 +26,6 @@ projects_dir = os.path.join(project_dir, "projects")
 pcre_dir = os.path.join(projects_dir, "pcre-8.45")
 pcre_test_main = os.path.join(projects_dir, "test_pcre_main.c")
 
-llvm.initialize_native_target()
-llvm.initialize_native_asmprinter()
 
 _TYPEDEF_CLEANUP = re.compile(
     r"typedef\s+(int|char|short|long|double|float|void)\s+\1\s*;"
@@ -82,7 +80,7 @@ def _compile_pcre_file(fname):
         ast = CParser().parse(processed)
         stage = "parse"
 
-        cg = LLVMCodeGenerator()
+        cg = CCodeGenerator()
         cg.generate_code(ast)
         stage = "codegen"
 
@@ -97,7 +95,7 @@ def _compile_pcre_file(fname):
         funcs = [l for l in ir_text.splitlines() if l.startswith("define ")]
         stage = "ir_serialize"
 
-        llvm.parse_assembly(ir_text)
+        verify_ir_text(ir_text)
         stage = "llvm_verify"
 
         return "ok", len(funcs)

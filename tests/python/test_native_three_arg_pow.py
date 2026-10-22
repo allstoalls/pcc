@@ -71,23 +71,25 @@ def test_three_arg_pow_mod_zero_raises(tmp_path):
     ], out
 
 
-def test_three_arg_pow_negative_exponent_raises(tmp_path):
-    """We do not yet compute the modular inverse, so a negative exponent with a
-    modulus raises a clear ValueError (rather than a wrong result or a silent
-    NULL). CPython DOES support ``pow(2, -1, 7) == 4`` via the inverse; this
-    test pins the deferral to a caught, matching-typed error so the boundary is
-    honest — upgrade this expectation when the inverse lands."""
+def test_three_arg_pow_negative_exponent_uses_the_inverse(tmp_path):
+    """A negative exponent raises the base's modular inverse to the negated
+    exponent, as CPython 3.8+ does (``pow(2, -1, 7) == 4``); a base sharing a
+    factor with the modulus has no inverse and raises ValueError."""
     out = _run(tmp_path,
         "def safe(b, e, m):\n"
         "    try:\n"
         "        return pow(b, e, m)\n"
-        "    except ValueError:\n"
-        "        return 'VE'\n"
+        "    except ValueError as ex:\n"
+        "        return 'VE:' + str(ex)\n"
         "def main():\n"
-        "    print(safe(2, -1, 7))\n"      # VE (negative-exp-with-mod deferred)
+        "    print(safe(2, -1, 7))\n"      # 4
+        "    print(safe(3, -2, 7))\n"      # 4 (inverse 5, squared 25 % 7)
+        "    print(safe(2, -1, 4))\n"      # no inverse
         "    print(safe(2, 10, 1000))\n"   # 24 (positive exp unaffected)
         "main()\n")
-    assert out.split("\n")[:2] == ["VE", "24"], out
+    assert out.split("\n")[:4] == [
+        "4", "4", "VE:base is not invertible for the given modulus", "24",
+    ], out
 
 
 def test_two_arg_pow_float_result(tmp_path):

@@ -7,7 +7,6 @@ metadata and explicit toolchain paths rather than package-specific rules.
 
 from __future__ import annotations
 
-import argparse
 import ast
 import json
 import os
@@ -16,13 +15,14 @@ import shutil
 import shlex
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from pcc.package_schema import PCC_CAPI_HEADERS, pcc_native_extension_suffix
+from pcc.package.schema import PCC_CAPI_HEADERS, pcc_native_extension_suffix
 
 from .build_plan import (
     BuildCommand,
+    _compile_commands_path,
+    load_compile_commands,
     build_plan_for_artifact,
     load_meson_introspection_commands,
 )
@@ -82,7 +82,7 @@ def _pcc_capi_source_dir() -> Path | None:
 
 
 def _pcc_runtime_include_dir() -> Path | None:
-    candidate = _repo_root() / "pcc" / "py_runtime" / "include"
+    candidate = _repo_root() / "pcc" / "runtime" / "include"
     return candidate if candidate.is_dir() else None
 
 
@@ -105,7 +105,10 @@ def _materialize_pcc_capi_include(build_dir: Path, *, execute: bool) -> Path | N
         for header in PCC_CAPI_HEADERS:
             header_src = src / header
             if header_src.is_file():
-                shutil.copyfile(header_src, dest / header)
+                with open(header_src, "rb") as source:
+                    contents = source.read()
+                with open(dest / header, "wb") as output:
+                    output.write(contents)
     return dest
 
 
@@ -847,6 +850,278 @@ def _cython_min_version(requires: tuple[str, ...]) -> str | None:
     return None
 
 
+def _owned_compile_argv(command: BuildCommand, root: Path, output: Path, abi_mode: str) -> list[str]:
+    """Translate a C compile action, never execute its recorded tool or shell."""
+    cwd = Path(command.directory).resolve() if command.directory else root
+    source = Path(command.file)
+    if not source.is_absolute():
+        source = cwd / source
+    tokens = shlex.split(command.command)
+    index = 1
+    if tokens and Path(tokens[0]).name in {"ccache", "sccache"}:
+        index = 2
+    args = ["--backend=self", "--emit-obj", str(output)]
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "-c":
+            index += 1
+            continue
+        if token == "-o":
+            if index + 1 >= len(tokens):
+                raise ValueError("missing output in compile command")
+            index += 2
+            continue
+        if token.startswith("-o") and len(token) > 2:
+            index += 1
+            continue
+        if token in {"-I", "-D", "-U"}:
+            if index + 1 >= len(tokens):
+                raise ValueError("missing value for " + token)
+            value = tokens[index + 1]
+            index += 2
+        elif token.startswith(("-I", "-D", "-U")) and len(token) > 2:
+            value = token[2:]
+            token = token[:2]
+            index += 1
+        elif token in {"-O0", "-O1", "-O2", "-O3"}:
+            args.append(token)
+            index += 1
+            continue
+        elif not token.startswith("-"):
+            candidate = Path(token)
+            if not candidate.is_absolute():
+                candidate = cwd / candidate
+            if candidate.resolve() != source.resolve():
+                raise ValueError("unsupported command operand: " + token)
+            index += 1
+            continue
+        else:
+            raise ValueError("unsupported owned C compile option: " + token)
+        if token == "-I":
+            directory = Path(value)
+            if not directory.is_absolute():
+                directory = cwd / directory
+            if abi_mode == "pcc-native" and _is_cpython_include_dir(str(directory)):
+                continue
+            args.append("--cpp-arg=-I" + str(directory.resolve()))
+        else:
+            args.append("--cpp-arg=" + token + value)
+    args.append(str(source.resolve()))
+    return args
+
+
+def _execute_owned_build_actions(
+    name, path, *, include_dirs, execute, regenerate_cython, run_f2py,
+    link_output, abi_mode, from_compile_commands, from_meson_introspection,
+    meson_target, configure_meson, enforce_generated_c, jobs, timeout, owned_compiler,
+    library_dirs, libraries,
+):
+    """Compile supported source actions through the actual owned C driver.
+
+    The source/graph readers are shared with the explicit host executor. Only
+    the execution boundary differs; arbitrary recorded commands are never run.
+    A job count is an upper bound; this initial owned executor stays serial.
+    Compiler children use the native timed process boundary, never cc/ninja.
+    """
+    import tempfile
+
+    root = Path(path).expanduser().resolve()
+    plan = build_plan_for_artifact(name, root)
+    actions = []
+    diagnostics = []
+    replay = None
+    replay_outputs = []
+    generated = generated_c_provenance(root)
+
+    def diagnose(code, message):
+        diagnostics.append({"code": code, "message": message})
+
+    compiler_command = []
+    if sys.implementation.name == "pcc":
+        if owned_compiler:
+            compiler_command = [str(owned_compiler)]
+        elif execute:
+            diagnose("PCC-PKG-OWNED-COMPILER-REQUIRED", "native build replay requires its parent PCC compiler")
+    else:
+        compiler_command = [sys.executable, "-m", "pcc"]
+    if not root.is_dir():
+        diagnose("PCC-PKG-BUILD-PATH-MISSING", "package source directory is missing")
+    if regenerate_cython:
+        diagnose("PCC-PKG-OWNED-CYTHON-UNAVAILABLE", "Cython source generation has no owned execution provider")
+    if run_f2py:
+        diagnose("PCC-PKG-OWNED-F2PY-UNAVAILABLE", "f2py source generation has no owned execution provider")
+    if libraries and link_output is None:
+        diagnose("PCC-PKG-OWNED-LIBRARY-LINK-UNAVAILABLE", "requested libraries require an owned native link action")
+    if link_output is not None:
+        diagnose("PCC-PKG-OWNED-SHARED-LINK-UNAVAILABLE", "native package shared-library linking has no cross-platform owned provider; C object compilation remains available")
+    if enforce_generated_c:
+        for row in generated:
+            if row["status"] in {"missing", "stale"}:
+                diagnose("PCC-PKG-GENERATED-C-" + row["status"].upper(), str(row["generated_c"]))
+    if configure_meson and not (_meson_build_dir_from_intro_path(root, _meson_intro_targets_path(root)) / "build.ninja").is_file():
+        diagnose("PCC-PKG-OWNED-MESON-GRAPH-REQUIRED", "configure the source with the owned native Meson tool before target replay")
+
+    commands = []
+    if from_compile_commands or from_meson_introspection or meson_target:
+        if from_meson_introspection:
+            commands = list(load_meson_introspection_commands(root, root))
+        elif from_compile_commands:
+            compile_path = _compile_commands_path(root)
+            commands = list(load_compile_commands(compile_path)) if compile_path else []
+        else:
+            commands = list(plan.commands)
+        if not commands:
+            diagnose("PCC-PKG-BUILD-COMMANDS-MISSING", "requested source graph has no compile actions")
+        if meson_target:
+            replay = _meson_target_replay_plan(root, meson_target)
+            if not replay["ok"]:
+                diagnose(str(replay["diagnostic"]), "requested Meson target has no owned object closure")
+                commands = []
+            else:
+                selected = []
+                for object_name in replay["objects"]:
+                    expected_source = replay["object_sources"].get(object_name)
+                    candidates = []
+                    for command in commands:
+                        base = Path(command.directory).resolve() if command.directory else root
+                        source = Path(command.file)
+                        if not source.is_absolute():
+                            source = base / source
+                        if expected_source and str(source.resolve()) == expected_source:
+                            candidates.append(command)
+                    if len(candidates) > 1:
+                        expected_output = (Path(replay["build_dir"]) / object_name).resolve()
+                        exact = []
+                        for candidate in candidates:
+                            if candidate.output:
+                                base = Path(candidate.directory).resolve() if candidate.directory else root
+                                candidate_output = Path(candidate.output)
+                                if not candidate_output.is_absolute():
+                                    candidate_output = base / candidate_output
+                                if candidate_output.resolve() == expected_output:
+                                    exact.append(candidate)
+                        candidates = exact
+                    if len(candidates) != 1:
+                        diagnose("PCC-PKG-MESON-TARGET-COMPILE-ACTION-MISSING", "target object has no unique source action: " + object_name)
+                    else:
+                        selected.append(candidates[0])
+                        replay_outputs.append(object_name)
+                commands = selected
+        build_root = _meson_build_dir_from_intro_path(root, _meson_intro_targets_path(root))
+        if (build_root / "build.ninja").is_file():
+            graph = _ninja_graph(build_root)
+            nodes = list(graph) if replay is None else list(replay.get("objects", []))
+            seen_nodes = set()
+            while nodes:
+                node = nodes.pop()
+                if node in seen_nodes:
+                    continue
+                seen_nodes.add(node)
+                edge = graph.get(node)
+                if edge:
+                    if str(edge["rule"]).startswith("CUSTOM_COMMAND"):
+                        diagnose("PCC-PKG-OWNED-GENERATED-COMMAND-UNAVAILABLE", "generated source action has no owned provider: " + node)
+                    nodes.extend(edge["inputs"])
+    else:
+        for source in _iter_source_files(root, _C_SUFFIXES | {".cc", ".cpp", ".cxx", ".c++"} | _FORTRAN_SUFFIXES):
+            relative = source.relative_to(root)
+            output = root / "build" / "pcc-package" / "owned" / (str(relative) + ".o")
+            language = "c" if source.suffix.lower() == ".c" else "fortran" if source.suffix.lower() in _FORTRAN_SUFFIXES else "cxx"
+            commands.append(BuildCommand(str(source), "cc -c " + shlex.quote(str(source)), str(root), language, "cc", str(output), (), (), (), (), ()))
+
+    capi_dir = None
+    runtime_include = None
+    if abi_mode == "pcc-native" and commands:
+        capi_dir = _materialize_pcc_capi_include(root / "build" / "pcc-package", execute=execute and not diagnostics)
+        runtime_include = _pcc_runtime_include_dir()
+        if capi_dir is None or runtime_include is None:
+            diagnose("PCC-PKG-CAPI-INCLUDE-MISSING", "owned C build requires PCC C-API headers")
+    for index, command in enumerate(commands):
+        cwd = Path(command.directory).resolve() if command.directory else root
+        source = Path(command.file)
+        if not source.is_absolute():
+            source = cwd / source
+        output = Path(command.output) if command.output else root / "build" / "pcc-package" / "owned" / (source.name + "." + str(index) + ".o")
+        if not output.is_absolute():
+            output = cwd / output
+        output = output.resolve()
+        if replay_outputs:
+            output = root / "build" / "pcc-package" / "owned-target" / (str(index) + "-" + Path(replay_outputs[index]).name)
+        row = {"kind": "c_compile", "command": [], "source": str(source.resolve()), "output": str(output), "status": "planned", "returncode": None, "stdout": "", "stderr": "", "execution_owner": "pcc"}
+        actions.append(row)
+        if command.language != "c":
+            row["status"] = "blocked"
+            diagnose("PCC-PKG-OWNED-LANGUAGE-UNAVAILABLE", "owned package compilation does not yet support " + command.language)
+            continue
+        try:
+            argv = _owned_compile_argv(command, root, output, abi_mode)
+            for directory in include_dirs:
+                include = Path(directory).expanduser()
+                if not include.is_absolute():
+                    include = root / include
+                if abi_mode == "pcc-native" and _is_cpython_include_dir(str(include)):
+                    continue
+                argv.insert(-1, "--cpp-arg=-I" + str(include.resolve()))
+            if capi_dir is not None:
+                argv.insert(-1, "--cpp-arg=-I" + str(capi_dir))
+                argv.insert(-1, "--cpp-arg=-I" + str(runtime_include))
+            if source.resolve() == output:
+                raise ValueError("compile output aliases its source")
+            row["command"] = (compiler_command or ["pcc"]) + argv
+        except ValueError as exc:
+            row["status"] = "blocked"
+            row["stderr"] = str(exc)
+            diagnose("PCC-PKG-OWNED-COMPILE-OPTION-UNAVAILABLE", str(exc))
+            continue
+        if not execute:
+            continue
+        if diagnostics:
+            row["status"] = "blocked"
+            continue
+        output.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with tempfile.TemporaryDirectory(prefix="pcc-owned-build-") as scratch:
+                staged = os.path.join(scratch, "output.o")
+                compile_argv = list(argv)
+                compile_argv[compile_argv.index("--emit-obj") + 1] = staged
+                row["executed_command"] = compiler_command + compile_argv
+                process = subprocess.run(
+                    compiler_command + compile_argv, capture_output=True,
+                    text=True, timeout=timeout,
+                )
+                row["returncode"] = process.returncode
+                row["stdout"] = process.stdout or ""
+                row["stderr"] = process.stderr or ""
+                if process.returncode == 0 and os.path.isfile(staged):
+                    os.replace(staged, str(output))
+                    row["status"] = "passed"
+                else:
+                    row["status"] = "failed"
+        except subprocess.TimeoutExpired as exc:
+            row["status"] = "timeout"
+            row["stderr"] = str(exc)
+        except Exception as exc:
+            row["status"] = "failed"
+            row["stderr"] = str(exc)
+        if row["status"] != "passed":
+            diagnose("PCC-PKG-BUILD-ACTION-FAILED", "owned C object action did not complete: " + str(source))
+    ok = not diagnostics and all(row["status"] in {"passed", "planned"} for row in actions)
+    return {"ok": ok, "name": name, "path": str(root), "execute": execute,
+            "build_backend": "pcc-self", "build_mode_requested": "owned", "build_ownership": "owned",
+            "host_assisted": False, "host_python": None,
+            "host_free_build_claim": bool(sys.implementation.name == "pcc" and execute and ok and actions and all(row["status"] == "passed" for row in actions)),
+            "compiler_execution": "native-pcc" if sys.implementation.name == "pcc" else "cpython-hosted",
+            "include_dirs": [str(path) for path in include_dirs],
+            "library_dirs": [str(path) for path in library_dirs], "libraries": list(libraries),
+            "from_compile_commands": from_compile_commands,
+            "from_meson_introspection": from_meson_introspection, "meson_target": meson_target,
+            "meson_target_replay": replay, "configure_meson": configure_meson,
+            "jobs": jobs, "effective_jobs": 1, "timeout": timeout,
+            "timeout_enforcement": "owned-process-deadline",
+            "generated_c_provenance": generated, "actions": actions, "diagnostics": diagnostics,
+            "vendor_bindings": [], "linkage": None, "toolchain": {"owner": "pcc"}, "build_plan": plan.as_dict()}
+
+
 def execute_build_actions(
     name: str,
     path: str | Path,
@@ -867,7 +1142,26 @@ def execute_build_actions(
     enforce_generated_c: bool = False,
     jobs: int = 1,
     timeout: int = 30,
+    build_mode: str = "owned",
+    owned_compiler: str | None = None,
 ) -> dict[str, object]:
+    if build_mode not in {"owned", "host"}:
+        raise ValueError("build mode must be owned or host")
+    if jobs < 1 or timeout < 1:
+        raise ValueError("jobs and timeout must be positive")
+    if build_mode == "owned":
+        if search_paths:
+            raise ValueError("tool search paths require --build-mode=host")
+        return _execute_owned_build_actions(
+            name, path, include_dirs=include_dirs, execute=execute,
+            regenerate_cython=regenerate_cython, run_f2py=run_f2py,
+            link_output=link_output, abi_mode=abi_mode,
+            from_compile_commands=from_compile_commands,
+            from_meson_introspection=from_meson_introspection,
+            meson_target=meson_target, configure_meson=configure_meson,
+            enforce_generated_c=enforce_generated_c, jobs=jobs, timeout=timeout,
+            owned_compiler=owned_compiler, library_dirs=library_dirs, libraries=libraries,
+        )
     root = Path(path).expanduser().resolve()
     metadata = inspect_artifact(name, root)
     plan = build_plan_for_artifact(name, root)
@@ -1226,6 +1520,7 @@ def execute_build_actions(
             )
 
         if execute and target_replay is not None and jobs > 1:
+            from concurrent.futures import ThreadPoolExecutor
             with ThreadPoolExecutor(max_workers=max(1, jobs)) as executor:
                 actions.extend(executor.map(run_graph_action, graph_action_specs))
         else:
@@ -1455,6 +1750,12 @@ def execute_build_actions(
             if isinstance(diag, dict)
             and str(diag.get("code", "")).startswith("PCC-PKG")
         ],
+        "build_backend": "host",
+        "build_mode_requested": "host",
+        "build_ownership": "host",
+        "host_assisted": True,
+        "host_free_build_claim": False,
+        "host_python": sys.executable if sys.implementation.name != "pcc" else None,
         "name": metadata.name,
         "path": str(root),
         "execute": execute,
@@ -1482,7 +1783,8 @@ def execute_eager_meson_extensions(
     execute: bool = False,
     jobs: int = 1,
     timeout: int = 30,
-    build_mode: str = "host",
+    build_mode: str = "owned",
+    owned_compiler: str | None = None,
 ) -> dict[str, object]:
     """Configure Meson and replay the package's eager extension closure."""
 
@@ -1619,6 +1921,8 @@ def execute_eager_meson_extensions(
                 meson_target=row["target"],
                 link_output=row["output"],
                 abi_mode="pcc-native",
+                build_mode=build_mode,
+                owned_compiler=owned_compiler,
                 jobs=max(1, jobs),
                 timeout=timeout,
             )
@@ -1631,6 +1935,7 @@ def execute_eager_meson_extensions(
             target_row.update(
                 {
                     "ok": report["ok"],
+                    "host_free_build_claim": report["host_free_build_claim"],
                     "action_count": len(report["actions"]),
                     "failed_actions": [
                         {
@@ -1673,7 +1978,7 @@ def execute_eager_meson_extensions(
             "build_ownership": ownership,
             "host_assisted": not owned,
             "host_python": host_python,
-            "host_free_build_claim": owned and ok,
+            "host_free_build_claim": owned and execute and ok and all(bool(row["host_free_build_claim"]) for row in target_reports),
             "selection": "module_scope_eager_import_closure",
             "actions": actions,
             "targets": target_reports,
@@ -1684,64 +1989,174 @@ def execute_eager_meson_extensions(
             wrappers.cleanup()
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="pcc.package build-exec")
-    parser.add_argument("name", nargs="?", default="package")
-    parser.add_argument("--path", required=True)
-    parser.add_argument("--search-path", action="append", default=[])
-    parser.add_argument("--include-dir", action="append", default=[])
-    parser.add_argument("--library-dir", action="append", default=[])
-    parser.add_argument("--execute", action="store_true")
-    parser.add_argument("--regenerate-cython", action="store_true")
-    parser.add_argument("--run-f2py", action="store_true")
-    parser.add_argument("--link-output", default=None)
-    parser.add_argument("--library", action="append", default=[])
-    parser.add_argument("--abi", dest="abi_mode", default="pcc-native")
-    parser.add_argument("--from-compile-commands", action="store_true")
-    parser.add_argument("--from-meson-introspection", action="store_true")
-    parser.add_argument("--meson-target", default=None)
-    parser.add_argument("--configure-meson", action="store_true")
-    parser.add_argument("--enforce-generated-c", action="store_true")
-    parser.add_argument("--jobs", type=int, default=1)
-    parser.add_argument("--timeout", type=int, default=30)
-    parser.add_argument("--eager-meson-extensions", action="store_true")
-    parser.add_argument("--build-mode", choices=("owned", "host"), default="host")
-    parser.add_argument("--report", default=None)
-    parser.add_argument("--json", action="store_true")
-    ns = parser.parse_args(argv)
-    if ns.eager_meson_extensions:
+_BUILD_EXEC_HELP = """usage: pcc.package build-exec [name] --path PATH [OPTIONS]
+
+Compile package source actions with PCC's owned backend by default.
+Explicit --build-mode=host selects external compatibility tools.
+
+Options:
+  -h, --help                   Show this help
+  --path PATH                  Source tree (required)
+  --search-path PATH           Repeat compatibility-tool search paths
+  --include-dir PATH           Repeat C include directories
+  --library-dir PATH           Repeat library directories
+  --library NAME               Repeat requested libraries
+  --execute                    Execute the plan
+  --regenerate-cython          Regenerate Cython sources
+  --run-f2py                    Build Fortran wrappers
+  --link-output PATH           Shared-library output
+  --abi MODE                   Extension ABI (default: pcc-native)
+  --from-compile-commands       Read compile_commands.json
+  --from-meson-introspection    Read Meson source actions
+  --meson-target TARGET         Select one graph object closure
+  --configure-meson            Configure a missing graph
+  --enforce-generated-c        Reject missing/stale generated C
+  --jobs N                     Maximum action concurrency (default: 1)
+  --timeout SECONDS            Per-action deadline (default: 30)
+  --eager-meson-extensions      Select eager extension targets
+  --build-mode owned|host       Execution owner (default: owned)
+  --owned-compiler PATH         Parent native PCC compiler for replay tools
+  --report PATH                 Write the JSON report
+  --json                        Print the JSON report
+"""
+
+
+def _parse_build_exec_args(argv, owned_compiler=None):
+    """A shared bounded parser, independent of host/native argparse coverage."""
+    options = {
+        "name": "package", "path": None, "search_path": [], "include_dir": [],
+        "library_dir": [], "library": [], "execute": False,
+        "regenerate_cython": False, "run_f2py": False, "link_output": None,
+        "abi_mode": "pcc-native", "from_compile_commands": False,
+        "from_meson_introspection": False, "meson_target": None,
+        "configure_meson": False, "enforce_generated_c": False,
+        "jobs": 1, "timeout": 30, "eager_meson_extensions": False,
+        "build_mode": "owned", "owned_compiler": owned_compiler,
+        "report": None, "json": False, "help": False,
+    }
+    values = {
+        "--path": "path", "--search-path": "search_path", "--include-dir": "include_dir",
+        "--library-dir": "library_dir", "--library": "library", "--link-output": "link_output",
+        "--abi": "abi_mode", "--meson-target": "meson_target", "--jobs": "jobs",
+        "--timeout": "timeout", "--build-mode": "build_mode", "--report": "report",
+        "--owned-compiler": "owned_compiler",
+    }
+    flags = {
+        "--execute": "execute", "--regenerate-cython": "regenerate_cython",
+        "--run-f2py": "run_f2py", "--from-compile-commands": "from_compile_commands",
+        "--from-meson-introspection": "from_meson_introspection",
+        "--configure-meson": "configure_meson", "--enforce-generated-c": "enforce_generated_c",
+        "--eager-meson-extensions": "eager_meson_extensions", "--json": "json",
+        "--help": "help", "-h": "help",
+    }
+    repeated = ("search_path", "include_dir", "library_dir", "library")
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    positional = False
+    separator = False
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--" and not separator:
+            separator = True
+            index += 1
+            continue
+        if not separator and token.startswith("-"):
+            option, equals, value = token.partition("=")
+            if option in flags:
+                if equals:
+                    raise ValueError(option + " does not take a value")
+                options[flags[option]] = True
+            elif option in values:
+                key = values[option]
+                if not equals:
+                    index += 1
+                    if index >= len(tokens) or tokens[index].startswith("--"):
+                        raise ValueError(option + " requires a value")
+                    value = tokens[index]
+                if not value:
+                    raise ValueError(option + " requires a value")
+                if key in ("jobs", "timeout"):
+                    try:
+                        integer = int(value)
+                    except ValueError:
+                        raise ValueError(option + " must be a positive integer")
+                    if integer < 1:
+                        raise ValueError(option + " must be a positive integer")
+                    options[key] = integer
+                elif key in repeated:
+                    options[key].append(value)
+                else:
+                    options[key] = value
+            else:
+                raise ValueError("unrecognized argument: " + token)
+        else:
+            if positional:
+                raise ValueError("unexpected package name: " + token)
+            options["name"] = token
+            positional = True
+        index += 1
+    if options["help"]:
+        return options
+    if options["path"] is None:
+        raise ValueError("--path is required")
+    if options["build_mode"] not in ("owned", "host"):
+        raise ValueError("--build-mode must be owned or host")
+    if options["build_mode"] == "owned" and options["search_path"]:
+        raise ValueError("--search-path requires --build-mode=host")
+    if options["from_compile_commands"] and options["from_meson_introspection"]:
+        raise ValueError("select only one source command graph")
+    if options["eager_meson_extensions"]:
+        for key in ("search_path", "include_dir", "library_dir", "library", "link_output", "meson_target", "from_compile_commands", "from_meson_introspection", "configure_meson", "regenerate_cython", "run_f2py", "enforce_generated_c"):
+            if options[key]:
+                raise ValueError("--eager-meson-extensions does not accept --" + key.replace("_", "-"))
+    return options
+
+
+def main(argv: list[str] | None = None, *, owned_compiler: str | None = None) -> int:
+    try:
+        ns = _parse_build_exec_args(argv, owned_compiler)
+    except ValueError as exc:
+        sys.stderr.write("pcc.package build-exec: error: " + str(exc) + "\n")
+        return 2
+    if ns["help"]:
+        print(_BUILD_EXEC_HELP, end="")
+        return 0
+    if ns["eager_meson_extensions"]:
         report = execute_eager_meson_extensions(
-            ns.name,
-            ns.path,
-            execute=ns.execute,
-            jobs=ns.jobs,
-            timeout=ns.timeout,
-            build_mode=ns.build_mode,
+            ns["name"],
+            ns["path"],
+            execute=ns["execute"],
+            jobs=ns["jobs"],
+            timeout=ns["timeout"],
+            build_mode=ns["build_mode"],
+            owned_compiler=ns["owned_compiler"],
         )
     else:
         report = execute_build_actions(
-            ns.name,
-            ns.path,
-            search_paths=ns.search_path,
-            include_dirs=ns.include_dir,
-            library_dirs=ns.library_dir,
-            execute=ns.execute,
-            regenerate_cython=ns.regenerate_cython,
-            run_f2py=ns.run_f2py,
-            link_output=ns.link_output,
-            libraries=ns.library,
-            abi_mode=ns.abi_mode,
-            from_compile_commands=ns.from_compile_commands,
-            from_meson_introspection=ns.from_meson_introspection,
-            meson_target=ns.meson_target,
-            configure_meson=ns.configure_meson,
-            enforce_generated_c=ns.enforce_generated_c,
-            jobs=ns.jobs,
-            timeout=ns.timeout,
+            ns["name"],
+            ns["path"],
+            search_paths=ns["search_path"],
+            include_dirs=ns["include_dir"],
+            library_dirs=ns["library_dir"],
+            execute=ns["execute"],
+            regenerate_cython=ns["regenerate_cython"],
+            run_f2py=ns["run_f2py"],
+            link_output=ns["link_output"],
+            libraries=ns["library"],
+            abi_mode=ns["abi_mode"],
+            from_compile_commands=ns["from_compile_commands"],
+            from_meson_introspection=ns["from_meson_introspection"],
+            meson_target=ns["meson_target"],
+            configure_meson=ns["configure_meson"],
+            enforce_generated_c=ns["enforce_generated_c"],
+            build_mode=ns["build_mode"],
+            owned_compiler=ns["owned_compiler"],
+            jobs=ns["jobs"],
+            timeout=ns["timeout"],
         )
     rendered = json.dumps(report, indent=2, sort_keys=True)
-    if ns.report:
-        report_path = Path(ns.report).expanduser()
+    if ns["report"]:
+        report_path = Path(ns["report"]).expanduser()
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(rendered + "\n", encoding="utf-8")
     print(rendered)

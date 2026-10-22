@@ -142,7 +142,7 @@ def test_frontend_codegen_plan_runs_worker_then_ordered_link(
         result_path = tmp_path / ("worker_" + str(index) + ".tsv")
         manifest = tmp_path / ("worker_" + str(index) + ".manifest")
         manifest.write_text(
-            "pcc.py_frontend.codegen_worker.v4\n"
+            "pcc.frontends.python.codegen_worker.v4\n"
             + str(result_path)
             + "\n"
             + str(artifacts)
@@ -290,7 +290,7 @@ def test_frontend_codegen_lanes_use_measured_ast_risk_bands(
         )
         manifest = tmp_path / ("worker_" + str(index) + ".manifest")
         manifest.write_text(
-            "pcc.py_frontend.codegen_worker.v4\nresult\nir\nexports\n"
+            "pcc.frontends.python.codegen_worker.v4\nresult\nir\nexports\n"
             "codegen\n"
             + str(ast_dir)
             + "\nentry\noff\non\n0\n0\n0\n1\n"

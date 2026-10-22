@@ -40,7 +40,7 @@ pcc 的论题(见第 1 章)把"五 GC 比较运行时"列为五大差异化之�
 
 ## 10.2 一套 ABI 表面:`PCC_GC_KIND_*` 与运行时选择
 
-五个后端在 [pcc/py_runtime/include/py_runtime.h](../../pcc/py_runtime/include/py_runtime.h) 中以一个枚举存在:
+五个后端在 [pcc/runtime/include/py_runtime.h](../../pcc/runtime/include/py_runtime.h) 中以一个枚举存在:
 
 ```c
 enum {
@@ -52,7 +52,7 @@ enum {
 };
 ```
 
-pcc-Python 镜像 [pcc/py_runtime/py/py_gc_backend.py](../../pcc/py_runtime/py/py_gc_backend.py) 的文件头特意注明:名字是算法性的,不是项目品牌——refcount-cycle、incremental-tricolor、concurrent-mark-sweep、generational-minor-major、colored-relocating。选择发生在运行时:`py_gc_backend.c` 的 `pcc_gc_init_config()` 在首次进入 GC 路径时解析环境变量 `PCC_GC_BACKEND`(默认 0),`pcc_gc_set_backend()` 提供程序内切换。这意味着**同一个二进制可以在五种收集策略下运行**——这是五后端自举矩阵([tests/python/gc/](../../tests/python/gc/) 下的 `test_pcc_bootstrap_full_gc{0..4}.py`,对每个后端各跑一遍完整 stage1→stage2→stage3 自举)在工程上可行的前提:不需要五份编译产物,只需要五次运行。
+pcc-Python 镜像 [pcc/runtime/py/py_gc_backend.py](../../pcc/runtime/py/py_gc_backend.py) 的文件头特意注明:名字是算法性的,不是项目品牌——refcount-cycle、incremental-tricolor、concurrent-mark-sweep、generational-minor-major、colored-relocating。选择发生在运行时:`py_gc_backend.c` 的 `pcc_gc_init_config()` 在首次进入 GC 路径时解析环境变量 `PCC_GC_BACKEND`(默认 0),`pcc_gc_set_backend()` 提供程序内切换。这意味着**同一个二进制可以在五种收集策略下运行**——这是五后端自举矩阵([tests/python/gc/](../../tests/python/gc/) 下的 `test_pcc_bootstrap_full_gc{0..4}.py`,对每个后端各跑一遍完整 stage1→stage2→stage3 自举)在工程上可行的前提:不需要五份编译产物,只需要五次运行。
 
 更重要的设计决定写在 `py_runtime.h` 的 GC 接口注释里:`pcc_gc_alloc` / `pcc_gc_retain` / `pcc_gc_release` / `pcc_gc_load_ptr` / `pcc_gc_store_ptr` 这组函数"是代码生成应当面向的内存管理 ABI;未来的追踪/分代/移动收集器必须保持这个表面,而不是把自己的内部机制教给代码生成";`py_incref` / `py_decref` 被明确定位为引用计数形状的兼容垫片,"不应被新代码当作基础 ABI"。备选方案是让前端为每个后端发射不同的屏障序列——那会把后端数量乘进代码生成的测试矩阵,并使"同一二进制五种运行"不可能。pcc 选择把全部后端分派折叠进运行时函数内部,代价是每次槽访问多一次后端判断;10.4 节会看到这个判断的具体形态。
 
@@ -78,7 +78,7 @@ C collector 源仍保留,但 production link map 已证明没有 C-owned collect
 
 ## 10.4 读写屏障:`pcc_gc_store_ptr` 与 `pcc_gc_load_ptr` 各为谁服务
 
-代码生成访问对象指针槽只允许走两个函数([pcc/py_runtime/src/py_obj.c](../../pcc/py_runtime/src/py_obj.c)):
+代码生成访问对象指针槽只允许走两个函数([pcc/runtime/src/py_obj.c](../../pcc/runtime/src/py_obj.c)):
 
 ```c
 PyObject *pcc_gc_load_ptr(PyObject *owner, PyObject **slot);
@@ -117,7 +117,7 @@ AGENTS.md 警告:绕过屏障的裸写 `obj->slot = x` "在后端 #0 上工作,�
 
 ### 帧根:槽粒度,非 LIFO,必须哈希
 
-编译后的函数把局部变量根描述为一个**帧映射(frame map)**,v0 格式定义在 `py_runtime.h` 注释里:`frame_map` 指向一个带符号 int32 槽数(正数=拥有引用的根,负数=借用根),`slots` 指向连续的 `PyObject *` 数组;NULL 映射表示无根。运行时入口是 `pcc_gc_frame_enter()` / `pcc_gc_frame_leave()`,落到 `pcc_gc_note_frame_enter()` / `pcc_gc_note_frame_leave()`:进入时分配一个 `PccGcFrameNode` 挂入活动帧链表,**并以 slots 指针为键插入 `pcc_gc_frame_index` 哈希表**;离开时按键删除。哪些局部需要进入帧映射由前端的所有权低层化(lowering)决定——`_ensure_owned_local_gc_root`([pcc/py_frontend/codegen/](../../pcc/py_frontend/codegen/) 的 ownership 路径)注册槽位;10.7.2 会展示这半边契约缺一个角时的后果。
+编译后的函数把局部变量根描述为一个**帧映射(frame map)**,v0 格式定义在 `py_runtime.h` 注释里:`frame_map` 指向一个带符号 int32 槽数(正数=拥有引用的根,负数=借用根),`slots` 指向连续的 `PyObject *` 数组;NULL 映射表示无根。运行时入口是 `pcc_gc_frame_enter()` / `pcc_gc_frame_leave()`,落到 `pcc_gc_note_frame_enter()` / `pcc_gc_note_frame_leave()`:进入时分配一个 `PccGcFrameNode` 挂入活动帧链表,**并以 slots 指针为键插入 `pcc_gc_frame_index` 哈希表**;离开时按键删除。哪些局部需要进入帧映射由前端的所有权低层化(lowering)决定——`_ensure_owned_local_gc_root`([pcc/frontends/python/codegen/](../../pcc/frontends/python/codegen/) 的 ownership 路径)注册槽位;10.7.2 会展示这半边契约缺一个角时的后果。
 
 为什么是哈希而不是栈?因为**帧根的进入/离开不是函数粒度而是槽粒度,顺序不是 LIFO**。代码生成在多个位置发射 `pcc_gc_note_frame_leave(slots)`——return 路径、元组打印、拥有局部的清理、一元调用包装——同一逻辑帧的注册与注销彼此交错。2026-06 的调查([docs/investigations/gc-frame-index-entry-pool-perf.md](../../docs/investigations/gc-frame-index-entry-pool-perf.md))用一次失败实验证明了这一点:把哈希换成 LIFO 影子栈(非栈顶退化为线性扫描)后,gc3 的 stage2 自举从约 226 秒**退化到 900 秒超时**——在约 300 层深的递归下降解析器上,"回退"线性扫描成了常态路径,复杂度变成 O(n²)。哈希无论目标在哪个深度都是 O(1),是这里**正确的数据结构**;真正的成本(每帧一次 malloc)后来用条目池解决(见 10.7.1)。`PccGcFrameNode` 的 `dup_next` 链处理同一 slots 地址被重复注册的情形;`pcc_gc_root_slot_count_from_map()` 对 INT32_MIN 与超大槽数做了防御。还有一个细节:`pcc_gc_should_track_frame_roots()` 显示后端 #0 默认不追踪帧根(它靠引用计数,不需要),仅当通过 `pcc_gc_set_backend()` 显式选回 #0 时才打开——这是少数明示的后端差异,差异在于"是否需要这份信息",不在语义。
 
@@ -190,8 +190,8 @@ C 扩展通过 `PyModuleDef.m_size` 持有模块状态,状态里的 `PyObject *`
 
 ## 练习
 
-1. **读源码验证**:阅读 [pcc/py_runtime/src/py_obj.c](../../pcc/py_runtime/src/py_obj.c) 中的 `pcc_gc_store_ptr()`,写出它对新值与旧值各做了什么。据此论证 `py_list_append` 是引用平衡的,并设计一个带 `__del__` 计数器的小程序在 `PCC_GC_BACKEND=0` 下验证(只设计,不必运行)。
+1. **读源码验证**:阅读 [pcc/runtime/src/py_obj.c](../../pcc/runtime/src/py_obj.c) 中的 `pcc_gc_store_ptr()`,写出它对新值与旧值各做了什么。据此论证 `py_list_append` 是引用平衡的,并设计一个带 `__del__` 计数器的小程序在 `PCC_GC_BACKEND=0` 下验证(只设计,不必运行)。
 2. **读源码验证**:阅读 `py_gc_backend.c` 的 `pcc_gc_note_slot_write_barrier()`,为五个后端分别写出"该函数提前返回、什么都不做"的精确条件。解释为什么 #0 下它实际是空操作,而这不构成语义差异。
 3. **格式推演**:按 `py_runtime.h` 的 frame map v0 注释,手工写出一个含两个借用根槽的帧映射的内存布局。再读 `pcc_gc_root_slot_count_from_map()`,解释它对 `INT32_MIN` 与超大槽数的两个防御分支分别防什么。
 4. **镜像审计**:对照 `py_gc_backend.c` 的 `pcc_gc_trace_referents()` 与 `py_gc_backend.py` 的 `_trace_referents`,为任选三个类型标签核对两侧访问的槽集合是否一致(注意端口用裸偏移)。若要新增一个带两个指针槽的运行时类型,列出本章提到的所有必改点。
-5. **设计权衡论证**:[docs/investigations/gc-frame-index-entry-pool-perf.md](../../docs/investigations/gc-frame-index-entry-pool-perf.md) 末尾记录了把索引表改为开放寻址的设计稿。读 [pcc/py_runtime/src/py_gc_index_table.c](../../pcc/py_runtime/src/py_gc_index_table.c) 中关于条目池与锁界的注释,论证:该重写必须保持哪条"谁持锁、谁不持锁"的分界?为什么字节同一(pcc2==pcc3)对这个改动不是必要闸门,而五后端契约套件是?
+5. **设计权衡论证**:[docs/investigations/gc-frame-index-entry-pool-perf.md](../../docs/investigations/gc-frame-index-entry-pool-perf.md) 末尾记录了把索引表改为开放寻址的设计稿。读 [pcc/runtime/src/py_gc_index_table.c](../../pcc/runtime/src/py_gc_index_table.c) 中关于条目池与锁界的注释,论证:该重写必须保持哪条"谁持锁、谁不持锁"的分界?为什么字节同一(pcc2==pcc3)对这个改动不是必要闸门,而五后端契约套件是?

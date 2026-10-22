@@ -4,7 +4,7 @@ import json
 import subprocess
 import sys
 
-from pcc.runtime_report import build_runtime_report, format_runtime_report
+from pcc.diagnostics.runtime_report import build_runtime_report, format_runtime_report
 
 
 def test_runtime_report_distinguishes_production_gated_backends():
@@ -24,7 +24,7 @@ def test_runtime_report_text_and_json_output():
     assert "pcc runtime report" in text
     assert "gc.backend.0.refcount-cycle" in text
     payload = json.loads(format_runtime_report("json"))
-    assert payload["schema"] == "pcc.runtime_report.v1"
+    assert payload["schema"] == "pcc.diagnostics.runtime_report.v1"
 
 
 def test_runtime_report_script_json(tmp_path):
@@ -36,4 +36,4 @@ def test_runtime_report_script_json(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    assert payload["schema"] == "pcc.runtime_report.v1"
+    assert payload["schema"] == "pcc.diagnostics.runtime_report.v1"

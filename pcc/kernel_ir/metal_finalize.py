@@ -138,7 +138,7 @@ def _metal_toolchain_available() -> bool:
     if shutil.which("xcrun") is None:
         return False
     try:
-        from pcc.gpu_metal import metal_toolchain_usable
+        from pcc.backend.metal import metal_toolchain_usable
 
         return metal_toolchain_usable()
     except Exception:
@@ -2426,12 +2426,7 @@ def finalize_metal(
             )
 
         try:
-            from pcc.gpu_metal import (
-                MetalCompileError,
-                MetalToolchainUnavailable,
-                compile_air_to_metallib,
-                compile_metal_source_to_air,
-            )
+            from pcc.backend.metal import MetalCompileError, MetalToolchainUnavailable, compile_air_to_metallib, compile_metal_source_to_air
 
             compile_metal_source_to_air(metal_source, air_path, timeout=timeout)
             compile_air_to_metallib([air_path], metallib_path, timeout=timeout)

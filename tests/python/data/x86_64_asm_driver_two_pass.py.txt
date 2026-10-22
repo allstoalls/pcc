@@ -1,0 +1,973 @@
+"""Owned Intel-syntax file driver for the x86_64 Linux self backend.
+
+The self emitter writes a deliberately finite GNU-style assembly dialect.
+This module owns that complete file boundary: directives, sections, symbols,
+data, instructions, and RELA records become an ``ElfObject`` without invoking
+``as``/``cc``.  Any dialect growth fails closed and must be added together with
+an encoder differential.
+"""
+
+from __future__ import annotations
+
+import struct
+import re
+from dataclasses import dataclass, field
+
+from .elf_x86_64 import (
+    R_X86_64_64,
+    SHF_ALLOC,
+    SHF_EXECINSTR,
+    SHF_TLS,
+    SHF_WRITE,
+    SHT_NOBITS,
+    SHT_PROGBITS,
+    STB_GLOBAL,
+    STB_LOCAL,
+    STT_FUNC,
+    STT_NOTYPE,
+    STT_OBJECT,
+    STT_TLS,
+    ElfObject,
+    ElfRelocation,
+    ElfSection,
+    ElfSymbol,
+)
+from .x86_64_encode import (
+    X86EncodeError,
+    _OperandParseCache,
+    encode_instruction,
+)
+
+
+@dataclass(frozen=True)
+class _Align:
+    log2: int
+    fill: int
+
+
+@dataclass(frozen=True, slots=True)
+class _Label:
+    name: str
+
+
+@dataclass(frozen=True)
+class _Data:
+    payload: bytes
+
+
+@dataclass(frozen=True)
+class _Zero:
+    size: int
+
+
+@dataclass(frozen=True)
+class _SymbolData:
+    symbol: str
+    addend: int
+
+
+@dataclass(frozen=True)
+class _SymbolDifference:
+    left: str
+    right: str
+    width: int
+
+
+@dataclass(frozen=True, slots=True)
+class _Instruction:
+    text: str
+
+
+@dataclass(frozen=True)
+class _SizeHere:
+    symbol: str
+
+
+@dataclass
+class _SectionPlan:
+    name: str
+    type: int
+    flags: int
+    align: int
+    entries: list[object] = field(default_factory=list)
+    source_text: str = field(default="", repr=False, compare=False)
+
+
+@dataclass(slots=True)
+class _SymbolMeta:
+    global_: bool = False
+    type: int = STT_NOTYPE
+    size: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _PendingRelocation:
+    section_name: str
+    offset: int
+    symbol: str
+    type: int
+    addend: int
+
+
+_SECTION_SPECS = {
+    # ELF sh_addralign is the maximum alignment actually requested inside the
+    # section.  The emitter writes a .p2align before every function/global, so
+    # begin at one rather than inventing an eight/sixteen-byte requirement
+    # that GNU as would not put on a byte-only section.
+    ".text": (SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 1),
+    ".rodata": (SHT_PROGBITS, SHF_ALLOC, 1),
+    ".data": (SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 1),
+    ".pcc_stackmaps": (SHT_PROGBITS, SHF_ALLOC, 1),
+    ".tdata": (SHT_PROGBITS, SHF_ALLOC | SHF_WRITE | SHF_TLS, 1),
+    ".tbss": (SHT_NOBITS, SHF_ALLOC | SHF_WRITE | SHF_TLS, 1),
+    ".note.GNU-stack": (SHT_PROGBITS, 0, 1),
+}
+
+
+def _parse_int(text: str) -> int:
+    try:
+        return int(text.strip(), 0)
+    except ValueError as exc:
+        raise X86EncodeError(f"expected integer in directive, got {text!r}") from exc
+
+
+def _align(value: int, log2: int) -> int:
+    alignment = 1 << log2
+    return (value + alignment - 1) & ~(alignment - 1)
+
+
+def _data_items(text: str) -> list[str]:
+    items = [item.strip() for item in text.split(",")]
+    if not items or any(not item for item in items):
+        raise X86EncodeError(f"empty data item list {text!r}")
+    return items
+
+
+def _integer_payload(value: int, width: int, *, owner: str) -> bytes:
+    bits = width * 8
+    if value < -(1 << (bits - 1)) or value > (1 << bits) - 1:
+        raise X86EncodeError(
+            f"{owner} value {value} does not fit {bits} bits"
+        )
+    return (value & ((1 << bits) - 1)).to_bytes(width, "little")
+
+
+def _symbol_plus_addend(text: str) -> tuple[str, int]:
+    item = text.strip()
+    for index in range(1, len(item)):
+        if item[index] not in "+-":
+            continue
+        symbol = item[:index].strip()
+        if not symbol:
+            break
+        addend = _parse_int(item[index:])
+        return symbol, addend
+    if not item or any(char.isspace() for char in item):
+        raise X86EncodeError(f"invalid symbol-valued data item {text!r}")
+    return item, 0
+
+
+def _section_from_directive(line: str) -> str:
+    body = line[len(".section"):].strip()
+    parts = [part.strip() for part in body.split(",")]
+    if not parts or not parts[0]:
+        raise X86EncodeError(f"bad section directive {line!r}")
+    name = parts[0]
+    initializer = name.startswith((".init_array.", ".fini_array.")) and name.rsplit(".", 1)[1].isdigit()
+    if (name not in _SECTION_SPECS and not initializer) or len(parts) not in (1, 3):
+        raise X86EncodeError(f"section shape not proven: {line!r}")
+    if len(parts) == 1:
+        return name
+    section_type, flags, _alignment = (SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8) if initializer else _SECTION_SPECS[name]
+    expected_flags = ""
+    for letter, bit in (("a", SHF_ALLOC), ("w", SHF_WRITE), ("x", SHF_EXECINSTR), ("T", SHF_TLS)):
+        if flags & bit:
+            expected_flags += letter
+    expected_type = "@nobits" if section_type == SHT_NOBITS else "@progbits"
+    spelled_flags = parts[1]
+    if (
+        not (spelled_flags.startswith('"') and spelled_flags.endswith('"'))
+        or set(spelled_flags[1:-1]) != set(expected_flags)
+        or parts[2] != expected_type
+    ):
+        raise X86EncodeError(f"section attributes not proven: {line!r}")
+    return name
+
+
+_ASSEMBLY_LINE_CHUNK_CHARS = 65536
+_ASSEMBLY_LINE_BREAKS = "\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029"
+
+
+def _iter_assembly_lines(asm_text: str):
+    """Keep splitlines semantics without retaining the whole line list."""
+    position = 0
+    length = len(asm_text)
+    fragments: list[str] = []
+    while position < length:
+        end = min(position + _ASSEMBLY_LINE_CHUNK_CHARS, length)
+        # Do not separate the two characters of one CRLF boundary.
+        if end < length and asm_text[end - 1] == "\r" and asm_text[end] == "\n":
+            end += 1
+        chunk = asm_text[position:end]
+        position = end
+        for line in chunk.splitlines(True):
+            complete = line[-1] in "\r\n"
+            if not complete and line[-1] in _ASSEMBLY_LINE_BREAKS:
+                # Match the executing runtime's splitlines contract even when
+                # a less common separator happens to end a chunk.
+                complete = line[-1].splitlines() == [""]
+            if complete:
+                if line.endswith("\r\n"):
+                    line = line[:-2]
+                else:
+                    line = line[:-1]
+                if fragments:
+                    fragments.append(line)
+                    yield "".join(fragments)
+                    fragments = []
+                else:
+                    yield line
+            else:
+                fragments.append(line)
+    if fragments:
+        yield "".join(fragments)
+
+
+# A negative plan integer packs one validated instruction's character span.
+# Short spans stay in the native small-integer lane for ordinary object sizes;
+# oversized lines retain the ordinary text record without truncating anything.
+_INSTRUCTION_SPAN_BASE = 65536
+_INSTRUCTION_SPAN_CODEC = struct.Struct("<q")
+_INSTRUCTION_SPAN_CHUNK_BYTES = 8192
+_INSTRUCTION_SPAN_MIN_RUN = 5
+
+# Fixed scratch-payload bound, matching the existing plan-chunk scale.
+# This is not an environment-tuned cache or a cap on object/section size.
+_NUMERIC_DATA_BATCH_BYTES = 8192
+
+
+def _flush_instruction_spans(entries: list[object], pending: list[int]) -> None:
+    # Publish only completed runs. Native bytearray.extend currently returns a
+    # replacement object, so growing a buffer already held by entries would
+    # leave that entry on the old allocation. Short runs keep their boxed form.
+    if len(pending) < _INSTRUCTION_SPAN_MIN_RUN:
+        for span in pending:
+            entries.append(span)
+    else:
+        fragments: list[bytes] = []
+        for span in pending:
+            fragments.append(_INSTRUCTION_SPAN_CODEC.pack(span))
+        entries.append(bytearray(b"".join(fragments)))
+    pending.clear()
+
+
+def _append_instruction_span(
+    entries: list[object], pending: list[int], span: int,
+) -> None:
+    pending.append(span)
+    # The scratch list belongs to this parse, never to a published plan. Keep
+    # at most one chunk live and retain the final bytearray/clear protocol.
+    if len(pending) >= _INSTRUCTION_SPAN_CHUNK_BYTES // _INSTRUCTION_SPAN_CODEC.size:
+        _flush_instruction_spans(entries, pending)
+
+
+def _iter_plan_entries(plan: _SectionPlan, *, consume: bool = False):
+    for index, entry in enumerate(plan.entries):
+        if consume:
+            plan.entries[index] = None
+        if isinstance(entry, bytearray):
+            if len(entry) % _INSTRUCTION_SPAN_CODEC.size:
+                raise X86EncodeError("truncated compact instruction span run")
+            for offset in range(0, len(entry), _INSTRUCTION_SPAN_CODEC.size):
+                yield _INSTRUCTION_SPAN_CODEC.unpack_from(entry, offset)[0]
+            if consume:
+                entry.clear()
+        else:
+            yield entry
+
+
+def _instruction_text(entry, source_text: str) -> str:
+    if isinstance(entry, _Instruction):
+        return entry.text
+    if not isinstance(entry, int) or entry >= 0:
+        raise X86EncodeError("invalid compact instruction record")
+    encoded = -entry - 1
+    start = encoded // _INSTRUCTION_SPAN_BASE
+    size = encoded % _INSTRUCTION_SPAN_BASE
+    if size == 0 or start + size > len(source_text):
+        raise X86EncodeError("compact instruction span is outside source")
+    return source_text[start:start + size]
+
+
+def _parse_file(asm_text: str, *, compact_instructions: bool = False):
+    plans: dict[str, _SectionPlan] = {}
+    order: list[str] = []
+    symbols: dict[str, _SymbolMeta] = {}
+    current: _SectionPlan | None = None
+    saw_syntax = False
+    pending_data: list[bytes] = []
+    pending_data_size = 0
+    pending_instructions: list[int] = []
+    # Section switches alone do not insert a record in the old section.
+    # Keep its unfinished run private until that section reaches a boundary.
+    pending_instruction_plan: _SectionPlan | None = None
+    data_batch_bytes = _NUMERIC_DATA_BATCH_BYTES
+
+    def flush_instructions(plan) -> None:
+        if pending_instructions and plan is pending_instruction_plan:
+            assert plan is not None
+            _flush_instruction_spans(plan.entries, pending_instructions)
+
+    def flush_data(pending: list[bytes]) -> None:
+        nonlocal pending_data_size
+        # Passing the scratch list keeps append/clear on typed list receivers;
+        # a captured CELL_READ would produce an owned dynamic temporary.
+        if pending:
+            assert current is not None
+            flush_instructions(current)
+            # Only immutable _Data enters the plan. Raw bytearray entries
+            # already belong to the compact instruction-span transport.
+            # A literal separator keeps this on the owned bytes.join path.
+            current.entries.append(_Data(b"".join(pending)))
+            pending.clear()
+            pending_data_size = 0
+
+    def switch(name: str) -> None:
+        nonlocal current
+        spec = _SECTION_SPECS.get(name)
+        if name.startswith((".init_array.", ".fini_array.")) and name.rsplit(".", 1)[1].isdigit():
+            spec = (SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8)
+        if spec is None:
+            raise X86EncodeError(f"section {name!r} is outside the ELF contract")
+        if name not in plans:
+            plans[name] = _SectionPlan(
+                name, spec[0], spec[1], spec[2],
+                source_text=asm_text if compact_instructions else "",
+            )
+            order.append(name)
+        current = plans[name]
+
+    source_position = 0
+    for raw_line in _iter_assembly_lines(asm_text):
+        raw_start = 0
+        if compact_instructions:
+            raw_start = asm_text.find(raw_line, source_position)
+            if raw_start < 0:
+                raise X86EncodeError("assembly line is outside its source")
+            source_position = raw_start + len(raw_line)
+        line = raw_line.strip()
+        if not line:
+            continue
+        # Keep every nonempty nonnumeric source-line boundary, including section,
+        # label, alignment, zero-fill, metadata and instruction boundaries.
+        if pending_data and not line.startswith((
+            ".byte ", ".short ", ".long ", ".quad ", ".float ", ".double ",
+        )):
+            flush_data(pending_data)
+        if line == ".intel_syntax noprefix":
+            if saw_syntax or current is not None or symbols:
+                raise X86EncodeError(
+                    ".intel_syntax noprefix must be the first file directive"
+                )
+            saw_syntax = True
+            continue
+        if not saw_syntax:
+            raise X86EncodeError(
+                "owned x86 assembly must begin with .intel_syntax noprefix"
+            )
+        if line == ".text":
+            switch(".text")
+            continue
+        if line == ".data":
+            switch(".data")
+            continue
+        if line.startswith(".section"):
+            switch(_section_from_directive(line))
+            continue
+        if line.startswith(".globl "):
+            name = line.split(None, 1)[1].strip()
+            if not name:
+                raise X86EncodeError(f"bad .globl directive {line!r}")
+            meta = symbols.get(name)
+            if meta is None:
+                meta = _SymbolMeta()
+                symbols[name] = meta
+            meta.global_ = True
+            continue
+        if line.startswith(".type "):
+            body = line[len(".type "):]
+            pieces = [part.strip() for part in body.split(",")]
+            if len(pieces) != 2 or not pieces[0] or pieces[1] not in ("@function", "@object", "@tls_object"):
+                raise X86EncodeError(f"bad .type directive {line!r}")
+            symbol_type = STT_FUNC if pieces[1] == "@function" else STT_TLS if pieces[1] == "@tls_object" else STT_OBJECT
+            meta = symbols.get(pieces[0])
+            if meta is None:
+                meta = _SymbolMeta()
+                symbols[pieces[0]] = meta
+            if meta.type not in (STT_NOTYPE, symbol_type):
+                raise X86EncodeError(
+                    f"conflicting .type directives for {pieces[0]!r}"
+                )
+            meta.type = symbol_type
+            continue
+        if line.startswith(".size "):
+            if current is None:
+                raise X86EncodeError(".size before any section")
+            body = line[len(".size "):]
+            pieces = [part.strip() for part in body.split(",", 1)]
+            if len(pieces) != 2:
+                raise X86EncodeError(f"bad .size directive {line!r}")
+            meta = symbols.get(pieces[0])
+            if meta is None:
+                meta = _SymbolMeta()
+                symbols[pieces[0]] = meta
+            if pieces[1] == ".-" + pieces[0]:
+                flush_instructions(current)
+                current.entries.append(_SizeHere(pieces[0]))
+            else:
+                size = _parse_int(pieces[1])
+                if size < 0:
+                    raise X86EncodeError(f"negative symbol size in {line!r}")
+                if meta.size is not None and meta.size != size:
+                    raise X86EncodeError(
+                        f"conflicting .size directives for {pieces[0]!r}"
+                    )
+                meta.size = size
+            continue
+        if line.startswith(".p2align "):
+            if current is None:
+                raise X86EncodeError(".p2align before any section")
+            pieces = _data_items(line[len(".p2align "):])
+            log2 = _parse_int(pieces[0])
+            if log2 < 0 or log2 > 16:
+                raise X86EncodeError(f".p2align outside finite range: {line!r}")
+            fill = _parse_int(pieces[1]) if len(pieces) == 2 else (
+                0x90 if current.flags & SHF_EXECINSTR else 0
+            )
+            if len(pieces) > 2 or not 0 <= fill <= 255:
+                raise X86EncodeError(f"bad .p2align fill: {line!r}")
+            current.align = max(current.align, 1 << log2)
+            flush_instructions(current)
+            current.entries.append(_Align(log2, fill))
+            continue
+        if line.startswith((".byte ", ".short ", ".long ", ".quad ")):
+            if current is None:
+                raise X86EncodeError("data directive before any section")
+            directive, rest = line.split(None, 1)
+            width = {".byte": 1, ".short": 2, ".long": 4, ".quad": 8}[directive]
+            for item in _data_items(rest):
+                try:
+                    value = int(item, 0)
+                except ValueError:
+                    difference = re.fullmatch(r"([.$A-Za-z_][.$\w]*)\s*-\s*([.$A-Za-z_][.$\w]*)", item)
+                    if difference:
+                        flush_data(pending_data)
+                        flush_instructions(current)
+                        current.entries.append(_SymbolDifference(difference.group(1), difference.group(2), width))
+                        continue
+                    if width != 8:
+                        raise X86EncodeError(
+                            f"symbol-valued {directive} is not proven: {line!r}"
+                        )
+                    symbol, addend = _symbol_plus_addend(item)
+                    flush_data(pending_data)
+                    flush_instructions(current)
+                    current.entries.append(_SymbolData(symbol, addend))
+                else:
+                    payload = _integer_payload(value, width, owner=directive)
+                    if data_batch_bytes > 0 and len(payload) <= data_batch_bytes:
+                        if pending_data_size + len(payload) > data_batch_bytes:
+                            flush_data(pending_data)
+                        pending_data.append(payload)
+                        pending_data_size += len(payload)
+                    else:
+                        flush_data(pending_data)
+                        flush_instructions(current)
+                        current.entries.append(_Data(payload))
+            continue
+        if line.startswith((".float ", ".double ")):
+            if current is None:
+                raise X86EncodeError("floating data before any section")
+            directive, rest = line.split(None, 1)
+            fmt = "<f" if directive == ".float" else "<d"
+            for item in _data_items(rest):
+                try:
+                    payload = struct.pack(fmt, float(item))
+                except (ValueError, OverflowError) as exc:
+                    raise X86EncodeError(f"bad {directive} value {item!r}") from exc
+                if data_batch_bytes > 0 and len(payload) <= data_batch_bytes:
+                    if pending_data_size + len(payload) > data_batch_bytes:
+                        flush_data(pending_data)
+                    pending_data.append(payload)
+                    pending_data_size += len(payload)
+                else:
+                    flush_data(pending_data)
+                    flush_instructions(current)
+                    current.entries.append(_Data(payload))
+            continue
+        if line.startswith((".zero ", ".space ")):
+            if current is None:
+                raise X86EncodeError("zero-fill before any section")
+            size = _parse_int(line.split(None, 1)[1])
+            if size < 0:
+                raise X86EncodeError(f"negative zero-fill {line!r}")
+            flush_instructions(current)
+            current.entries.append(_Zero(size))
+            continue
+        if line.startswith(".") and not line.endswith(":"):
+            raise X86EncodeError(f"directive not proven: {line!r}")
+        if line.endswith(":"):
+            if current is None:
+                raise X86EncodeError(f"label before any section: {line!r}")
+            name = line[:-1].strip()
+            if not name:
+                raise X86EncodeError("empty label")
+            # Labels carry no metadata by themselves. Keep their definitions
+            # in the plan; only explicit declarations need a metadata entry.
+            flush_instructions(current)
+            current.entries.append(_Label(name))
+            continue
+        if current is None or not current.flags & SHF_EXECINSTR:
+            raise X86EncodeError(f"instruction outside .text: {line!r}")
+        if compact_instructions and len(line) < _INSTRUCTION_SPAN_BASE:
+            start = raw_start + len(raw_line) - len(raw_line.lstrip())
+            span = -(start * _INSTRUCTION_SPAN_BASE + len(line) + 1)
+            if span >= -(1 << 63):
+                if pending_instruction_plan is not current:
+                    flush_instructions(pending_instruction_plan)
+                    pending_instruction_plan = current
+                _append_instruction_span(current.entries, pending_instructions, span)
+            else:
+                # Preserve arbitrarily large source offsets without wrapping
+                # them into the fixed-width private transport.
+                flush_instructions(current)
+                current.entries.append(_Instruction(line))
+        else:
+            flush_instructions(current)
+            current.entries.append(_Instruction(line))
+    if not saw_syntax:
+        raise X86EncodeError(
+            "owned x86 assembly must begin with .intel_syntax noprefix"
+        )
+    flush_data(pending_data)
+    flush_instructions(pending_instruction_plan)
+    return plans, order, symbols
+
+
+_INSTRUCTION_SIZE_CACHE_MAX_ENTRIES = 4096
+_INSTRUCTION_SIZE_CACHE_MAX_KEY_BYTES = 1_048_576
+
+
+_SECTION_PAYLOAD_CHUNK_BYTES = 8192
+
+
+class _SectionPayload:
+    """Publish section bytes without repeatedly copying their whole prefix."""
+
+    def __init__(self) -> None:
+        self.chunks: list[bytes] = []
+        self.pending: list[bytes] = []
+        self.pending_size = 0
+
+    def _flush(self) -> None:
+        if self.pending:
+            self.chunks.append(b"".join(self.pending))
+            self.pending.clear()
+            self.pending_size = 0
+
+    def append(self, raw: bytes) -> None:
+        if not raw:
+            return
+        size = len(raw)
+        if size >= _SECTION_PAYLOAD_CHUNK_BYTES:
+            self._flush()
+            self.chunks.append(raw)
+            return
+        self.pending.append(raw)
+        self.pending_size += size
+        if self.pending_size >= _SECTION_PAYLOAD_CHUNK_BYTES:
+            self._flush()
+
+    def finish(self) -> bytes:
+        self._flush()
+        result = b"".join(self.chunks)
+        self.chunks.clear()
+        return result
+
+
+def _measure_sections(plans, order, symbols, operand_cache=None):
+    labels: dict[str, tuple[str, int]] = {}
+    sizes: dict[str, int] = {}
+    section_sizes: dict[str, int] = {}
+    for name in order:
+        plan = plans[name]
+        offset = 0
+        instruction_sizes: dict[str, int] = {}
+        instruction_key_bytes = 0
+        for entry in _iter_plan_entries(plan):
+            if isinstance(entry, _Align):
+                offset = _align(offset, entry.log2)
+            elif isinstance(entry, _Label):
+                if entry.name in labels:
+                    raise X86EncodeError(f"duplicate assembly label {entry.name!r}")
+                labels[entry.name] = (name, offset)
+            elif isinstance(entry, _Data):
+                if plan.type == SHT_NOBITS and entry.payload:
+                    raise X86EncodeError(f"NOBITS section {name!r} has file data")
+                offset += len(entry.payload)
+            elif isinstance(entry, _Zero):
+                offset += entry.size
+            elif isinstance(entry, _SymbolData):
+                if plan.type == SHT_NOBITS:
+                    raise X86EncodeError(f"NOBITS section {name!r} has a relocation")
+                offset += 8
+            elif isinstance(entry, _SymbolDifference):
+                if plan.type == SHT_NOBITS:
+                    raise X86EncodeError(f"NOBITS section {name!r} has file data")
+                offset += entry.width
+            elif isinstance(entry, (_Instruction, int)):
+                instruction_text = _instruction_text(entry, plan.source_text)
+                # With no resolved labels, this fixed-near-branch dialect has
+                # PC-independent lengths. Reuse only successful lengths; final
+                # emission still encodes every instruction at its real PC.
+                cacheable = type(instruction_text) is str
+                key_bytes = 0
+                if cacheable:
+                    # Unicode character storage uses at most four bytes per
+                    # character. The separate entry cap bounds key/dict
+                    # metadata, even for many distinct short instructions.
+                    key_bytes = 4 * len(instruction_text)
+                    cacheable = (
+                        _INSTRUCTION_SIZE_CACHE_MAX_ENTRIES > 0
+                        and key_bytes <= _INSTRUCTION_SIZE_CACHE_MAX_KEY_BYTES
+                    )
+                instruction_size = instruction_sizes.get(instruction_text) if cacheable else None
+                if instruction_size is None:
+                    # Do not retain a throwaway encoded relocation graph from
+                    # an oversized miss through the following cache hits.
+                    instruction_size = len(encode_instruction(
+                        instruction_text, pc=offset, labels={}, section_name=name,
+                        operand_cache=operand_cache,
+                    ).code)
+                    if cacheable:
+                        if (
+                            len(instruction_sizes) >= _INSTRUCTION_SIZE_CACHE_MAX_ENTRIES
+                            or instruction_key_bytes + key_bytes > _INSTRUCTION_SIZE_CACHE_MAX_KEY_BYTES
+                        ):
+                            instruction_sizes.clear()
+                            instruction_key_bytes = 0
+                        instruction_sizes[instruction_text] = instruction_size
+                        instruction_key_bytes += key_bytes
+                offset += instruction_size
+            elif isinstance(entry, _SizeHere):
+                start = labels.get(entry.symbol)
+                if start is None or start[0] != name:
+                    raise X86EncodeError(
+                        f".size references non-local symbol {entry.symbol!r}"
+                    )
+                computed_size = offset - start[1]
+                meta = symbols.get(entry.symbol)
+                if meta is None:
+                    meta = _SymbolMeta()
+                    symbols[entry.symbol] = meta
+                existing_size = meta.size
+                if existing_size is not None and existing_size != computed_size:
+                    raise X86EncodeError(
+                        f"conflicting .size directives for {entry.symbol!r}"
+                    )
+                if entry.symbol in sizes and sizes[entry.symbol] != computed_size:
+                    raise X86EncodeError(
+                        f"inconsistent location size for {entry.symbol!r}"
+                    )
+                sizes[entry.symbol] = computed_size
+            else:
+                raise X86EncodeError("unknown assembly plan entry")
+        section_sizes[name] = offset
+    for symbol, size in sizes.items():
+        meta = symbols.get(symbol)
+        if meta is None:
+            meta = _SymbolMeta()
+            symbols[symbol] = meta
+        meta.size = size
+    return labels, section_sizes
+
+
+def assemble_file(asm_text: str, *, phase_timing=None) -> ElfObject:
+    """Assemble one complete self-backend file into a validated ElfObject."""
+    if phase_timing is None:
+        return assemble_file_keeping_labels(asm_text, ())
+    return assemble_file_keeping_labels(asm_text, (), phase_timing=phase_timing)
+
+
+def assemble_file_keeping_labels(asm_text: str, keep_labels, *, phase_timing=None) -> ElfObject:
+    """``assemble_file``, also publishing the named unreferenced local labels.
+
+    The COFF writer reads its unwind markers from .symtab.  No default
+    argument: pcc's closed-world frontend compiles this module into pcc1.
+    """
+    if phase_timing is None:
+        return _assemble_file(asm_text, keep_labels, None, None, None)
+    return _assemble_file(
+        asm_text, keep_labels, None, None, None, phase_timing=phase_timing,
+    )
+
+
+def assemble_file_with_stack_maps(
+    asm_text: str, stack_map_plans, *, function_symbol, block_label,
+    consume_stack_map_plans: bool = False, phase_timing=None,
+) -> ElfObject:
+    """Assemble code plus structured maps, retaining the ordinary ELF checks."""
+    if phase_timing is None:
+        return _assemble_file(
+            asm_text, (), stack_map_plans, function_symbol, block_label,
+            consume_stack_map_plans,
+        )
+    return _assemble_file(
+        asm_text, (), stack_map_plans, function_symbol, block_label,
+        consume_stack_map_plans, phase_timing=phase_timing,
+    )
+
+
+def assemble_file_with_stack_maps_keeping_labels(
+    asm_text: str, stack_map_plans, keep_labels, *, function_symbol, block_label,
+    consume_stack_map_plans: bool = False, phase_timing=None,
+) -> ElfObject:
+    """Assemble structured maps while retaining the requested local labels.
+
+    COFF consumers retain the same unreferenced SEH marker labels as their
+    text-only path; packed metadata still resolves at final machine offsets.
+    """
+    if phase_timing is None:
+        return _assemble_file(
+            asm_text, keep_labels, stack_map_plans, function_symbol, block_label,
+            consume_stack_map_plans,
+        )
+    return _assemble_file(
+        asm_text, keep_labels, stack_map_plans, function_symbol, block_label,
+        consume_stack_map_plans, phase_timing=phase_timing,
+    )
+
+
+def _assemble_file(
+    asm_text: str, keep_labels, stack_map_plans, function_symbol, block_label,
+    consume_stack_map_plans: bool = False, phase_timing=None,
+) -> ElfObject:
+    if consume_stack_map_plans and not isinstance(stack_map_plans, list):
+        raise X86EncodeError("consuming stack maps require a mutable plan list")
+    started = phase_timing.begin_assembly(13) if phase_timing is not None else 0
+    plans, order, symbol_meta = _parse_file(asm_text, compact_instructions=True)
+    if phase_timing is not None:
+        phase_timing.complete_assembly(13, started)
+    operand_cache = _OperandParseCache()
+    started = phase_timing.begin_assembly(14) if phase_timing is not None else 0
+    labels, measured_sizes = _measure_sections(
+        plans, order, symbol_meta, operand_cache=operand_cache,
+    )
+    if phase_timing is not None:
+        phase_timing.complete_assembly(14, started)
+        started = phase_timing.begin_assembly(15)
+    pending: list[_PendingRelocation] = []
+    if stack_map_plans:
+        from .self_backend_precise_stackmaps import build_x86_64_stack_map_payload
+
+        stack_section = plans.get(".pcc_stackmaps")
+        if stack_section is None or measured_sizes[".pcc_stackmaps"] != 0:
+            raise X86EncodeError("structured stack maps require an empty section marker")
+        offsets = {
+            name: location[1]
+            for name, location in labels.items()
+            if location[0] == ".text"
+        }
+        packed, function_relocations = build_x86_64_stack_map_payload(
+            tuple(stack_map_plans), offsets,
+            function_symbol=function_symbol, block_label=block_label,
+        )
+        stack_section.entries = [_Data(packed)]
+        measured_sizes[".pcc_stackmaps"] = len(packed)
+        del packed
+        del offsets
+        if consume_stack_map_plans:
+            # Final machine offsets and all root facts now live in the owned
+            # section bytes.  The caller explicitly gives up these plans;
+            # ordinary callers keep their original non-consuming behavior.
+            stack_map_plans.clear()
+        for offset, symbol in function_relocations:
+            pending.append(_PendingRelocation(
+                ".pcc_stackmaps", offset, symbol, R_X86_64_64, 0,
+            ))
+    # A .type declaration is also legal for an external reference. A size
+    # describes a definition and still requires a label in this object.
+    missing_definitions = sorted(name for name, meta in symbol_meta.items()
+                                 if name not in labels and meta.size is not None)
+    if missing_definitions:
+        raise X86EncodeError(
+            "assembly metadata names symbols without definitions: "
+            + repr(missing_definitions)
+        )
+    # GAS deliberately leaves calls to global definitions relocatable so the
+    # final static linker, rather than the assembler, owns symbol resolution.
+    # Resolve assembler-local labels here; expose globals through RELA even
+    # when their definition happens to share this object.
+    local_branch_labels = {}
+    for name, location in labels.items():
+        meta = symbol_meta.get(name)
+        if meta is None or not meta.global_:
+            local_branch_labels[name] = location
+    section_payloads: dict[str, bytes] = {}
+    for name in order:
+        plan = plans[name]
+        # Native bytearray.extend allocates and copies the complete prefix.
+        # Keep machine PCs in memory_size and join bounded chunks only once.
+        payload = _SectionPayload()
+        memory_size = 0
+        # Measurement and stack-map resolution have consumed the plan. Retire
+        # each record/run while encoding; later readers use final payloads.
+        for entry in _iter_plan_entries(plan, consume=True):
+            if isinstance(entry, _Align):
+                target = _align(memory_size, entry.log2)
+                padding = target - memory_size
+                if plan.type != SHT_NOBITS:
+                    payload.append(bytes((entry.fill,)) * padding)
+                memory_size = target
+            elif isinstance(entry, (_Label, _SizeHere)):
+                continue
+            elif isinstance(entry, _Data):
+                if plan.type != SHT_NOBITS:
+                    payload.append(entry.payload)
+                memory_size += len(entry.payload)
+            elif isinstance(entry, _Zero):
+                if plan.type != SHT_NOBITS:
+                    payload.append(b"\0" * entry.size)
+                memory_size += entry.size
+            elif isinstance(entry, _SymbolData):
+                pending.append(_PendingRelocation(
+                    name, memory_size, entry.symbol, R_X86_64_64, entry.addend,
+                ))
+                payload.append(b"\0" * 8)
+                memory_size += 8
+            elif isinstance(entry, _SymbolDifference):
+                left = labels.get(entry.left)
+                right = labels.get(entry.right)
+                if left is None or right is None or left[0] != right[0]:
+                    raise X86EncodeError("symbol difference requires definitions in the same section: " + entry.left + " - " + entry.right)
+                payload.append(_integer_payload(left[1] - right[1], entry.width, owner="symbol difference"))
+                memory_size += entry.width
+            elif isinstance(entry, (_Instruction, int)):
+                encoded = encode_instruction(
+                    _instruction_text(entry, plan.source_text),
+                    pc=memory_size,
+                    labels=local_branch_labels,
+                    section_name=name,
+                    operand_cache=operand_cache,
+                )
+                payload.append(encoded.code)
+                memory_size += len(encoded.code)
+                for relocation in encoded.relocations:
+                    pending.append(_PendingRelocation(
+                        name,
+                        relocation.offset,
+                        relocation.symbol,
+                        relocation.type,
+                        relocation.addend,
+                    ))
+            else:
+                raise X86EncodeError("unknown assembly plan entry")
+        # Retire the final parsed payload before making the section byte copy.
+        # This also handles empty sections without retaining a previous entry.
+        entry = None
+        if memory_size != measured_sizes[name]:
+            raise X86EncodeError(
+                f"x86 assembly pass size drift in {name}: "
+                f"{memory_size} != {measured_sizes[name]}"
+            )
+        section_payloads[name] = payload.finish()
+        plan.entries.clear()
+
+    section_indices = {name: index for index, name in enumerate(order, start=1)}
+    referenced = {relocation.symbol for relocation in pending}
+    local_symbols: list[ElfSymbol] = []
+    global_symbols: list[ElfSymbol] = []
+    for name, (section_name, offset) in labels.items():
+        meta = symbol_meta.get(name)
+        # Undeclared labels use the metadata defaults without allocating a
+        # record that is never inserted into the private symbol table.
+        symbol_global = False if meta is None else meta.global_
+        symbol_type = STT_NOTYPE if meta is None else meta.type
+        symbol_size = None if meta is None else meta.size
+        if (
+            not symbol_global
+            and symbol_type == STT_NOTYPE
+            and symbol_size is None
+            and name not in referenced
+            and name not in keep_labels
+        ):
+            # Block/edge labels have already served the two-pass local branch
+            # resolver.  GAS does not publish its temporary, unreferenced
+            # labels into .symtab, and doing so here would add thousands of
+            # irrelevant symbols to bootstrap objects.  Typed function/data
+            # labels and any local relocation target remain materialized.
+            continue
+        section = plans[section_name]
+        if section.flags & SHF_TLS:
+            symbol_type = STT_TLS
+        elif symbol_type == STT_NOTYPE:
+            symbol_type = STT_FUNC if section.flags & SHF_EXECINSTR else STT_OBJECT
+        record = ElfSymbol(
+            name,
+            section_indices[section_name],
+            offset,
+            symbol_size or 0,
+            STB_GLOBAL if symbol_global else STB_LOCAL,
+            symbol_type,
+        )
+        (global_symbols if symbol_global else local_symbols).append(record)
+    # Collect only undefined names. Copying the complete metadata/label maps
+    # into sets creates several million-label tables just to subtract them.
+    undefined_symbols = {name for name in referenced if name not in labels}
+    for name in symbol_meta:
+        if name not in labels:
+            undefined_symbols.add(name)
+    for name in sorted(undefined_symbols):
+        meta = symbol_meta.get(name)
+        global_symbols.append(ElfSymbol(
+            name, 0, 0, 0, STB_GLOBAL,
+            STT_NOTYPE if meta is None else meta.type,
+        ))
+    all_symbols = [ElfSymbol.null(), *local_symbols, *global_symbols]
+    symbol_indices = {
+        symbol.name: index
+        for index, symbol in enumerate(all_symbols)
+        if symbol.name
+    }
+    relocations_by_section: dict[str, list[ElfRelocation]] = {
+        name: [] for name in order
+    }
+    for relocation in pending:
+        symbol_index = symbol_indices.get(relocation.symbol)
+        if symbol_index is None:
+            raise X86EncodeError(
+                f"relocation symbol {relocation.symbol!r} was not materialized"
+            )
+        relocations_by_section[relocation.section_name].append(ElfRelocation(
+            relocation.offset,
+            symbol_index,
+            relocation.type,
+            relocation.addend,
+        ))
+    sections: list[ElfSection] = []
+    for name in order:
+        plan = plans[name]
+        payload = section_payloads[name]
+        sections.append(ElfSection(
+            name,
+            plan.type,
+            plan.flags,
+            plan.align,
+            b"" if plan.type == SHT_NOBITS else payload,
+            measured_sizes[name] if plan.type == SHT_NOBITS else 0,
+            tuple(relocations_by_section[name]),
+        ))
+    result = ElfObject(tuple(sections), tuple(all_symbols))
+    if phase_timing is not None:
+        phase_timing.complete_assembly(15, started)
+    return result

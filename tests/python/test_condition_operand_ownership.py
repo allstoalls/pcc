@@ -16,9 +16,9 @@ import pytest
     ("[1 for row in [holder] if row.empty]", 0),
 ])
 def test_condition_field_reads_release_their_tree(
-    tmp_path: Path, pcc_py_runtime_archive, condition, expected,
+    tmp_path: Path, pcc_runtime_archive, condition, expected,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "condition_owner.py"
     source.write_text('''from pcc.extern import c_int64, extern
@@ -53,7 +53,7 @@ main()
 '''.replace("CONDITION", condition))
     binary = tmp_path / "condition_owner"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND="0"),
                          capture_output=True, text=True, timeout=15)
     assert ran.returncode == 0, ran.stdout + ran.stderr
@@ -62,8 +62,8 @@ main()
     assert growth1 < 16384 and growth2 < 16384, (growth1, growth2)
 
 
-def test_truth_tests_short_circuit_once_and_release_after_errors(tmp_path: Path, pcc_py_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+def test_truth_tests_short_circuit_once_and_release_after_errors(tmp_path: Path, pcc_runtime_archive):
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "truth_order.py"
     source.write_text('''import gc
@@ -103,7 +103,7 @@ main()
 ''')
     binary = tmp_path / "truth_order"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
                              capture_output=True, text=True, timeout=15)

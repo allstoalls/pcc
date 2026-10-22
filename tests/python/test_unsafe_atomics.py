@@ -111,9 +111,9 @@ DEC_IF_POSITIVE_PROGRAM = textwrap.dedent("""
     """).lstrip()
 
 
-@pytest.mark.parametrize("backend", ["llvm", "self"])
+@pytest.mark.parametrize("backend", [pytest.param(None, id="default-self"), pytest.param("self", id="explicit-self")])
 def test_atomic_intrinsics_single_thread_semantics(tmp_path, backend):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "atomics.py"
     exe = tmp_path / f"atomics_{backend}.out"
@@ -129,9 +129,9 @@ def test_atomic_intrinsics_single_thread_semantics(tmp_path, backend):
     assert result.stdout == EXPECTED
 
 
-@pytest.mark.parametrize("backend", ["llvm", "self"])
+@pytest.mark.parametrize("backend", [pytest.param(None, id="default-self"), pytest.param("self", id="explicit-self")])
 def test_atomic_cas_loop_matches_removed_dec_if_positive_helper(tmp_path, backend):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "dec_if_positive.py"
     exe = tmp_path / ("dec_if_positive_" + backend + ".out")
@@ -151,7 +151,7 @@ def test_atomic_cas_loop_matches_removed_dec_if_positive_helper(tmp_path, backen
 
 
 def _compile_to_ll(tmp_path, source: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "atomics_ir.py"
     out = tmp_path / "atomics_ir.ll"
@@ -225,7 +225,7 @@ def test_atomic_intrinsics_lower_to_aarch64_exclusives(tmp_path):
     ],
 )
 def test_atomic_intrinsics_fail_closed(tmp_path, call, message_part):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "atomics_bad.py"
     out = tmp_path / "atomics_bad.ll"
@@ -259,7 +259,7 @@ def test_atomic_intrinsics_fail_closed(tmp_path, call, message_part):
 
 
 def test_atomic_ordering_must_be_a_string_literal(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "atomics_dyn.py"
     out = tmp_path / "atomics_dyn.ll"

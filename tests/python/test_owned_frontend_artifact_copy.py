@@ -1,6 +1,6 @@
 """Compiler artifact copies use owned file operations on every host."""
 
-from pcc.py_frontend import pipeline_frontend_parallel as parallel
+from pcc.frontends.python import pipeline_frontend_parallel as parallel
 
 
 def test_frontend_artifact_tree_keeps_names_and_binary_contents(tmp_path, monkeypatch):

@@ -41,7 +41,7 @@ class TracebackFormatExcTests(unittest.TestCase):
         return dst
 
     def _compile(self, src: str, exe: str) -> None:
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         compile_python(
             src,

@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_zpage_mechanics.py"
 MANAGED_SOURCE = RUNTIME_DIR / "py" / "py_gc_backend.py"
 ALLOCATION_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_zpage_allocation.py"
@@ -166,10 +166,10 @@ def test_zpage_mechanics_preserves_layout_and_bounded_reuse_contract() -> None:
 
 
 def test_production_archive_has_one_zpage_mechanics_owner(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -294,9 +294,9 @@ def _link_zpage_mechanics_probe(tmp_path: Path, archive: Path) -> Path:
 
 def test_zpage_mechanics_archive_runs_active_free_and_node_state_machines(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    executable = _link_zpage_mechanics_probe(tmp_path, pcc_py_runtime_archive)
+    executable = _link_zpage_mechanics_probe(tmp_path, pcc_runtime_archive)
     result = subprocess.run(
         [str(executable)], capture_output=True, text=True, timeout=30
     )

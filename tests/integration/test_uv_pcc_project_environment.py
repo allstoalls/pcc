@@ -81,10 +81,10 @@ def _build_wheel(tmp_path: Path, env: dict[str, str]) -> Path:
     with zipfile.ZipFile(wheels[0]) as archive:
         names = archive.namelist()
     assert any(name.endswith(".data/scripts/pcc1") for name in names)
-    assert any(name == "pcc/package_environment.py" for name in names)
-    assert "pcc/py_runtime/libpy_runtime_pcc_py.a" in names
-    assert "pcc/py_runtime/libpy_runtime_pcc_py.a.target" in names
-    assert "pcc/py_runtime/libpy_runtime_pcc_py.a.wheel" in names
+    assert any(name == "pcc/package/environment.py" for name in names)
+    assert "pcc/runtime/libpy_runtime_pcc_py.a" in names
+    assert "pcc/runtime/libpy_runtime_pcc_py.a.target" in names
+    assert "pcc/runtime/libpy_runtime_pcc_py.a.wheel" in names
     return wheels[0]
 
 

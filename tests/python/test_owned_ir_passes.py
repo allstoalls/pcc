@@ -1,3 +1,5 @@
+
+from tests.owned_ir_validation import verify_ir_text
 """Owned optimizer kernels must run without importing an LLVM binding."""
 
 from pathlib import Path
@@ -15,12 +17,12 @@ def test_owned_scalar_and_cfg_passes_without_llvm():
 import sys
 class RejectLLVM(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname == "llvmlite" or fullname.startswith("llvmlite.") or fullname == "pcc.llvm_capi.binding":
+        if fullname == "llvmlite" or fullname.startswith("llvmlite.") or fullname == "pcc.ir.binding":
             raise AssertionError("external LLVM import: " + fullname)
 sys.meta_path.insert(0, RejectLLVM())
-from pcc.native_ir.instsimplify import simplify_module_text
-from pcc.native_ir.simplifycfg import simplify_cfg_text
-from pcc.native_ir.instcombine import instcombine_text
+from pcc.ir.optimization.instsimplify import simplify_module_text
+from pcc.ir.optimization.simplifycfg import simplify_cfg_text
+from pcc.ir.optimization.instcombine import instcombine_text
 ir = """define i64 @execute(i64 %x) {
 entry:
   %same = add i64 %x, 0
@@ -54,7 +56,7 @@ print("owned-optimizer-ok")
     "%unused = load atomic i64, ptr %p acquire, align 8",
 ])
 def test_owned_dce_preserves_effects_without_result_users(instruction):
-    from pcc.native_ir.dce import dce_module_text
+    from pcc.ir.optimization.dce import dce_module_text
 
     source = "declare i64 @effect()\ndefine i64 @f(ptr %p) {\nentry:\n  " + instruction + "\n  ret i64 0\n}\n"
     result, _ = dce_module_text(source)
@@ -62,7 +64,7 @@ def test_owned_dce_preserves_effects_without_result_users(instruction):
 
 
 def test_function_cleanup_keeps_module_call_effect_contracts():
-    from pcc.native_ir.simplifycfg import simplify_cfg_text
+    from pcc.ir.optimization.simplifycfg import simplify_cfg_text
 
     source = '''declare i64 @pure() memory(none) willreturn nounwind
 declare i64 @effect()
@@ -94,10 +96,10 @@ def test_owned_inliner_without_llvm():
 import sys
 class RejectLLVM(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname == "llvmlite" or fullname.startswith("llvmlite.") or fullname == "pcc.llvm_capi.binding":
+        if fullname == "llvmlite" or fullname.startswith("llvmlite.") or fullname == "pcc.ir.binding":
             raise AssertionError("external LLVM import: " + fullname)
 sys.meta_path.insert(0, RejectLLVM())
-from pcc.native_ir.inline import inline_module
+from pcc.ir.optimization.inline import inline_module
 ir = """define internal i64 @twice(i64 %x) {
 entry:
   %result = mul i64 %x, 2
@@ -120,8 +122,37 @@ print("owned-inline-ok")
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_instcombine_gives_each_rewritten_negation_its_own_name():
+    # Two negations of one value are both rewritten in one round; each new
+    # result must get a distinct SSA name (the freestanding runtime's
+    # ``0 - offset`` pair once produced two ``%x.neg`` definitions).
+    import re
+    from collections import Counter
+
+    from pcc.ir.optimization.instcombine import instcombine_text
+
+    ir = """define i64 @f(i64 %a, i64 %b, i64 %x.neg) {
+entry:
+  %x = sub i64 %a, %b
+  %n1 = sub i64 0, %x
+  %n2 = sub i64 0, %x
+  %c = icmp sgt i64 %n2, %x.neg
+  %m = and i64 %n1, 7
+  %z = zext i1 %c to i64
+  %r = add i64 %m, %z
+  ret i64 %r
+}
+"""
+    out, changed = instcombine_text(ir)
+    assert changed
+    definitions = Counter(re.findall(r"^\s*%([\w.$-]+)\s*=", out, re.M))
+    assert all(count == 1 for count in definitions.values()), out
+    assert "x.neg" not in definitions, out
+    verify_ir_text(out)
+
+
 def test_local_name_replacement_preserves_prefixes_and_literals():
-    from pcc.native_ir.text_tokens import replace_local_names
+    from pcc.ir.optimization.text_tokens import replace_local_names
 
     source = '%answer = add i64 %a, %a.field ; keep %a\ncall void @f(ptr c"%a")\n'
     expected = '%answer = add i64 %renamed, %a.field ; keep %a\ncall void @f(ptr c"%a")\n'
@@ -129,7 +160,7 @@ def test_local_name_replacement_preserves_prefixes_and_literals():
 
 
 def test_defined_inlining_preserves_external_symbols_and_replacement_boundaries():
-    from pcc.native_ir.inline import inline_module
+    from pcc.ir.optimization.inline import inline_module
 
     source = '''define i64 @small(i64 %x) {
 entry:
@@ -164,7 +195,7 @@ entry:
 
 
 def test_pointer_inline_rewrites_earlier_backedge_phi_uses():
-    from pcc.native_ir.inline import inline_module
+    from pcc.ir.optimization.inline import inline_module
 
     source = '''define internal ptr @identity(ptr %value) {
 entry:
@@ -194,7 +225,7 @@ exit:
 
 
 def test_owned_pass_dispatch_preserves_order_and_needs_no_host(monkeypatch):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     def reject(*args, **kwargs):
         raise AssertionError("owned optimizer called a host subprocess")
@@ -212,10 +243,11 @@ def test_owned_pass_dispatch_preserves_order_and_needs_no_host(monkeypatch):
         assert "%dead" not in text
 
 
-def test_compiled_simplifier_preserves_each_function(tmp_path, pcc_py_runtime_archive):
-    from pcc.native_ir.instsimplify import simplify_module_text
-    from pcc.native_ir.inline import inline_module
-    from pcc.py_frontend.pipeline import compile_python
+@pytest.mark.integration
+def test_compiled_simplifier_preserves_each_function(tmp_path, pcc_runtime_archive):
+    from pcc.ir.optimization.instsimplify import simplify_module_text
+    from pcc.ir.optimization.inline import inline_module
+    from pcc.frontends.python.pipeline import compile_python
 
     ir = "\n".join(
         "define i64 @function_" + str(index) + "(i64 %x) {\nentry:\n"
@@ -307,7 +339,7 @@ entry:
     driver = ROOT / "pcc" / "native_ir" / "driver.py"
     binary = tmp_path / "simplify_driver"
     compile_python(str(driver), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     run = subprocess.run([str(binary), "inline,instsimplify", str(input_path), str(output_path)],
                          capture_output=True, text=True, timeout=15)
     assert run.returncode == 0, run.stderr
@@ -315,7 +347,7 @@ entry:
 
     # Use the same native driver for the memory tier, including a loop whose
     # carried value requires a PHI. Host dispatch alone cannot qualify this.
-    from pcc.py_frontend.compiled_owned_passes import run_owned_passes
+    from pcc.frontends.python.compiled_owned_passes import run_owned_passes
 
     memory_ir = '''define i64 @count(i64 %limit) {
 entry:
@@ -346,8 +378,7 @@ done:
 
 @pytest.mark.parametrize("chain", [False, True])
 def test_cfg_return_fold_preserves_third_predecessor(chain):
-    from llvmlite import binding as llvm
-    from pcc.native_ir.simplifycfg import simplify_cfg_text
+    from pcc.ir.optimization.simplifycfg import simplify_cfg_text
     source = '''define RESULT @choose(i1 %outer, i1 %inner, ptr %a, ptr %b) {
 entry:
   br i1 %outer, label %diamond, label %bypass
@@ -365,15 +396,15 @@ merge:
 }
 '''.replace('RESULT', 'i64' if chain else 'ptr').replace('RETURN_BODY',
     '%converted = ptrtoint ptr %result to i64\n  ret i64 %converted' if chain else 'ret ptr %result')
-    llvm.parse_assembly(source).verify()
+    verify_ir_text(source)
     result, _ = simplify_cfg_text(source)
-    llvm.parse_assembly(result).verify()
+    verify_ir_text(result)
 
 
 def test_label_rewrite_does_not_run_regex_on_unrelated_instructions(monkeypatch):
     import re
     from types import SimpleNamespace
-    from pcc.native_ir import simplifycfg
+    from pcc.ir.optimization import simplifycfg
     operations = []
     class Pattern:
         def __init__(self, pattern):
@@ -393,7 +424,7 @@ def test_label_rewrite_does_not_run_regex_on_unrelated_instructions(monkeypatch)
 
 
 def test_phi_pruning_preserves_name_prefixes_and_literals():
-    from pcc.native_ir.simplifycfg import _Block, _prune_invalid_phi_incomings
+    from pcc.ir.optimization.simplifycfg import _Block, _prune_invalid_phi_incomings
     blocks = [_Block("entry", ["  br label %join\n"]), _Block("join", [
         "  %value = phi i64 [ 7, %entry ], [ 8, %dead ]\n",
         "  %value.suffix = add i64 %value, 1\n",
@@ -409,7 +440,7 @@ def test_phi_pruning_preserves_name_prefixes_and_literals():
 
 
 def test_linear_merging_reuses_predecessor_counts(monkeypatch):
-    from pcc.native_ir import simplifycfg
+    from pcc.ir.optimization import simplifycfg
     calls = []
     original = simplifycfg._predecessor_counts
     def counted(blocks):

@@ -17,7 +17,7 @@ import textwrap
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 
 HARNESS = r'''
     #define _GNU_SOURCE
@@ -100,7 +100,7 @@ HARNESS = r'''
 
 
 def test_object_cells_use_side_words_and_foreign_keys_use_the_hash(
-    tmp_path: Path, pcc_py_runtime_archive: Path,
+    tmp_path: Path, pcc_runtime_archive: Path,
 ) -> None:
     source = tmp_path / "side_slots.c"
     output = tmp_path / "side_slots"
@@ -108,7 +108,7 @@ def test_object_cells_use_side_words_and_foreign_keys_use_the_hash(
     built = subprocess.run(
         [os.environ.get("CC", "cc"), "-std=c11", "-pthread",
          f"-I{RUNTIME_DIR / 'include'}", f"-I{RUNTIME_DIR / 'src'}",
-         str(source), str(pcc_py_runtime_archive), "-lm", "-o", str(output)],
+         str(source), str(pcc_runtime_archive), "-lm", "-o", str(output)],
         capture_output=True, text=True, timeout=60,
     )
     assert built.returncode == 0, built.stdout + built.stderr

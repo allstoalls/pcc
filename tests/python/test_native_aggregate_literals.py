@@ -7,7 +7,7 @@ import sys
 
 
 def test_native_aggregate_literals_match_host(tmp_path, pcc_diagnostic_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = Path(__file__).resolve().parents[2] / "pcc/backend/owned_literal_driver.py"
     binary = tmp_path / "aggregate_literals"

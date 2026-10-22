@@ -50,21 +50,21 @@ def _emit_ll(src_path: str, out_path: str, *, mode: str | None) -> int:
 
 
 def test_resolve_ir_scaffold_mode_default_on():
-    from pcc.py_frontend.pipeline import _resolve_ir_scaffold_mode
+    from pcc.frontends.python.pipeline import _resolve_ir_scaffold_mode
 
     assert _resolve_ir_scaffold_mode(None) == "on"
     assert _resolve_ir_scaffold_mode("") == "on"
 
 
 def test_resolve_ir_scaffold_mode_off():
-    from pcc.py_frontend.pipeline import _resolve_ir_scaffold_mode
+    from pcc.frontends.python.pipeline import _resolve_ir_scaffold_mode
 
     assert _resolve_ir_scaffold_mode("off") == "off"
     assert _resolve_ir_scaffold_mode("OFF") == "off"
 
 
 def test_resolve_ir_scaffold_mode_on():
-    from pcc.py_frontend.pipeline import _resolve_ir_scaffold_mode
+    from pcc.frontends.python.pipeline import _resolve_ir_scaffold_mode
 
     assert _resolve_ir_scaffold_mode("on") == "on"
     assert _resolve_ir_scaffold_mode("ON") == "on"
@@ -74,13 +74,13 @@ def test_resolve_ir_scaffold_mode_on():
 
 
 def test_resolve_ir_scaffold_mode_auto_aliases_on():
-    from pcc.py_frontend.pipeline import _resolve_ir_scaffold_mode
+    from pcc.frontends.python.pipeline import _resolve_ir_scaffold_mode
 
     assert _resolve_ir_scaffold_mode("auto") == "on"
 
 
 def test_resolve_ir_scaffold_mode_invalid_raises():
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         PyPipelineError,
         _resolve_ir_scaffold_mode,
     )
@@ -90,7 +90,7 @@ def test_resolve_ir_scaffold_mode_invalid_raises():
 
 
 def test_resolve_ir_scaffold_mode_env_default():
-    from pcc.py_frontend.pipeline import _resolve_ir_scaffold_mode
+    from pcc.frontends.python.pipeline import _resolve_ir_scaffold_mode
 
     saved = os.environ.get("PCC_IR_SCAFFOLD")
     try:
@@ -110,8 +110,8 @@ def test_resolve_ir_scaffold_mode_env_default():
 def test_l1_codegen_constructor_accepts_mode():
     """L1CodeGen accepts ir_scaffold_mode and stores it. Invalid value
     raises ValueError immediately at construction time."""
-    from pcc.py_frontend.codegen import layer1
-    from pcc.py_frontend.py_ast import Module
+    from pcc.frontends.python.codegen import layer1
+    from pcc.frontends.python.py_ast import Module
 
     empty = Module(name="empty", body=[])
 

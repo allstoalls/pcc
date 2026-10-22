@@ -1,6 +1,6 @@
 import json
 
-from pcc.tailcall_ir import analyze_self_tailcalls, format_tailcall_report
+from pcc.ir.optimization.tailcall_ir import analyze_self_tailcalls, format_tailcall_report
 
 
 def test_tailcall_detector_finds_self_call():

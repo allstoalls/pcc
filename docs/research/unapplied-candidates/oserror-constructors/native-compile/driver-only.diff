@@ -1,0 +1,47 @@
+--- prior/compile_open_errno.py
++++ successor/compile_oserror_constructors.py
+@@ -1,4 +1,4 @@
+-"""Compile the unchanged open-errno fixture; emitted execution is separate."""
++"""Compile the unchanged OSError constructor fixture; execution is separate."""
+ from __future__ import annotations
+ 
+ import argparse
+@@ -22,7 +22,7 @@
+ 
+ GiB = 1024 ** 3
+ TARGET = "x86_64-unknown-linux-gnu"
+-FIXTURE = "tests/python/test_native_open_errno.py"
++FIXTURE = "tests/python/test_os_error_constructors.py"
+ SUPERVISOR_ENV = {"PCC_WORKER_TREE_STATE_PATH", "PCC_WORKER_TREE_BUDGET_BYTES"}
+ TARGET_ENV = ("PCC_SELF_TARGET_PASSES", "PCC_SELF_TARGET_PASS_TRANSPORT")
+ FIXED_ENV = {
+@@ -124,14 +124,10 @@
+     assignments = [node for node in tree.body if isinstance(node, ast.Assign)
+                    and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                    and node.targets[0].id == "PROGRAM"]
+-    check(len(assignments) == 2, "original PROGRAM assignment count changed")
++    check(len(assignments) == 1, "original PROGRAM assignment count changed")
+     raw = ast.literal_eval(assignments[0].value)
+-    expected = ast.parse('PROGRAM.replace("MISSING_MESSAGE_VALUE", repr(os.strerror(2))).replace("EXISTS_MESSAGE_VALUE", repr(os.strerror(17)))', mode="eval").body
+-    check(ast.dump(assignments[1].value, include_attributes=False) == ast.dump(expected, include_attributes=False),
+-          "original PROGRAM substitutions changed")
+-    messages = {"missing": os.strerror(2), "exists": os.strerror(17)}
+-    return raw.replace("MISSING_MESSAGE_VALUE", repr(messages["missing"])).replace(
+-        "EXISTS_MESSAGE_VALUE", repr(messages["exists"])), messages
++    check(isinstance(raw, str), "original PROGRAM is not a string literal")
++    return raw, {}
+ 
+ 
+ def main():
+@@ -288,9 +284,9 @@
+         text = capture["text"]
+         (output / "actual-generated.ll").write_text(text)
+         check("strict.nolib.stub" not in text and not re.search(r"\bcall[^\n]*@py_cpy_", text), "host fallback in actual IR")
+-        check(re.search(r"\bcall[^\n]*@py_file_open_options\(", text)
++        check(re.search(r"\bcall[^\n]*@py_obj_call_slots\(", text)
+               and re.search(r"\bcall[^\n]*@pcc_gc_collect\(i32 -1\)", text),
+-              "expected actual open/GC callsites missing")
++              "expected actual object-call/GC callsites missing")
+         verify_ir_text(text)
+         check(executable.is_file() and stat.S_IMODE(executable.stat().st_mode) == 0o755, "executable absent or wrong mode")
+         with executable.open("rb") as stream:

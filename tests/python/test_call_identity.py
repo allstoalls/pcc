@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 
-from pcc.py_frontend.codegen.call_identity import (
+from pcc.frontends.python.codegen.call_identity import (
     BindingIdentities,
     ClassIdentity,
     MethodIdentity,
@@ -33,7 +33,7 @@ def _receiver(*classes, nullable=False):
 
 
 def test_same_class_spelling_does_not_select_ir_provider():
-    ir_builder = _class("pcc.llvm_capi.ir", "IRBuilder")
+    ir_builder = _class("pcc.ir.ir", "IRBuilder")
     user_builder = _class("application", "IRBuilder")
     classes = {c.symbol: c for c in (ir_builder, user_builder)}
     actual = resolve_method_identity(_receiver(user_builder), "add", classes)
@@ -134,7 +134,7 @@ def test_builtin_object_lookup_is_not_a_custom_attribute_hook():
 
 def test_local_ir_parameter_shadows_a_module_import_before_any_assignment():
     module = BindingIdentities()
-    provider = SymbolIdentity("pcc.llvm_capi", "ir")
+    provider = SymbolIdentity("pcc.ir", "ir")
     module.bind_symbol("ir", provider)
     method = BindingIdentities(module)
     method.shadow("ir")
@@ -144,7 +144,7 @@ def test_local_ir_parameter_shadows_a_module_import_before_any_assignment():
 
 def test_importing_ir_does_not_grant_an_unknown_builder_an_identity():
     module = BindingIdentities()
-    module.bind_symbol("ir", SymbolIdentity("pcc.llvm_capi", "ir"))
+    module.bind_symbol("ir", SymbolIdentity("pcc.ir", "ir"))
     function = BindingIdentities(module)
     function.shadow("builder")
     decision = resolve_method_identity(function.receiver("builder"), "add", {})
@@ -160,7 +160,7 @@ def test_ir_specific_method_spellings_still_resolve_user_methods():
 
 
 def test_alias_save_restore_and_unknown_reassignment_preserve_provenance():
-    cls = _class("pcc.llvm_capi.ir", "IRBuilder")
+    cls = _class("pcc.ir.ir", "IRBuilder")
     scope = BindingIdentities()
     scope.bind_receiver("builder", _receiver(cls))
     scope.assign_alias("saved", "builder")
@@ -176,7 +176,7 @@ def test_alias_save_restore_and_unknown_reassignment_preserve_provenance():
 
 
 def test_control_flow_join_keeps_none_and_unknown_paths():
-    cls = _class("pcc.llvm_capi.ir", "IRBuilder")
+    cls = _class("pcc.ir.ir", "IRBuilder")
     parent = BindingIdentities()
     parent.shadow("builder")
     left, right = BindingIdentities(parent), BindingIdentities(parent)
@@ -192,9 +192,9 @@ def test_control_flow_join_keeps_none_and_unknown_paths():
 def _declared_host():
     from types import SimpleNamespace
 
-    from pcc.llvm_capi import ir
-    from pcc.py_frontend.codegen.class_gen import ClassInfo
-    from pcc.py_frontend.py_ast import ClassDef, Module, SourceSpan
+    from pcc.ir import ir
+    from pcc.frontends.python.codegen.class_gen import ClassInfo
+    from pcc.frontends.python.py_ast import ClassDef, Module, SourceSpan
 
     module = ir.Module(name="application")
     pointer = ir.IntType(8).as_pointer()
@@ -262,7 +262,7 @@ def test_codegen_adapter_cannot_hide_an_undeclared_lookup_hook():
 
 
 def test_codegen_adapter_keeps_inheritance_and_mutation_as_proof_obligations():
-    from pcc.py_frontend.py_ast import DynType, Name
+    from pcc.frontends.python.py_ast import DynType, Name
 
     host, info = _declared_host()
     fact = ReceiverIdentity(

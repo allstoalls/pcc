@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from pcc.llvm_capi import binding as pcc_bind
+from pcc.backend.self_backend_dispatch import emit_self_asm
+from tests.owned_ir_validation import verify_ir_text
 
 _LLVM_CODEGEN_ROOT = Path("/tmp/llvm-project-20.1.8-targets/llvm/test/CodeGen")
 
@@ -80,16 +81,10 @@ def _converted_llvm_codegen_test(text: str, *, max_functions: int, triple: str) 
     return _ensure_target_triple(text, triple)
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _init_llvm():
-    pcc_bind.initialize_native_target()
-    pcc_bind.initialize_native_asmprinter()
-
-
 @pytest.mark.parametrize(
     ("target_dir", "filename", "triple", "expected_label"),
     [
-        ("AArch64", "arm64-csel.ll", "arm64-unknown-unknown", "foo1:"),
+        ("AArch64", "arm64-csel.ll", "arm64-apple-darwin", "foo1:"),
         (
             "X86",
             "convert-2-addr-3-addr-inc64.ll",
@@ -111,18 +106,8 @@ def test_llvm_codegen_ll_samples_convert_to_pcc_supported_assembly(
         max_functions=3,
         triple=triple,
     )
-    mod = pcc_bind.parse_assembly(ir_text)
-    mod.verify()
-
-    try:
-        tm = pcc_bind.Target.from_triple(triple).create_target_machine(
-            cpu="generic",
-            features="",
-            opt=2,
-        )
-        asm = tm.emit_assembly(mod)
-    except RuntimeError as exc:
-        pytest.fail(f"LLVM target {triple!r} is unavailable: {exc}")
+    verify_ir_text(ir_text)
+    asm = emit_self_asm(ir_text, triple)
 
     assert expected_label in asm
     assert "ret" in asm

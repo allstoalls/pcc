@@ -4,7 +4,7 @@ import subprocess
 import shutil
 from pathlib import Path
 
-from pcc.py_frontend.pipeline import compile_python_multi
+from pcc.frontends.python.pipeline import compile_python_multi
 
 REPO = Path(__file__).absolute().parents[2]
 
@@ -21,7 +21,7 @@ def test_compiled_enum_provider_publishes_member_name_and_value(tmp_path, monkey
         encoding="utf-8",
     )
     provider = tmp_path / "enum.py"
-    shutil.copyfile(REPO / "pcc" / "py_stdlib" / "enum.py", provider)
+    shutil.copyfile(REPO / "pcc" / "stdlib" / "enum.py", provider)
     executable = tmp_path / "enum-provider"
     compile_python_multi(
         [str(main), str(provider)],

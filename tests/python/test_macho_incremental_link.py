@@ -346,3 +346,107 @@ def test_semantic_identity_keys_exact_images_and_disables_layout_patch(
         validate=_validate_linked_image,
     ) == first_image
     assert exact.stats.image_hits == 1
+
+
+def _stack_mapped_caller() -> NativeObject:
+    from pcc.backend import precise_stackmap as maps
+    from pcc.backend.macho_obj import PCC_STACKMAP_SECTION_FLAGS
+
+    payload = maps.encode_stack_map(maps.PreciseStackMap(
+        arch=maps.ARCH_AARCH64,
+        functions=(maps.FunctionStackMap(
+            function_id=maps.function_id("_main"), function_address=0,
+            code_size=16, frame_size=32,
+            records=(maps.SafepointRecord(
+                safepoint_id=maps.safepoint_id("_main", 0, maps.SAFEPOINT_CALL),
+                instruction_offset=4,
+                kind=maps.SAFEPOINT_CALL,
+                locations=(maps.StackMapLocation(
+                    maps.LOCATION_STACK_INDIRECT, maps.LOCATION_MANAGED,
+                    register=29, offset=-16,
+                ),),
+            ),),
+        ),),
+    ))
+    offset, = maps.function_address_offsets(payload)
+    return NativeObject.from_sections(
+        [
+            Section(
+                sectname="__text",
+                segname="__TEXT",
+                data=_BL_PLACEHOLDER + _NOP + _NOP + _RET,
+                align_log2=2,
+                flags=TEXT_SECTION_FLAGS,
+                symbols=(TextSymbol("_main", 0),),
+                relocations=(Relocation(
+                    offset=0,
+                    symbol="_helper",
+                    type=spec.ARM64_RELOC_BRANCH26,
+                    pcrel=True,
+                ),),
+            ),
+            Section(
+                sectname="__pcc_stackmaps",
+                segname="__DATA",
+                data=payload,
+                flags=PCC_STACKMAP_SECTION_FLAGS,
+                align_log2=3,
+                relocations=(Relocation(
+                    offset, "_main", spec.ARM64_RELOC_UNSIGNED, False, 3,
+                ),),
+            ),
+        ],
+        undefined=["_helper"],
+    )
+
+
+def _image_stack_map(image: bytes) -> bytes:
+    for section in spec.parse_object(image).sections():
+        if (section["segname_str"], section["sectname_str"]) == ("__DATA", "__pcc_stackmaps"):
+            return image[section["offset"]:section["offset"] + section["size"]]
+    raise AssertionError("image has no stack-map table")
+
+
+def test_stack_map_inputs_are_never_layout_patched(tmp_path: Path, monkeypatch) -> None:
+    # The merged table is rebuilt from the inputs' records, so copying an
+    # input's bytes at a concatenation offset cannot reproduce a cold merge.
+    monkeypatch.delenv("PCC_PRECISE_STACKMAP_FORMAT", raising=False)
+    first = IncrementalMachOLinker(tmp_path / "cache", "test-link-source-v1")
+    first.link(
+        [_stack_mapped_caller(), _helper(_NOP)],
+        prepare=prepare_executable_object,
+        finalize=link_prepared_executable,
+        validate=_validate_linked_image,
+    )
+    edited_objects = [_stack_mapped_caller(), _helper(_MOV_X0_X0)]
+    edited = IncrementalMachOLinker(tmp_path / "cache", "test-link-source-v1")
+    edited_image = edited.link(
+        edited_objects,
+        prepare=prepare_executable_object,
+        finalize=link_prepared_executable,
+        validate=_validate_linked_image,
+    )
+    assert (edited.stats.merged_hits, edited.stats.merged_misses) == (0, 0)
+    assert edited_image == link_executable(edited_objects)
+
+
+def test_exact_images_are_keyed_by_the_stack_map_format(tmp_path: Path, monkeypatch) -> None:
+    from pcc.backend.precise_stackmap import RUNTIME_TABLE_VERSION, VERSION, validate_stack_map_payload
+
+    images = {}
+    for setting, version in (("", VERSION), ("3", RUNTIME_TABLE_VERSION)):
+        monkeypatch.setenv("PCC_PRECISE_STACKMAP_FORMAT", setting)
+        linker = IncrementalMachOLinker(tmp_path / "cache", "test-link-source-v1")
+        image = linker.link(
+            [_stack_mapped_caller(), _helper(_NOP)],
+            prepare=prepare_executable_object,
+            finalize=link_prepared_executable,
+            validate=_validate_linked_image,
+        )
+        assert linker.stats.image_hits == 0
+        assert image == link_executable([_stack_mapped_caller(), _helper(_NOP)])
+        table = _image_stack_map(image)
+        assert int.from_bytes(table[8:10], "little") == version
+        validate_stack_map_payload(table, final_image=True)
+        images[setting] = image
+    assert len(_image_stack_map(images["3"])) < len(_image_stack_map(images[""]))

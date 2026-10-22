@@ -19,7 +19,7 @@ from typing import Iterator
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 from pcc.tools.runtime_archive_provenance import verify_runtime_archive_manifest
 from tests.runtime_build_cache import (
     cached_pcc_python_runtime,
@@ -28,12 +28,12 @@ from tests.runtime_build_cache import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 ARCHIVE_NAME = "libpy_runtime_pcc_py.a"
 
 
 def test_granule_cache_survives_raw_address_reuse(
-    tmp_path: Path, pcc_py_runtime_archive: Path,
+    tmp_path: Path, pcc_runtime_archive: Path,
 ) -> None:
     """A retired raw span must not hide a new object at the same address.
 
@@ -88,7 +88,7 @@ def test_granule_cache_survives_raw_address_reuse(
     built = subprocess.run(
         [os.environ.get("CC", "cc"), "-std=c11", "-pthread",
          f"-I{RUNTIME_DIR / 'include'}", f"-I{RUNTIME_DIR / 'src'}",
-         str(source), str(pcc_py_runtime_archive), "-lm", "-o", str(output)],
+         str(source), str(pcc_runtime_archive), "-lm", "-o", str(output)],
         capture_output=True, text=True, timeout=60,
     )
     assert built.returncode == 0, built.stdout + built.stderr
@@ -163,10 +163,10 @@ def granule_runtime_archives() -> Iterator[dict[str, Path]]:
 
     default_members = _archive_members(archives["default"])
     threaded_members = _archive_members(archives["threaded"])
-    assert "freestanding_thread_kernel.o" in default_members
-    assert "freestanding_thread_kernel_pthread.o" not in default_members
+    # Every runtime is threaded: both fixtures link the one pthread kernel.
+    assert "freestanding_thread_kernel_pthread.o" in default_members
     assert "freestanding_thread_kernel_pthread.o" in threaded_members
-    assert "freestanding_thread_kernel.o" not in threaded_members
+    assert "freestanding_thread_kernel.o" not in default_members | threaded_members
 
     isolated_before = {
         name: _artifact_snapshot(archive.parent)

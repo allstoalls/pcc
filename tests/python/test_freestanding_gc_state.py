@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen import runtime_abi
-from pcc.py_frontend.codegen.runtime_abi import (
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen import runtime_abi
+from pcc.frontends.python.codegen.runtime_abi import (
     FREESTANDING_GC_I32_GLOBALS,
     FREESTANDING_GC_I64_GLOBALS,
     FREESTANDING_GC_PTR_GLOBALS,
@@ -18,9 +18,10 @@ from pcc.py_frontend.codegen.runtime_abi import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STATE_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_state.py"
 SELECTOR_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_relocation_selector.py"
+ROOT_OPERATIONS_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_root_operations.py"
 SUBSTRATE_SOURCE = RUNTIME_DIR / "py" / "py_substrate.py"
 
 
@@ -100,7 +101,7 @@ extern void *pcc_gc_backend4_zpage_head;
 int main(void) {
     int marker = 0;
     if (py_gc_enabled != 1) return 1;
-    if (py_gc_threshold0 != 700) return 2;
+    if (py_gc_threshold0 != 2000) return 2;
     if (py_gc_threshold1 != 10 || py_gc_threshold2 != 10) return 3;
     if (pcc_gc_backend_selected != 0) return 4;
     if (pcc_gc_pause != 1000 || pcc_gc_stepmul != 10000) return 5;
@@ -150,7 +151,19 @@ def test_freestanding_gc_state_has_complete_raw_abi_and_initial_values(
     # (pcc_gc_refcount_fast) one more, the GC4 cross-thread medium-buffer
     # flush counters (flushes, flushed entries) two more, and the GC4
     # remembered-page table (head, entries, slot entries, high water) four.
-    assert len(expected) == 200
+    # The source already held 201 against this 200 pin; the GC4 evacuation
+    # page find memo (page, node, revision) adds three, the published
+    # precise stack-map table pointer one, and the differential walk's
+    # mapped-object buffer (values, count, capacity) three, and the table's
+    # address index (entries, count, location base) three, and the cached
+    # stack-map rooting setting one; GC0's inline atomic refcount gate
+    # (pcc_gc_refcount_atomic) one more, GC0's automatic collection the
+    # survivors of the last collection, and tracing pacing the heap marked.
+    assert len(expected) == 215
+    assert expected["pcc_gc_refcount_atomic"] == ("define_global_i32", 0)
+    assert expected["pcc_gc_tracked_after_collect"] == ("define_global_i64", 0)
+    assert expected["pcc_gc_tracing_marked_bytes"] == ("define_global_i64", 0)
+    assert expected["pcc_gc_precise_stackmap_table"] == ("define_global_ptr_null", None)
     assert expected["pcc_gc_backend4_deferred_recycle_pages"] == (
         "define_global_i64",
         0,
@@ -206,9 +219,11 @@ def test_production_archive_plan_includes_freestanding_gc_state():
 
 def test_gc_state_storage_types_are_registered_in_runtime_abi():
     definitions = _state_definitions(STATE_SOURCE)
-    selector_definitions = _state_definitions(SELECTOR_SOURCE)
-    assert set(definitions).isdisjoint(selector_definitions)
-    definitions.update(selector_definitions)
+    for owner_source in (SELECTOR_SOURCE, ROOT_OPERATIONS_SOURCE):
+        owner_definitions = _state_definitions(owner_source)
+        assert set(definitions).isdisjoint(owner_definitions)
+        definitions.update(owner_definitions)
+    assert definitions["pcc_gc_foreign_lease_active"] == ("define_global_i64", 0)
     expected = {
         name: (
             "i32" if kind == "define_global_i32"
@@ -237,15 +252,19 @@ def test_raw_gc_state_uses_string_kinds_not_managed_llvm_type_registry():
         )
         for name, (kind, _value) in _state_definitions(STATE_SOURCE).items()
     }
-    assert set(expected).isdisjoint(RUNTIME_GLOBALS)
+    # The application safepoint gate intentionally imports this existing
+    # raw flag through declare_runtime_global; no other raw state may leak.
+    assert set(expected) & set(RUNTIME_GLOBALS) == {"pcc_gc_backend4_auto_step_pending"}
+    assert expected["pcc_gc_backend4_auto_step_pending"] == "i32"
+    assert str(RUNTIME_GLOBALS["pcc_gc_backend4_auto_step_pending"]) == "i32"
     assert all(isinstance(name, str) for name in runtime_abi.FREESTANDING_GC_RUNTIME_GLOBALS)
 
 
 def test_built_production_archive_owns_and_runs_freestanding_gc_state(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ):
     members = subprocess.run(
-        ["ar", "-t", str(pcc_py_runtime_archive)],
+        ["ar", "-t", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -254,7 +273,7 @@ def test_built_production_archive_owns_and_runs_freestanding_gc_state(
     assert "freestanding_gc_state.o" in members.stdout.splitlines()
 
     symbols = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -272,14 +291,14 @@ def test_built_production_archive_owns_and_runs_freestanding_gc_state(
     )
 
     result = _build_and_run_harness(
-        tmp_path, "gc_state_production_archive", [str(pcc_py_runtime_archive)]
+        tmp_path, "gc_state_production_archive", [str(pcc_runtime_archive)]
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout == ""
 
 
 def test_current_production_archive_gc_state_drives_all_five_collectors(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ):
     source = tmp_path / "gc_state_runtime.py"
     executable = tmp_path / "gc_state_runtime"
@@ -306,10 +325,10 @@ def test_current_production_archive_gc_state_drives_all_five_collectors(
         backend="self",
         ir_scaffold_mode="on",
         libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
 
-    expected = "(700, 10, 10)\n(701, 11, 12)\nFalse\nTrue\n6\n"
+    expected = "(2000, 10, 10)\n(701, 11, 12)\nFalse\nTrue\n6\n"
     for backend in range(5):
         env = dict(os.environ)
         env.pop("LC_ALL", None)

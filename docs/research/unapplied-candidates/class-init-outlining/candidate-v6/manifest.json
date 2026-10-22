@@ -1,0 +1,98 @@
+{
+  "actual_predecessor_failure": {
+    "collected": 29,
+    "failed": 1,
+    "failure": "source-order test compared serialized block offsets",
+    "host_result_sha256": "236edadb94fd0f8379410bad37e8c122a5ff1a570fbab211938c7c59e68ab7a1",
+    "passed": 10,
+    "qualification_sha256": "3a1d9955fedf62016696cb7e21edf6836390a9be8327a47c5afca1a281997c1f",
+    "receipt_commit": "cd6b466d3de99cf96cfa08f2c9f7d33100451a32",
+    "unrun": 18
+  },
+  "artifacts": {
+    "README.md": {
+      "bytes": 4928,
+      "mode": "100644",
+      "sha256": "ba4b4f912c0052effb41cd536c59066f75c597c9b70e268f554eaa931be07cbb"
+    },
+    "successor.patch": {
+      "bytes": 4520,
+      "mode": "100644",
+      "sha256": "527b776a9f0b50945ae6807aae6cdc6b807e2ac6bcd3840ac9a24c55b4fbd1f6"
+    }
+  },
+  "base_pcc_git_tree": "d234174fbac80575ea822f6100f65fe914dd4498",
+  "base_production_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "base_source_container_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "changed_files": {
+    "pcc/frontends/python/codegen/class_gen.py": {
+      "base_bytes": 343221,
+      "base_sha256": "d4ec2c4ccc6a9123ed502108fbaf32cdc1dd1a979169ba4628506cb902f4b53e",
+      "mode": "100644",
+      "postimage_bytes": 367383,
+      "postimage_sha256": "cbd36884dbb5d118e0da4148ed50b26223ddbfe7f75a6ad3604d2a697f9be8af",
+      "v5_postimage_bytes": 367383,
+      "v5_postimage_sha256": "cbd36884dbb5d118e0da4148ed50b26223ddbfe7f75a6ad3604d2a697f9be8af"
+    },
+    "pcc/frontends/python/codegen/generation_lowering.py": {
+      "base_bytes": 50484,
+      "base_sha256": "0982b9b0209b8785552b75cd552c3e18837ff39f92c289cf53df373eaa140904",
+      "mode": "100644",
+      "postimage_bytes": 50542,
+      "postimage_sha256": "30d38936b4f4dbc1259de9993557c7ccfeca491f3f0546820382185858d56c5b",
+      "v5_postimage_bytes": 50542,
+      "v5_postimage_sha256": "30d38936b4f4dbc1259de9993557c7ccfeca491f3f0546820382185858d56c5b"
+    },
+    "tests/python/test_class_init_outlining.py": {
+      "base_bytes": null,
+      "base_sha256": null,
+      "mode": "100644",
+      "postimage_bytes": 23026,
+      "postimage_sha256": "2c361ba0e0893a8a6775e9449f2904e043306007de8cabeab967fd9a7d61d168",
+      "v5_postimage_bytes": 19666,
+      "v5_postimage_sha256": "e442fbdd4a6d93e8817ff65efb1c60c48019f1c8ddb760ec4cfb8150ac9a5afa"
+    }
+  },
+  "delta_paths": [
+    "tests/python/test_class_init_outlining.py"
+  ],
+  "execution": {
+    "actual_heavy_module": "UNRUN",
+    "collection": "UNRUN",
+    "compiler_native_closed_world": "UNRUN",
+    "focused_host": "UNRUN",
+    "native": "UNRUN",
+    "performance": "UNRUN"
+  },
+  "intended_host_nodes": 29,
+  "patch_relation": "incremental test delta from V5; recover V1 then V4 then V5 then V6",
+  "predecessor_commit": "299704c73a37c359b39a9360a6754e92a1ee08f6",
+  "predecessor_manifest_sha256": "3c827f03243726a63726fc0c59450b34c5101e3aa8ffe879ab447a4051257994",
+  "predecessor_patch_sha256": "468ccd9adf98a167d20305dcacb65e0f500899825bb564cb232c05d90313e2c9",
+  "proposed_guard": {
+    "address_space_bytes": 4294967296,
+    "execution_owner": "coordinator",
+    "minimum_free_bytes": 4294967296,
+    "nproc": 0,
+    "seconds": 300
+  },
+  "retained_ir_readback": {
+    "decoded_top_ir_sha256": "815876512cb40d86443bc57eeb7cf8b26d18bf6151dcfac6670062fd57673e2a",
+    "independent_review": "CFG order diagnosis and exact test delta source-cleared",
+    "method": "literal decoding of the preserved pytest assertion value; no PCC execution",
+    "raw_stdout_sha256": "5c70a31e9efda20bd834882a4e06491aabca42025614388b758f904ce671b100"
+  },
+  "review": "independent source review complete for exact test-only delta; no V6 execution performed",
+  "schema": 1,
+  "scope": "test-only successor; both production postimages unchanged from V5",
+  "source_evidence": {
+    "pcc/frontends/python/codegen/user_function_lowering.py": {
+      "bytes": 157312,
+      "mode": "100644",
+      "sha256": "7d3d6c7827a3f1ac7d005921ac5ac9af21f10f377656431f420835ed79587f3f"
+    }
+  },
+  "status": "UNAPPLIED_SOURCE_REVIEW_CLEAR_EXECUTION_UNRUN",
+  "unchanged_candidate_codegen_checksum": "68581b5d714a4d11835199b80fd6cbcb6e3178245c79dcef6843d73469b1a5e5",
+  "unchanged_candidate_pcc_git_tree": "dc63c2a946f533f7b31ce63db2f759a044fdc37f"
+}

@@ -8,8 +8,8 @@ import pytest
 
 
 @pytest.mark.parametrize("consumer", ["untouched", "bound", "iterated"])
-def test_dynamic_field_read_releases_its_owner(tmp_path, pcc_py_runtime_archive, consumer):
-    from pcc.py_frontend.pipeline import compile_python
+def test_dynamic_field_read_releases_its_owner(tmp_path, pcc_runtime_archive, consumer):
+    from pcc.frontends.python.pipeline import compile_python
 
     action = {"untouched": "pass", "bound": "values = holder.values",
               "iterated": "for item in holder.values:\n        pass"}[consumer]
@@ -38,7 +38,7 @@ print(events)
                       'print(backend())\n' + source.read_text())
     executable = tmp_path / "field_owner"
     compile_python(str(source), str(executable), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(executable)], capture_output=True, text=True,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)), timeout=10)
@@ -48,9 +48,9 @@ print(events)
 
 @pytest.mark.parametrize("exit_kind", ["exhausted", "break", "return", "error", "close"])
 def test_owned_field_iterator_survives_suspension_and_releases_on_exit(
-    tmp_path, pcc_py_runtime_archive, exit_kind,
+    tmp_path, pcc_runtime_archive, exit_kind,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     action = {"exhausted": "pass", "break": "break", "return": "return",
               "error": 'raise ValueError("stop")', "close": "pass"}[exit_kind]
@@ -91,7 +91,7 @@ print(events)
                       'print(backend())\n' + source.read_text())
     executable = tmp_path / "suspended_field"
     compile_python(str(source), str(executable), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(executable)], capture_output=True, text=True,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)), timeout=10)

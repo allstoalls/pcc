@@ -5,7 +5,7 @@ import textwrap
 
 
 def test_call_to_function_with_unused_varargs_does_not_overrun_abi(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "varargs_call_abi.py"
     src.write_text(
@@ -36,7 +36,7 @@ def test_call_to_function_with_unused_varargs_does_not_overrun_abi(tmp_path):
 
 
 def test_generator_forward_unpack_with_kwonly_separator_compiles(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "generator_forward_kwonly.py"
     src.write_text(

@@ -30,12 +30,12 @@ def test_root_store_prepares_inside_and_finishes_after_its_own_lock_scope():
         "def _py_incref_finish(", 1
     )[0]
     assert "pcc_refcount_incref(" in py_incref_prepare
-    assert "pcc_runtime_log_event_code" not in py_incref_prepare
+    assert "pcc_diagnostics_runtime_log_event_code" not in py_incref_prepare
     assert "_pcc_debug_bad_incref(" not in py_incref_prepare
     py_incref_finish = py_src.split("def _py_incref_finish(", 1)[1].split(
         '@c_abi_export("py_incref")', 1
     )[0]
-    assert py_incref_finish.count("pcc_runtime_log_event_code(") == 1
+    assert py_incref_finish.count("pcc_diagnostics_runtime_log_event_code(") == 1
     assert "\n            3,\n            1," in py_incref_finish
     py_decref_prepare = py_src.split("def _py_decref_prepare(", 1)[1].split(
         "def _py_decref_finish(", 1
@@ -43,7 +43,7 @@ def test_root_store_prepares_inside_and_finishes_after_its_own_lock_scope():
     assert "pcc_refcount_decref(" in py_decref_prepare
     assert "524288" in py_decref_prepare
     for forbidden in [
-        "pcc_runtime_log_event_code",
+        "pcc_diagnostics_runtime_log_event_code",
         "_pcc_debug_bad_incref(",
         "py_weakref_invalidate",
         "pcc_gc_note_object_freeing",
@@ -76,27 +76,32 @@ def test_root_store_prepares_inside_and_finishes_after_its_own_lock_scope():
     py_terminal_finish = py_decref_finish.split(
         "delay_zpage_freeing_note: int = 0", 1
     )[1]
-    assert py_nonterminal_finish.count("pcc_runtime_log_event_code(") == 1
+    assert py_nonterminal_finish.count("pcc_diagnostics_runtime_log_event_code(") == 1
     assert py_nonterminal_finish.count(
-        "pcc_runtime_log_event_code(3, 2"
+        "pcc_diagnostics_runtime_log_event_code(3, 2"
     ) == 1
     assert "return" in py_nonterminal_finish
-    assert py_terminal_finish.count("pcc_runtime_log_event_code(") == 2
-    assert py_terminal_finish.count("pcc_runtime_log_event_code(3, 2") == 1
-    assert py_terminal_finish.count("pcc_runtime_log_event_code(3, 3") == 1
+    assert py_terminal_finish.count("pcc_diagnostics_runtime_log_event_code(") == 2
+    assert py_terminal_finish.count("pcc_diagnostics_runtime_log_event_code(3, 2") == 1
+    assert py_terminal_finish.count("pcc_diagnostics_runtime_log_event_code(3, 3") == 1
 
     py_incref_public = py_src.split('@c_abi_export("py_incref")', 1)[1].split(
         "def _py_decref_prepare(", 1
     )[0]
+    # Plan-based collectors delegate to the prepare/finish pair before any
+    # direct kernel call; standalone GC0 needs no prepare record on the
+    # nonterminal path and increments through the kernel itself.
+    delegate = py_incref_public.index("if _gc_backend_fast() != 0:")
     assert py_incref_public.count("_py_incref_prepare(o, prepared)") == 1
     assert py_incref_public.count("_py_incref_finish(prepared)") == 1
-    assert "pcc_refcount_incref(" not in py_incref_public
-    assert "pcc_runtime_log_event_code(" not in py_incref_public
+    assert delegate < py_incref_public.index("_py_incref_prepare(o, prepared)")
+    assert py_incref_public.index("_py_incref_finish(prepared)") < py_incref_public.index("pcc_refcount_incref(")
     py_decref_public = py_src.split('@c_abi_export("py_decref")', 1)[1]
-    assert py_decref_public.count("_py_decref_prepare(o, prepared)") == 1
-    assert py_decref_public.count("_py_decref_finish(prepared)") == 1
-    assert "pcc_refcount_decref(" not in py_decref_public
-    assert "pcc_runtime_log_event_code(" not in py_decref_public
+    delegate = py_decref_public.index("if _gc_backend_fast() != 0:")
+    first_prepare = py_decref_public.index("_py_decref_prepare(o, prepared)")
+    assert delegate < first_prepare < py_decref_public.index("_py_decref_finish(prepared)")
+    # A GC0 count that would reach zero shares the terminal finish too.
+    assert py_decref_public.index("_py_decref_finish(prepared)") < py_decref_public.index("pcc_refcount_decref(")
     for helper in [
         "_py_incref_prepare",
         "_py_incref_finish",
@@ -106,8 +111,10 @@ def test_root_store_prepares_inside_and_finishes_after_its_own_lock_scope():
         assert f'@c_abi_export("{helper}")' not in py_src
         assert helper not in RUNTIME_SIGNATURES
 
+    # Only pcc_gc_store_root's own body: later exports (store_root_take and
+    # others) run their own plans.
     py_root = py_src.split('@c_abi_export("pcc_gc_store_root")', 1)[1].split(
-        '@c_abi_export("pcc_gc_frame_enter")', 1
+        "\n@c_abi_export(", 1
     )[0]
     assert (
         py_root.index("pcc_gc_store_root_plan_init(plan, backend)")
@@ -120,7 +127,7 @@ def test_root_store_prepares_inside_and_finishes_after_its_own_lock_scope():
         "pcc_gc_store_root_plan_commit_locked(plan, slot, value)"
     ) == 1
     for forbidden in [
-        "pcc_runtime_log_event_code",
+        "pcc_diagnostics_runtime_log_event_code",
         "py_incref(",
         "py_decref(",
         "_py_incref_finish(",
@@ -135,7 +142,7 @@ def test_scheduler_queue_root_transfer_plans_finish_after_outer_graph_unlock():
     """Every C queue root transfer defers reentrant tails past its graph lock."""
     public_header = RUNTIME_HEADER.read_text(encoding="utf-8")
     internal_header = (
-        REPO_ROOT / "pcc" / "py_runtime" / "src" / "py_internal.h"
+        REPO_ROOT / "pcc" / "runtime" / "src" / "py_internal.h"
     ).read_text(encoding="utf-8")
     plan_symbols = [
         "pcc_gc_store_root_plan_init",
@@ -204,7 +211,7 @@ def test_scheduler_queue_root_transfer_plans_finish_after_outer_graph_unlock():
         '@c_abi_export("pcc_gc_store_root_plan_commit_locked")', 1
     )[0]
     for forbidden in [
-        "pcc_runtime_log_event_code(",
+        "pcc_diagnostics_runtime_log_event_code(",
         "_py_incref_finish(",
         "_py_decref_finish(",
         "py_incref(",

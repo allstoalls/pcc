@@ -91,7 +91,7 @@ def test_finalizers_still_run_on_every_backend(tmp_path):
 
 
 def test_finalizers_still_run_with_the_c_runtime_mirror(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "finalizer_gate_cc.py"
     exe = tmp_path / "finalizer_gate_cc.out"

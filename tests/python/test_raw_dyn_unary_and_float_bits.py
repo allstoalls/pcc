@@ -1,7 +1,7 @@
 """Unary operators on objects and uint64 float patterns in pcc's raw-int build.
 
 Stage2 (pcc1 compiling pcc) stopped with ``OverflowError: Python int too
-large to convert to C int64`` inside ``pcc.stdlib._float_bits``: the IEEE
+large to convert to C int64`` inside ``pcc.ir.support._float_bits``: the IEEE
 pattern of a negative double is >= 2**63, and the ``-> int`` helpers carried
 it in an i64 lane.  Before the lane raised, it read such a value as 0, so
 pcc1 silently compiled negative double constants as +0.0 -- in IR constant
@@ -46,12 +46,12 @@ def main():
 main()
 '''
 
-_FLOAT_BITS = '''from pcc.stdlib._float_bits import _bits_to_float64, _float32_to_bits, _float64_to_bits
+_FLOAT_BITS = '''from pcc.ir.support._float_bits import _bits_to_float64, _float32_to_bits, _float64_to_bits
 from pcc.backend.self_backend_float_bits import u64_as_i64
 from pcc.backend.self_backend_ir import TypeDesc
 from pcc.backend.self_backend_aarch64_darwin_regs import emit_fp_constant, emit_fp_hex_constant
-from pcc.llvm_capi import ir
-from pcc.py_frontend.codegen.marshal import _float_literal_object
+from pcc.ir import ir
+from pcc.frontends.python.codegen.marshal import _float_literal_object
 
 
 def main():
@@ -113,23 +113,23 @@ def _pcc(tmp_path, name, text, compiler, archive, backends):
 
 
 def test_unary_operators_on_dynamic_operands(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     expected = _cpython(_UNARY)
     for output in _pcc(
         tmp_path, "raw_unary", _UNARY, python_program_compiler,
-        pcc_py_runtime_archive, range(5),
+        pcc_runtime_archive, range(5),
     ):
         assert output == expected
 
 
 def test_negative_double_patterns_stay_exact(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     expected = _cpython(_FLOAT_BITS)
     assert "False True 2" in expected
     for output in _pcc(
         tmp_path, "raw_float_bits", _FLOAT_BITS, python_program_compiler,
-        pcc_py_runtime_archive, (0,),
+        pcc_runtime_archive, (0,),
     ):
         assert output == expected

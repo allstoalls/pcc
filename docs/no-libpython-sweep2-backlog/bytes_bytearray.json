@@ -10,11 +10,11 @@
       "expected": "True\\nTrue",
       "root_cause": "method_call_expression_lowering.py has native bytes branches only for find/decode/hex/upper/translate/replace. bytes.startswith/endswith fall through to _emit_callable_attribute_call (line ~1885) which emits a runtime getattr; the bytes runtime object exposes no 'startswith' method so it raises AttributeError. The fix is pure frontend dispatch: the existing runtime helpers py_str_startswith/py_str_endswith (py_str_accessors.c:305/327) already read the receiver and each tuple element via stringlike_bytes() which dispatches on the type tag and handles PY_TYPE_BYTES/PY_TYPE_BYTEARRAY, and already implement the tuple-of-prefixes case. So routing a bytes/bytearray receiver to py_str_startswith/py_str_endswith is correct with no runtime change.",
       "owning_files": [
-        "pcc/py_frontend/codegen/method_call_expression_lowering.py"
+        "pcc/frontends/python/codegen/method_call_expression_lowering.py"
       ],
       "proposed_edits": [
         {
-          "file": "pcc/py_frontend/codegen/method_call_expression_lowering.py",
+          "file": "pcc/frontends/python/codegen/method_call_expression_lowering.py",
           "old_string": "            recv = self._emit_expr(attr.obj)\n            needle = self._emit_as_object(expr.args[0])\n            return self.builder.call(\n                self.runtime[\"py_bytes_find\"],\n                [recv, needle],\n                name=self._fresh(\"bytes.find\"),\n            )\n        if isinstance(obj_ty, (BytesType, ByteArrayType)) and attr.name == \"decode\":",
           "new_string": "            recv = self._emit_expr(attr.obj)\n            needle = self._emit_as_object(expr.args[0])\n            return self.builder.call(\n                self.runtime[\"py_bytes_find\"],\n                [recv, needle],\n                name=self._fresh(\"bytes.find\"),\n            )\n        if (\n            isinstance(obj_ty, (BytesType, ByteArrayType))\n            and attr.name in (\"startswith\", \"endswith\")\n            and len(expr.args) == 1\n            and not expr.kwargs\n        ):\n            # bytes/bytearray startswith/endswith reuse the str helpers:\n            # py_str_startswith/py_str_endswith read the receiver and each\n            # tuple element through stringlike_bytes(), which dispatches on\n            # the type tag (PY_TYPE_BYTES / PY_TYPE_BYTEARRAY) and already\n            # implements the tuple-of-prefixes case. Result is i64 0/1 ->\n            # truncate to i1 bool.\n            recv = self._emit_expr(attr.obj)\n            arg = self._emit_as_object(expr.args[0])\n            fn = {\n                \"startswith\": \"py_str_startswith\",\n                \"endswith\": \"py_str_endswith\",\n            }[attr.name]\n            i64v = self.builder.call(\n                self.runtime[fn],\n                [recv, arg],\n                name=self._fresh(f\"bytes.{attr.name}\"),\n            )\n            return self.builder.icmp_signed(\n                \"!=\",\n                i64v,\n                ir.Constant(_I64, 0),\n                name=self._fresh(f\"bytes.{attr.name}.i1\"),\n            )\n        if isinstance(obj_ty, (BytesType, ByteArrayType)) and attr.name == \"decode\":",
           "note": "Frontend-only. Inserts a startswith/endswith branch right after the existing bytes.find branch, reusing py_str_startswith/py_str_endswith (already declared in runtime_abi.py:379-380 and already bytes+tuple aware via stringlike_bytes). No runtime/port change; no new ABI decl. _I64 and ir are already imported in this module."
@@ -31,39 +31,39 @@
       "expected": "b'abc'",
       "root_cause": "Asymmetry: method_call_expression_lowering has a bytes branch for 'upper' (-> py_bytes_upper) but none for 'lower'. bytes.lower falls through to _emit_callable_attribute_call -> runtime getattr -> AttributeError. Needs a new runtime helper py_bytes_lower that mirrors py_bytes_upper (py_bytes.c:430 and port py_obj_stubs.py:402) flipping the case test to A-Z(65..90)->+32. In the DEFAULT no-libpython build the bytes helpers are sourced from the pcc-Python port py_obj_stubs.py (Makefile PY_REPLACED_C_MODULES = ... py_bytes), so the impl must be added in BOTH py_bytes.c and py_obj_stubs.py.",
       "owning_files": [
-        "pcc/py_frontend/codegen/method_call_expression_lowering.py",
-        "pcc/py_frontend/codegen/runtime_abi.py",
-        "pcc/py_runtime/include/py_runtime.h",
-        "pcc/py_runtime/src/py_bytes.c",
-        "pcc/py_runtime/py/py_obj_stubs.py"
+        "pcc/frontends/python/codegen/method_call_expression_lowering.py",
+        "pcc/frontends/python/codegen/runtime_abi.py",
+        "pcc/runtime/include/py_runtime.h",
+        "pcc/runtime/src/py_bytes.c",
+        "pcc/runtime/py/py_obj_stubs.py"
       ],
       "proposed_edits": [
         {
-          "file": "pcc/py_frontend/codegen/method_call_expression_lowering.py",
+          "file": "pcc/frontends/python/codegen/method_call_expression_lowering.py",
           "old_string": "        if (\n            isinstance(obj_ty, (BytesType, ByteArrayType))\n            and attr.name == \"upper\"\n            and not expr.args\n            and not expr.kwargs\n        ):\n            recv = self._emit_expr(attr.obj)\n            return self.builder.call(\n                self.runtime[\"py_bytes_upper\"],\n                [recv],\n                name=self._fresh(\"bytes.upper\"),\n            )",
           "new_string": "        if (\n            isinstance(obj_ty, (BytesType, ByteArrayType))\n            and attr.name == \"upper\"\n            and not expr.args\n            and not expr.kwargs\n        ):\n            recv = self._emit_expr(attr.obj)\n            return self.builder.call(\n                self.runtime[\"py_bytes_upper\"],\n                [recv],\n                name=self._fresh(\"bytes.upper\"),\n            )\n        if (\n            isinstance(obj_ty, (BytesType, ByteArrayType))\n            and attr.name == \"lower\"\n            and not expr.args\n            and not expr.kwargs\n        ):\n            recv = self._emit_expr(attr.obj)\n            return self.builder.call(\n                self.runtime[\"py_bytes_lower\"],\n                [recv],\n                name=self._fresh(\"bytes.lower\"),\n            )",
           "note": "Frontend dispatch: add a bytes.lower branch mirroring the existing bytes.upper branch."
         },
         {
-          "file": "pcc/py_frontend/codegen/runtime_abi.py",
+          "file": "pcc/frontends/python/codegen/runtime_abi.py",
           "old_string": "    \"py_bytes_upper\": (_PYOBJ, [_PYOBJ], False),",
           "new_string": "    \"py_bytes_upper\": (_PYOBJ, [_PYOBJ], False),\n    \"py_bytes_lower\": (_PYOBJ, [_PYOBJ], False),",
           "note": "Declare the new helper's ABI signature next to py_bytes_upper."
         },
         {
-          "file": "pcc/py_runtime/include/py_runtime.h",
+          "file": "pcc/runtime/include/py_runtime.h",
           "old_string": "PyObject *py_bytes_upper(PyObject *o);",
           "new_string": "PyObject *py_bytes_upper(PyObject *o);\nPyObject *py_bytes_lower(PyObject *o);",
           "note": "Public decl next to py_bytes_upper."
         },
         {
-          "file": "pcc/py_runtime/src/py_bytes.c",
+          "file": "pcc/runtime/src/py_bytes.c",
           "old_string": "PyObject *py_bytes_getitem(PyObject *o, PyObject *k) {\n    int64_t i = as_index(k);\n    int64_t n = 0;\n    const char *data = bytes_data(o, &n);",
           "new_string": "PyObject *py_bytes_lower(PyObject *o) {\n    int64_t n = 0;\n    const char *data = bytes_data(o, &n);\n    if (data == NULL) return NULL;\n    PyObject *out = bytes_new_same_family(o, NULL, n);\n    if (out == NULL) return NULL;\n    int64_t out_n = 0;\n    char *dst = bytes_mutable_data(out, &out_n);\n    if (dst == NULL || out_n != n) return NULL;\n    for (int64_t i = 0; i < n; i++) {\n        unsigned char c = (unsigned char)data[i];\n        if (c >= (unsigned char)'A' && c <= (unsigned char)'Z') {\n            c = (unsigned char)(c + ((unsigned char)'a' - (unsigned char)'A'));\n        }\n        dst[i] = (char)c;\n    }\n    dst[n] = '\\0';\n    return out;\n}\n\nPyObject *py_bytes_getitem(PyObject *o, PyObject *k) {\n    int64_t i = as_index(k);\n    int64_t n = 0;\n    const char *data = bytes_data(o, &n);",
           "note": "C impl: exact mirror of py_bytes_upper (py_bytes.c:430) with the case test flipped to A-Z(65..90) and the add direction reversed. Anchored to insert right before py_bytes_getitem. NOTE: editing py_bytes.c forces the cc-tier archive rebuild (libpy_runtime*.a) -- the human lands this, not the sweep."
         },
         {
-          "file": "pcc/py_runtime/py/py_obj_stubs.py",
+          "file": "pcc/runtime/py/py_obj_stubs.py",
           "old_string": "@c_abi_export(\"py_bytes_upper\")\ndef py_bytes_upper(o):\n    data = _bytes_data(o)\n    if ptr_is_null(data):\n        return null()\n    n: int = py_bytes_len(o)\n    out = _bytes_new_same_family(o, null(), n)\n    if ptr_is_null(out):\n        return null()\n    dst = _bytes_data(out)\n    if ptr_is_null(dst):\n        return null()\n    i: int = 0\n    while i < n:\n        c: int = load_i8(data, i) & 255\n        if c >= 97 and c <= 122:\n            c = c - 32\n        store_i8(dst, i, c)\n        i = i + 1\n    store_i8(dst, n, 0)\n    return out",
           "new_string": "@c_abi_export(\"py_bytes_upper\")\ndef py_bytes_upper(o):\n    data = _bytes_data(o)\n    if ptr_is_null(data):\n        return null()\n    n: int = py_bytes_len(o)\n    out = _bytes_new_same_family(o, null(), n)\n    if ptr_is_null(out):\n        return null()\n    dst = _bytes_data(out)\n    if ptr_is_null(dst):\n        return null()\n    i: int = 0\n    while i < n:\n        c: int = load_i8(data, i) & 255\n        if c >= 97 and c <= 122:\n            c = c - 32\n        store_i8(dst, i, c)\n        i = i + 1\n    store_i8(dst, n, 0)\n    return out\n\n\n@c_abi_export(\"py_bytes_lower\")\ndef py_bytes_lower(o):\n    data = _bytes_data(o)\n    if ptr_is_null(data):\n        return null()\n    n: int = py_bytes_len(o)\n    out = _bytes_new_same_family(o, null(), n)\n    if ptr_is_null(out):\n        return null()\n    dst = _bytes_data(out)\n    if ptr_is_null(dst):\n        return null()\n    i: int = 0\n    while i < n:\n        c: int = load_i8(data, i) & 255\n        if c >= 65 and c <= 90:\n            c = c + 32\n        store_i8(dst, i, c)\n        i = i + 1\n    store_i8(dst, n, 0)\n    return out",
           "note": "Port (DEFAULT no-libpython tier) impl: exact mirror of port py_bytes_upper (py_obj_stubs.py:402) with case test A-Z(65..90) and +32. Mirrors the C edit so both tiers agree (both_tier)."
@@ -80,39 +80,39 @@
       "expected": "4   (rfind)    and    3   (count)",
       "root_cause": "bytes.rfind and bytes.count have no native branch and fall through to _emit_callable_attribute_call -> runtime getattr -> AttributeError. They CANNOT reuse the str helpers py_str_rfind/py_str_count: those cast the receiver directly to PyStrObject* and read ss->data, but PyBytesObject's data[] member sits at a different offset than PyStrObject's (str has extra cp_len+hash int64 fields before data; see py_internal.h:295-327), so a bytes object cast to PyStrObject* reads garbage. Also py_str_*find return codepoint offsets via byte_offset_to_cp_offset, whereas bytes indices are byte offsets. So both need dedicated byte-offset helpers py_bytes_rfind / py_bytes_count mirroring the existing py_bytes_find (py_bytes.c:711, port py_obj_stubs.py:574). DEFAULT no-libpython sources bytes from the port py_obj_stubs.py, so both py_bytes.c AND py_obj_stubs.py must get the impl (both_tier).",
       "owning_files": [
-        "pcc/py_frontend/codegen/method_call_expression_lowering.py",
-        "pcc/py_frontend/codegen/runtime_abi.py",
-        "pcc/py_runtime/include/py_runtime.h",
-        "pcc/py_runtime/src/py_bytes.c",
-        "pcc/py_runtime/py/py_obj_stubs.py"
+        "pcc/frontends/python/codegen/method_call_expression_lowering.py",
+        "pcc/frontends/python/codegen/runtime_abi.py",
+        "pcc/runtime/include/py_runtime.h",
+        "pcc/runtime/src/py_bytes.c",
+        "pcc/runtime/py/py_obj_stubs.py"
       ],
       "proposed_edits": [
         {
-          "file": "pcc/py_frontend/codegen/method_call_expression_lowering.py",
+          "file": "pcc/frontends/python/codegen/method_call_expression_lowering.py",
           "old_string": "            result = self.builder.call(\n                self.runtime[\"py_bytes_replace\"],\n                [recv, old_obj, new_obj],\n                name=self._fresh(\"bytes.replace\"),\n            )\n            self._emit_post_call_err_check(expr.span)\n            return result\n        if isinstance(obj_ty, StrType):",
           "new_string": "            result = self.builder.call(\n                self.runtime[\"py_bytes_replace\"],\n                [recv, old_obj, new_obj],\n                name=self._fresh(\"bytes.replace\"),\n            )\n            self._emit_post_call_err_check(expr.span)\n            return result\n        if (\n            isinstance(obj_ty, (BytesType, ByteArrayType))\n            and attr.name in (\"rfind\", \"count\")\n            and len(expr.args) == 1\n            and not expr.kwargs\n        ):\n            # bytes/bytearray rfind/count -> byte-offset helpers that mirror\n            # py_bytes_find. (The str helpers py_str_rfind/py_str_count cast\n            # straight to PyStrObject* and return codepoint offsets, so they\n            # are unsafe on a bytes object whose data[] lives at a different\n            # struct offset.) Both return i64.\n            recv = self._emit_expr(attr.obj)\n            needle = self._emit_as_object(expr.args[0])\n            fn = {\n                \"rfind\": \"py_bytes_rfind\",\n                \"count\": \"py_bytes_count\",\n            }[attr.name]\n            return self.builder.call(\n                self.runtime[fn],\n                [recv, needle],\n                name=self._fresh(f\"bytes.{attr.name}\"),\n            )\n        if isinstance(obj_ty, StrType):",
           "note": "Frontend dispatch: add rfind/count branch anchored after the existing bytes.replace branch (distinct anchor from the startswith/endswith edit so the two patches do not overlap)."
         },
         {
-          "file": "pcc/py_frontend/codegen/runtime_abi.py",
+          "file": "pcc/frontends/python/codegen/runtime_abi.py",
           "old_string": "    \"py_bytes_find\": (_I64, [_PYOBJ, _PYOBJ], False),",
           "new_string": "    \"py_bytes_find\": (_I64, [_PYOBJ, _PYOBJ], False),\n    \"py_bytes_rfind\": (_I64, [_PYOBJ, _PYOBJ], False),\n    \"py_bytes_count\": (_I64, [_PYOBJ, _PYOBJ], False),",
           "note": "ABI signatures next to py_bytes_find."
         },
         {
-          "file": "pcc/py_runtime/include/py_runtime.h",
+          "file": "pcc/runtime/include/py_runtime.h",
           "old_string": "int64_t   py_bytes_find(PyObject *src, PyObject *needle);",
           "new_string": "int64_t   py_bytes_find(PyObject *src, PyObject *needle);\nint64_t   py_bytes_rfind(PyObject *src, PyObject *needle);\nint64_t   py_bytes_count(PyObject *src, PyObject *needle);",
           "note": "Public decls next to py_bytes_find."
         },
         {
-          "file": "pcc/py_runtime/src/py_bytes.c",
+          "file": "pcc/runtime/src/py_bytes.c",
           "old_string": "PyObject *py_bytearray_extend(PyObject *o, PyObject *iterable) {",
           "new_string": "int64_t py_bytes_rfind(PyObject *src, PyObject *needle) {\n    int64_t n = 0;\n    const char *data = bytes_data(src, &n);\n    if (data == NULL) return -1;\n\n    int64_t byte = 0;\n    if (byte_from_obj(needle, &byte) == 0) {\n        if (byte < 0 || byte > 255) return -1;\n        unsigned char target = (unsigned char)byte;\n        for (int64_t i = n - 1; i >= 0; i--) {\n            if ((unsigned char)data[i] == target) return i;\n        }\n        return -1;\n    }\n\n    int64_t needle_n = 0;\n    const char *needle_data = bytes_data(needle, &needle_n);\n    if (needle_data == NULL) return -1;\n    if (needle_n == 0) return n;\n    if (needle_n > n) return -1;\n    for (int64_t i = n - needle_n; i >= 0; i--) {\n        if (data[i] == needle_data[0]\n            && memcmp(data + i, needle_data, (size_t)needle_n) == 0) {\n            return i;\n        }\n    }\n    return -1;\n}\n\nint64_t py_bytes_count(PyObject *src, PyObject *needle) {\n    int64_t n = 0;\n    const char *data = bytes_data(src, &n);\n    if (data == NULL) return 0;\n\n    int64_t byte = 0;\n    if (byte_from_obj(needle, &byte) == 0) {\n        if (byte < 0 || byte > 255) return 0;\n        unsigned char target = (unsigned char)byte;\n        int64_t count = 0;\n        for (int64_t i = 0; i < n; i++) {\n            if ((unsigned char)data[i] == target) count++;\n        }\n        return count;\n    }\n\n    int64_t needle_n = 0;\n    const char *needle_data = bytes_data(needle, &needle_n);\n    if (needle_data == NULL) return 0;\n    if (needle_n == 0) return n + 1;\n    if (needle_n > n) return 0;\n    int64_t count = 0;\n    int64_t i = 0;\n    while (i + needle_n <= n) {\n        if (data[i] == needle_data[0]\n            && memcmp(data + i, needle_data, (size_t)needle_n) == 0) {\n            count++;\n            i += needle_n;\n        } else {\n            i++;\n        }\n    }\n    return count;\n}\n\nPyObject *py_bytearray_extend(PyObject *o, PyObject *iterable) {",
           "note": "C impl: both mirror py_bytes_find (py_bytes.c:711) using the same bytes_data/byte_from_obj helpers; rfind scans right-to-left (empty-needle returns n, matching CPython), count uses CPython's non-overlapping scan (empty-needle returns n+1). Anchored to insert right before py_bytearray_extend. Editing py_bytes.c forces a cc-tier archive rebuild -- human lands it."
         },
         {
-          "file": "pcc/py_runtime/py/py_obj_stubs.py",
+          "file": "pcc/runtime/py/py_obj_stubs.py",
           "old_string": "@c_abi_export(\"py_bytearray_from_obj\")\ndef py_bytearray_from_obj(o):",
           "new_string": "@c_abi_export(\"py_bytes_rfind\")\ndef py_bytes_rfind(src, needle) -> int:\n    data = _bytes_data(src)\n    if ptr_is_null(data):\n        return -1\n    n: int = py_bytes_len(src)\n\n    byte: int = _byte_from_obj(needle)\n    if byte >= 0:\n        if byte > 255:\n            return -1\n        i: int = n - 1\n        while i >= 0:\n            if (load_i8(data, i) & 255) == byte:\n                return i\n            i = i - 1\n        return -1\n\n    needle_data = _bytes_data(needle)\n    if ptr_is_null(needle_data):\n        return -1\n    needle_n: int = py_bytes_len(needle)\n    if needle_n == 0:\n        return n\n    if needle_n > n:\n        return -1\n    i = n - needle_n\n    while i >= 0:\n        if load_i8(data, i) == load_i8(needle_data, 0):\n            same: int = 1\n            j: int = 0\n            while j < needle_n:\n                if load_i8(data, i + j) != load_i8(needle_data, j):\n                    same = 0\n                    break\n                j = j + 1\n            if same != 0:\n                return i\n        i = i - 1\n    return -1\n\n\n@c_abi_export(\"py_bytes_count\")\ndef py_bytes_count(src, needle) -> int:\n    data = _bytes_data(src)\n    if ptr_is_null(data):\n        return 0\n    n: int = py_bytes_len(src)\n\n    byte: int = _byte_from_obj(needle)\n    if byte >= 0:\n        if byte > 255:\n            return 0\n        count: int = 0\n        i: int = 0\n        while i < n:\n            if (load_i8(data, i) & 255) == byte:\n                count = count + 1\n            i = i + 1\n        return count\n\n    needle_data = _bytes_data(needle)\n    if ptr_is_null(needle_data):\n        return 0\n    needle_n: int = py_bytes_len(needle)\n    if needle_n == 0:\n        return n + 1\n    if needle_n > n:\n        return 0\n    count = 0\n    i = 0\n    while i + needle_n <= n:\n        if load_i8(data, i) == load_i8(needle_data, 0):\n            same: int = 1\n            j: int = 0\n            while j < needle_n:\n                if load_i8(data, i + j) != load_i8(needle_data, j):\n                    same = 0\n                    break\n                j = j + 1\n            if same != 0:\n                count = count + 1\n                i = i + needle_n\n            else:\n                i = i + 1\n        else:\n            i = i + 1\n    return count\n\n\n@c_abi_export(\"py_bytearray_from_obj\")\ndef py_bytearray_from_obj(o):",
           "note": "Port (DEFAULT no-libpython tier) impl: mirrors port py_bytes_find (py_obj_stubs.py:574) using _bytes_data/_byte_from_obj/load_i8/py_bytes_len; rfind right-to-left, count non-overlapping. Inserted before py_bytearray_from_obj. Mirrors the C edit (both_tier). Note: pcc-Python has no early-return inside the nested while other than via the same break idiom used in py_bytes_find; structure copied from that proven function."
@@ -129,39 +129,39 @@
       "expected": "b'hi'",
       "root_cause": "bytes.strip/lstrip/rstrip (no-arg) have no native branch and fall through to _emit_callable_attribute_call -> runtime getattr -> AttributeError. Cannot reuse py_str_strip (casts to PyStrObject*, wrong data offset for bytes, and returns a str not a same-family bytes/bytearray). Need new byte-based helpers py_bytes_strip / py_bytes_lstrip / py_bytes_rstrip that trim ASCII whitespace (0x09-0x0d and 0x20) and return via bytes_new_same_family so a bytearray receiver yields a bytearray. DEFAULT no-libpython sources bytes from the port py_obj_stubs.py, so both py_bytes.c AND py_obj_stubs.py must get the impl (both_tier). This entry wires only the no-arg form; the 1-arg (chars) form stays on the fallback.",
       "owning_files": [
-        "pcc/py_frontend/codegen/method_call_expression_lowering.py",
-        "pcc/py_frontend/codegen/runtime_abi.py",
-        "pcc/py_runtime/include/py_runtime.h",
-        "pcc/py_runtime/src/py_bytes.c",
-        "pcc/py_runtime/py/py_obj_stubs.py"
+        "pcc/frontends/python/codegen/method_call_expression_lowering.py",
+        "pcc/frontends/python/codegen/runtime_abi.py",
+        "pcc/runtime/include/py_runtime.h",
+        "pcc/runtime/src/py_bytes.c",
+        "pcc/runtime/py/py_obj_stubs.py"
       ],
       "proposed_edits": [
         {
-          "file": "pcc/py_frontend/codegen/method_call_expression_lowering.py",
+          "file": "pcc/frontends/python/codegen/method_call_expression_lowering.py",
           "old_string": "        if (\n            isinstance(obj_ty, (BytesType, ByteArrayType))\n            and attr.name == \"translate\"\n            and len(expr.args) == 1\n            and not expr.kwargs\n        ):",
           "new_string": "        if (\n            isinstance(obj_ty, (BytesType, ByteArrayType))\n            and attr.name in (\"strip\", \"lstrip\", \"rstrip\")\n            and not expr.args\n            and not expr.kwargs\n        ):\n            recv = self._emit_expr(attr.obj)\n            fn = {\n                \"strip\": \"py_bytes_strip\",\n                \"lstrip\": \"py_bytes_lstrip\",\n                \"rstrip\": \"py_bytes_rstrip\",\n            }[attr.name]\n            return self.builder.call(\n                self.runtime[fn],\n                [recv],\n                name=self._fresh(f\"bytes.{attr.name}\"),\n            )\n        if (\n            isinstance(obj_ty, (BytesType, ByteArrayType))\n            and attr.name == \"translate\"\n            and len(expr.args) == 1\n            and not expr.kwargs\n        ):",
           "note": "Frontend dispatch: add strip/lstrip/rstrip no-arg branch anchored before the existing bytes.translate branch."
         },
         {
-          "file": "pcc/py_frontend/codegen/runtime_abi.py",
+          "file": "pcc/frontends/python/codegen/runtime_abi.py",
           "old_string": "    \"py_bytes_translate\": (_PYOBJ, [_PYOBJ, _PYOBJ], False),",
           "new_string": "    \"py_bytes_translate\": (_PYOBJ, [_PYOBJ, _PYOBJ], False),\n    \"py_bytes_strip\": (_PYOBJ, [_PYOBJ], False),\n    \"py_bytes_lstrip\": (_PYOBJ, [_PYOBJ], False),\n    \"py_bytes_rstrip\": (_PYOBJ, [_PYOBJ], False),",
           "note": "ABI signatures next to py_bytes_translate."
         },
         {
-          "file": "pcc/py_runtime/include/py_runtime.h",
+          "file": "pcc/runtime/include/py_runtime.h",
           "old_string": "PyObject *py_bytes_translate(PyObject *src, PyObject *table);",
           "new_string": "PyObject *py_bytes_translate(PyObject *src, PyObject *table);\nPyObject *py_bytes_strip(PyObject *o);\nPyObject *py_bytes_lstrip(PyObject *o);\nPyObject *py_bytes_rstrip(PyObject *o);",
           "note": "Public decls next to py_bytes_translate."
         },
         {
-          "file": "pcc/py_runtime/src/py_bytes.c",
+          "file": "pcc/runtime/src/py_bytes.c",
           "old_string": "PyObject *py_bytes_getitem(PyObject *o, PyObject *k) {",
           "new_string": "static int bytes_is_ascii_space(unsigned char c) {\n    return c == ' ' || (c >= 0x09 && c <= 0x0d);\n}\n\nPyObject *py_bytes_lstrip(PyObject *o) {\n    int64_t n = 0;\n    const char *data = bytes_data(o, &n);\n    if (data == NULL) return NULL;\n    int64_t lo = 0;\n    while (lo < n && bytes_is_ascii_space((unsigned char)data[lo])) lo++;\n    return bytes_new_same_family(o, data + lo, n - lo);\n}\n\nPyObject *py_bytes_rstrip(PyObject *o) {\n    int64_t n = 0;\n    const char *data = bytes_data(o, &n);\n    if (data == NULL) return NULL;\n    int64_t hi = n;\n    while (hi > 0 && bytes_is_ascii_space((unsigned char)data[hi - 1])) hi--;\n    return bytes_new_same_family(o, data, hi);\n}\n\nPyObject *py_bytes_strip(PyObject *o) {\n    int64_t n = 0;\n    const char *data = bytes_data(o, &n);\n    if (data == NULL) return NULL;\n    int64_t lo = 0;\n    int64_t hi = n;\n    while (lo < hi && bytes_is_ascii_space((unsigned char)data[lo])) lo++;\n    while (hi > lo && bytes_is_ascii_space((unsigned char)data[hi - 1])) hi--;\n    return bytes_new_same_family(o, data + lo, hi - lo);\n}\n\nPyObject *py_bytes_getitem(PyObject *o, PyObject *k) {",
           "note": "C impl: byte-based strip family using bytes_data + bytes_new_same_family (both already in py_bytes.c). ASCII-whitespace set matches CPython bytes.strip (space + \\t\\n\\v\\f\\r). Inserted before py_bytes_getitem."
         },
         {
-          "file": "pcc/py_runtime/py/py_obj_stubs.py",
+          "file": "pcc/runtime/py/py_obj_stubs.py",
           "old_string": "@c_abi_export(\"py_bytes_getitem\")\ndef py_bytes_getitem(o, k):",
           "new_string": "def _bytes_is_ascii_space(c: int) -> int:\n    if c == 32:\n        return 1\n    if c >= 9 and c <= 13:\n        return 1\n    return 0\n\n\n@c_abi_export(\"py_bytes_lstrip\")\ndef py_bytes_lstrip(o):\n    data = _bytes_data(o)\n    if ptr_is_null(data) != 0:\n        return null()\n    n: int = py_bytes_len(o)\n    lo: int = 0\n    while lo < n and _bytes_is_ascii_space(load_i8(data, lo) & 255) != 0:\n        lo = lo + 1\n    return _bytes_new_same_family(o, ptr_add(data, lo), n - lo)\n\n\n@c_abi_export(\"py_bytes_rstrip\")\ndef py_bytes_rstrip(o):\n    data = _bytes_data(o)\n    if ptr_is_null(data) != 0:\n        return null()\n    n: int = py_bytes_len(o)\n    hi: int = n\n    while hi > 0 and _bytes_is_ascii_space(load_i8(data, hi - 1) & 255) != 0:\n        hi = hi - 1\n    return _bytes_new_same_family(o, data, hi)\n\n\n@c_abi_export(\"py_bytes_strip\")\ndef py_bytes_strip(o):\n    data = _bytes_data(o)\n    if ptr_is_null(data) != 0:\n        return null()\n    n: int = py_bytes_len(o)\n    lo: int = 0\n    hi: int = n\n    while lo < hi and _bytes_is_ascii_space(load_i8(data, lo) & 255) != 0:\n        lo = lo + 1\n    while hi > lo and _bytes_is_ascii_space(load_i8(data, hi - 1) & 255) != 0:\n        hi = hi - 1\n    return _bytes_new_same_family(o, ptr_add(data, lo), hi - lo)\n\n\n@c_abi_export(\"py_bytes_getitem\")\ndef py_bytes_getitem(o, k):",
           "note": "Port impl mirroring the C strip family, using the verified contiguous-slice idiom _bytes_new_same_family(o, ptr_add(data, lo), count) -- exactly how the port's py_bytes_slice (py_obj_stubs.py:875) returns a step-1 slice. ptr_add/_bytes_data/_bytes_new_same_family/py_bytes_len/load_i8 all already exist in the port. ptr_is_null(x)!=0 form. Mirror so both tiers agree."
@@ -178,45 +178,45 @@
       "expected": "bytearray(b'abc')",
       "root_cause": "bytearray.append(int) has no native handling and falls through to runtime getattr -> AttributeError. PyByteArrayObject uses an inline flexible-array-member data[] (py_internal.h:301-305), so there is no true in-place grow; the established pattern for bytearray mutation is statement-level recognition + store-back of a NEW object, exactly how bytearray.extend is handled in stmt_misc_lowering.py (_maybe_emit_bytearray_extend_stmt -> _emit_bytearray_extend_store, which calls py_bytearray_extend returning a new bytearray and stores it back to the target). append should mirror this: a new runtime helper py_bytearray_append(o, int_obj) that returns a new bytearray with the byte appended, wired as a statement that stores back to the target. Both py_bytes.c and the port py_obj_stubs.py need the impl (both_tier).",
       "owning_files": [
-        "pcc/py_frontend/codegen/stmt_misc_lowering.py",
-        "pcc/py_frontend/codegen/runtime_abi.py",
-        "pcc/py_runtime/include/py_runtime.h",
-        "pcc/py_runtime/src/py_bytes.c",
-        "pcc/py_runtime/py/py_obj_stubs.py"
+        "pcc/frontends/python/codegen/stmt_misc_lowering.py",
+        "pcc/frontends/python/codegen/runtime_abi.py",
+        "pcc/runtime/include/py_runtime.h",
+        "pcc/runtime/src/py_bytes.c",
+        "pcc/runtime/py/py_obj_stubs.py"
       ],
       "proposed_edits": [
         {
-          "file": "pcc/py_frontend/codegen/stmt_misc_lowering.py",
+          "file": "pcc/frontends/python/codegen/stmt_misc_lowering.py",
           "old_string": "        if isinstance(expr, Call) and self._maybe_emit_bytearray_extend_stmt(expr):\n            return\n        # Otherwise evaluate for side-effects.",
           "new_string": "        if isinstance(expr, Call) and self._maybe_emit_bytearray_extend_stmt(expr):\n            return\n        if isinstance(expr, Call) and self._maybe_emit_bytearray_append_stmt(expr):\n            return\n        # Otherwise evaluate for side-effects.",
           "note": "Hook the new append statement recognizer next to the extend one."
         },
         {
-          "file": "pcc/py_frontend/codegen/stmt_misc_lowering.py",
+          "file": "pcc/frontends/python/codegen/stmt_misc_lowering.py",
           "old_string": "    def _maybe_emit_bytearray_extend_stmt(self, expr: Call) -> bool:",
           "new_string": "    def _maybe_emit_bytearray_append_stmt(self, expr: Call) -> bool:\n        if (\n            not isinstance(expr.func, Attr)\n            or expr.func.name != \"append\"\n            or len(expr.args) != 1\n            or expr.kwargs\n        ):\n            return False\n        target = expr.func.obj\n        if not isinstance(target, (Name, Attr, Subscript)):\n            return False\n        if not isinstance(target.ty, ByteArrayType):\n            return False\n        recv_obj = self._emit_as_object(target)\n        arg_obj = self._emit_as_object(expr.args[0])\n        result = self.builder.call(\n            self.runtime[\"py_bytearray_append\"],\n            [recv_obj, arg_obj],\n            name=self._fresh(\"bytearray.append\"),\n        )\n        self._emit_post_call_err_check(expr.span)\n        self._gc_release_if_owned(arg_obj, expr.args[0])\n        self._store_unpack_target(\n            target,\n            result,\n            ByteArrayType(name=\"bytearray\"),\n            value_is_owned=True,\n        )\n        return True\n\n    def _maybe_emit_bytearray_extend_stmt(self, expr: Call) -> bool:",
           "note": "Frontend: statement-level append recognizer modeled exactly on _emit_bytearray_extend_store (store-back of a new bytearray). Only the statically-ByteArrayType, name/attr/subscript-target form is wired here; DynType-attr append can be added later like the extend dyn path. NOTE: this only fixes `ba.append(x)` as a bare statement; an append used as an expression value is rare and stays on the fallback."
         },
         {
-          "file": "pcc/py_frontend/codegen/runtime_abi.py",
+          "file": "pcc/frontends/python/codegen/runtime_abi.py",
           "old_string": "    \"py_bytearray_extend\": (_PYOBJ, [_PYOBJ, _PYOBJ], False),",
           "new_string": "    \"py_bytearray_extend\": (_PYOBJ, [_PYOBJ, _PYOBJ], False),\n    \"py_bytearray_append\": (_PYOBJ, [_PYOBJ, _PYOBJ], False),",
           "note": "ABI signature next to py_bytearray_extend."
         },
         {
-          "file": "pcc/py_runtime/include/py_runtime.h",
+          "file": "pcc/runtime/include/py_runtime.h",
           "old_string": "PyObject *py_bytearray_extend(PyObject *o, PyObject *iterable);",
           "new_string": "PyObject *py_bytearray_extend(PyObject *o, PyObject *iterable);\nPyObject *py_bytearray_append(PyObject *o, PyObject *value);",
           "note": "Public decl next to py_bytearray_extend."
         },
         {
-          "file": "pcc/py_runtime/src/py_bytes.c",
+          "file": "pcc/runtime/src/py_bytes.c",
           "old_string": "int64_t py_bytearray_setitem(PyObject *o, PyObject *k, PyObject *v) {",
           "new_string": "PyObject *py_bytearray_append(PyObject *o, PyObject *value) {\n    if (o == NULL || py_type_of(o) != PY_TYPE_BYTEARRAY) {\n        py_raise(py_exc_new(PY_EXC_TYPEERROR, \"bytearray.append target must be bytearray\"));\n        return NULL;\n    }\n    int64_t byte = 0;\n    if (byte_from_obj(value, &byte) != 0 || byte < 0 || byte > 255) {\n        py_raise(py_exc_new(PY_EXC_VALUEERROR, \"byte must be in range(0, 256)\"));\n        return NULL;\n    }\n    int64_t an = 0;\n    const char *ad = bytes_data(o, &an);\n    if (ad == NULL || an < 0) return NULL;\n    if (an > INT64_MAX - 1) {\n        py_raise(py_exc_new(PY_EXC_OVERFLOWERROR, \"bytearray too large\"));\n        return NULL;\n    }\n    int64_t total = an + 1;\n    PyObject *out = bytearray_new_raw(NULL, total);\n    if (out == NULL) return NULL;\n    int64_t out_n = 0;\n    char *dst = bytes_mutable_data(out, &out_n);\n    if (dst == NULL || out_n != total) return NULL;\n    if (an > 0) memcpy(dst, ad, (size_t)an);\n    dst[an] = (char)(unsigned char)byte;\n    dst[total] = '\\0';\n    return out;\n}\n\nint64_t py_bytearray_setitem(PyObject *o, PyObject *k, PyObject *v) {",
           "note": "C impl: mirror of py_bytearray_extend's allocate-new-and-copy pattern (py_bytes.c:741) for a single byte, using byte_from_obj + bytes_mutable_data + bytearray_new_raw (all already in this file). Returns a new bytearray; the frontend stores it back to the target. Inserted before py_bytearray_setitem."
         },
         {
-          "file": "pcc/py_runtime/py/py_obj_stubs.py",
+          "file": "pcc/runtime/py/py_obj_stubs.py",
           "old_string": "@c_abi_export(\"py_bytearray_extend\")\ndef py_bytearray_extend(o, iterable):",
           "new_string": "@c_abi_export(\"py_bytearray_append\")\ndef py_bytearray_append(o, value):\n    if ptr_is_null(o) != 0 or _type_of(o) != 18:\n        py_raise(py_exc_new(3, cstr(\"bytearray.append target must be bytearray\")))\n        return null()\n    byte: int = _byte_from_obj(value)\n    if byte < 0 or byte > 255:\n        py_raise(py_exc_new(2, cstr(\"byte must be in range(0, 256)\")))\n        return null()\n    an: int = py_bytes_len(o)\n    ad = _bytes_data(o)\n    if ptr_is_null(ad) != 0 or an < 0:\n        return null()\n    total: int = an + 1\n    out = _bytearray_new_raw(null(), total)\n    if ptr_is_null(out) != 0:\n        return null()\n    dst = _bytes_data(out)\n    if ptr_is_null(dst) != 0:\n        return null()\n    i: int = 0\n    while i < an:\n        store_i8(dst, i, load_i8(ad, i))\n        i = i + 1\n    store_i8(dst, an, byte)\n    store_i8(dst, total, 0)\n    return out\n\n\n@c_abi_export(\"py_bytearray_extend\")\ndef py_bytearray_extend(o, iterable):",
           "note": "Port impl mirroring the C py_bytearray_append, modeled on the port's py_bytearray_extend (py_obj_stubs.py:639): raises via py_raise(py_exc_new(CODE, cstr(...))) with integer exc codes (3=PY_EXC_TYPEERROR matching extend; 2=PY_EXC_VALUEERROR per py_runtime.h:60), ptr_is_null(x)!=0 form, store_i8 copy loop without &255. Uses _bytearray_new_raw/_bytes_data/_byte_from_obj/py_bytes_len which already exist. Mirror so both tiers agree."
@@ -233,39 +233,39 @@
       "expected": "[b'a', b'b', b'c']   ;   [b'a', b'b', b'c']   ;   b'x-y-z'",
       "root_cause": "bytes.split / bytes.join have no native branch and fall through to runtime getattr -> AttributeError. Cannot reuse py_str_split/py_str_join: those cast to PyStrObject* (wrong data offset for bytes) and build str parts via str_from_range, so they would return str elements not bytes. Need new helpers: py_bytes_split(src, sep) returning a list whose elements are made with bytes_new_same_family (bytes->bytes parts); the bare/None-sep form splits on runs of ASCII whitespace dropping empties (CPython semantics); py_bytes_join(sep, seq) concatenating a list/tuple of bytes-like with sep between. Both need the list/tuple runtime API (py_list_new/py_list_append/py_list_len, py_tuple_*). Both py_bytes.c AND port py_obj_stubs.py need impls (both_tier). I provide the frontend dispatch edit (apply-ready) and the runtime spec; the runtime bodies are non-trivial and untested here, so confidence is low for the runtime portion.",
       "owning_files": [
-        "pcc/py_frontend/codegen/method_call_expression_lowering.py",
-        "pcc/py_frontend/codegen/runtime_abi.py",
-        "pcc/py_runtime/include/py_runtime.h",
-        "pcc/py_runtime/src/py_bytes.c",
-        "pcc/py_runtime/py/py_obj_stubs.py"
+        "pcc/frontends/python/codegen/method_call_expression_lowering.py",
+        "pcc/frontends/python/codegen/runtime_abi.py",
+        "pcc/runtime/include/py_runtime.h",
+        "pcc/runtime/src/py_bytes.c",
+        "pcc/runtime/py/py_obj_stubs.py"
       ],
       "proposed_edits": [
         {
-          "file": "pcc/py_frontend/codegen/method_call_expression_lowering.py",
+          "file": "pcc/frontends/python/codegen/method_call_expression_lowering.py",
           "old_string": "        if isinstance(obj_ty, (BytesType, ByteArrayType)) and attr.name == \"decode\":",
           "new_string": "        if (\n            isinstance(obj_ty, (BytesType, ByteArrayType))\n            and attr.name == \"split\"\n            and len(expr.args) <= 1\n            and not expr.kwargs\n        ):\n            recv = self._emit_expr(attr.obj)\n            if expr.args:\n                sep = self._emit_as_object(expr.args[0])\n            else:\n                sep = self._emit_none()\n            result = self.builder.call(\n                self.runtime[\"py_bytes_split\"],\n                [recv, sep],\n                name=self._fresh(\"bytes.split\"),\n            )\n            self._emit_post_call_err_check(expr.span)\n            return result\n        if (\n            isinstance(obj_ty, (BytesType, ByteArrayType))\n            and attr.name == \"join\"\n            and len(expr.args) == 1\n            and not expr.kwargs\n        ):\n            recv = self._emit_expr(attr.obj)\n            seq = self._emit_as_object(expr.args[0])\n            result = self.builder.call(\n                self.runtime[\"py_bytes_join\"],\n                [recv, seq],\n                name=self._fresh(\"bytes.join\"),\n            )\n            self._emit_post_call_err_check(expr.span)\n            return result\n        if isinstance(obj_ty, (BytesType, ByteArrayType)) and attr.name == \"decode\":",
           "note": "Frontend dispatch for split (0/1 arg) and join, anchored before the bytes.decode branch. Uses self._emit_none() to pass None for the bare split() whitespace form -- VERIFY the exact name of the None-emitting helper in this mixin (grep _emit_none / py_None); if absent, emit a None constant the same way other branches do. py_bytes_split returns a list (owned), py_bytes_join returns bytes (owned)."
         },
         {
-          "file": "pcc/py_frontend/codegen/runtime_abi.py",
+          "file": "pcc/frontends/python/codegen/runtime_abi.py",
           "old_string": "    \"py_bytes_find\": (_I64, [_PYOBJ, _PYOBJ], False),",
           "new_string": "    \"py_bytes_find\": (_I64, [_PYOBJ, _PYOBJ], False),\n    \"py_bytes_split\": (_PYOBJ, [_PYOBJ, _PYOBJ], False),\n    \"py_bytes_join\": (_PYOBJ, [_PYOBJ, _PYOBJ], False),",
           "note": "ABI signatures. NOTE: this old_string also matches the rfind/count patch's anchor -- if that patch lands first, re-anchor this insert on the resulting py_bytes_count line instead. Land one bytes patch, rebuild, then re-derive the next anchor."
         },
         {
-          "file": "pcc/py_runtime/include/py_runtime.h",
+          "file": "pcc/runtime/include/py_runtime.h",
           "old_string": "int64_t   py_bytes_find(PyObject *src, PyObject *needle);",
           "new_string": "int64_t   py_bytes_find(PyObject *src, PyObject *needle);\nPyObject *py_bytes_split(PyObject *src, PyObject *sep);\nPyObject *py_bytes_join(PyObject *sep, PyObject *seq);",
           "note": "Public decls. Same anchor-overlap caveat with the rfind/count patch as above."
         },
         {
-          "file": "pcc/py_runtime/src/py_bytes.c",
+          "file": "pcc/runtime/src/py_bytes.c",
           "old_string": "int64_t py_bytes_len(PyObject *o) {",
           "new_string": "/* py_bytes_split: when sep is NULL/None, split on runs of ASCII whitespace\n * and drop empty fields (CPython bytes.split() semantics). Otherwise split\n * on the literal separator. Parts are same-family (bytes->bytes,\n * bytearray->bytearray). Returns a new list (owned). */\nPyObject *py_bytes_split(PyObject *src, PyObject *sep) {\n    int64_t n = 0;\n    const char *data = bytes_data(src, &n);\n    if (data == NULL) return NULL;\n    PyObject *list = py_list_new(4);\n    if (list == NULL) return NULL;\n    if (sep == NULL || sep == py_None) {\n        int64_t i = 0;\n        while (i < n) {\n            while (i < n && (data[i] == ' ' || (data[i] >= 0x09 && data[i] <= 0x0d))) i++;\n            if (i >= n) break;\n            int64_t start = i;\n            while (i < n && !(data[i] == ' ' || (data[i] >= 0x09 && data[i] <= 0x0d))) i++;\n            PyObject *part = bytes_new_same_family(src, data + start, i - start);\n            if (part == NULL) { py_decref(list); return NULL; }\n            py_list_append(list, part);\n            py_decref(part);\n        }\n        return list;\n    }\n    int64_t sn = 0;\n    const char *sd = bytes_data(sep, &sn);\n    if (sd == NULL) { py_decref(list); py_raise(py_exc_new(PY_EXC_TYPEERROR, \"split separator must be bytes-like\")); return NULL; }\n    if (sn == 0) { py_decref(list); py_raise(py_exc_new(PY_EXC_VALUEERROR, \"empty separator\")); return NULL; }\n    int64_t start = 0;\n    int64_t i = 0;\n    while (i + sn <= n) {\n        if (data[i] == sd[0] && memcmp(data + i, sd, (size_t)sn) == 0) {\n            PyObject *part = bytes_new_same_family(src, data + start, i - start);\n            if (part == NULL) { py_decref(list); return NULL; }\n            py_list_append(list, part);\n            py_decref(part);\n            i += sn;\n            start = i;\n        } else {\n            i++;\n        }\n    }\n    PyObject *tail = bytes_new_same_family(src, data + start, n - start);\n    if (tail == NULL) { py_decref(list); return NULL; }\n    py_list_append(list, tail);\n    py_decref(tail);\n    return list;\n}\n\n/* py_bytes_join: sep.join(seq) over a list/tuple of bytes-like. */\nPyObject *py_bytes_join(PyObject *sep, PyObject *seq) {\n    int64_t sn = 0;\n    const char *sd = bytes_data(sep, &sn);\n    if (sd == NULL) return NULL;\n    int32_t tag = py_type_of(seq);\n    int64_t count;\n    if (tag == PY_TYPE_LIST) count = py_list_len(seq);\n    else if (tag == PY_TYPE_TUPLE) count = py_tuple_len(seq);\n    else { py_raise(py_exc_new(PY_EXC_TYPEERROR, \"can only join an iterable\")); return NULL; }\n    int64_t total = 0;\n    for (int64_t k = 0; k < count; k++) {\n        PyObject *item = (tag == PY_TYPE_LIST) ? py_list_get(seq, k) : py_tuple_get(seq, k);\n        int64_t in = 0;\n        const char *id = bytes_data(item, &in);\n        py_decref(item);\n        if (id == NULL) { py_raise(py_exc_new(PY_EXC_TYPEERROR, \"sequence item must be bytes-like\")); return NULL; }\n        total += in;\n        if (k > 0) total += sn;\n    }\n    PyObject *out = bytes_new_same_family(sep, NULL, total);\n    if (out == NULL) return NULL;\n    int64_t out_n = 0;\n    char *dst = bytes_mutable_data(out, &out_n);\n    if (dst == NULL || out_n != total) return NULL;\n    int64_t pos = 0;\n    for (int64_t k = 0; k < count; k++) {\n        if (k > 0 && sn > 0) { memcpy(dst + pos, sd, (size_t)sn); pos += sn; }\n        PyObject *item = (tag == PY_TYPE_LIST) ? py_list_get(seq, k) : py_tuple_get(seq, k);\n        int64_t in = 0;\n        const char *id = bytes_data(item, &in);\n        if (in > 0) memcpy(dst + pos, id, (size_t)in);\n        pos += in;\n        py_decref(item);\n    }\n    dst[total] = '\\0';\n    return out;\n}\n\nint64_t py_bytes_len(PyObject *o) {",
           "note": "C impl spec for split/join using py_list_new/py_list_append/py_list_get/py_list_len + py_tuple_len/py_tuple_get + bytes_data/bytes_new_same_family/bytes_mutable_data (all available in this file or runtime). VERIFY py_list_get/py_tuple_get ownership (whether they return a borrowed or owned ref -- I assumed owned and py_decref; if borrowed, drop the py_decref). Inserted before py_bytes_len. Untested -- confidence low; treat as a starting impl to land + regress."
         },
         {
-          "file": "pcc/py_runtime/py/py_obj_stubs.py",
+          "file": "pcc/runtime/py/py_obj_stubs.py",
           "old_string": "@c_abi_export(\"py_bytes_len\")\ndef py_bytes_len(o) -> int:",
           "new_string": "# NOTE: pcc-Python port mirrors of py_bytes_split / py_bytes_join must be\n# authored here for the DEFAULT no-libpython tier, mirroring the C impls in\n# py_bytes.c. They build a list via py_list_new/py_list_append (split) and a\n# joined bytes via _bytearray_new_raw/py_bytes_new + store_i8 (join), using the\n# whitespace set {32, 9..13} and bytes_new_same_family for part type. Left as a\n# TODO marker rather than a guessed body because the port's list/tuple element\n# accessor + ownership idioms must be copied from an existing port function that\n# already iterates a list (e.g. _bytes_from_int_sequence) to stay correct.\n@c_abi_export(\"py_bytes_len\")\ndef py_bytes_len(o) -> int:",
           "note": "Port placeholder/TODO comment only (no guessed body) -- the split/join port bodies need the verified list-iteration idiom from _bytes_from_int_sequence. This keeps the patch honest: the human authors the port mirror from the C spec above + the existing port list helpers. both_tier still true."
@@ -282,39 +282,39 @@
       "expected": "(b'a', b'=', b'b=c')",
       "root_cause": "bytes.partition has no native branch -> runtime getattr -> AttributeError. Needs a new helper py_bytes_partition(src, sep) returning a 3-tuple (head, sep_or_empty, tail) with same-family parts: find sep; if found, head=before, mid=sep, tail=after; if not found, (whole, b'', b''). Cannot reuse the str path (PyStrObject* cast + str parts). Needs py_tuple_new/py_tuple_set_item + bytes_new_same_family. Both py_bytes.c AND port (both_tier). Frontend dispatch is apply-ready; the runtime body is provided as a C spec, untested -> confidence low.",
       "owning_files": [
-        "pcc/py_frontend/codegen/method_call_expression_lowering.py",
-        "pcc/py_frontend/codegen/runtime_abi.py",
-        "pcc/py_runtime/include/py_runtime.h",
-        "pcc/py_runtime/src/py_bytes.c",
-        "pcc/py_runtime/py/py_obj_stubs.py"
+        "pcc/frontends/python/codegen/method_call_expression_lowering.py",
+        "pcc/frontends/python/codegen/runtime_abi.py",
+        "pcc/runtime/include/py_runtime.h",
+        "pcc/runtime/src/py_bytes.c",
+        "pcc/runtime/py/py_obj_stubs.py"
       ],
       "proposed_edits": [
         {
-          "file": "pcc/py_frontend/codegen/method_call_expression_lowering.py",
+          "file": "pcc/frontends/python/codegen/method_call_expression_lowering.py",
           "old_string": "        if (\n            isinstance(obj_ty, (BytesType, ByteArrayType))\n            and attr.name == \"replace\"\n            and len(expr.args) == 2\n            and not expr.kwargs\n        ):",
           "new_string": "        if (\n            isinstance(obj_ty, (BytesType, ByteArrayType))\n            and attr.name == \"partition\"\n            and len(expr.args) == 1\n            and not expr.kwargs\n        ):\n            recv = self._emit_expr(attr.obj)\n            sep = self._emit_as_object(expr.args[0])\n            result = self.builder.call(\n                self.runtime[\"py_bytes_partition\"],\n                [recv, sep],\n                name=self._fresh(\"bytes.partition\"),\n            )\n            self._emit_post_call_err_check(expr.span)\n            return result\n        if (\n            isinstance(obj_ty, (BytesType, ByteArrayType))\n            and attr.name == \"replace\"\n            and len(expr.args) == 2\n            and not expr.kwargs\n        ):",
           "note": "Frontend dispatch for partition anchored before the bytes.replace branch. Returns an owned 3-tuple."
         },
         {
-          "file": "pcc/py_frontend/codegen/runtime_abi.py",
+          "file": "pcc/frontends/python/codegen/runtime_abi.py",
           "old_string": "    \"py_bytes_replace\": (_PYOBJ, [_PYOBJ, _PYOBJ, _PYOBJ], False),",
           "new_string": "    \"py_bytes_replace\": (_PYOBJ, [_PYOBJ, _PYOBJ, _PYOBJ], False),\n    \"py_bytes_partition\": (_PYOBJ, [_PYOBJ, _PYOBJ], False),",
           "note": "ABI signature next to py_bytes_replace."
         },
         {
-          "file": "pcc/py_runtime/include/py_runtime.h",
+          "file": "pcc/runtime/include/py_runtime.h",
           "old_string": "PyObject *py_bytes_replace(PyObject *src, PyObject *old, PyObject *new_value);",
           "new_string": "PyObject *py_bytes_replace(PyObject *src, PyObject *old, PyObject *new_value);\nPyObject *py_bytes_partition(PyObject *src, PyObject *sep);",
           "note": "Public decl next to py_bytes_replace."
         },
         {
-          "file": "pcc/py_runtime/src/py_bytes.c",
+          "file": "pcc/runtime/src/py_bytes.c",
           "old_string": "int64_t py_bytes_len(PyObject *o) {",
           "new_string": "PyObject *py_bytes_partition(PyObject *src, PyObject *sep) {\n    int64_t n = 0;\n    const char *data = bytes_data(src, &n);\n    int64_t sn = 0;\n    const char *sd = bytes_data(sep, &sn);\n    if (data == NULL || sd == NULL) {\n        py_raise(py_exc_new(PY_EXC_TYPEERROR, \"partition separator must be bytes-like\"));\n        return NULL;\n    }\n    if (sn == 0) { py_raise(py_exc_new(PY_EXC_VALUEERROR, \"empty separator\")); return NULL; }\n    int64_t hit = -1;\n    if (sn <= n) {\n        for (int64_t i = 0; i + sn <= n; i++) {\n            if (data[i] == sd[0] && memcmp(data + i, sd, (size_t)sn) == 0) { hit = i; break; }\n        }\n    }\n    PyObject *tup = py_tuple_new(3);\n    if (tup == NULL) return NULL;\n    PyObject *a;\n    PyObject *b;\n    PyObject *c;\n    if (hit < 0) {\n        a = bytes_new_same_family(src, data, n);\n        b = bytes_new_same_family(src, NULL, 0);\n        c = bytes_new_same_family(src, NULL, 0);\n    } else {\n        a = bytes_new_same_family(src, data, hit);\n        b = bytes_new_same_family(src, data + hit, sn);\n        c = bytes_new_same_family(src, data + hit + sn, n - hit - sn);\n    }\n    if (a == NULL || b == NULL || c == NULL) { py_decref(tup); return NULL; }\n    py_tuple_set_item(tup, 0, a);\n    py_tuple_set_item(tup, 1, b);\n    py_tuple_set_item(tup, 2, c);\n    return tup;\n}\n\nint64_t py_bytes_len(PyObject *o) {",
           "note": "C impl spec for partition using py_tuple_new/py_tuple_set_item + bytes_new_same_family. VERIFY py_tuple_set_item steals vs borrows the reference (the exception-args path elsewhere uses py_tuple_set_item with py_obj_repr results; if it steals, do NOT py_decref a/b/c -- as written I let the tuple own them and do not decref). Inserted before py_bytes_len. Untested -> confidence low."
         },
         {
-          "file": "pcc/py_runtime/py/py_obj_stubs.py",
+          "file": "pcc/runtime/py/py_obj_stubs.py",
           "old_string": "@c_abi_export(\"py_bytes_concat\")\ndef py_bytes_concat(a, b):",
           "new_string": "# NOTE: pcc-Python port mirror of py_bytes_partition for the DEFAULT\n# no-libpython tier must be authored here mirroring the C impl in py_bytes.c,\n# using py_tuple_new/py_tuple_set_item + _bytes_new_same_family + ptr_add. Left\n# as a TODO marker rather than a guessed body so the tuple set-item ownership\n# idiom is copied from an existing port function that builds a tuple.\n@c_abi_export(\"py_bytes_concat\")\ndef py_bytes_concat(a, b):",
           "note": "Port placeholder/TODO comment only -- author the port mirror from the C spec + an existing port tuple-builder. both_tier still true."
@@ -331,10 +331,10 @@
       "expected": "99\\nbytearray(b'ab')",
       "root_cause": "bytearray.pop() has no native handling -> runtime getattr -> AttributeError. Unlike append/extend (statement store-back), pop is an EXPRESSION that BOTH mutates the bytearray AND returns the removed int, so the extend statement-pattern is insufficient. With the inline FAM data[] layout there is no in-place shrink-and-return primitive. Cleanest design: lower `x = ba.pop()` specially (an assignment whose RHS is a bytearray.pop) -> call a new helper py_bytearray_pop_value(o) that returns the last byte as a tagged int, then store a shrunk-by-one new bytearray back to the target (mirroring extend's store-back). This needs a dedicated assignment-statement recognizer (not just an expr-statement one). I am NOT providing an apply-ready frontend edit because it requires a new assignment-target rewrite path I have not located precisely in assignment_statement_lowering.py; confidence low. Recording as a confirmed gap with the runtime-helper direction.",
       "owning_files": [
-        "pcc/py_frontend/codegen/assignment_statement_lowering.py",
-        "pcc/py_frontend/codegen/stmt_misc_lowering.py",
-        "pcc/py_runtime/src/py_bytes.c",
-        "pcc/py_runtime/py/py_obj_stubs.py"
+        "pcc/frontends/python/codegen/assignment_statement_lowering.py",
+        "pcc/frontends/python/codegen/stmt_misc_lowering.py",
+        "pcc/runtime/src/py_bytes.c",
+        "pcc/runtime/py/py_obj_stubs.py"
       ],
       "proposed_edits": [],
       "needs_new_runtime_fn": true,
@@ -348,9 +348,9 @@
       "expected": "b'val=42'",
       "root_cause": "binary_op_lowering.py handles bytes/bytearray for + (concat) and * (repeat) only (lines ~86-90, ~179-216); the % operator on a bytes LHS is not special-cased, so it routes to the generic py_obj_mod which raises TypeError for bytes. CPython's bytes %-formatting (PEP 461) supports %d %i %s(bytes) %b %a %x %o %c %f %% etc. This needs a new runtime helper py_bytes_mod(fmt, args) that parses the bytes format string (analogous to the str %-format helper) and a binary_op_lowering branch dispatching bytes-LHS % to it. I have not located the str %-format runtime entry to mirror precisely, so I provide no apply-ready edit; confidence low. Recording as a confirmed gap with direction.",
       "owning_files": [
-        "pcc/py_frontend/codegen/binary_op_lowering.py",
-        "pcc/py_runtime/src/py_bytes.c",
-        "pcc/py_runtime/py/py_obj_stubs.py"
+        "pcc/frontends/python/codegen/binary_op_lowering.py",
+        "pcc/runtime/src/py_bytes.c",
+        "pcc/runtime/py/py_obj_stubs.py"
       ],
       "proposed_edits": [],
       "needs_new_runtime_fn": true,

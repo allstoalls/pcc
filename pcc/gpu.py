@@ -23,7 +23,7 @@ f32 = _GpuType("f32")
 
 
 def kernel(fn):
-    fn.__pcc_gpu_kernel__ = True
+    fn.__pcc_kernel_ir_entry__ = True
     return fn
 
 

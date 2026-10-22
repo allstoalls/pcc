@@ -125,7 +125,7 @@ SHADOWED = textwrap.dedent(
 
 
 def _compile(tmp_path: Path, name: str, source: str, *, enabled: bool) -> Path:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / f"{name}.py"
     exe = tmp_path / f"{name}.out"
@@ -169,7 +169,7 @@ def test_override_semantics_are_identical_with_and_without_the_flag(tmp_path):
 
 
 def test_a_class_that_intercepts_attributes_keeps_the_general_protocol(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     ir_path = tmp_path / "intercepted.ll"
     src = tmp_path / "intercepted.py"
@@ -198,9 +198,9 @@ def test_a_class_that_intercepts_attributes_keeps_the_general_protocol(tmp_path)
 
 
 def test_runtime_instance_shadow_falls_back_under_all_collectors(
-    tmp_path, monkeypatch, pcc_py_runtime_archive,
+    tmp_path, monkeypatch, pcc_runtime_archive,
 ):
-    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_py_runtime_archive))
+    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_runtime_archive))
     exe = _compile(tmp_path, "shadowed_on", SHADOWED, enabled=True)
     for backend in range(5):
         assert _run(exe, backend) == "99"
@@ -208,6 +208,6 @@ def test_runtime_instance_shadow_falls_back_under_all_collectors(
 
 @pytest.mark.parametrize("enabled", [False, True])
 def test_the_flag_is_part_of_the_compile_cache_identity(enabled) -> None:
-    from pcc.py_frontend import compile_cache
+    from pcc.frontends.python import compile_cache
 
     assert FLAG in compile_cache._CODEGEN_ENV_NAMES

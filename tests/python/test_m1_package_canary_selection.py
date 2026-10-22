@@ -12,13 +12,13 @@ REPO = Path(__file__).absolute().parents[2]
 PIN_PATH = REPO / "docs" / "goal" / "m1-package-canary.json"
 REPORT_PATH = REPO / "docs" / "reports" / "m1-package-canary-selection.md"
 DISPATCH_ROOTS = (
-    REPO / "pcc" / "py_frontend",
-    REPO / "pcc" / "py_runtime",
-    REPO / "pcc" / "codegen",
+    REPO / "pcc" / "frontends" / "python",
+    REPO / "pcc" / "runtime",
+    REPO / "pcc" / "frontends" / "c" / "codegen",
     REPO / "pcc" / "package",
     REPO / "pcc" / "array_core.py",
-    REPO / "pcc" / "package_compat.py",
-    REPO / "pcc" / "cli_bootstrap.py",
+    REPO / "pcc" / "package" / "compat.py",
+    REPO / "pcc" / "driver" / "cli_bootstrap.py",
 )
 
 

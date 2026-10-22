@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Produce the pinned M3 C-like value-array benchmark manifest."""
+"""Measure the owned value-array kernel against labeled host/C references.
+
+New runs use the owned self backend. Historical v1 LLVM observations remain
+recorded evidence and are not relabeled as measurements of this pipeline.
+"""
 
 from __future__ import annotations
 
@@ -205,7 +209,7 @@ def build_manifest(runs: int, warmups: int, timeout: int) -> dict[str, Any]:
     # a different scaffold boundary and is not an alias for the installed
     # ``pcc`` command.  Running the launcher as a module keeps the subprocess
     # tied to this interpreter/environment without depending on PATH.
-    pcc_prefix = [sys.executable, "-m", "pcc.cli_launcher"]
+    pcc_prefix = [sys.executable, "-m", "pcc.driver.cli_launcher"]
     cc = shutil.which(os.environ.get("CC", "clang"))
     if cc is None:
         raise RuntimeError("C compiler not found")
@@ -217,7 +221,6 @@ def build_manifest(runs: int, warmups: int, timeout: int) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="pcc_m3_c_like_") as tmp_name:
         tmp = Path(tmp_name)
         ir_path = tmp / "value_array_c_like.ll"
-        llvm_exe = tmp / "value_array_c_like_llvm"
         self_exe = tmp / "value_array_c_like_self"
         c_exe = tmp / "value_array_c_like_c"
         common = ["--python-libpython=off", "--ir-scaffold=on"]
@@ -225,14 +228,14 @@ def build_manifest(runs: int, warmups: int, timeout: int) -> dict[str, Any]:
             [
                 *pcc_prefix,
                 "--backend",
-                "llvm",
+                "self",
                 *common,
                 f"--emit-llvm={ir_path}",
                 str(PY_SOURCE),
             ],
             timeout=60,
         )
-        for backend, output in (("llvm", llvm_exe), ("self", self_exe)):
+        for backend, output in (("self", self_exe),):
             run_checked(
                 [
                     *pcc_prefix,
@@ -254,7 +257,7 @@ def build_manifest(runs: int, warmups: int, timeout: int) -> dict[str, Any]:
         if len(lines) != 5 or lines[1:] != EXPECTED_SLOW_PATH:
             raise RuntimeError(f"slow-path oracle mismatch: {lines}")
         checksum = float(lines[0])
-        for executable in (llvm_exe, self_exe):
+        for executable in (self_exe,):
             result = run_checked([str(executable)], timeout=timeout)
             if result.stdout != expected_python:
                 raise RuntimeError(f"backend output mismatch: {executable}")
@@ -267,13 +270,11 @@ def build_manifest(runs: int, warmups: int, timeout: int) -> dict[str, Any]:
 
         commands = {
             "cpython-host": [sys.executable, str(PY_SOURCE)],
-            "llvm/no-libpython": [str(llvm_exe)],
             "self/no-libpython": [str(self_exe)],
             "native-c/clang-O3": [str(c_exe)],
         }
         expected = {
             "cpython-host": expected_python,
-            "llvm/no-libpython": expected_python,
             "self/no-libpython": expected_python,
             "native-c/clang-O3": native.stdout,
         }
@@ -294,12 +295,6 @@ def build_manifest(runs: int, warmups: int, timeout: int) -> dict[str, Any]:
                 links_python="host-runtime",
                 command=["python", "benchmarks/python/scenarios/value_array_c_like.py"],
             ),
-            "llvm_no_libpython": mode_result(
-                "LLVM/no-libpython",
-                samples["llvm/no-libpython"],
-                links_python=links_libpython(llvm_exe),
-                command=["value_array_c_like_llvm"],
-            ),
             "self_no_libpython": mode_result(
                 "self/no-libpython",
                 samples["self/no-libpython"],
@@ -315,26 +310,26 @@ def build_manifest(runs: int, warmups: int, timeout: int) -> dict[str, Any]:
         }
         c_median = modes["native_c"]["median_ns"]
         host_median = modes["cpython_host"]["median_ns"]
-        for key in ("llvm_no_libpython", "self_no_libpython"):
+        for key in ("self_no_libpython",):
             median = modes[key]["median_ns"]
             modes[key]["ratio_vs_cpython"] = median / host_median
             modes[key]["ratio_vs_native_c"] = median / c_median
-        llvm_mode = modes["llvm_no_libpython"]
-        if llvm_mode["ratio_vs_native_c"] > 2.0:
+        self_mode = modes["self_no_libpython"]
+        if self_mode["ratio_vs_native_c"] > 2.0:
             raise RuntimeError(
-                "LLVM/no-libpython missed the pinned C-like band: "
-                f"{llvm_mode['ratio_vs_native_c']:.3f}x native C"
+                "self/no-libpython missed the C-like band: "
+                f"{self_mode['ratio_vs_native_c']:.3f}x native C"
             )
-        if llvm_mode["ratio_vs_cpython"] > 0.2:
+        if self_mode["ratio_vs_cpython"] > 0.2:
             raise RuntimeError(
-                "LLVM/no-libpython missed the pinned CPython speedup: "
-                f"{llvm_mode['ratio_vs_cpython']:.3f}x CPython"
+                "self/no-libpython missed the CPython speedup: "
+                f"{self_mode['ratio_vs_cpython']:.3f}x CPython"
             )
 
         ir_text = ir_path.read_text(encoding="utf-8")
         cc_version = run_checked([cc, "--version"], timeout=20).stdout.splitlines()[0]
         return {
-            "schema": "pcc.m3_c_like.value_array.v1",
+            "schema": "pcc.m3_c_like.value_array.v2",
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "claim": {
                 "name": "fixed value-array float recurrence",
@@ -343,18 +338,13 @@ def build_manifest(runs: int, warmups: int, timeout: int) -> dict[str, Any]:
                     "specialized hot path with Python semantic slow paths retained."
                 ),
                 "measured_policy": {
-                    "llvm_no_libpython_ratio_vs_native_c_max": 2.0,
-                    "llvm_no_libpython_ratio_vs_cpython_max": 0.2,
-                    "self_no_libpython": (
-                        "result required and reported separately; no C-like ratio "
-                        "threshold claimed"
-                    ),
+                    "self_no_libpython_ratio_vs_native_c_max": 2.0,
+                    "self_no_libpython_ratio_vs_cpython_max": 0.2,
                 },
                 "does_not_claim": [
                     "arbitrary dynamic Python is C-speed",
                     "compile or process startup is allocation-free",
                     "long-running GC pause, RSS, or fragmentation performance",
-                    "LLVM and self have equal throughput",
                 ],
             },
             "source_identity": {
@@ -385,14 +375,13 @@ def build_manifest(runs: int, warmups: int, timeout: int) -> dict[str, Any]:
             "ir_shape": ir_shape(ir_text),
             "correctness": {
                 "python_stdout": expected_python,
-                "host_llvm_self_exact_match": True,
+                "host_self_exact_match": True,
                 "native_c_hot_checksum_match": True,
                 "slow_path_lines": lines[1:],
             },
             "allocation_probe": allocation_probe(tmp, pcc_prefix),
             "modes": modes,
             "compile_commands": {
-                "llvm": ["pcc", "--backend", "llvm", *common],
                 "self": ["pcc", "--backend", "self", *common],
                 "native_c": [Path(cc).name, "-O3", "-std=c11"],
             },

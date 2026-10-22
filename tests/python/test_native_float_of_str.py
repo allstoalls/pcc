@@ -40,7 +40,7 @@ PROGRAM = textwrap.dedent("""
 
 
 def test_float_of_str_matches_cpython(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "fs.py"
     exe = tmp_path / "fs.out"

@@ -33,13 +33,13 @@ def main():
 main()
 """
 
-def test_tuple_generator_contents_and_error(tmp_path: Path, pcc_py_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+def test_tuple_generator_contents_and_error(tmp_path: Path, pcc_runtime_archive):
+    from pcc.frontends.python.pipeline import compile_python
     source = tmp_path / "tuple_iterator.py"
     source.write_text(PROGRAM)
     binary = tmp_path / "tuple_iterator"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], capture_output=True, text=True, timeout=20,
                              env=dict(os.environ, PCC_GC_BACKEND=str(backend)))
@@ -110,13 +110,13 @@ int main(int argc, char **argv) {
 }
 """
 
-@pytest.mark.parametrize("runtime_fixture", ["pcc_py_runtime_archive", "pcc_py_runtime_archive"])
+@pytest.mark.parametrize("runtime_fixture", ["pcc_runtime_archive", "pcc_runtime_archive"])
 def test_tuple_iterator_runtime_mirrors(tmp_path, request, runtime_fixture):
     archive = request.getfixturevalue(runtime_fixture)
     source = tmp_path / "tuple_runtime.c"
     source.write_text(RUNTIME_PROBE)
     binary = tmp_path / "tuple_runtime"
-    include = Path(__file__).resolve().parents[2] / "pcc/py_runtime/include"
+    include = Path(__file__).resolve().parents[2] / "pcc/runtime/include"
     built = subprocess.run(["clang", "-I", str(include), str(source), str(archive),
                             "-pthread", "-o", str(binary)], capture_output=True,
                            text=True, timeout=30)

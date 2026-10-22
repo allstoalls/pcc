@@ -1,0 +1,92 @@
+{
+  "actual_discovered_closure": [
+    "program.py"
+  ],
+  "actual_payload_status": "FAIL",
+  "archive_sidecars_after": "PASS",
+  "base_commit": "761bcdaf62408d56060bb9074585218e6b8bccc4",
+  "blocker": {
+    "attempts_denied": 1,
+    "event": "subprocess.Popen",
+    "interpretation": "Existing single-process audit rejected child creation; no successful ELF or native constructor execution",
+    "reported_worker_exit_status": 127,
+    "retry": "None",
+    "route": "ordinary public compile_python -> self backend medium emitter worker pool",
+    "threshold_emitter_fixture_or_guard_changes": "None"
+  },
+  "codegen_checksum": "819d8a565812fb28205d0056fc859ac8810d2cd5518ca3129a80e8674173fc35",
+  "compile": "FAIL at audited subprocess boundary",
+  "effective_target_passes": {
+    "names": [],
+    "transport": "text"
+  },
+  "elf_exists": false,
+  "fixture_sha256": "8f5efffc7b2b6ebb926dd142e7c7b418f5b17483c5a0b2de3bab669911329f36",
+  "guard": {
+    "cleanup": "CLEAN",
+    "continuous_minimum_free_bytes": 4294967296,
+    "echild": true,
+    "elapsed_seconds": 2.4417833820007218,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "outer_timeout_seconds": 300.0,
+    "peak_sampled_root_rss_bytes": 142426112,
+    "returncode": 1,
+    "root_reaped": true,
+    "status": "COMPLETE"
+  },
+  "guard_sha256": "0fa802dbb6b0c054a4801151f02b3b57fcec6c9b96e78dfaff6acab8e5dc50cc",
+  "native_execution": "UNRUN",
+  "packet_manifest_sha256": "db4eec0d9bb18bda8e26ddf7874b462288e25a42a649a5ae11fce1baa7ad88e5",
+  "performance_claim": "None",
+  "preservation_commit": "b96902a1c32d9681761a533cba54fcde2868a94c",
+  "production_base_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "program_sha256": "485230dc67510433ebd2a697a90d8b30d97186c211208537f6cb59c33061410c",
+  "qualification_sha256": "7a638316c2eb2e78d7e8bb9a8113152b33c197691ad26eebe1be832cddc7bfc8",
+  "reference": "PASS",
+  "reference_output": {
+    "stderr": "",
+    "stdout": "OS_ERROR_CONSTRUCTORS_OK\n"
+  },
+  "reference_sha256": "eda4122a176fb30c7785426ea0fa8b086ca7152f705bdd28efd8f8f72d6615ab",
+  "result_sha256": "46abe6c877ae193e6b9e1f4715a8108914b92f9721bdd1e4c3a5c3d947276506",
+  "retained_profile": {
+    "configured_emitter_jobs": 4,
+    "frontend_modules": 1,
+    "generated_ir_bytes": 2809632
+  },
+  "runtime_sha256": "42ed3029a7fdf560dba6ba8f8c22133f736e2cba0a0ed65267505f25d51af97a",
+  "runtime_source_after": {
+    "bytes": 5144901,
+    "files": 220,
+    "status": "PASS"
+  },
+  "schema": "pcc.oserror_constructor_public_compile_qualification.v1",
+  "scope": "One unchanged original constructor PROGRAM reference and ordinary public compile attempt",
+  "source_after": {
+    "bytes": 44453538,
+    "files": 3866,
+    "status": "PASS"
+  },
+  "source_before": {
+    "bytes": 44453538,
+    "files": 3866,
+    "status": "PASS"
+  },
+  "source_imports_postcheck": "UNRUN after compile failure",
+  "source_manifest_sha256": "03538c5d750db4b1e8541cae229d0c5695a376a2b5ed80b6a451cb7818319c19",
+  "status": "INFRASTRUCTURE_BLOCKED",
+  "target_pass_environment": {
+    "PCC_SELF_TARGET_PASSES": null,
+    "PCC_SELF_TARGET_PASS_TRANSPORT": null
+  },
+  "unrun": [
+    "Native constructor GC0/1",
+    "GC2-4",
+    "Darwin",
+    "native pcc1",
+    "full async/gateway",
+    "broad regressions",
+    "full Stage1"
+  ]
+}

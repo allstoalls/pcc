@@ -5,7 +5,7 @@ import json
 import os
 import subprocess
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def _ir(tmp_path, source):
@@ -47,7 +47,7 @@ def probe():
 
 
 def test_host_compile_executes_c_obj_contract_on_all_gc_backends(
-    tmp_path, pcc_py_runtime_archive,
+    tmp_path, pcc_runtime_archive,
 ):
     """Host frontend compilation followed by native GC0–4 execution.
 
@@ -61,13 +61,13 @@ def test_host_compile_executes_c_obj_contract_on_all_gc_backends(
     source.write_text(SOURCE, encoding="utf-8")
     compile_python(
         str(source), str(executable), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     receipts = {
         "scope": "host compile_python -> native execution; not a native compiler gate",
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
-        "runtime_archive": str(pcc_py_runtime_archive),
-        "runtime_sha256": hashlib.sha256(pcc_py_runtime_archive.read_bytes()).hexdigest(),
+        "runtime_archive": str(pcc_runtime_archive),
+        "runtime_sha256": hashlib.sha256(pcc_runtime_archive.read_bytes()).hexdigest(),
         "executable_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
         "runs": [],
     }

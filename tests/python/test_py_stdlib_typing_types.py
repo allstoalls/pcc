@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pcc.py_stdlib import typing as t
-from pcc.py_stdlib import types as ty
+from pcc.stdlib import typing as t
+from pcc.stdlib import types as ty
 
 
 def test_typing_generic_markers_preserve_origin_and_args():

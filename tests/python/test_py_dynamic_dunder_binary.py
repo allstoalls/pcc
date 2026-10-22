@@ -14,7 +14,7 @@ REPO = repo_root()
 
 
 def test_dynamic_receiver_truediv_compiles_dunder_self_backend(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "dynamic_truediv.py"
     src.write_text(textwrap.dedent(
@@ -94,7 +94,7 @@ def test_pcc1_dynamic_truediv_unknown_receiver_compile_only(tmp_path):
 
 
 def test_int_builtin_on_class_instance_compiles_dunder_self_backend(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "class_int_dunder.py"
     src.write_text(textwrap.dedent(
@@ -172,7 +172,7 @@ def test_pcc1_int_builtin_on_class_instance_compile_only(tmp_path):
 
 
 def test_class_instance_numeric_rhs_uses_dynamic_mul_dunder_self_backend(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "class_numeric_rhs_mul.py"
     src.write_text(textwrap.dedent(

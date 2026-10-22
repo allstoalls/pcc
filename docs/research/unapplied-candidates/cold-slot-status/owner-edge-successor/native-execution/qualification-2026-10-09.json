@@ -1,0 +1,142 @@
+{
+  "candidate_source_manifest_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "compiler_sha256": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+  "date_utc": "2026-10-09",
+  "execution_order": [
+    "candidate GC0",
+    "candidate GC1",
+    "inline-reference GC0",
+    "inline-reference GC1"
+  ],
+  "executions": [
+    {
+      "arm": "candidate",
+      "cleanup": "CLEAN",
+      "collection_events": 6,
+      "echild": true,
+      "elapsed_seconds": 0.24668467199990118,
+      "executable_sha256": "912aea9c4a76f91efb839856c978b13384d4e0341d4b3d92b5b1c37aaa196cb6",
+      "observed_gc": [
+        0
+      ],
+      "peak_sampled_rss_bytes": 21860352,
+      "receipt_sha256": "ed25932e4048709de0094b183e6fb19c7cfdf029e6ba05707062f9b75ed6f69c",
+      "requested_gc": 0,
+      "returncode": 0,
+      "root_reaped": true,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "slot-status-owned-callsite-ok\n"
+    },
+    {
+      "arm": "candidate",
+      "cleanup": "CLEAN",
+      "collection_events": 6,
+      "echild": true,
+      "elapsed_seconds": 0.20582302499860816,
+      "executable_sha256": "912aea9c4a76f91efb839856c978b13384d4e0341d4b3d92b5b1c37aaa196cb6",
+      "observed_gc": [
+        1
+      ],
+      "peak_sampled_rss_bytes": 21860352,
+      "receipt_sha256": "03d48722ee1f437815fb05c2e756f5c74443b69106f021a2011af8cb42c28cc0",
+      "requested_gc": 1,
+      "returncode": 0,
+      "root_reaped": true,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "slot-status-owned-callsite-ok\n"
+    },
+    {
+      "arm": "inline-reference",
+      "cleanup": "CLEAN",
+      "collection_events": 6,
+      "echild": true,
+      "elapsed_seconds": 0.16577164299997094,
+      "executable_sha256": "84aa5f918b6137ff4a89b41d374c53d3b9f84242ab0e20b1e94d63ee1dfdb607",
+      "observed_gc": [
+        0
+      ],
+      "peak_sampled_rss_bytes": 21843968,
+      "receipt_sha256": "fc3dc76af58ba0e0b18578b3f5c7463ebae402280a61a89ee02a34edfc8556f7",
+      "requested_gc": 0,
+      "returncode": 0,
+      "root_reaped": true,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "slot-status-owned-callsite-ok\n"
+    },
+    {
+      "arm": "inline-reference",
+      "cleanup": "CLEAN",
+      "collection_events": 6,
+      "echild": true,
+      "elapsed_seconds": 0.16534875799879956,
+      "executable_sha256": "84aa5f918b6137ff4a89b41d374c53d3b9f84242ab0e20b1e94d63ee1dfdb607",
+      "observed_gc": [
+        1
+      ],
+      "peak_sampled_rss_bytes": 21848064,
+      "receipt_sha256": "35237fc4730a04bdd73474eb5ce7e9e1d328cadb382567ad311b46413951f46a",
+      "requested_gc": 1,
+      "returncode": 0,
+      "root_reaped": true,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "slot-status-owned-callsite-ok\n"
+    }
+  ],
+  "failed_native_executions": 0,
+  "integrity": {
+    "complete_candidate_source_inventory": "PASS before and after",
+    "complete_canonical_source_inventory": "PASS before and after",
+    "elf_bytes": "Unchanged for each arm",
+    "native_fixture": "Unchanged",
+    "runtime_archive_and_sidecars": "Unchanged"
+  },
+  "native_packet_manifest_sha256": "c2f6ba10e39ffa3dc406e649bdfdb6358c952fae3d4d166cb3b16e62df3d427d",
+  "packet_preservation_commit": "e77b43dff9f60f6531ff091e615d554127bac17e",
+  "passed_native_executions": 4,
+  "performance_claim": "None. The per-run guard elapsed times are outcome diagnostics, not a performance benchmark.",
+  "program_sha256": "1f9407b70ea3b765c4bba302dea9ecca7d363f5ddeef7b5af4b301f657e8adc6",
+  "runtime_configuration": {
+    "ordered_members": 191,
+    "refcount": "atomic",
+    "target": "x86_64-unknown-linux-gnu",
+    "threads": true
+  },
+  "runtime_sha256": "a6645f903e03f6766ecc7466b76f2993318582d287a393831aa5522158421915",
+  "schema": "pcc.cold_slot_native_public_qualification.v1",
+  "scope": "Two already compiled Linux x86-64 executables of the unchanged Python callsite fixture, run once per observed GC0/GC1 backend. The inline arm restores one reporting method within the same compiler and runtime.",
+  "sealed_qualification_sha256": "30a04c07cfa121fdc1ecf4e33d15bc854b033f428761b3e04716534590d69da8",
+  "semantics_exercised": [
+    "Original ValueError identity and message survive the failing keyword call",
+    "TypeError is raised for the unexpected keyword argument",
+    "The owned Temporary argument is finalized before the exact events assertion",
+    "The successful keyword call returns the expected value",
+    "Actual runtime collection events identify only the requested collector"
+  ],
+  "source_patch_sha256": "4dd5955455944d3b905fd7f5998ac874fd0b815c22d45af13092f9c582259136",
+  "status": "PASS",
+  "supervision": {
+    "cleanup": "All four roots reaped, ECHILD true and no remaining handles",
+    "continuous_free_space_reserve_bytes": 4294967296,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "native_alarm_seconds": 10,
+    "outer_seconds_each": 15,
+    "restriction": "This zero-process boundary admits GC0/GC1 only. It is not a filesystem/network sandbox.",
+    "same_pid_descriptor_exec": true,
+    "sigalrm_explicitly_unblocked": true
+  },
+  "test_successor_delta_sha256": "43e74045c8305a16caa0c88f4404476f3ce752a5cd8039250534b274212fd4ac",
+  "unrun": [
+    "GC2",
+    "GC3",
+    "GC4",
+    "Separate C fixture: fresh RuntimeError creation, source-frame order and root/refcount comparison",
+    "Compiled pcc1",
+    "macOS execution",
+    "Full async/gateway suites"
+  ]
+}

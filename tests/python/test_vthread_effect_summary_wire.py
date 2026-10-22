@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend.vthread_effect_summary_wire import read_summary, write_summary
+from pcc.frontends.python.vthread_effect_summary_wire import read_summary, write_summary
 
 
 def test_vthread_effect_summary_wire_is_deterministic_and_roundtrips(

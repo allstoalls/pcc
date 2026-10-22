@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import ast
 import inspect
+import re
 import subprocess
 import textwrap
 
-from pcc.py_frontend.codegen.binary_op_lowering import BinaryOpLoweringMixin
-from pcc.py_frontend.codegen.host_contract import L1_CODEGEN_HOST_METHODS
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.codegen.binary_op_lowering import BinaryOpLoweringMixin
+from pcc.frontends.python.codegen.host_contract import L1_CODEGEN_HOST_METHODS
+from pcc.frontends.python.pipeline import compile_python
 
 
 def _source() -> str:
@@ -60,7 +61,7 @@ def test_dyn_tagged_int_binop_preserves_object_semantics(tmp_path):
     compile_python(
         str(src),
         str(exe),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )
@@ -88,7 +89,7 @@ def test_dyn_tagged_int_binop_emits_fast_path(tmp_path):
     compile_python(
         str(src),
         str(ll),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
         emit_llvm_only=True,
@@ -96,10 +97,11 @@ def test_dyn_tagged_int_binop_emits_fast_path(tmp_path):
     ir_text = ll.read_text(encoding="utf-8")
 
     assert "int.tag.fast" in ir_text
-    assert "call ptr @py_obj_add" in ir_text
-    assert "call ptr @py_obj_and" in ir_text
-    assert "call ptr @py_obj_or" in ir_text
-    assert "call ptr @py_obj_xor" in ir_text
+    for callee in ("py_obj_add", "py_obj_and", "py_obj_or", "py_obj_xor"):
+        assert re.search(
+            r"call ptr(?: \(ptr, ptr\))? @" + callee + r"\(ptr [^,]+, ptr [^)]+\)",
+            ir_text,
+        ), callee
     assert "@py_obj_lshift" in ir_text
 
 
@@ -129,10 +131,12 @@ def test_dyn_tagged_int_binop_has_one_wrapper_owner():
         "py_obj_xor",
         "py_obj_lshift",
         "py_obj_rshift",
+        "py_obj_pow",
     }
     assert runtime_owners <= _string_constants(helper)
     assert not (runtime_owners & _string_constants(caller))
-    assert caller_source.count("self._emit_dyn_tagged_int_object_binop(") == 4
+    # +, -, *, the bitwise/shift group and ** (ae6ecaae4 gave ** its own).
+    assert caller_source.count("self._emit_dyn_tagged_int_object_binop(") == 5
     assert helper_source.count("marshal.marshal_to_object(") == 2
     assert "self._emit_inline_tagged_int_binop_or_call(" in helper_source
     assert "self._emit_post_call_err_check(" in helper_source

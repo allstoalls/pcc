@@ -4,8 +4,8 @@ import os
 import subprocess
 
 
-def test_repeated_object_start_checks_observe_retirement_and_reuse(tmp_path, pcc_py_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+def test_repeated_object_start_checks_observe_retirement_and_reuse(tmp_path, pcc_runtime_archive):
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "object_geometry.py"
     source.write_text('''from pcc.extern import extern, c_rawptr, c_ptr, c_int64
@@ -51,7 +51,7 @@ main()
 ''')
     binary = tmp_path / "object_geometry"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
                                 capture_output=True, text=True, timeout=20)

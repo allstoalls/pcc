@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from pcc.py_stdlib import abc
-from pcc.py_stdlib import enum
-from pcc.py_stdlib import inspect
-from pcc.py_stdlib import weakref
+from pcc.stdlib import abc
+from pcc.stdlib import enum
+from pcc.stdlib import inspect
+from pcc.stdlib import weakref
 
 
 def test_abc_abstractmethod_register_and_cache_token():

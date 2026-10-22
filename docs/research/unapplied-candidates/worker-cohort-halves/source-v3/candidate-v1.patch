@@ -1,0 +1,236 @@
+--- a/pcc/frontends/python/worker_resource_plan.py
++++ b/pcc/frontends/python/worker_resource_plan.py
+@@ -111,8 +111,9 @@
+     """Keep small independent codegen cohorts ahead of large peak samples.
+ 
+     Source/AST bytes vary per singleton; full-export bytes and module count
+-    do not. Exclude those shared features from the size band. The largest
+-    input in each band calibrates first, with the existing componentwise
++    do not. Split each power-of-two size band at its arithmetic midpoint,
++    limiting a cohort to a size ratio below 1.5 instead of 2. The largest
++    input in each half-band calibrates first, with the existing componentwise
+     coverage and maximum-peak estimator unchanged. Task indices never move.
+     Other phases, mixed classes and dependency-bearing tasks keep their old
+     priority and readiness rules.
+@@ -138,9 +139,14 @@
+             return pending, []
+         size = inputs[0] + inputs[2]
+         band = 0
+-        while size > 0:
+-            size //= 2
++        upper = 1
++        while upper <= size:
++            upper *= 2
+             band += 1
++        if size > 0:
++            # [2**k, 2**(k+1)) splits at 3*2**(k-1). Integer
++            # comparison also handles the smallest intervals exactly.
++            band = 2 * band + (1 if 4 * size >= 3 * upper else 0)
+         bands.append(band)
+     pending = sorted(pending, key=lambda index: (
+         bands[index], -sum(tasks[index]["inputs"]), index,
+--- a/pcc/frontends/python/worker_process_pool.py
++++ b/pcc/frontends/python/worker_process_pool.py
+@@ -124,7 +124,7 @@
+             )
+ 
+ 
+-def _resource_diagnostic(task, event, index, pid, reservation, available, peak):
++def _resource_diagnostic(task, event, index, pid, reservation, available, peak, cohort=-1):
+     """Keep safe task identity and admission evidence after temp files unwind."""
+     if str(os.environ.get("PCC_PY_FRONTEND_WORKER_TIMING", "") or "").strip().lower() not in (
+         "1", "true", "yes", "on",
+@@ -133,8 +133,12 @@
+     # Never log the command, environment, source, AST, report path or token.
+     # repr keeps unusual module names from forging extra diagnostic lines.
+     # Bound each batch line while preserving every assigned module/index.
++    import hashlib
++
+     modules = task.get("diagnostic_modules", [])
+     indices = task.get("diagnostic_indices", [])
++    inputs = task.get("inputs", [])
++    class_digest = hashlib.sha256(str(task.get("class", "")).encode("utf-8")).hexdigest()
+     count = max(1, len(modules), len(indices))
+     offset = 0
+     while offset < count:
+@@ -149,6 +153,10 @@
+             + " reservation_bytes=" + str(reservation)
+             + " available_bytes=" + str(available)
+             + " peak_bytes=" + str(peak)
++            + " input_count=" + str(len(inputs))
++            + " inputs=" + repr(inputs[:8])
++            + " class_sha256=" + class_digest
++            + " cohort=" + str(cohort)
+             + " monotonic_s=" + str(time.monotonic()) + "\n"
+         )
+         offset += 16
+@@ -217,7 +225,8 @@
+                 active = [item for item in active if item[1] != pid]
+                 if result:
+                     _resource_event(trace_path, "failed", index, pid, reservation, 0, observed_peak)
+-                    _resource_diagnostic(tasks[index], "failed", index, pid, reservation, 0, observed_peak)
++                    _resource_diagnostic(tasks[index], "failed", index, pid, reservation, 0, observed_peak,
++                                         bands[index] if bands else -1)
+                     raise subprocess.CalledProcessError(result, commands[index])
+                 # The child may publish complete and exit between the earlier
+                 # live read and poll. Only a fresh post-success read can bind
+@@ -225,11 +234,13 @@
+                 report = read_worker_resource(str(tasks[index]["report_path"]), pid, attempt_tokens[pid])
+                 if report is None or report[0] != "complete":
+                     _resource_event(trace_path, "unverified-retire", index, pid, reservation, 0, observed_peak)
+-                    _resource_diagnostic(tasks[index], "unverified-retire", index, pid, reservation, 0, observed_peak)
++                    _resource_diagnostic(tasks[index], "unverified-retire", index, pid, reservation, 0, observed_peak,
++                                         bands[index] if bands else -1)
+                     raise WorkerMemoryError("completed worker did not publish final peak RSS: task=" + str(index))
+                 observed_peak = max(observed_peak, report[2])
+                 _resource_event(trace_path, "retire", index, pid, reservation, 0, observed_peak)
+-                _resource_diagnostic(tasks[index], "retire", index, pid, reservation, 0, observed_peak)
++                _resource_diagnostic(tasks[index], "retire", index, pid, reservation, 0, observed_peak,
++                                         bands[index] if bands else -1)
+                 observations.append((tasks[index]["class"], tasks[index]["inputs"], observed_peak))
+                 if tasks[index].get("retry_calibration", False):
+                     tasks[index]["retry_calibration"] = False
+@@ -322,7 +333,8 @@
+                 active.pop()
+                 fresh_after = time.monotonic()
+                 _resource_event(trace_path, "cancel", index, pid, reservation, available, observed_peak)
+-                _resource_diagnostic(tasks[index], "cancel", index, pid, reservation, available, observed_peak)
++                _resource_diagnostic(tasks[index], "cancel", index, pid, reservation, available, observed_peak,
++                                     bands[index] if bands else -1)
+                 if retries[index] >= 1:
+                     raise WorkerMemoryError("worker peak estimate remains unstable after one bounded retry: task=" + str(index))
+                 retries[index] += 1
+@@ -407,7 +419,8 @@
+                 _resource_event(trace_path, "calibrate" if exclusive and retries[index] == 0 else "start",
+                                 index, pid, demand, available, 0)
+                 _resource_diagnostic(tasks[index], "calibrate" if exclusive and retries[index] == 0 else "start",
+-                                     index, pid, demand, available, 0)
++                                     index, pid, demand, available, 0,
++                                     bands[index] if bands else -1)
+                 if exclusive:
+                     break
+                 # Refresh live reports and the synchronized tree before the
+--- a/tests/python/test_worker_codegen_cohorts.py
++++ b/tests/python/test_worker_codegen_cohorts.py
+@@ -23,8 +23,8 @@
+     tasks = [task(n, i) for i, n in enumerate([16, 3, 2, 8, 3, 0])]
+     before = copy.deepcopy(tasks)
+     order, bands = policy.resource_task_order(tasks)
+-    assert order == [5, 1, 4, 2, 3, 0]
+-    assert bands == [6, 3, 3, 5, 3, 0]
++    assert order == [5, 2, 1, 4, 3, 0]
++    assert bands == [12, 7, 6, 10, 7, 0]
+     assert sorted(order) == list(range(len(tasks)))
+     assert tasks == before
+     assert policy.resource_task_order(tasks) == (order, bands)
+@@ -81,7 +81,8 @@
+ 
+ 
+ def mock_pool(tmp_path, monkeypatch, failure=False, growth=False):
+-    tasks = [task(n, i) for i, n in enumerate([70, 50, 40, 12, 10, 9, 300])]
++    # Keep the original overlapping/growth witnesses inside each new half-band.
++    tasks = [task(n, i) for i, n in enumerate([70, 44, 40, 11, 10, 9, 300])]
+     for i, item in enumerate(tasks): item['report_path'] = str(tmp_path / ('rss' + str(i)))
+     monkeypatch.delenv(policy.TREE_STATE_ENV, raising=False)
+     monkeypatch.delenv('PCC_PY_FRONTEND_WORKER_TIMING', raising=False)
+@@ -179,7 +180,7 @@
+     import sys
+ 
+     monkeypatch.delenv(policy.TREE_STATE_ENV, raising=False)
+-    tasks = [task(n, i) for i, n in enumerate([70, 12, 10, 9])]
++    tasks = [task(n, i) for i, n in enumerate([70, 11, 10, 9])]
+     commands = []
+     for index, item in enumerate(tasks):
+         item['report_path'] = str(tmp_path / ('rss' + str(index)))
+@@ -205,3 +206,91 @@
+     assert all(next(i for i, row in enumerate(rows) if row[:2] == ['retire', str(index)]) < later for index in (1, 2, 3))
+     assert all((tmp_path / ('original-output' + str(index))).read_text() == str(index) for index in range(4))
+     assert len(observations) == 4 and pool._HOST_WORKERS == {}
++
++
++@pytest.mark.parametrize("size,expected", [
++    (0, 0), (1, 2), (2, 4), (3, 5), (4, 6), (5, 6),
++    (6, 7), (7, 7), (8, 8), (11, 8), (12, 9), (15, 9),
++    (16, 10), (23, 10), (24, 11), (31, 11), (32, 12),
++])
++def test_half_band_integer_boundaries(size, expected):
++    item = task(0)
++    item['inputs'][:4] = [size, size, 0, 0]
++    assert policy.resource_task_order([item]) == ([0], [expected])
++
++
++def test_finer_order_keeps_larger_peak_after_smaller_half_band():
++    # 20 and 26 used to share [16,32); a 26-byte high-RSS task would
++    # calibrate first. The lower half now drains before it can contribute.
++    tasks = [task(13, 0), task(10, 1), task(9, 2)]
++    order, bands = policy.resource_task_order(tasks)
++    assert order == [1, 2, 0] and bands[1] == bands[2] < bands[0]
++    low = (tasks[1]['class'], list(tasks[1]['inputs']), 100 * MIB)
++    assert policy.estimated_task_bytes(tasks[2], [low]) == policy.peak_reservation(100 * MIB)
++    assert policy.estimated_task_bytes(tasks[0], [low]) == 0
++    high = (tasks[0]['class'], list(tasks[0]['inputs']), 900 * MIB)
++    # Sorting never filters, deletes or substitutes a MAX observation.
++    assert policy.estimated_task_bytes(tasks[2], [low, high]) == policy.peak_reservation(900 * MIB)
++    assert policy.ready_resource_cohort([0], [0], [1, 2], bands) == []
++    assert policy.ready_resource_cohort([0], [0], [], bands) == [0]
++
++
++def test_smaller_completed_cohort_cannot_cover_larger_pending_vector():
++    # Source/AST can trade off; the sum argument holds in both dimensions.
++    tasks = []
++    for source in range(9):
++        for wire in range(9):
++            item = task(0, len(tasks))
++            item['inputs'][:4] = [source, source, wire, wire]
++            tasks.append(item)
++    _order, bands = policy.resource_task_order(tasks)
++    for before, observed in enumerate(tasks):
++        for after, pending in enumerate(tasks):
++            if bands[before] < bands[after]:
++                assert not policy.input_envelope_covers(observed['inputs'], pending['inputs'])
++
++
++def test_half_bands_preserve_huge_integer_and_equal_vector_order():
++    size = 2 ** 80
++    tasks = [task(size, 0), task(size, 1), task(size - 1, 2)]
++    order, bands = policy.resource_task_order(tasks)
++    assert order == [2, 0, 1] and bands[0] == bands[1] > bands[2]
++    assert tasks[0]['inputs'][0] == size
++
++
++def test_admission_diagnostic_records_bounded_inputs_and_private_class_digest(monkeypatch, capsys):
++    import hashlib
++
++    monkeypatch.setenv('PCC_PY_FRONTEND_WORKER_TIMING', '1')
++    item = task(10, 4)
++    item['class'] = '/private/manifest|/private/compiler|codegen|secret-token'
++    item['report_path'] = '/private/report'
++    pool._resource_diagnostic(item, 'start', 4, 123, 500, 1000, 0, cohort=10)
++    text = capsys.readouterr().err
++    assert text.count('pcc frontend admission event=') == 1
++    assert 'input_count=6 inputs=[10, 10, 10, 10, 100000000, 1]' in text
++    assert 'class_sha256=' + hashlib.sha256(item['class'].encode()).hexdigest() in text
++    assert 'cohort=10' in text and 'module_count=1 mapping_offset=0' in text
++    assert '/private' not in text and 'secret-token' not in text
++
++
++@pytest.mark.parametrize('enabled', ['', '0', 'false'])
++def test_disabled_admission_diagnostic_never_reads_task(enabled, monkeypatch, capsys):
++    monkeypatch.setenv('PCC_PY_FRONTEND_WORKER_TIMING', enabled)
++    pool._resource_diagnostic(object(), 'start', 0, 1, 1, 1, 0)
++    assert capsys.readouterr().err == ''
++
++
++def test_admission_diagnostic_bounds_unknown_input_shape_and_keeps_batch_mapping(monkeypatch, capsys):
++    monkeypatch.setenv('PCC_PY_FRONTEND_WORKER_TIMING', '1')
++    item = task(10)
++    item['inputs'] = list(range(20))
++    item['diagnostic_modules'] = ['module' + str(i) for i in range(18)]
++    item['diagnostic_indices'] = list(range(18))
++    pool._resource_diagnostic(item, 'retire', 2, 99, 500, 0, 300)
++    lines = capsys.readouterr().err.splitlines()
++    assert len(lines) == 2
++    assert all('input_count=20 inputs=[0, 1, 2, 3, 4, 5, 6, 7]' in line for line in lines)
++    assert 'mapping_offset=0' in lines[0] and 'mapping_offset=16' in lines[1]
++    assert 'indices=[16, 17]' in lines[1] and "modules=['module16', 'module17']" in lines[1]
++    assert all('cohort=-1' in line for line in lines)

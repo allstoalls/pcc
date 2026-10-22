@@ -21,10 +21,10 @@ import zlib as host_zlib
 
 import pytest
 
-from pcc.py_stdlib import bz2 as port_bz2
-from pcc.py_stdlib import gzip as port_gzip
-from pcc.py_stdlib import lzma as port_lzma
-from pcc.py_stdlib import zlib as port_zlib
+from pcc.stdlib import bz2 as port_bz2
+from pcc.stdlib import gzip as port_gzip
+from pcc.stdlib import lzma as port_lzma
+from pcc.stdlib import zlib as port_zlib
 
 
 def test_compression_parameter_boundaries_fail_before_native_dispatch():

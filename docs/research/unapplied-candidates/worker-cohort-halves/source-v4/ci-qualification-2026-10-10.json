@@ -1,0 +1,334 @@
+{
+  "artifacts": {
+    "bootstrap-linux-aarch64": {
+      "CRC": "PASS",
+      "artifact_id": 11661983321,
+      "bytes": 1143112,
+      "sha256": "88fe4bc0a07f1b6d01ddea19f950a7003c855443da514a1f3cf37269cd03f5e3",
+      "zip_members": 199
+    },
+    "bootstrap-linux-x86_64": {
+      "CRC": "PASS",
+      "artifact_id": 11661508783,
+      "bytes": 998758,
+      "sha256": "4fd222ef8f3f75a76c423af89870ec04c29574697becfe3606d2a3385d98dd1c",
+      "zip_members": 198
+    },
+    "bootstrap-macos-arm64": {
+      "CRC": "PASS",
+      "artifact_id": 11661074713,
+      "bytes": 325397,
+      "sha256": "7fdb258e7aad99cf3fee12925af5f578fe0cd864a96663b21ef23852858a6668",
+      "zip_members": 6
+    },
+    "bootstrap-windows-x86_64": {
+      "CRC": "PASS",
+      "artifact_id": 11661748304,
+      "bytes": 1001553,
+      "sha256": "bf0e49196eff248ce4ffae36553f08b205d44e0dbed903b9a65551a121318bef",
+      "zip_members": 200
+    },
+    "macos-pcc0-regression-receipts": {
+      "CRC": "PASS",
+      "artifact_id": 11662125653,
+      "bytes": 206257,
+      "sha256": "56db9d60ba1c8ff0c88e477274059d799a249cd0623952e17ac7dccd9a11ab88",
+      "zip_members": 225
+    }
+  },
+  "conclusion": "failure",
+  "event": "push",
+  "focused_macos_pcc0": {
+    "actual_pytest_nodes_passed": 13,
+    "gates": {
+      "clock": {
+        "call_seconds": 0.03398508300000458,
+        "nodeids": [
+          "tests/python/test_worker_state_clock_contract.py::test_emitted_host_clock_shares_cpython_epoch_across_processes",
+          "tests/python/test_worker_state_clock_contract.py::test_darwin_clock_abi_matches_host_state_after_system_suspend[17924]"
+        ],
+        "qualification_live_sha256": "6b3646ffef5ac66f840b3a641c0cda7d9903c6406dfadc481d0335efc7e81c97",
+        "status": "PASS"
+      },
+      "native-worker-clock": {
+        "call_seconds": 36.87421387500001,
+        "nodeids": [
+          "tests/python/test_native_worker_state_clock.py::test_native_worker_state_reader_matches_host_clock[pcc0]"
+        ],
+        "qualification_live_sha256": "07fd20f2bd7783f891e68ec377ce13f83c4e432e8119e612850b482ace7f55a3",
+        "status": "PASS"
+      },
+      "oserror": {
+        "call_seconds": 31.52360945800001,
+        "nodeids": [
+          "tests/python/test_os_error_constructors.py::test_os_error_constructor_native_five_gc[pcc0]",
+          "tests/python/test_native_open_errno.py::test_open_errno_native_five_gc[pcc0]"
+        ],
+        "qualification_live_sha256": "19a64d7ed9ca56dbc9cefe9e1f620b1f0de81b8aaad9082777756fef0445a4e0",
+        "status": "PASS"
+      },
+      "root-joins": {
+        "call_seconds": 582.539549459,
+        "nodeids": [
+          "tests/python/test_valueclass_aggregate_ownership_native.py::test_aggregate_ownership_native_five_gc[pcc0-typed-list-unbox]",
+          "tests/python/test_valueclass_aggregate_ownership_native.py::test_aggregate_ownership_native_five_gc[pcc0-typed-loop-unbox]",
+          "tests/python/test_valueclass_aggregate_ownership_native.py::test_aggregate_ownership_native_five_gc[pcc0-typed-comprehension-unbox]",
+          "tests/python/test_valueclass_aggregate_ownership_native.py::test_aggregate_ownership_native_five_gc[pcc0-original-direct-payload]",
+          "tests/python/test_valueclass_aggregate_ownership_native.py::test_aggregate_ownership_native_five_gc[pcc0-original-valuebox]"
+        ],
+        "qualification_live_sha256": "bb9e8924a2bb51246c4d137f4cfb5ca2c1a892a10a814ff3c1f47e88c855b7c6",
+        "status": "PASS"
+      },
+      "time": {
+        "call_seconds": 27.681262457999992,
+        "nodeids": [
+          "tests/python/test_owned_darwin_time_runtime.py::test_darwin_import_time_and_gmtime_execute[pcc0]"
+        ],
+        "qualification_live_sha256": "4b4bc8ee1cee7b274cf1d3bedf64dbc1a9d9c037b7808938f9c71df5e6dd5e5a",
+        "status": "PASS"
+      },
+      "worker-handles": {
+        "call_seconds": 104.42314895799996,
+        "nodeids": [
+          "tests/python/test_worker_resource_plan.py::test_resource_acceptance_driver_matches_cpython[handles]",
+          "tests/python/test_worker_resource_setpgid.py::test_darwin_resource_fixture_handles_execute[pcc0]"
+        ],
+        "qualification_live_sha256": "f7e23b228eb9a165c94d60f2bf78ca0f7b40d2379b0542b4b540abf9225fda21",
+        "status": "PASS"
+      }
+    },
+    "gc_scope": "Ten native executions requested configurations0-4; collector-selection telemetry is not established by this unchanged helper.",
+    "oserror_native_programs": [
+      {
+        "binary_sha256": "3e2350da3a35cbf6a1fc7e8c333b77db3c957884958f538dbffdf0a6e3026d1b",
+        "empty_stderr_each": true,
+        "executions_passed": 5,
+        "expected_stdout": "OPEN_ERRNO_OK\n",
+        "fixture": "test_open_errno_native_five_gc0",
+        "observed_collector_telemetry": "NOT_ASSERTED_BY_ORIGINAL_HELPER",
+        "program_sha256": "4b2bddca6830f26c7b9f1d7148fe494906694a04188f191ab08bca939b6ab35d",
+        "raw_receipt_sha256": "67a600e27cba5a2dad0cd927a578410206b9886420768f6e035cdb9598bd2a1b",
+        "reference_equal": true,
+        "requested_gc_configurations": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "returncode_each": 0,
+        "runtime_sha256": "a4972f82bd153942457b850147cef9081bf51d9eb754a95eb565f373e8d67e80"
+      },
+      {
+        "binary_sha256": "6643c18d8db6e5d70dd9bf4cb2a631d57ea168a6810aedd024bb9ed0c53c1381",
+        "empty_stderr_each": true,
+        "executions_passed": 5,
+        "expected_stdout": "OS_ERROR_CONSTRUCTORS_OK\n",
+        "fixture": "test_os_error_constructor_nati0",
+        "observed_collector_telemetry": "NOT_ASSERTED_BY_ORIGINAL_HELPER",
+        "program_sha256": "485230dc67510433ebd2a697a90d8b30d97186c211208537f6cb59c33061410c",
+        "raw_receipt_sha256": "d4f72c3a0a02b0d7b6f938251e480bec53caf743c2b44b6b84237a9f0d538b77",
+        "reference_equal": true,
+        "requested_gc_configurations": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "returncode_each": 0,
+        "runtime_sha256": "a4972f82bd153942457b850147cef9081bf51d9eb754a95eb565f373e8d67e80"
+      }
+    ],
+    "raw_qualification_sha256": "5057b62046eb5ae025512bb3b0ed75eff03e7ad525af196069427d7549ea472a",
+    "raw_supervisor_sha256": "60277c99eef4ebca910536141ec4f7466c4ed3f9a26a003c2f6341ead1561ffc",
+    "runtime": {
+      "archive_sha256": "a4972f82bd153942457b850147cef9081bf51d9eb754a95eb565f373e8d67e80",
+      "capi_inventory_sha256": "71ab7e714faa2f754fd353fc6d7f50cf95267d32f4388895b95d30ddd01dffda",
+      "codegen_sha256": [
+        "fd426a9915c9123023f533839feadde4ddeceaf0e839fe44a9e589e9a21b9f75"
+      ],
+      "config": {
+        "refcount": "atomic",
+        "threads": true
+      },
+      "member_count": 181,
+      "provenance_sha256": "9283f4ea20900871a308c71924cbd59b1fafe266a7a7f5978fc740b34355840d",
+      "target": "arm64-apple-darwin"
+    },
+    "runtime_build": "PASS_SEPARATE_FROM_13_NODES",
+    "supervisor": {
+      "completed_at_utc": "2026-10-10T06:01:11.967702+00:00",
+      "elapsed_s": 1191.8888434169999,
+      "max_tree_rss_bytes": 2823503872,
+      "peak_tree_rss_bytes": 1117798400,
+      "returncode": 0,
+      "started_at_utc": "2026-10-10T05:41:20.078694+00:00",
+      "status": "COMPLETE",
+      "terminal_processes": [],
+      "timeout_s": 1200.0
+    }
+  },
+  "head_pcc_tree": "2d087588b3dce59d5f3ddceaa7af327b0f70f010",
+  "head_sha": "a7282a82ef885412e90143e1cede90dcfd8c0d81",
+  "jobs": [
+    {
+      "conclusion": "failure",
+      "failed_steps": [
+        "Build current pcc1"
+      ],
+      "id": 114143787496,
+      "name": "macOS arm64 native pcc1 and installed wheel",
+      "skipped_steps": [
+        "Build, install, and execute the native wheel",
+        "Run pcc1 package parity hard gate",
+        "Post Set up uv",
+        "Post Set up Python"
+      ]
+    },
+    {
+      "conclusion": "failure",
+      "failed_steps": [
+        "Qualify all five GC self-host chains"
+      ],
+      "id": 114143787662,
+      "name": "Native wheel / linux-x86_64",
+      "skipped_steps": [
+        "Install Windows publication test tools",
+        "Verify Windows RSS publication with a held reader",
+        "Build this machine's native wheel",
+        "Install and execute the Linux wheel inside Docker",
+        "Install and execute the Windows wheel inside Docker",
+        "Install wheel and execute native output on the runner",
+        "Post Set up Python"
+      ]
+    },
+    {
+      "conclusion": "failure",
+      "failed_steps": [
+        "Qualify all five GC self-host chains"
+      ],
+      "id": 114143787683,
+      "name": "Native wheel / linux-aarch64",
+      "skipped_steps": [
+        "Install Windows publication test tools",
+        "Verify Windows RSS publication with a held reader",
+        "Build this machine's native wheel",
+        "Install and execute the Linux wheel inside Docker",
+        "Install and execute the Windows wheel inside Docker",
+        "Install wheel and execute native output on the runner",
+        "Post Set up Python"
+      ]
+    },
+    {
+      "conclusion": "success",
+      "failed_steps": [],
+      "id": 114143787692,
+      "name": "macOS arm64 focused pcc0 native regressions",
+      "skipped_steps": []
+    },
+    {
+      "conclusion": "failure",
+      "failed_steps": [
+        "Qualify all five GC self-host chains"
+      ],
+      "id": 114143787697,
+      "name": "Native wheel / windows-x86_64",
+      "skipped_steps": [
+        "Build this machine's native wheel",
+        "Install and execute the Linux wheel inside Docker",
+        "Install and execute the Windows wheel inside Docker",
+        "Install wheel and execute native output on the runner",
+        "Post Set up Python"
+      ]
+    }
+  ],
+  "qualification_limits": [
+    "All four Stage1 attempts timed out at the original 2400-second bound; no completed pcc1 executable or Stage1-to-Stage2-to-Stage3 fixed point is established.",
+    "The five-GC self-host chains, wheel execution and package parity steps after failed Stage1 remain UNRUN.",
+    "The two unchanged OSError/open programs each matched their CPython reference for five requested GC configurations. Original helpers do not assert actual collector-selection telemetry.",
+    "The focused Mac job is separate from complete async/gateway and broad regression qualification; the strict BlockingIOError.characters_written model XFAIL remains outside the native PROGRAM scope.",
+    "Float/doc candidate changes are absent from this CI head; its native behavior and movement witness remain UNRUN.",
+    "No speedup, CPU share or memory improvement is inferred from deadline status or sampled RSS. Cohort critical-path analysis is separate.",
+    "No rerun or additional workflow dispatch was started."
+  ],
+  "repository": "ikshengmin/pcc",
+  "run_id": 38028319451,
+  "run_url": "https://github.com/ikshengmin/pcc/actions/runs/38028319451",
+  "schema": "pcc.cohort-oserror.ci-qualification.v1",
+  "stage1": {
+    "linux-aarch64": {
+      "completed_stages": [],
+      "error": "stage deadline exceeded",
+      "failure_sha256": "f933f06495d1a4fb537f61db80a8b92fa6ca24eac53d1732d7e24fb60bc0e324",
+      "last_sample_elapsed_s": 2400.070163337,
+      "peak_sampled_tree_rss_bytes": 4683681792,
+      "resources_sha256": "01b4a6fc8a6e2203c8e37df959a124a6adb627420012a8947b96dc0d19fdf578",
+      "sampled_rows": 11203,
+      "source": {
+        "clean_commit": true,
+        "commit": "a7282a82ef885412e90143e1cede90dcfd8c0d81",
+        "source_file_count": 1126,
+        "source_scope": "compiler-runtime-headers-build-harness-v1",
+        "source_sha256": "e32eb71847622e8fd1b874bbfd31f897135fa780e10c8ee9fd8b81a3e98413c6"
+      },
+      "stage1_log_sha256": "ed65af7681d2be4220cfafdaa692c2686c27e2b91a6466030ea9e38132a9b0aa",
+      "status": "TIMEOUT"
+    },
+    "linux-x86_64": {
+      "completed_stages": [],
+      "error": "stage deadline exceeded",
+      "failure_sha256": "f933f06495d1a4fb537f61db80a8b92fa6ca24eac53d1732d7e24fb60bc0e324",
+      "last_sample_elapsed_s": 2400.2140610320002,
+      "peak_sampled_tree_rss_bytes": 1858674688,
+      "resources_sha256": "da167320787c5b48020e152eb8cc2b0a64f1f1b354081fff12a4eb15b2dc064c",
+      "sampled_rows": 9905,
+      "source": {
+        "clean_commit": true,
+        "commit": "a7282a82ef885412e90143e1cede90dcfd8c0d81",
+        "source_file_count": 1126,
+        "source_scope": "compiler-runtime-headers-build-harness-v1",
+        "source_sha256": "e32eb71847622e8fd1b874bbfd31f897135fa780e10c8ee9fd8b81a3e98413c6"
+      },
+      "stage1_log_sha256": "954fa01ad90c6f20792f88eaa6b9e2e50d23ddbed1c2962c29ba2abe43ed02c5",
+      "status": "TIMEOUT"
+    },
+    "macos-arm64": {
+      "bootstrap_returncode": 124,
+      "elapsed_s": 2400.358941792,
+      "max_tree_rss_bytes": 2626535424,
+      "output": "none",
+      "peak_sampled_tree_rss_bytes": 1628323840,
+      "process_snapshot_at_termination_count": 3,
+      "raw_supervisor_returncode": 143,
+      "status": "TIMEOUT",
+      "stderr_sha256": "7cb2d85d46dbaa6cb7d478359496746c86a428ba1c269ddb25babc866c3edf8f",
+      "supervisor_sha256": "d38eaf05fd55457f0bcc2d56789a6270897a0410840e1272ea04e0d84bc3b1fc",
+      "timeout_s": 2400
+    },
+    "windows-x86_64": {
+      "completed_stages": [],
+      "error": "stage deadline exceeded",
+      "failure_sha256": "5c8867065f565081a39d7e052f6fb530caf5781c7ceb6abddf33b87b40b9b094",
+      "last_sample_elapsed_s": 2397.2776968,
+      "peak_sampled_tree_rss_bytes": 3997466624,
+      "resources_sha256": "38064c122c5815876d8d81f26c4e80dfe3cd053329d3a61e4055cf5924365fc8",
+      "sampled_rows": 8297,
+      "source": {
+        "clean_commit": true,
+        "commit": "a7282a82ef885412e90143e1cede90dcfd8c0d81",
+        "source_file_count": 1126,
+        "source_scope": "compiler-runtime-headers-build-harness-v1",
+        "source_sha256": "02ebba767def24d1af015be0d623ff58127d08385ca2c35c9aec1ef3d0c62d2e"
+      },
+      "stage1_log_sha256": "967fad8767bf3fab29dd4f21bec0605dbb35ca72e4716e53b49b865a8e81c690",
+      "status": "TIMEOUT"
+    }
+  },
+  "status": "TERMINAL_FAILURE_WITH_SCOPED_NATIVE_PASSES",
+  "windows_resource_publication": {
+    "actual_test_cases": 10,
+    "scope": "Isolated Windows RSS publication regression file, before bootstrap",
+    "status": "PASS"
+  }
+}

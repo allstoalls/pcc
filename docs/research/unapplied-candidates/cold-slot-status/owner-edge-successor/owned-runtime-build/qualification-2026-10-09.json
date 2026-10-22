@@ -1,0 +1,80 @@
+{
+  "archive_bytes": 49923352,
+  "archive_sha256": "a6645f903e03f6766ecc7466b76f2993318582d287a393831aa5522158421915",
+  "candidate_source_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "capi_inventory_sha256": "22fac549efc3f5b042da9ce4f3f75611290ddac2912503c94f1ca2532b526f1e",
+  "capi_symbol_count": 444,
+  "codegen_checksum": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+  "date_utc": "2026-10-09",
+  "deep_member_verification_sha256": "5da7ebf5c913701d34edcbde7f50dae023c67d7bf056ecd8ce3b54e86e953a74",
+  "driver_sha256": "fd073d6fa747e9786eb938b09821148824b51af596a1ee1745cfd5634a437674",
+  "execution_boundary": {
+    "audit_denials": 0,
+    "build_seconds": 267.35778970200045,
+    "cleanup": "CLEAN; root reaped; ECHILD; no admitted handles remain; exclusive lock reacquired.",
+    "continuous_minimum_free_bytes": 4294967296,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "initial_minimum_free_bytes": 8589934592,
+    "max_net_disk_growth_bytes": 4294967296,
+    "observed_workspace_net_growth_bytes": 214597632,
+    "peak_sampled_root_rss_bytes": 326311936,
+    "wall_limit_s": 1200.0,
+    "whole_guard_seconds": 272.20361415000116
+  },
+  "harness_preservation_commit": "73e90c03c5b9d62c9b0775bfa4a8a0d2fcfc3b65",
+  "imported_source_closure": "PASS",
+  "limitations": [
+    "This proves runtime construction and provenance only. No emitted native program was executed.",
+    "The full191-member archive is threads-enabled; hard NPROC0 constrained the host builder and did not select a thread-disabled runtime.",
+    "Native call-edge exception/frame identity, root lifetime and cleanup behavior remain unqualified.",
+    "A later native GC0/GC1 run requires a separately admitted exact-ELF launcher. GC2/GC3/GC4, parallel workers, pcc1, full Stage1 and fixed-point qualification remain outside this result.",
+    "Build duration is a single observation, not a comparative speedup measurement."
+  ],
+  "member_count": 191,
+  "member_emitter_counts": {
+    "pcc-self-backend-object-writer": 191
+  },
+  "member_producer_counts": {
+    "pcc-python-library-ir-to-obj": 191
+  },
+  "members_using_host_cc": 0,
+  "packet_manifest_sha256": "648182a835cfb397ec3bc2a68cbad48b757b2a4a8bac80c690c10b9f842a62b5",
+  "payload_result_sha256": "c4c77819b3b44712c52d6732338dede4cc04a38ba332c74ba5d9ac00bc911238",
+  "provenance_sha256": "09f686fc222b14991749e890c9d60823f2a68fcbfd5e3ff2e7669b7c8288052c",
+  "qualification_sha256": "21b8c935fdca66f1134e207a987c32ff3803b497a9c0d6b26b6dfdcc8ae23caa",
+  "runtime_build_config": {
+    "refcount": "atomic",
+    "threads": true
+  },
+  "runtime_source_after": {
+    "bytes": 5136492,
+    "files": 220,
+    "status": "PASS"
+  },
+  "runtime_source_before": {
+    "bytes": 5136492,
+    "files": 220,
+    "status": "PASS"
+  },
+  "schema": "pcc.cold_slot_owned_runtime_public_result.v1",
+  "source_after": {
+    "bytes": 390463117,
+    "files": 30024,
+    "status": "PASS"
+  },
+  "source_before": {
+    "bytes": 390463117,
+    "files": 30024,
+    "status": "PASS"
+  },
+  "status": "BUILD_AND_PROVENANCE_PASS",
+  "target": "x86_64-unknown-linux-gnu",
+  "verified_contracts": [
+    "Unchanged production builder compiled every expected member, with the full threaded/atomic configuration and actual host target.",
+    "Strict production archive admission verifies source, compiler, target, configuration and all actual archived member hashes.",
+    "All191 retained object/IR/receipt identities, ordered member names and source identities match.",
+    "C-API inventory recomputed from actual ELF objects matches all444 symbols.",
+    "Complete compiler and private runtime source byte/mode/path inventories pass before and after construction."
+  ]
+}

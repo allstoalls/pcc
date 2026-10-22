@@ -20,7 +20,7 @@
 
 **备选三:纯静态所有权(Rust 路线)。** 在编译期完全证明每个引用的生命周期,运行期零计数。Python 的语义不配合:变量可以在任意控制流分支重绑定,异常可以从几乎任何调用点抛出(见第 8 章),同一个名字在控制流汇合点上可能一条边是拥有、另一条边是借用。要做纯静态证明就得改语言,而 pcc 的北极星是不弱化 Python 语义。
 
-pcc 的答案是一个混合体:**静态分类 + 运行时旗标 + 单向的边界契约**。静态部分由 [pcc/py_frontend/codegen/ownership_lowering.py](../../pcc/py_frontend/codegen/ownership_lowering.py) 的表达式分类承担;运行时部分是每个 owned 局部变量配一个 `i1` 旗标;边界契约只有一句话,值得抄写仓库规则([AGENTS.md](../../AGENTS.md) 自举回归纪律第 5 条)的原文大意:
+pcc 的答案是一个混合体:**静态分类 + 运行时旗标 + 单向的边界契约**。静态部分由 [pcc/frontends/python/codegen/ownership_lowering.py](../../pcc/frontends/python/codegen/ownership_lowering.py) 的表达式分类承担;运行时部分是每个 owned 局部变量配一个 `i1` 旗标;边界契约只有一句话,值得抄写仓库规则([AGENTS.md](../../AGENTS.md) 自举回归纪律第 5 条)的原文大意:
 
 > 函数调用返回拥有引用;被调方返回借用的 local、参数、模块全局、字段或单例时,必须在**被调方** retain,而不是让调用方停止 release 拥有的结果。
 
@@ -43,13 +43,13 @@ pcc 的答案是一个混合体:**静态分类 + 运行时旗标 + 单向的边�
 
 ## 9.2 运行时基元:py_incref、py_decref 与对象之死
 
-引用计数住在对象头里。[pcc/py_runtime/include/py_runtime.h](../../pcc/py_runtime/include/py_runtime.h) 定义的 `PyObjectHeader` 是每个堆对象的前缀:`int64_t refcount`(偏移 0)、`int32_t type_tag`(偏移 8)、`int32_t flags`。对象出生即被拥有:`pcc_gc_alloc()`([pcc/py_runtime/src/py_obj.c](../../pcc/py_runtime/src/py_obj.c))在分配后写入 `h->refcount = 1`,分配者就是第一个拥有者。
+引用计数住在对象头里。[pcc/runtime/include/py_runtime.h](../../pcc/runtime/include/py_runtime.h) 定义的 `PyObjectHeader` 是每个堆对象的前缀:`int64_t refcount`(偏移 0)、`int32_t type_tag`(偏移 8)、`int32_t flags`。对象出生即被拥有:`pcc_gc_alloc()`([pcc/runtime/src/py_obj.c](../../pcc/runtime/src/py_obj.c))在分配后写入 `h->refcount = 1`,分配者就是第一个拥有者。
 
 `py_incref()` 和 `py_decref()` 同在 `py_obj.c`,两者开头的快速路径揭示了三类不参与计数的"对象":
 
 1. **NULL**:两个函数都直接返回,这让生成代码不必在每次释放前判空。
 2. **标记小整数(tagged small int)**:`PY_IS_TAGGED_INT` 命中的值是 `int` 的值投影(见第 16 章),没有对象头,自然没有计数。
-3. **不朽(immortal)单例**:`py_None`/`py_True`/`py_False` 在 [pcc/py_runtime/src/py_substrate.c](../../pcc/py_runtime/src/py_substrate.c) 里以 `.flags = PY_FLAG_IMMORTAL` 静态定义,`py_incref`/`py_decref` 检查到 `PY_FLAG_IMMORTAL` 即返回。这意味着生成代码可以对单例统一执行 retain/release 而无任何效果——契约的统一性比省掉几条指令重要。
+3. **不朽(immortal)单例**:`py_None`/`py_True`/`py_False` 在 [pcc/runtime/src/py_substrate.c](../../pcc/runtime/src/py_substrate.c) 里以 `.flags = PY_FLAG_IMMORTAL` 静态定义,`py_incref`/`py_decref` 检查到 `PY_FLAG_IMMORTAL` 即返回。这意味着生成代码可以对单例统一执行 retain/release 而无任何效果——契约的统一性比省掉几条指令重要。
 
 `py_decref()` 把计数减到 0 时,执行一个固定的死亡序列:`pcc_refcount_forget()` 注销计数、`py_weakref_invalidate(o)` 失效弱引用、`pcc_gc_note_object_freeing(o)` 通知活动 GC 后端、`py_gc_untrack(o)` 摘出循环收集器名册,然后才进入类型分派的析构。这个顺序不是随意的:弱引用必须在任何析构副作用(包括用户 `__del__`)之前失效,否则终结器可以通过弱引用看到一个半死对象。
 
@@ -57,7 +57,7 @@ pcc 的答案是一个混合体:**静态分类 + 运行时旗标 + 单向的边�
 
 析构本身有一个值得讲的机制:**垃圾延迟队列**。设想 `list -> list -> list -> ...` 嵌套十万层,朴素实现里 `py_dealloc_list()` 释放子元素会递归调用 `py_decref` 再进 `py_dealloc_list`,栈直接打穿。`py_decref` 用线程局部的 `pcc_trash_dealloc_depth` 计数器检测嵌套析构:深度大于 0 时,容器与用户实例类型(`pcc_trash_should_defer()`)不立即析构,而是挂入 `pcc_trash_enqueue()` 的链表;最外层析构者负责 `pcc_trash_drain()`,把递归摊平成迭代。这是 CPython "trashcan" 机制在 pcc 里的对应物。
 
-最后是文件组织本身承载的设计决定。`py_obj.c` 只留计数与分派;类型专属析构器全部拆到 [pcc/py_runtime/src/py_obj_dealloc.c](../../pcc/py_runtime/src/py_obj_dealloc.c)。拆分注释写明了理由:计数逻辑要被 pcc-Python 端口([pcc/py_runtime/py/py_obj.py](../../pcc/py_runtime/py/py_obj.py))整体替换以推进自托管,而析构器要摸柔性数组成员和裸结构体字段,当前 pcc-Python 表面表达不了,留在 C。端口侧的 `py_obj.py` 用 `@c_abi_export("pcc_gc_store_ptr")` 等装饰器导出同名 C ABI 符号,镜像 C 实现的每一步——这是第 14 章详述的 C↔pcc-Python 镜像纪律在引用计数上的实例:同一份对象图规则,两种作者语言,不允许语义漂移。
+最后是文件组织本身承载的设计决定。`py_obj.c` 只留计数与分派;类型专属析构器全部拆到 [pcc/runtime/src/py_obj_dealloc.c](../../pcc/runtime/src/py_obj_dealloc.c)。拆分注释写明了理由:计数逻辑要被 pcc-Python 端口([pcc/runtime/py/py_obj.py](../../pcc/runtime/py/py_obj.py))整体替换以推进自托管,而析构器要摸柔性数组成员和裸结构体字段,当前 pcc-Python 表面表达不了,留在 C。端口侧的 `py_obj.py` 用 `@c_abi_export("pcc_gc_store_ptr")` 等装饰器导出同名 C ABI 符号,镜像 C 实现的每一步——这是第 14 章详述的 C↔pcc-Python 镜像纪律在引用计数上的实例:同一份对象图规则,两种作者语言,不允许语义漂移。
 
 ## 9.3 平衡的槽位写入:pcc_gc_store_ptr
 
@@ -82,7 +82,7 @@ py_decref(old);
 
 ## 9.4 前端:谁拥有这个引用?
 
-运行时基元只是算盘;打算盘的是前端。[pcc/py_frontend/codegen/ownership_lowering.py](../../pcc/py_frontend/codegen/ownership_lowering.py) 的 `OwnershipLoweringMixin` 回答编译期的核心问题:**这个表达式的求值结果,当前函数拥有吗?**
+运行时基元只是算盘;打算盘的是前端。[pcc/frontends/python/codegen/ownership_lowering.py](../../pcc/frontends/python/codegen/ownership_lowering.py) 的 `OwnershipLoweringMixin` 回答编译期的核心问题:**这个表达式的求值结果,当前函数拥有吗?**
 
 判定函数是 `_expr_returns_owned_object()`。它的分类学值得列举,因为每一条都对应运行时的一个事实:
 
@@ -96,7 +96,7 @@ py_decref(old);
 
 围绕这对机制是一组生命周期规则:
 
-- **重绑定**:[pcc/py_frontend/codegen/assignment_statement_lowering.py](../../pcc/py_frontend/codegen/assignment_statement_lowering.py) 的赋值路径先对旧值执行 `_emit_release_owned_local_if_flagged()`,再存新值、再置旗标。漏掉第一步就是每次循环迭代泄漏一个对象。
+- **重绑定**:[pcc/frontends/python/codegen/assignment_statement_lowering.py](../../pcc/frontends/python/codegen/assignment_statement_lowering.py) 的赋值路径先对旧值执行 `_emit_release_owned_local_if_flagged()`,再存新值、再置旗标。漏掉第一步就是每次循环迭代泄漏一个对象。
 - **作用域退出**:`_emit_owned_local_cleanup()` 在每个 `return` 之前释放所有带值旗标的 owned 局部,然后按注册的**逆序**(`_gc_rooted_local_order`)注销 GC 帧根。它接受 `skip_name` 参数——9.5 解释为什么。
 - **GC 根注册**:每个 owned 局部同时经 `_ensure_owned_local_gc_root()` 注册为帧根(`pcc_gc_frame_enter`/`pcc_gc_frame_leave`),让追踪式后端能看见栈上引用。根的机制属于第 10 章;本章只指出所有权与根注册在同一处低层化中耦合,这个耦合在 9.7 的第二个案例研究里会咬人。
 - **表达式临时的释放**:owned 不只属于具名局部。`a.b.c` 求值产生中间接收者临时、二元运算产生操作数临时,这些拥有的中间值用毕即应释放。统一入口是 `_gc_release_if_owned()`:它先经 `_raw_scaffold_object_rhs_is_owned()` 与 `_expr_returns_owned_object()` 双重确认来源表达式确实产生拥有引用、再排除 CPython 桥接标记值(`_cpy_values`),才发射 release。调用点散布在 `attr_load_lowering.py`、`expr_dispatch_lowering.py`、`exact_int_lowering.py`、`assignment_statement_lowering.py` 等十余处低层化位点。每次 release 都携带上下文标签(`_release_expr_label()` 编入函数名、表达式类型与源位置),调试构建里 `pcc_debug_check_release` 用它回答"是哪一行的哪一次 release 打穿了计数"。
@@ -118,7 +118,7 @@ def common_type(a, b):
 
 参数是调用方借给被调方的;模块全局归模块所有。直接返回它们,调用方按契约视之为拥有并最终释放,就释放了一个自己从未拥有的引用——计数下穿,双重释放。
 
-修复在 [pcc/py_frontend/codegen/return_lowering.py](../../pcc/py_frontend/codegen/return_lowering.py)。`_return_value_needs_retain()` 判定返回值在被调方是否为借用:返回表达式是 `Name` 且命中 `_current_param_names`(参数)、`_module_globals`(模块全局)或 env 中非 owned 的局部,即为借用;`_expr_returns_owned_object()` 为真则不是。判定为借用时,`_retain_borrowed_return_value()` 发射一次 `pcc_gc_retain`(IR 名 `ret.retain`),把借用提升为拥有再交出去。`pcc_gc_retain()` 在运行时侧就是 `py_incref` 加返回原指针——单例与标记整数经过它是无害的空操作,这正是 9.2 统一契约的回报:[AGENTS.md](../../AGENTS.md) 第 5 条里"字段或单例"也在借用之列,而生成代码不需要为它们特判。
+修复在 [pcc/frontends/python/codegen/return_lowering.py](../../pcc/frontends/python/codegen/return_lowering.py)。`_return_value_needs_retain()` 判定返回值在被调方是否为借用:返回表达式是 `Name` 且命中 `_current_param_names`(参数)、`_module_globals`(模块全局)或 env 中非 owned 的局部,即为借用;`_expr_returns_owned_object()` 为真则不是。判定为借用时,`_retain_borrowed_return_value()` 发射一次 `pcc_gc_retain`(IR 名 `ret.retain`),把借用提升为拥有再交出去。`pcc_gc_retain()` 在运行时侧就是 `py_incref` 加返回原指针——单例与标记整数经过它是无害的空操作,这正是 9.2 统一契约的回报:[AGENTS.md](../../AGENTS.md) 第 5 条里"字段或单例"也在借用之列,而生成代码不需要为它们特判。
 
 返回 owned 局部走的是另一条对称路径:**所有权转移**。`_emit_return()` 把返回名作为 `skip_name` 传给 `_emit_owned_local_cleanup()`——清理释放其余 owned 局部,唯独跳过正在返回的那个;它不被 retain 也不被 release,引用原样移交调用方。一次转移,计数净变化为零。
 
@@ -132,7 +132,7 @@ def common_type(a, b):
 
 引用计数归零触发析构,而用户实例的析构可能运行 `__del__`——一段任意 Python 代码,可以把 `self` 存到任何地方。这是引用计数语义里最阴的角落:**复活(resurrection)**。
 
-pcc 的处理在两个函数的配合里。[pcc/py_runtime/src/py_class.c](../../pcc/py_runtime/src/py_class.c) 的 `py_instance_dealloc()` 序列:先 `py_weakref_invalidate()`,再 `py_user_del_dispatch(o)` 运行终结器,然后检查——
+pcc 的处理在两个函数的配合里。[pcc/runtime/src/py_class.c](../../pcc/runtime/src/py_class.c) 的 `py_instance_dealloc()` 序列:先 `py_weakref_invalidate()`,再 `py_user_del_dispatch(o)` 运行终结器,然后检查——
 
 ```c
 if (py_header(o)->refcount > 0) {
@@ -143,7 +143,7 @@ if (py_header(o)->refcount > 0) {
 
 终结器若把 `self` 存进了某个活结构,`pcc_gc_store_ptr` 的平衡写入已经把计数从 0 加了回去。析构器看到非零计数就放弃释放,把对象重新挂回循环收集器名册,正常退出。对象合法复活。
 
-防线在 [pcc/py_runtime/src/py_dunder.c](../../pcc/py_runtime/src/py_dunder.c) 的 `py_user_del_dispatch()` 里:
+防线在 [pcc/runtime/src/py_dunder.c](../../pcc/runtime/src/py_dunder.c) 的 `py_user_del_dispatch()` 里:
 
 ```c
 if ((h->flags & PY_FLAG_FINALIZED) != 0) {
@@ -154,11 +154,11 @@ h->flags |= PY_FLAG_FINALIZED;       /* 先置位 */
 meth(o);                             /* 再调用 __del__ */
 ```
 
-`PY_FLAG_FINALIZED`([pcc/py_runtime/src/py_internal.h](../../pcc/py_runtime/src/py_internal.h),位 0x4)保证 `__del__` 至多运行一次——对应 CPython PEP 442 的语义。置位在调用**之前**:如果 `__del__` 内部的操作再次把计数推过生死线引发重入析构,重入方查旗标即返回,不会出现终结器套终结器。复活的对象将来第二次死亡时,同一旗标让它直接走释放路径。函数查找 `__del__` 时还顺手把结果缓存进 `PyClassObject` 的 `del_method` 槽(该槽位于类对象 120 字节布局的偏移 96,见第 7 章),后续实例析构免于重复的方法解析。
+`PY_FLAG_FINALIZED`([pcc/runtime/src/py_internal.h](../../pcc/runtime/src/py_internal.h),位 0x4)保证 `__del__` 至多运行一次——对应 CPython PEP 442 的语义。置位在调用**之前**:如果 `__del__` 内部的操作再次把计数推过生死线引发重入析构,重入方查旗标即返回,不会出现终结器套终结器。复活的对象将来第二次死亡时,同一旗标让它直接走释放路径。函数查找 `__del__` 时还顺手把结果缓存进 `PyClassObject` 的 `del_method` 槽(该槽位于类对象 120 字节布局的偏移 96,见第 7 章),后续实例析构免于重复的方法解析。
 
 一处如实记录的不完整:`py_user_del_dispatch()` 在终结器返回后调用 `py_clear_exception()`,源码注释承认这是对 CPython "unraisable exception" 通道的占位——异常被吞掉以保证 TLS 异常状态不污染调用方(见第 8 章),但警告报告通道还是后续的诊断任务。这是开放问题,不是设计。
 
-循环中的死亡(对象在引用环里,计数永不归零)由收集器处理:后端 #0 的 `py_gc_maybe_finalize_unreachable()`([pcc/py_runtime/src/py_obj_gc.c](../../pcc/py_runtime/src/py_obj_gc.c))与追踪后端的清扫前终结器阶段都调用同一个 `py_user_del_dispatch()`,同一个旗标保证跨路径的"至多一次"。值得注意的是旗标在收集器侧还多承担了一个角色:`py_gc_maybe_finalize_unreachable()` 比较调用前后的 `PY_FLAG_FINALIZED` 位来判断本轮是否**真的新运行了**终结器——只要有,收集器就必须重算可达性,因为任意 `__del__` 都可能改写对象图。多阶段清扫如何与终结器交错,见第 10 章。
+循环中的死亡(对象在引用环里,计数永不归零)由收集器处理:后端 #0 的 `py_gc_maybe_finalize_unreachable()`([pcc/runtime/src/py_obj_gc.c](../../pcc/runtime/src/py_obj_gc.c))与追踪后端的清扫前终结器阶段都调用同一个 `py_user_del_dispatch()`,同一个旗标保证跨路径的"至多一次"。值得注意的是旗标在收集器侧还多承担了一个角色:`py_gc_maybe_finalize_unreachable()` 比较调用前后的 `PY_FLAG_FINALIZED` 位来判断本轮是否**真的新运行了**终结器——只要有,收集器就必须重算可达性,因为任意 `__del__` 都可能改写对象图。多阶段清扫如何与终结器交错,见第 10 章。
 
 ## 9.7 历史与教训
 
@@ -166,7 +166,7 @@ meth(o);                             /* 再调用 __del__ */
 
 (来源:[docs/investigations/bootstrap-user-function-low-ir-fallback-2026-06-01.md](../../docs/investigations/bootstrap-user-function-low-ir-fallback-2026-06-01.md))
 
-长期全部通过的三阶段自举闸门(`--backend self --python-libpython=off`)突然双重失败。第一道边界是严格模式下的 libpython 回退,与所有权无关,修掉后暴露第二道:pcc0 产出的 pcc1 在编译 [pcc/cli_bootstrap.py](../../pcc/cli_bootstrap.py) 生成 pcc2 时崩溃,LLDB 回溯落在生成代码 `user_pcc_py_frontend_type_infer__infer_expr` 经 `pcc_gc_release` → `py_decref` → `pcc_gc_free_object_memory` 的双重释放,现场紧挨 `replace(expr, ..., ty=ty)`。
+长期全部通过的三阶段自举闸门(`--backend self --python-libpython=off`)突然双重失败。第一道边界是严格模式下的 libpython 回退,与所有权无关,修掉后暴露第二道:pcc0 产出的 pcc1 在编译 [pcc/driver/cli_bootstrap.py](../../pcc/driver/cli_bootstrap.py) 生成 pcc2 时崩溃,LLDB 回溯落在生成代码 `user_pcc_frontends_python_type_infer__infer_expr` 经 `pcc_gc_release` → `py_decref` → `pcc_gc_free_object_memory` 的双重释放,现场紧挨 `replace(expr, ..., ty=ty)`。
 
 错误假设排了一排。元组自动 GC 追踪被怀疑过——**用户明确否决**了禁用它的提案,因为那是用弱化运行时语义换闸门变绿,恰是仓库规则禁止的方向。`replace(...)` 的 dataclass 字段拷贝被怀疑过——源码检查否决:字段写入走 `pcc_gc_store_ptr`,平衡无误;`replace` 只是欠拥有的对象**变得可见**的地方,不是所有权丢失的地方。"把用户函数调用结果当借用"的方案也被否决——理由即 9.5 的方向性论证。
 
@@ -192,9 +192,9 @@ pcc 的引用计数与所有权是一份三层契约。运行时层提供基元:
 
 ## 练习
 
-1. **读源码验证**:在 [pcc/py_runtime/src/py_obj.c](../../pcc/py_runtime/src/py_obj.c) 的 `pcc_gc_store_ptr()` 中,把四行核心改写成"先 decref 旧值、后 incref 新值"的顺序,构造一个会因此产生悬垂指针的 Python 赋值语句,并解释为什么现行顺序不需要调用方做新旧判同。
+1. **读源码验证**:在 [pcc/runtime/src/py_obj.c](../../pcc/runtime/src/py_obj.c) 的 `pcc_gc_store_ptr()` 中,把四行核心改写成"先 decref 旧值、后 incref 新值"的顺序,构造一个会因此产生悬垂指针的 Python 赋值语句,并解释为什么现行顺序不需要调用方做新旧判同。
 
-2. **读源码验证**:`_expr_returns_owned_object()`([pcc/py_frontend/codegen/ownership_lowering.py](../../pcc/py_frontend/codegen/ownership_lowering.py))对返回类型为 `IntType` 的用户函数调用返回假。结合第 16 章的值投影,解释为什么"非对象"与"借用"是两个不同概念,以及把 `int` 返回值误判为拥有对象会在 `py_decref` 的哪个检查上被(侥幸)挡住。
+2. **读源码验证**:`_expr_returns_owned_object()`([pcc/frontends/python/codegen/ownership_lowering.py](../../pcc/frontends/python/codegen/ownership_lowering.py))对返回类型为 `IntType` 的用户函数调用返回假。结合第 16 章的值投影,解释为什么"非对象"与"借用"是两个不同概念,以及把 `int` 返回值误判为拥有对象会在 `py_decref` 的哪个检查上被(侥幸)挡住。
 
 3. **追踪契约**:[tests/python/test_return_ownership.py](../../tests/python/test_return_ownership.py) 里有 `test_returning_borrowed_parameter_retains_for_owned_call_result`。不运行测试,仅读 `return_lowering.py`,写出 `identity(xs)`(直接 `return xs`,`xs` 为参数)的返回路径会依次经过哪些函数,以及生成 IR 中应出现的 retain 调用名。
 

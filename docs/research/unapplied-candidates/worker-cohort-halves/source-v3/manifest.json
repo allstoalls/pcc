@@ -1,0 +1,105 @@
+{
+  "apply_order": [
+    "candidate-v1.patch",
+    "v2-logging-order.patch",
+    "v3-scan-termination.patch"
+  ],
+  "artifacts": [
+    {
+      "bytes": 12705,
+      "mode": "100644",
+      "path": "candidate-v1.patch",
+      "sha256": "10fb8ca6e77d6444b4b499a3bea3e75db81f65bb30dfd504c09fd16647e123c4"
+    },
+    {
+      "bytes": 675,
+      "mode": "100644",
+      "path": "v2-logging-order.patch",
+      "sha256": "74f832e3ab1ca83a4d5aba7038ee1de7b3cab9beb25a98702d4e54cae78f9c2d"
+    },
+    {
+      "bytes": 1987,
+      "mode": "100644",
+      "path": "v3-scan-termination.patch",
+      "sha256": "5f1b7bc53045f4189f23f08404c8c8937f08bd6cdbbeafe55c975a3b2ad08a75"
+    },
+    {
+      "bytes": 8135,
+      "mode": "100644",
+      "path": "README.md",
+      "sha256": "23a54a08f17701801d08f2ead2a2b9010e2c377abcacea3b240bd8d8336bf246"
+    }
+  ],
+  "base_pcc_tree": "930263bf204e578796c72dab5d4aa31fd7ab27ae",
+  "base_production_commit": "bf1bf82d8242a60a85a06322ceee97fab5346cc0",
+  "base_source_inventory_sha256": "7430a30766c11a59e7185758b725b289388ae131498ce6a8a568bdf10ff773ba",
+  "files": [
+    {
+      "base_bytes": 13153,
+      "base_sha256": "85af67c5c4b678d77e63f408dbbf0c1519710c9960bd9e2fecb8ddf969272389",
+      "mode": "100644",
+      "path": "pcc/frontends/python/worker_resource_plan.py",
+      "post_bytes": 13550,
+      "post_sha256": "4dc69c18568b54c2096e092b843e6ecd16c9a021291bc0fa528b69a93889a149",
+      "v1_post_bytes": 13473,
+      "v1_post_sha256": "a19f441dc5b3d64903c736548daac15d9d230f36d487eb4eac1aabeb79b3b885",
+      "v2_post_bytes": 13473,
+      "v2_post_sha256": "a19f441dc5b3d64903c736548daac15d9d230f36d487eb4eac1aabeb79b3b885"
+    },
+    {
+      "base_bytes": 33309,
+      "base_sha256": "d7ff2ba46c2bce876ee2f4cbaf8607213c94428d28cfbae41b5f7ccbff848ff1",
+      "mode": "100644",
+      "path": "pcc/frontends/python/worker_process_pool.py",
+      "post_bytes": 33996,
+      "post_sha256": "070eca7616c96f3cb8aecf688cf2649a8b848a57795ac0855dc4f8aed9ff30b6",
+      "v1_post_bytes": 33996,
+      "v1_post_sha256": "63986bb7b6f8fa7fdda7365e2e334fd0699eb50ad8110ee8000b9897cbe5d421",
+      "v2_post_bytes": 33996,
+      "v2_post_sha256": "070eca7616c96f3cb8aecf688cf2649a8b848a57795ac0855dc4f8aed9ff30b6"
+    },
+    {
+      "base_bytes": 10079,
+      "base_sha256": "4e08c5d4024cd8155e7a64463ccea52715cb14285c7ed7be5324cdadec47003d",
+      "mode": "100644",
+      "path": "tests/python/test_worker_codegen_cohorts.py",
+      "post_bytes": 14987,
+      "post_sha256": "ae4b2aa1e7f8090071692f9622dd709ba80dde80293475bbb9f262f5302ac085",
+      "v1_post_bytes": 14413,
+      "v1_post_sha256": "353d0704f1c5a8609a3622e40a2d2764514045703f482b0d1f28d1a8b074fdd1",
+      "v2_post_bytes": 14413,
+      "v2_post_sha256": "353d0704f1c5a8609a3622e40a2d2764514045703f482b0d1f28d1a8b074fdd1"
+    }
+  ],
+  "performance_claim": "none; real CI mechanism and benefit unmeasured",
+  "production_behavior_changes": [
+    "one arithmetic-midpoint subdivision of recognized existing dyadic cohorts",
+    "timing-gated admission input/class/cohort fields with old field prefix preserved"
+  ],
+  "proposed_host_gate": {
+    "address_space_bytes": 4294967296,
+    "excluded_node": "tests/python/test_worker_codegen_cohorts.py::test_small_real_children_keep_cohort_barrier_and_original_outputs",
+    "expected_excluded": 1,
+    "expected_selected": 56,
+    "minimum_free_bytes": 4294967296,
+    "nproc": 0,
+    "paths": [
+      "tests/python/test_worker_codegen_cohorts.py",
+      "tests/python/test_worker_admission_diagnostics.py"
+    ],
+    "reason": "real child creation requires separate process-capable admission; UNRUN in strict single-process gate",
+    "timeout_seconds": 300
+  },
+  "schema": "pcc.worker-cohort-halves.unapplied.v3",
+  "status": "source-only; final independent review pending; all execution UNRUN",
+  "unchanged_contracts": [
+    "uniform-singleton recognizer",
+    "componentwise coverage and maximum observation forecast",
+    "explicit and incomplete reservations",
+    "25 percent plus128MiB margin",
+    "tree cap and current-state admission",
+    "live reservation growth",
+    "cancel/drain/one retry",
+    "commands/task identity/output ownership"
+  ]
+}

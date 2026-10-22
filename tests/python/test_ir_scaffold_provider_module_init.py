@@ -2,26 +2,26 @@
 
 In ``--ir-scaffold=on`` mode two rewrites happen independently:
 
-* ``_filter_ir_scaffold_closure`` drops ``pcc.llvm_capi.compat`` from the
-  source closure and substitutes ``pcc.llvm_capi.ir``, which holds the real
-  definitions behind every emitted ``user_pcc_llvm_capi_ir_*`` call.
-* ``_emit_import_from`` treats ``from pcc.llvm_capi.compat import ir_c as ir``
+* ``_filter_ir_scaffold_closure`` drops ``pcc.ir.compat`` from the
+  source closure and substitutes ``pcc.ir.ir``, which holds the real
+  definitions behind every emitted ``user_pcc_ir_ir_*`` call.
+* ``_emit_import_from`` treats ``from pcc.ir.compat import ir_c as ir``
   as a compile-time marker import and returns without emitting runtime IR.
 
 Together they severed the only edge that ran
-``_pcc_py_module_top_pcc_llvm_capi_ir``.  The provider was still *registered*
+``_pcc_py_module_top_pcc_ir_ir``.  The provider was still *registered*
 with ``py_compiled_module_register_init``, but registration only records the
-initializer -- nothing executed it.  ``@.class.pcc_llvm_capi_ir.IntType``
+initializer -- nothing executed it.  ``@.class.pcc_ir_ir.IntType``
 therefore stayed NULL, and the first ``ir.IntType(1)`` read ``cls._cache``
 off that NULL class.  The failure surfaced as
 
     AttributeError: 'object' object has no attribute '_cache'
 
-which is exactly where pcc1 died compiling C, at ``pcc/codegen/c_types.py:22``
+which is exactly where pcc1 died compiling C, at ``pcc/frontends/c/codegen/c_types.py:22``
 (``true_bit = bool_t(1)``, three lines after ``bool_t = ir.IntType(1)``).
 
 The defect was invisible whenever *any* module in the program also did
-``from pcc.llvm_capi.ir import X``: that import is a normal sibling import and
+``from pcc.ir.ir import X``: that import is a normal sibling import and
 did run the provider's init, so the program depended on an unrelated import's
 presence and ordering.  Both shapes are covered below.
 """
@@ -43,7 +43,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # provider-init edge.
 _COMPAT_ONLY = textwrap.dedent(
     '''\
-    from pcc.llvm_capi.compat import ir_c as ir
+    from pcc.ir.compat import ir_c as ir
 
     bool_t = ir.IntType(1)
     int8_t = ir.IntType(8)
@@ -70,8 +70,8 @@ _COMPAT_ONLY_EXPECTED = "bool: i1\nint8: i8\nvoid: void\nfunc: i32\n"
 # two edges must still produce one execution and one interned IntType).
 _COMPAT_PLUS_DIRECT = textwrap.dedent(
     '''\
-    from pcc.llvm_capi.compat import ir_c as ir
-    from pcc.llvm_capi.ir import IntType
+    from pcc.ir.compat import ir_c as ir
+    from pcc.ir.ir import IntType
 
     via_compat = ir.IntType(64)
     via_direct = IntType(64)
@@ -93,7 +93,7 @@ _COMPAT_PLUS_DIRECT_EXPECTED = "compat: i64\ndirect: i64\ninterned: True\n"
 
 # The source has to live inside the repo: the dependency closure walks
 # imports relative to the entry file's root, so a program written to a pytest
-# ``tmp_path`` never reaches ``pcc.llvm_capi`` and fails at link instead of
+# ``tmp_path`` never reaches ``pcc.ir`` and fails at link instead of
 # exercising the initialization order under test.
 _BUILD = REPO_ROOT / "build" / "irscaffoldinit"
 

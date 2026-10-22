@@ -39,7 +39,7 @@ def _progress(message: str) -> None:
 
 
 _COMPETING_PCC = re.compile(
-    r"(?:/pcc[123](?:\s|$)|scripts/bootstrap\.sh|"
+    r"(?:/pcc[123](?:\s|$)|scripts/bootstrap\.py|"
     r"--pcc-python-multi-codegen-worker)"
 )
 

@@ -8,7 +8,7 @@ typedef double double_t;
 
 /* C99 <math.h> floating-point constants and classification macros.
  * pcc's C frontend lowers the matching __builtin_* forms directly
- * (see pcc/codegen/c_codegen.py), so map the standard names onto them
+ * (see pcc/frontends/c/codegen/c_codegen.py), so map the standard names onto them
  * instead of leaving them undeclared. */
 #ifndef INFINITY
 #define INFINITY (__builtin_inff())

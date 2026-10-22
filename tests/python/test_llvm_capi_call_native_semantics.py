@@ -10,8 +10,8 @@ import pytest
 
 
 _REPO_ROOT = Path(__file__).absolute().parents[2]
-_IR_PY = _REPO_ROOT / "pcc" / "llvm_capi" / "ir.py"
-_FLOAT_BITS_PY = _REPO_ROOT / "pcc" / "stdlib" / "_float_bits.py"
+_IR_PY = _REPO_ROOT / "pcc" / "ir" / "ir.py"
+_FLOAT_BITS_PY = _REPO_ROOT / "pcc" / "ir" / "support" / "_float_bits.py"
 
 
 @pytest.mark.integration
@@ -19,21 +19,21 @@ def test_compiled_call_signature_replacement_and_subclass_match_host(
     tmp_path: Path,
 ) -> None:
     """Execute the exact/duck split in a native ir.py, not only host Python."""
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     probe = tmp_path / "ir_call_probe.py"
     probe.write_text(
         textwrap.dedent(
             """
-            from pcc.llvm_capi.ir import DoubleType
-            from pcc.llvm_capi.ir import FloatType
-            from pcc.llvm_capi.ir import Function
-            from pcc.llvm_capi.ir import FunctionType
-            from pcc.llvm_capi.ir import HalfType
-            from pcc.llvm_capi.ir import IRBuilder
-            from pcc.llvm_capi.ir import Module
-            from pcc.llvm_capi.ir import Value
-            from pcc.llvm_capi.ir import VoidType
+            from pcc.ir.ir import DoubleType
+            from pcc.ir.ir import FloatType
+            from pcc.ir.ir import Function
+            from pcc.ir.ir import FunctionType
+            from pcc.ir.ir import HalfType
+            from pcc.ir.ir import IRBuilder
+            from pcc.ir.ir import Module
+            from pcc.ir.ir import Value
+            from pcc.ir.ir import VoidType
 
 
             class DynamicFunction(Function):
@@ -120,11 +120,11 @@ def test_compiled_call_signature_replacement_and_subclass_match_host(
         str(executable),
         module_names=[
             "ir_call_probe",
-            "pcc.llvm_capi.ir",
-            "pcc.stdlib._float_bits",
+            "pcc.ir.ir",
+            "pcc.ir.support._float_bits",
         ],
         entry_module="ir_call_probe",
-        backend="llvm",
+        backend="self",
         ir_scaffold_mode="on",
         libpython_mode="off",
     )

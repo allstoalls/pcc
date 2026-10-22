@@ -10,12 +10,12 @@ truncated low 32 bits of ``ob_type`` (a heap address), not a
 ``PyObject_Str`` so they print correctly.
 
 See:
-- ``pcc/py_runtime/src/py_format.c``: defines
+- ``pcc/runtime/src/py_format.c``: defines
   ``py_format_cpy_object_hook`` + ``py_format_try_cpy_object_into_fd``
   with a tag-threshold guard.
-- ``pcc/py_runtime/src/py_libpython.c::py_cpy_ensure_init``: installs
+- ``pcc/runtime/src/py_libpython.c::py_cpy_ensure_init``: installs
   the hook on first libpython init.
-- ``pcc/py_runtime/py/py_print_fmt.py`` (and ``.c``): consult the
+- ``pcc/runtime/py/py_print_fmt.py`` (and ``.c``): consult the
   helper before emitting ``<object tag=N>``.
 """
 from __future__ import annotations
@@ -31,7 +31,7 @@ def _compile_auto(monkeypatch, src: Path, exe: Path) -> None:
     looked up via CPython).  Self backend + ir-scaffold=on stays
     consistent with the rest of the suite.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     compile_python(
         str(src), str(exe),

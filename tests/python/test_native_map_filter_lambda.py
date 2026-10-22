@@ -14,7 +14,7 @@ import textwrap
 
 
 def test_map_filter_lambda_matches_cpython(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "mfl.py"
     exe = tmp_path / "mfl.out"

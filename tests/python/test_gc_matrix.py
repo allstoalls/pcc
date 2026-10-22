@@ -7,7 +7,7 @@ import pytest
 
 @pytest.mark.parametrize("backend", [0, 1, 2, 3, 4])
 def test_gc_matrix(tmp_path, backend):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
     source = """
         import gc
         class Node:

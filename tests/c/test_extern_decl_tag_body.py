@@ -22,11 +22,11 @@ this_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(os.path.dirname(this_dir))
 sys.path.insert(0, parent_dir)
 
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.project import TranslationUnit
-from pcc.parse import make_c_parser
-from pcc.passes.context import PassContext
-from pcc.passes.ipo_boundary import ElimAvailExternPass
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.driver.project import TranslationUnit
+from pcc.frontends.c.parse import make_c_parser
+from pcc.frontends.c.passes.context import PassContext
+from pcc.frontends.c.passes.ipo_boundary import ElimAvailExternPass
 
 
 def _decl_names(ast):

@@ -1,8 +1,119 @@
+
+from tests.owned_ir_validation import verify_ir_text
 """Cloned blocks and return PHIs need legal, function-unique IR names."""
 
-from pcc.native_ir.inline import inline_module
+from pcc.ir.optimization.inline import inline_module
 from pcc.backend.self_backend_parse import parse_self_backend_module
 from pcc.backend.self_backend_verify import verify_parsed_module
+import pytest
+
+
+NATIVE_INLINE_REFERENCE_PROGRAM = '''from pcc.ir.optimization.inline import inline_module
+from pcc.ir.optimization.text_tokens import global_name_counts
+SOURCE = "@callback = global ptr @finish\\ndefine internal void @finish() {\\nentry:\\n  ret void\\n}\\ndefine void @caller() {\\nentry:\\n  call void @finish()\\n  ret void\\n}\\n"
+def main():
+    result, changed = inline_module(SOURCE, include_definitions=True)
+    assert changed
+    assert "call void @finish()" not in result
+    assert "define internal void @finish()" in result
+    assert global_name_counts(result)["finish"] == 2
+    text = '@table = constant [3 x ptr] [ptr @finish, ptr @"finish", ptr @"\\\\66inish"]\\n'
+    text = text + '@message = constant [8 x i8] c"@finish\\\\00"\\n; @finish\\n'
+    references = global_name_counts(text)
+    assert references["finish"] == 3
+    assert references["table"] == 1
+    assert references["message"] == 1
+    print("INLINE_GLOBAL_REFERENCES_OK")
+main()
+'''
+
+
+@pytest.mark.integration
+def test_native_inliner_keeps_callback_and_exact_global_tokens(
+    tmp_path, pcc_runtime_archive, python_program_compiler,
+):
+    import os
+    import subprocess
+
+    source = tmp_path / "inline_references.py"
+    binary = tmp_path / "inline_references"
+    source.write_text(NATIVE_INLINE_REFERENCE_PROGRAM)
+    python_program_compiler(
+        str(source), str(binary), backend="self", libpython_mode="off",
+        runtime_archive=str(pcc_runtime_archive),
+    )
+    for gc in range(5):
+        environment = dict(os.environ, PCC_GC_BACKEND=str(gc),
+                           PCC_GC_REFCOUNT_PROVENANCE_PROBE="2")
+        environment.pop("LC_ALL", None)
+        result = subprocess.run([str(binary)], capture_output=True, text=True,
+                                timeout=30, env=environment)
+        assert result.returncode == 0, (gc, result.stderr)
+        assert result.stdout == "INLINE_GLOBAL_REFERENCES_OK\n"
+        assert result.stderr == ""
+
+
+@pytest.mark.parametrize("reference", [
+    "@callback = global ptr @finish",
+    "@callbacks = constant [1 x ptr] [ptr @finish]",
+    "@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] "
+    "[{ i32, ptr, ptr } { i32 65535, ptr @finish, ptr null }]",
+])
+def test_inline_retains_internal_function_referenced_as_a_value(reference):
+    source = reference + '''
+define internal void @finish() {
+entry:
+  ret void
+}
+define void @caller() {
+entry:
+  call void @finish()
+  ret void
+}
+'''
+    result, changed = inline_module(source)
+    assert changed
+    assert "call void @finish()" not in result
+    assert "define internal void @finish()" in result
+
+
+def test_global_reference_counts_preserve_token_and_literal_boundaries():
+    from pcc.ir.optimization.text_tokens import global_name_counts
+
+    text = '''@table = constant [3 x ptr] [ptr @finish, ptr @"finish", ptr @"\\66inish"]
+@message = constant [8 x i8] c"@finish\\00"
+; @finish is mentioned only in a comment
+define internal void @finish() {
+entry:
+  call void @finish.more()
+  ret void
+}
+'''
+    references = global_name_counts(text)
+    assert references["finish"] == 4
+    assert references["finish.more"] == 1
+    assert references["table"] == references["message"] == 1
+
+
+def test_inline_removes_unreferenced_body_despite_comment_and_prefix_mentions():
+    source = '''; @finish has no surviving reference
+@message = constant [7 x i8] c"@finish"
+declare void @finish.more()
+define internal void @finish() {
+entry:
+  ret void
+}
+define void @caller() {
+entry:
+  call void @finish()
+  call void @finish.more()
+  ret void
+}
+'''
+    result, changed = inline_module(source)
+    assert changed
+    assert "define internal void @finish()" not in result
+    assert "call void @finish.more()" in result
 
 
 def test_multiblock_inline_preserves_dotted_original_labels():
@@ -97,7 +208,6 @@ entry:
 def test_inliner_preserves_calls_with_different_argument_widths():
     # Opaque-pointer IR permits this ABI boundary. Substituting i32 into the
     # i64 body is invalid even though the direct call itself verifies.
-    from llvmlite import binding as llvm
     source = """declare void @sink(i64)
 define void @record(i64 %value) {
 entry:
@@ -110,14 +220,13 @@ entry:
   ret void
 }
 """
-    llvm.parse_assembly(source).verify()
+    verify_ir_text(source)
     result, _ = inline_module(source, include_definitions=True)
-    llvm.parse_assembly(result).verify()
+    verify_ir_text(result)
     assert "call void @record(i32 %value)" in result
 
 
 def test_multiblock_inline_splits_call_site_and_repairs_loop_phi(tmp_path):
-    from llvmlite import binding as llvm
     source = '''define i64 @choose(i1 %condition, i64 %value) {
 entry:
   br i1 %condition, label %yes, label %no
@@ -144,11 +253,11 @@ exit:
   ret i64 %total
 }
 '''
-    llvm.parse_assembly(source).verify()
+    verify_ir_text(source)
     result, changed = inline_module(source, include_definitions=True)
     assert changed
     assert "call i64 @choose" not in result
-    llvm.parse_assembly(result).verify()
+    verify_ir_text(result)
     verify_parsed_module(parse_self_backend_module('target triple = "arm64-apple-darwin23.6.0"\n' + result))
     import platform
     import subprocess
@@ -181,7 +290,6 @@ entry:
 
 
 def test_cfg_inline_preserves_addressed_caller_blocks():
-    from llvmlite import binding as llvm
     source = """@address = constant ptr blockaddress(@caller, %body)
 define i64 @choose(i1 %condition) {
 entry:
@@ -200,15 +308,14 @@ body:
   ret i64 %result
 }
 """
-    llvm.parse_assembly(source).verify()
+    verify_ir_text(source)
     result, _ = inline_module(source, include_definitions=True)
-    llvm.parse_assembly(result).verify()
+    verify_ir_text(result)
     assert "call i64 @choose" in result
 
 
 def test_cfg_inline_reuses_namespace_and_avoids_return_label_collision(monkeypatch):
-    from llvmlite import binding as llvm
-    from pcc.native_ir.ir_mutator import Function
+    from pcc.ir.optimization.ir_mutator import Function
     serializations = []
     defined_scans = []
     original_serialize = Function.serialize
@@ -241,6 +348,6 @@ entry:
     result, changed = inline_module(source, include_definitions=True)
     assert changed
     assert "call i64 @choose" not in result
-    llvm.parse_assembly(result).verify()
+    verify_ir_text(result)
     assert serializations.count("caller") <= 2
     assert defined_scans.count("caller") == 1

@@ -2,7 +2,7 @@
 
 import pytest
 
-from pcc.native_ir.instsimplify import simplify_module_text
+from pcc.ir.optimization.instsimplify import simplify_module_text
 
 
 @pytest.mark.parametrize("predicate,constant,inverted", [

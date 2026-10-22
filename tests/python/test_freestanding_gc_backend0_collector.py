@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_backend0_collector.py"
 MANAGED_SOURCE = RUNTIME_DIR / "py" / "py_obj_gc.py"
 MAKEFILE = RUNTIME_DIR / "Makefile"
@@ -46,6 +46,8 @@ RAW_IMPORTS = {
     "pcc_gc_root_slots",
     "pcc_gc_scheduler_root_head",
     "pcc_gc_trace_continuation_roots",
+    # Every mutator's mapped stack frames (a13c5b4a1).
+    "pcc_gc_visit_walked_stack_roots",
     "pcc_resume_world",
     "pcc_stop_the_world",
     "pcc_thread_safepoint",
@@ -204,10 +206,10 @@ def test_backend0_collector_compiles_as_strict_object(tmp_path: Path, emitter: s
 
 
 def test_production_archive_uniquely_owns_backend0_collector(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ):
     symbols = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,

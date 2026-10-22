@@ -42,8 +42,8 @@ def _run_once(args: argparse.Namespace, index: int) -> dict[str, Any]:
     profile_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = [
-        "bash",
-        str(REPO_ROOT / "scripts" / "bootstrap.sh"),
+        sys.executable,
+        str(REPO_ROOT / "scripts" / "bootstrap.py"),
         "--backend",
         args.backend,
         "--out-dir",

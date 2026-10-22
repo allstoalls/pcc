@@ -1,6 +1,6 @@
 import pytest
 
-from pcc.buffer_protocol_runtime import PyBUF_WRITABLE, request_buffer
+from pcc.library.buffer_protocol_runtime import PyBUF_WRITABLE, request_buffer
 
 
 def test_request_buffer_for_bytes():

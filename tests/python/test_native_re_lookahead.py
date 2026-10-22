@@ -2,10 +2,10 @@
 
 ``(?=...)`` and ``(?!...)`` were rejected by both the engine's parser and the
 frontend's static subset checker, so ``re.compile(r"...(?!\\s*\\()...")`` fell
-back to CPython.  Two of those live in ``pcc/passes/ir_metadata.py`` as
+back to CPython.  Two of those live in ``pcc/frontends/c/passes/ir_metadata.py`` as
 class-body constants, which run during module initialization -- and module
 initialization is outside the strict no-libpython stub projection, so the
-whole self-host compile failed with "module pcc.passes.ir_metadata generated
+whole self-host compile failed with "module pcc.frontends.c.passes.ir_metadata generated
 IR still calls py_cpy_* helpers".
 
 The assertion compiles to its own sub-program terminated by a dedicated
@@ -58,7 +58,7 @@ main()
 
 
 def test_lookahead_matches_cpython_without_libpython(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "re_lookahead.py"
     exe = tmp_path / "re_lookahead.out"
@@ -93,14 +93,14 @@ def test_ir_metadata_module_init_needs_no_libpython():
     import re as host_re
     from pathlib import Path
 
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
-    path = Path(__file__).resolve().parents[2] / "pcc/passes/ir_metadata.py"
+    path = Path(__file__).resolve().parents[2] / "pcc/frontends/c/passes/ir_metadata.py"
     typed = type_infer.infer_module(
         parse_and_lift(
-            path.read_text(encoding="utf-8"), str(path), "pcc.passes.ir_metadata"
+            path.read_text(encoding="utf-8"), str(path), "pcc.frontends.c.passes.ir_metadata"
         )
     )
     codegen = L1CodeGen(typed, False, "on")
@@ -127,9 +127,9 @@ def test_ir_metadata_module_init_needs_no_libpython():
     ],
 )
 def test_frontend_checker_agrees_on_lookahead(pattern, supported):
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
     typed = type_infer.infer_module(parse_and_lift("x = 1\n", "<probe>", "probe"))
     codegen = L1CodeGen(typed, False, "on")

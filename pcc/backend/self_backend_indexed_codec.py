@@ -41,11 +41,15 @@ def _wire_bool(value, name: str) -> bool:
 
 
 _SCHEMA = "pcc.self-backend.indexed-module.v1"
+_DEBUG_SCHEMA = "pcc.self-backend.indexed-module.v2"
 _MAGIC = b"PCCIDXMOD1\n"
 _MAX_HEADER_BYTES = 512 * 1024 * 1024
 
 # (wire name, final-kernel field, reconstructed-seed field).  The order is
-# part of v1 and is the raw payload order after the JSON header.
+# part of v1 and is the raw payload order after the JSON header. Atomic memory
+# payload IDs address two adjacent instruction_record_scalars rows: operands,
+# then (ordering text ID, explicit alignment or 0, 0, 0). Legacy cold atomic
+# payloads keep their five-field diagnostic form; new projections append align.
 _ARENA_FIELDS = (
     ("call_records", "call_scalars", "records"),
     ("call_args", "call_arg_scalars", "args"),
@@ -188,7 +192,7 @@ def _global_to_wire(value: GlobalDef):
     ]
 
 
-def _global_from_wire(value) -> GlobalDef:
+def _global_from_wire(value, type_context=None) -> GlobalDef:
     if not isinstance(value, list) or len(value) != 9:
         raise BackendUnavailable("indexed module has an invalid global record")
     value_type = _type_from_wire(value[1])
@@ -199,6 +203,7 @@ def _global_from_wire(value) -> GlobalDef:
         raise BackendUnavailable("indexed module global attributes are invalid")
     return GlobalDef(
         name=_wire_str(value[0], "global name"),
+        type_context=type_context,
         type=value_type,
         initializer=_wire_str(value[2], "global initializer"),
         is_constant=_wire_bool(value[3], "global constant flag"),
@@ -283,13 +288,25 @@ def _function_to_wire(function: ParsedFunction, kernel: IndexedFunctionKernel):
     }
 
 
+# At most 64 KiB of wire bytes per write, plus 8,192 scalar byte objects.
+# Keep packing scratch independent of arena length without changing <q coercion.
+_HOST_ARENA_CHUNK_SCALARS = 8192
+
+
 def _write_host_arena(stream, arena: CompilerIntArena) -> None:
+    # As before, the caller supplies a blocking binary writer that writes the
+    # complete bytes argument or raises. Earlier chunks can remain written if
+    # a later scalar cannot be packed; callers must discard failed sidecars.
     chunks = []
     index = 0
     while index < len(arena):
         chunks.append(struct.pack("<q", arena.get_unchecked(index)))
         index += 1
-    stream.write(b"".join(chunks))
+        if len(chunks) == _HOST_ARENA_CHUNK_SCALARS:
+            stream.write(b"".join(chunks))
+            chunks = []
+    if chunks or index == 0:
+        stream.write(b"".join(chunks))
 
 
 def encode_indexed_module_file(path: str, module: ParsedModule) -> None:
@@ -321,10 +338,26 @@ def encode_indexed_module_file(path: str, module: ParsedModule) -> None:
         "scalar_width": 8,
         "byte_order": "little",
         "triple": module.triple,
+        "named_type_bodies": (
+            dict(module.type_context.named_type_bodies)
+            if module.type_context is not None else {}
+        ),
         "globals": [_global_to_wire(item) for item in module.globals_],
         "functions": functions,
         "total_scalars": total_scalars,
     }
+    if module.type_context is not None and module.type_context.debug_info is not None:
+        from .self_backend_debug_codec import debug_to_wire
+        from . import BackendUnavailable as DebugUnavailable
+        try:
+            header["source_debug"] = debug_to_wire(
+                module.type_context.debug_info, module.functions,
+            )
+        except DebugUnavailable as error:
+            raise BackendUnavailable(str(error)) from error
+        # Old v1 readers must reject a debug module rather than ignore its
+        # additional header and silently emit a source-less artifact.
+        header["schema"] = _DEBUG_SCHEMA
     header_bytes = json.dumps(header, sort_keys=True).encode("utf-8")
     if len(header_bytes) > _MAX_HEADER_BYTES:
         raise BackendUnavailable("indexed module header exceeds the size limit")
@@ -502,6 +535,7 @@ def _seed_from_wire(value) -> tuple[ParsedFunction, tuple[tuple[str, int], ...]]
         aarch64_reload_slot_offsets=[],
         aarch64_fused_branch_values={},
         aarch64_frameless=False,
+        aarch64_dynamic_stack=False,
     )
     return function, tuple(arena_inventory)
 
@@ -528,11 +562,13 @@ def decode_indexed_module_file(path: str) -> ParsedModule:
             raise BackendUnavailable("indexed module header is invalid") from exc
         if (
             not isinstance(header, dict)
-            or header.get("schema") != _SCHEMA
+            or header.get("schema") not in (_SCHEMA, _DEBUG_SCHEMA)
             or header.get("scalar_width") != 8
             or header.get("byte_order") != "little"
         ):
             raise BackendUnavailable("indexed module header contract mismatch")
+        if ((header["schema"] == _DEBUG_SCHEMA) != ("source_debug" in header)):
+            raise BackendUnavailable("indexed module source debug version mismatch")
         function_rows = header.get("functions")
         global_rows = header.get("globals")
         if not isinstance(function_rows, list) or not isinstance(global_rows, list):
@@ -645,11 +681,35 @@ def decode_indexed_module_file(path: str) -> ParsedModule:
             definition_positions.close()
             used_value_ids.close()
             function_index += 1
-    globals_ = tuple(_global_from_wire(row) for row in global_rows)
+    bodies = header.get("named_type_bodies", {})
+    if not isinstance(bodies, dict):
+        raise BackendUnavailable("indexed module named type declarations are invalid")
+    declarations = []
+    for name, body in bodies.items():
+        name = _wire_str(name, "named type name")
+        body = _wire_str(body, "named type body")
+        if not name.startswith("%") or "\n" in name or "\n" in body:
+            raise BackendUnavailable("indexed module named type declaration is invalid")
+        declarations.append(name + " = type " + body)
+    from .self_backend_parse import _parse_named_types
+    triple = _wire_str(header.get("triple", ""), "target triple")
+    type_context = _parse_named_types("\n".join(declarations))
+    type_context.target_triple = triple
+    if "source_debug" in header:
+        from .self_backend_debug_codec import debug_from_wire
+        from . import BackendUnavailable as DebugUnavailable
+        try:
+            type_context.debug_info = debug_from_wire(header["source_debug"], tuple(functions))
+        except DebugUnavailable as error:
+            raise BackendUnavailable(str(error)) from error
+    for function in functions:
+        function.type_context = type_context
+    globals_ = tuple(_global_from_wire(row, type_context) for row in global_rows)
     return ParsedModule(
-        triple=_wire_str(header.get("triple", ""), "target triple"),
+        triple=triple,
         globals_=globals_,
         functions=tuple(functions),
+        type_context=type_context,
     )
 
 

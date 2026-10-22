@@ -1,6 +1,6 @@
 from io import StringIO
 
-from pcc.runtime_log_env import RuntimeLogEvent, emit_runtime_event
+from pcc.diagnostics.runtime_log_env import RuntimeLogEvent, emit_runtime_event
 
 
 def test_runtime_log_event_respects_channel(monkeypatch):

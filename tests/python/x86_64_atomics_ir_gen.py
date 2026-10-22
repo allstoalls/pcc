@@ -18,7 +18,7 @@ X86_64_LINUX_TRIPLE = "x86_64-unknown-linux-gnu"
 
 
 def build_module() -> str:
-    from pcc.llvm_capi import ir
+    from pcc.ir import ir
 
     mod = ir.Module(name="atomics_x86_64_smoke")
     mod.triple = X86_64_LINUX_TRIPLE

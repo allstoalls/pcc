@@ -63,7 +63,11 @@ def emit(func, dest, ret_type, callee, args, windows=False):
         if ceil:
             lines.extend(["  movq rax, xmm0", "  mov r10, 9223372036854775808", "  xor rax, r10", "  movq xmm0, rax"])
         if nearby:
-            save = func.platform_frame_extra - 8 if windows else 184 if func.is_vararg else 8
+            if windows:
+                from .self_backend_win64_abi import MXCSR_OFFSET, outgoing_size
+                save = outgoing_size(func) + MXCSR_OFFSET
+            else:
+                save = 184 if func.is_vararg else 8
             lines.append(f"  stmxcsr DWORD PTR [rsp + {save}]")
         # These functions are authored in freestanding_libc_numeric.py; no
         # external libm is introduced. Win64 home space is part of the frame.

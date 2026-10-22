@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 def _compile_to_ir(tmp_path: Path, source: str, name: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     input_path = tmp_path / (name + ".py")
     output_path = tmp_path / (name + ".ll")
@@ -67,7 +67,7 @@ def test_durable_file_surface_lowers_without_cpython(tmp_path: Path) -> None:
 
 
 def test_durable_file_surface_round_trip(tmp_path: Path) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source_path = tmp_path / "durable_source.txt"
     destination_path = tmp_path / "durable_destination.txt"
@@ -119,8 +119,8 @@ def test_durable_file_surface_round_trip(tmp_path: Path) -> None:
 def test_linux_durable_file_intrinsics_use_raw_syscalls(
     tmp_path: Path, monkeypatch
 ) -> None:
-    from pcc.py_frontend import pipeline
-    from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+    from pcc.frontends.python import pipeline
+    from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
     source = tmp_path / "durable_file_intrinsics.py"
     llvm_ir = tmp_path / "durable_file_intrinsics.ll"

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 
 def test_pipeline_import_policy_facade_reexports_single_table_owners():
-    from pcc.py_frontend import pipeline
-    from pcc.py_frontend import pipeline_import_policy as policy
+    from pcc.frontends.python import pipeline
+    from pcc.frontends.python import pipeline_import_policy as policy
 
     assert pipeline._COMPILE_TIME_ONLY_IMPORT_FROMS is policy.COMPILE_TIME_ONLY_IMPORT_FROMS
     assert pipeline._COMPILE_TIME_ONLY_IMPORT_MODULES is policy.COMPILE_TIME_ONLY_IMPORT_MODULES
@@ -17,8 +17,8 @@ def test_pipeline_import_policy_facade_reexports_single_table_owners():
 
 
 def test_pipeline_libpython_ir_and_lifecycle_facade_has_one_owner():
-    from pcc.py_frontend import pipeline
-    from pcc.py_frontend import pipeline_libpython
+    from pcc.frontends.python import pipeline
+    from pcc.frontends.python import pipeline_libpython
 
     assert pipeline._ir_needs_libpython is pipeline_libpython.ir_needs_libpython
     assert (
@@ -32,7 +32,7 @@ def test_pipeline_libpython_ir_and_lifecycle_facade_has_one_owner():
 
 
 def test_libpython_link_flags_honor_explicit_environment(monkeypatch):
-    from pcc.py_frontend import pipeline_libpython
+    from pcc.frontends.python import pipeline_libpython
 
     monkeypatch.setenv("PCC_PYTHON_LDFLAGS", "-L/test/python -lpython9.9")
     assert pipeline_libpython.link_flags() == [
@@ -47,7 +47,7 @@ def test_libpython_link_flags_add_interpreter_libdir_when_config_omits_it(
 ):
     import sysconfig
 
-    from pcc.py_frontend import pipeline_libpython
+    from pcc.frontends.python import pipeline_libpython
 
     libdir = tmp_path / "lib"
     libdir.mkdir()
@@ -88,7 +88,7 @@ def test_libpython_link_flags_keep_existing_interpreter_libdir_once(
 ):
     import sysconfig
 
-    from pcc.py_frontend import pipeline_libpython
+    from pcc.frontends.python import pipeline_libpython
 
     libdir = tmp_path / "lib"
     libdir.mkdir()
@@ -120,14 +120,14 @@ def test_libpython_link_flags_keep_existing_interpreter_libdir_once(
 
 
 def test_libpython_ir_scan_ignores_declarations_and_finds_calls():
-    from pcc.py_frontend.pipeline_libpython import ir_needs_libpython
+    from pcc.frontends.python.pipeline_libpython import ir_needs_libpython
 
     assert not ir_needs_libpython("declare ptr @py_cpy_import(ptr)\n")
     assert ir_needs_libpython("%value = call ptr @py_cpy_import(ptr %name)\n")
 
 
 def test_main_thread_init_is_idempotent_and_follows_program_args():
-    from pcc.py_frontend.pipeline_libpython import ensure_main_thread_init
+    from pcc.frontends.python.pipeline_libpython import ensure_main_thread_init
 
     ir = """\
 define i32 @main(i32 %argc, ptr %argv) {

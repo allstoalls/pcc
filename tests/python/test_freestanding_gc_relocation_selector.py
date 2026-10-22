@@ -7,17 +7,21 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_relocation_selector.py"
 MANAGED_SOURCE = RUNTIME_DIR / "py" / "py_gc_backend.py"
 MAKEFILE = RUNTIME_DIR / "Makefile"
 
 OWNED_SYMBOLS = {
+    "pcc_gc_relocation_selector_single_thread_rank_sift_down",
+    "pcc_gc_relocation_selector_single_thread_rank_begin",
+    "pcc_gc_relocation_selector_single_thread_ranked_page",
+    "pcc_gc_relocation_selector_single_thread_page_best_batch",
     "pcc_gc_backend4_candidate_fresh_skips_count",
     "pcc_gc_backend4_relocation_add_refusals_count",
     "pcc_gc_backend4_select_relocation_pages",
@@ -41,6 +45,7 @@ OWNED_GLOBALS = {
     "pcc_gc_backend4_relocation_add_refusals_g",
 }
 RAW_FUNCTION_IMPORTS = {
+    "pcc_gc_object_is_address_pinned",
     "free",
     "malloc",
     "pcc_current_thread_id",
@@ -49,9 +54,11 @@ RAW_FUNCTION_IMPORTS = {
     "pcc_gc_config_ensure",
     "pcc_gc_forwarding_find",
     "pcc_gc_forwarding_target_exists",
+    "pcc_gc_relocation_member_note",
     "pcc_py_gc_minor_graph_lock",
     "pcc_py_gc_minor_graph_unlock",
     "pcc_thread_safepoint",
+    "pcc_threads_enabled",
 }
 RAW_GLOBAL_IMPORTS = {
     "pcc_gc_backend4_evacuation_candidate_bytes_count",
@@ -219,7 +226,12 @@ def test_relocation_selector_preserves_page_policy_contract() -> None:
     )[1]
     assert "if pcc_gc_config_ensure() != 4" in page_selector
     assert "if allocated != object_budget:" in page_selector
-    assert "if batch_budget > 16:" in page_selector
+    assert "batch_budget: i64 = object_budget - page_selected" in page_selector
+    assert "if batch_budget > 16:" not in page_selector
+    page_batch = strict.split("def _select_page_objects_batch(", 1)[1].split(
+        '@c_abi_export("pcc_gc_select_relocation_set")', 1
+    )[0]
+    assert "and examined < 16" in page_batch
     assert "_best_relocation_page_batch(" in page_selector
     assert "_select_page_objects_batch(" in page_selector
     for forbidden in (
@@ -232,10 +244,10 @@ def test_relocation_selector_preserves_page_policy_contract() -> None:
 
 
 def test_production_archive_has_one_relocation_selector_owner(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,

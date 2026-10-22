@@ -7,7 +7,7 @@ import pytest
 
 @pytest.mark.parametrize("kind", ["function", "method", "classmethod"])
 def test_rebound_parameter_releases_values_on_return_and_error(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive, kind,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive, kind,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     body = '''if rows is None:
@@ -65,7 +65,7 @@ main()
 '''.replace("DEFINITION", definition).replace("CALL", call))
     binary = tmp_path / "rebound_owner"
     python_program_compiler(str(source), str(binary), backend="self",
-                            libpython_mode="off", runtime_archive=str(pcc_py_runtime_archive))
+                            libpython_mode="off", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], capture_output=True, text=True, timeout=20,
                              env=dict(os.environ, PATH="/nonexistent", PCC_GC_BACKEND=str(backend)))
@@ -77,7 +77,7 @@ main()
 
 
 def test_rebound_parameter_early_return_self_assignment_and_loop(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = tmp_path / "parameter_edges.py"
@@ -137,7 +137,7 @@ main()
 ''')
     binary = tmp_path / "parameter_edges"
     python_program_compiler(str(source), str(binary), backend="self",
-                            libpython_mode="off", runtime_archive=str(pcc_py_runtime_archive))
+                            libpython_mode="off", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], capture_output=True, text=True, timeout=20,
                              env=dict(os.environ, PATH="/nonexistent", PCC_GC_BACKEND=str(backend)))

@@ -23,6 +23,31 @@ _GATE = None if (_CC and _IS_X86_LINUX) else "needs cc and Linux x86_64"
 _X86_GATE = pytest.mark.pcc_gate(unavailable=_GATE)
 
 
+@pytest.mark.parametrize("instruction, expected", [
+    ("mov BYTE PTR [r11], 255", "41c603ff"),
+    ("mov WORD PTR [r11], 4660", "6641c7033412"),
+    ("mov DWORD PTR [r11], 24", "41c70318000000"),
+    ("mov QWORD PTR [r11], -1", "49c703ffffffff"),
+])
+def test_memory_immediate_mov_encoding(instruction, expected):
+    encoded = encode_instruction(instruction, pc=0, labels={}, section_name=".text")
+    assert encoded.code.hex() == expected
+    assert not encoded.relocations
+
+
+def test_memory_immediate_mov_rip_relocation_accounts_for_immediate():
+    encoded = encode_instruction("mov DWORD PTR value[rip], 24", pc=0, labels={}, section_name=".text")
+    assert encoded.code.hex() == "c7050000000018000000"
+    assert len(encoded.relocations) == 1
+    relocation = encoded.relocations[0]
+    assert relocation.offset == 2 and relocation.symbol == "value" and relocation.addend == -8
+
+
+def test_memory_immediate_mov_rejects_unencodable_64bit_constant():
+    with pytest.raises(X86EncodeError, match="immediate"):
+        encode_instruction("mov QWORD PTR [r11], 2147483648", pc=0, labels={}, section_name=".text")
+
+
 def _system_encoding(tmp_path: Path, instruction: str):
     asm_path = tmp_path / "oracle.s"
     obj_path = tmp_path / "oracle.o"
@@ -179,6 +204,8 @@ def test_owned_encoder_matches_system_assembler_per_emitted_shape(
     (
         "mov rax, [no_base*4]",
         "mov ah, r10b",
+        "mov QWORD PTR [rsp + 32], xmm10",
+        "mov xmm10, DWORD PTR [rbp + 48]",
         "vzeroupper",
         "jmp 7",
         "lock ret",

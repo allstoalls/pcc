@@ -26,7 +26,7 @@ With that reading order, Chapter 11 is not five unrelated algorithm dumps. It is
 
 ## 11.1 One Skeleton, Five Gaits
 
-Claim hygiene first. The file header of [pcc/py_runtime/src/py_gc_backend.c](../../pcc/py_runtime/src/py_gc_backend.c) records the backends' origin honestly: the non-refcount backends "start as selectable skeletons: they reuse the refcount semantics while exposing the barrier/safepoint counters that the real Lua/Go/OCaml/ZGC implementations will drive." Two years of slice work have grown real algorithms onto those skeletons — tricolor stepping, a concurrent worker, minor-heap promotion, forwarding and movement — but the status table in [docs/refs_docs/gc-research/README.md](../../docs/refs_docs/gc-research/README.md) still says plainly that they are **not** equivalent algorithmic ports of Lua, Go, OCaml, or ZGC. They are directions converging toward their references, validated slice by slice. This chapter is written in that voice: each section first states what the reference demands, then what pcc implements today and what it deliberately does not.
+Claim hygiene first. The file header of [pcc/runtime/src/py_gc_backend.c](../../pcc/runtime/src/py_gc_backend.c) records the backends' origin honestly: the non-refcount backends "start as selectable skeletons: they reuse the refcount semantics while exposing the barrier/safepoint counters that the real Lua/Go/OCaml/ZGC implementations will drive." Two years of slice work have grown real algorithms onto those skeletons — tricolor stepping, a concurrent worker, minor-heap promotion, forwarding and movement — but the status table in [docs/refs_docs/gc-research/README.md](../../docs/refs_docs/gc-research/README.md) still says plainly that they are **not** equivalent algorithmic ports of Lua, Go, OCaml, or ZGC. They are directions converging toward their references, validated slice by slice. This chapter is written in that voice: each section first states what the reference demands, then what pcc implements today and what it deliberately does not.
 
 Source snapshots of all five reference implementations live in the repository ([docs/refs_docs/gc-research/](../../docs/refs_docs/gc-research/) under `<lang>/`), and repository rules require reading the reference before porting, never re-deriving it:
 
@@ -43,7 +43,7 @@ Backend  Algorithm                      Reference        Snapshot contents (exce
 
 The ZGC snapshot is deliberately pinned to OpenJDK `jdk-27+21`: generational mode became ZGC's default in JDK 23 (JEP 474) and the non-generational mode was removed in JDK 24 (JEP 490), so backend #4 must be evaluated against **generational** ZGC, not against a mode that no longer exists.
 
-Before opening the backends, look once at the entry point they share, so the sections need not repeat it. `gc.collect()` lands in `pcc_gc_collect()` in [pcc/py_runtime/src/py_obj.c](../../pcc/py_runtime/src/py_obj.c), which runs two entirely different pipelines:
+Before opening the backends, look once at the entry point they share, so the sections need not repeat it. `gc.collect()` lands in `pcc_gc_collect()` in [pcc/runtime/src/py_obj.c](../../pcc/runtime/src/py_obj.c), which runs two entirely different pipelines:
 
 ```text
 pcc_gc_collect(reason)
@@ -66,10 +66,10 @@ The hard gate is the same for every backend: [tests/python/gc/](../../tests/pyth
 
 **Reference.** `gc-research/python/gcmodule.c` is CPython 3.13's generational cycle collector (`gc_collect_main`, `visit_decref`, `move_unreachable`); `gc_free_threading.c` is the PEP 703 free-threaded variant, kept as the reference for a future free-threaded path.
 
-**Core algorithm.** Refcounting is the primary collector: `py_decref` frees at zero, and the vast majority of objects never enter any tracing list. The cycle collector works only on tracked containers (`PY_FLAG_GC_TRACKED`, Chapter 9) and lives in [pcc/py_runtime/src/py_obj_gc.c](../../pcc/py_runtime/src/py_obj_gc.c):
+**Core algorithm.** Refcounting is the primary collector: `py_decref` frees at zero, and the vast majority of objects never enter any tracing list. The cycle collector works only on tracked containers (`PY_FLAG_GC_TRACKED`, Chapter 9) and lives in [pcc/runtime/src/py_obj_gc.c](../../pcc/runtime/src/py_obj_gc.c):
 
 ```c
-// pcc/py_runtime/src/py_obj_gc.c
+// pcc/runtime/src/py_obj_gc.c
 int64_t py_gc_collect(void) {
     if (py_gc_collecting) return 0;
     py_gc_collecting = 1;
@@ -85,7 +85,7 @@ int64_t py_gc_collect(void) {
 tracked objects hang on the `py_gc_head` list, accelerated by the `py_gc_node_index` pointer hash; the thresholds have CPython's shape (`py_gc_threshold0 = 700` and friends). `py_gc_collect()` reproduces the skeleton of CPython's algorithm: initialize each node's `gc_refs` to its refcount, subtract internal object-graph edges via `py_gc_subtract_child`, treat any node with `gc_refs > 0` as externally referenced, and propagate reachability from those via `py_gc_mark_reachable`. Runtime roots — frame, continuation, scheduler, and extension-state roots — are injected into the same mark via `pcc_gc_visit_runtime_roots()`: this is the #0-side consumer of Chapter 10's "exactly one root set." Then come the finalizer pass, the resurrection recheck, cycle clearing, and release, in the four-step order of Section 10.6.
 
 ```c
-// pcc/py_runtime/src/py_gc_backend.c
+// pcc/runtime/src/py_gc_backend.c
 void pcc_gc_store_ptr(PyObject *owner, PyObject **slot, PyObject *value) {
     if (pcc_gc_selected_backend == PCC_GC_KIND_INCREMENTAL_TRICOLOR) {
         if (owner != NULL && (owner->flags & PY_FLAG_GC_BLACK) &&
@@ -102,7 +102,7 @@ void pcc_gc_store_ptr(PyObject *owner, PyObject **slot, PyObject *value) {
 ```
 
 ```c
-// pcc/py_runtime/src/py_gc_backend.c
+// pcc/runtime/src/py_gc_backend.c
 void pcc_gc_step(int64_t work_limit) {
     switch (pcc_gc_selected_backend) {
     case PCC_GC_KIND_INCREMENTAL_TRICOLOR:

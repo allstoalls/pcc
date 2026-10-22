@@ -1,6 +1,6 @@
 # 第 4 章 C 语义低层化与符号性
 
-第 3 章把 C 源码送到了"AST 进入代码生成器"这条线;本章讲线的另一侧:[pcc/codegen/c_codegen.py](../../pcc/codegen/c_codegen.py) 如何把 C 表达式低层化(lowering)为 LLVM IR。仓库的 [AGENTS.md](../../AGENTS.md) 对这份约 1.1 万行的文件有一句定性——"大多数 C 侧 bug 落在这里",而其中最高产的一族 bug 只围绕一个事实:LLVM 的整数类型没有符号,C 的整数类型有。本章以符号性跟踪为主线,讲清三件事:为什么 `int` 与 `unsigned int` 同为 `i32` 而符号性要单独跟踪;C 标准的 usual arithmetic conversions 如何落在 `_usual_arithmetic_conversion` 等六个 helper 上;以及这个设计的经典失败模式——位形正确、签名标记丢失,下游悄悄选了 `sdiv`/`srem`/`ashr`/有符号比较。压轴的案例研究来自 Lua:一次"排序偶尔出错"的诡异失败,最终缩减成一行丢了无符号标记的 XOR。
+第 3 章把 C 源码送到了"AST 进入代码生成器"这条线;本章讲线的另一侧:[pcc/frontends/c/codegen/c_codegen.py](../../pcc/frontends/c/codegen/c_codegen.py) 如何把 C 表达式低层化(lowering)为 LLVM IR。仓库的 [AGENTS.md](../../AGENTS.md) 对这份约 1.1 万行的文件有一句定性——"大多数 C 侧 bug 落在这里",而其中最高产的一族 bug 只围绕一个事实:LLVM 的整数类型没有符号,C 的整数类型有。本章以符号性跟踪为主线,讲清三件事:为什么 `int` 与 `unsigned int` 同为 `i32` 而符号性要单独跟踪;C 标准的 usual arithmetic conversions 如何落在 `_usual_arithmetic_conversion` 等六个 helper 上;以及这个设计的经典失败模式——位形正确、签名标记丢失,下游悄悄选了 `sdiv`/`srem`/`ashr`/有符号比较。压轴的案例研究来自 Lua:一次"排序偶尔出错"的诡异失败,最终缩减成一行丢了无符号标记的 XOR。
 
 ## 本章导读:LLVM 整数类型不携带符号信息
 
@@ -25,7 +25,7 @@ C 语义            有符号指令          无符号指令
 浮点→整数         fptosi             fptoui
 ```
 
-这个立场对两补码机器是诚实的:`+`、`-`、`*`、`&`、`|`、`^`、`<<` 在两补码下本来就不区分符号,位形完全相同,LLVM 没必要为它们准备两套指令。但它把一个责任完整地推给了前端:**C 类型系统里的符号性信息,必须由编译器自己从"产生值的表达式"携带到"消费值的运算符"**。[pcc/codegen/c_codegen.py](../../pcc/codegen/c_codegen.py) 的类型映射表 `get_ir_type_from_names()` 写得很直白:`"int"` 与 `"int unsigned"` 都映到 `int32_t`,`"long"` 与 `"long unsigned"` 都映到 `int64_t`,`signed` 关键字在进表前就被过滤掉。IR 类型层面,符号性已经不存在了。
+这个立场对两补码机器是诚实的:`+`、`-`、`*`、`&`、`|`、`^`、`<<` 在两补码下本来就不区分符号,位形完全相同,LLVM 没必要为它们准备两套指令。但它把一个责任完整地推给了前端:**C 类型系统里的符号性信息,必须由编译器自己从"产生值的表达式"携带到"消费值的运算符"**。[pcc/frontends/c/codegen/c_codegen.py](../../pcc/frontends/c/codegen/c_codegen.py) 的类型映射表 `get_ir_type_from_names()` 写得很直白:`"int"` 与 `"int unsigned"` 都映到 `int32_t`,`"long"` 与 `"long unsigned"` 都映到 `int64_t`,`signed` 关键字在进表前就被过滤掉。IR 类型层面,符号性已经不存在了。
 
 设计空间有三个候选。其一,把 C 类型全程钉在每个表达式值上——每个 codegen 方法不再返回裸 IR 值,而是返回"值 + 完整 C 类型"的包装对象,类似 clang 在 AST 上携带完整类型信息的做法。这最严密,但 pcc 的代码生成器架构是 `codegen_<节点类名>` 方法族经 `codegen()` 的 MRO 扫描分派,每个方法返回 `(值, 地址)` 二元组;包装方案要求一次性改写全部表达式路径,且包装对象会渗进所有与 llvmlite builder 交互的代码。其二,用不同 IR 宽度区分符号——直接违背 LLVM 模型,不成立。其三,pcc 的实际选择:**IR 值对象上的旁挂元数据,加一组纪律化的 helper**。值还是 llvmlite 的值,但可能带一个 `_is_unsigned` 属性;六个 helper(`_tag_unsigned`、`_clear_unsigned`、`_is_unsigned_val`、`_convert_int_value`、`_usual_arithmetic_conversion`、`_shift_operand_conversion`)构成读写与转换的全部合法入口。
 
@@ -33,7 +33,7 @@ C 语义            有符号指令          无符号指令
 
 ## 4.2 三层元数据:值标签、绑定标签、常量值
 
-符号性信息在 `LLVMCodeGenerator` 里以三种形态存在,对应值的三种生命阶段。
+符号性信息在 `CCodeGenerator` 里以三种形态存在,对应值的三种生命阶段。
 
 ### 4.2.1 值标签:三种"味道"
 
@@ -230,7 +230,7 @@ enum { MAXHSIZE = luaM_limitN(1 << MAXHBITS, Node) };
 
 ## 练习
 
-1. **读源码验证。** 在 [pcc/codegen/c_codegen.py](../../pcc/codegen/c_codegen.py) 的 `codegen_BinaryOp` 中追踪表达式 `(x ^ y) % m`(`x`、`y` 为 `unsigned int`,`m` 为 `int`)的完整低层化路径:`^` 的结果在哪一行被打标?`%` 之前的 `_usual_arithmetic_conversion` 走哪个分支、`result_unsigned` 是什么?最终选择 `urem` 的判定条件是哪一句?再对照 `test_unsigned_xor_result_stays_unsigned_for_modulo`,解释 `% 960` 中 960 不写成 `960u` 的用意。
+1. **读源码验证。** 在 [pcc/frontends/c/codegen/c_codegen.py](../../pcc/frontends/c/codegen/c_codegen.py) 的 `codegen_BinaryOp` 中追踪表达式 `(x ^ y) % m`(`x`、`y` 为 `unsigned int`,`m` 为 `int`)的完整低层化路径:`^` 的结果在哪一行被打标?`%` 之前的 `_usual_arithmetic_conversion` 走哪个分支、`result_unsigned` 是什么?最终选择 `urem` 的判定条件是哪一句?再对照 `test_unsigned_xor_result_stays_unsigned_for_modulo`,解释 `% 960` 中 960 不写成 `960u` 的用意。
 2. **双向不变式。** `_integer_promotion` 对宽度小于 32 的整数固定传 `result_unsigned=False`。假设有人"修复"为保留源符号性(`unsigned char` 提升后仍无符号),[tests/c/test_unsigned_loads.py](../../tests/c/test_unsigned_loads.py) 中哪个测试会立即失败?写出该测试里比较运算两侧的提升后类型与比较指令,分别在正确实现与"修复"后实现下的版本。
 3. **开放角落实证。** 4.4 节指出 `codegen_TernaryOp` 的 phi 合流用 any() 近似符号性。构造一个最小 C 程序,让"较宽有符号臂 + 较窄无符号臂"的三目结果流入一个符号敏感的消费者,按 C 标准与按 any() 规则分别手推结果;说明为什么现有测试 `test_unsigned_ternary_result_stays_unsigned_for_modulo` 捕不到它,并按 §11 的形状为它写一个下游敏感回归测试(纸面即可)。
 4. **编译期孪生推演。** 不运行代码,分别按 `_eval_const_expr` 的 `ConstIntValue` 语义与"直接用 Python int"的朴素语义,手推 `((size_t)(~(size_t)0)) / sizeof(Node)`(设 `sizeof(Node) == 16`)的折叠值,以及它使 `luaM_limitN` 三目各选哪个分支;再解释 `c_int_div` 为什么不能写成 Python 的 `//`(给出一个两者结果不同的具体常量表达式)。

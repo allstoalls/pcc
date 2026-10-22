@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pcc.gc_backend_capabilities import all_backends, by_id, production_backends, validate_capabilities
+from pcc.diagnostics.gc_backend_capabilities import all_backends, by_id, production_backends, validate_capabilities
 
 
 def test_gc_backend_capabilities_cover_all_five_backends():

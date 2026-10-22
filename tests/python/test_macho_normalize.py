@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import struct
 
-from pcc.macho_normalize import normalize_macho_metadata
+from pcc.diagnostics.macho_normalize import normalize_macho_metadata
 
 
 def test_normalize_macho_metadata_zeros_lc_uuid_payload(tmp_path):

@@ -8,8 +8,8 @@ import pytest
 
 
 @pytest.mark.parametrize("argument", ["", "[]", "make()"])
-def test_constructor_temporaries_are_released(tmp_path: Path, pcc_py_runtime_archive, argument):
-    from pcc.py_frontend.pipeline import compile_python
+def test_constructor_temporaries_are_released(tmp_path: Path, pcc_runtime_archive, argument):
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "constructor_temps.py"
     source.write_text('''from dataclasses import dataclass, field
@@ -42,7 +42,7 @@ main()
 '''.replace("ARGUMENT", argument))
     binary = tmp_path / "constructor_temps"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND="0"),
                          capture_output=True, text=True, timeout=15)
     assert ran.returncode == 0, ran.stdout + ran.stderr
@@ -52,9 +52,9 @@ main()
 
 
 def test_constructor_arguments_keep_source_order_and_cleanup_on_failure(
-    tmp_path: Path, pcc_py_runtime_archive,
+    tmp_path: Path, pcc_runtime_archive,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "constructor_failures.py"
     source.write_text('''import gc
@@ -100,7 +100,7 @@ main()
 ''')
     binary = tmp_path / "constructor_failures"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
                              capture_output=True, text=True, timeout=15)
@@ -113,7 +113,7 @@ main()
     "left=tuple(left), right=tuple(right)",
 ])
 def test_classmethod_constructor_consumes_temporary_tuples(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive, arguments,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive, arguments,
 ):
     """The NativeObject.from_sections calling shape, including kwargs."""
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
@@ -159,7 +159,7 @@ main()
     binary = tmp_path / "classmethod_owners"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         ran = subprocess.run(
@@ -174,7 +174,7 @@ main()
 
 
 def test_classmethod_constructor_arguments_survive_rebind_and_unwind(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = tmp_path / "classmethod_unwind.py"
@@ -232,7 +232,7 @@ main()
     binary = tmp_path / "classmethod_unwind"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         ran = subprocess.run(

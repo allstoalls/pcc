@@ -1,10 +1,10 @@
 import os
 import subprocess
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
-def test_native_rmdir_preserves_nonempty_directories_and_removes_empty_ones(tmp_path, pcc_py_runtime_archive):
+def test_native_rmdir_preserves_nonempty_directories_and_removes_empty_ones(tmp_path, pcc_runtime_archive):
     source = tmp_path / "remove_dir.py"
     source.write_text('''
 import os
@@ -25,7 +25,7 @@ main()
 ''')
     output = tmp_path / "remove_dir"
     compile_python(str(source), str(output), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         directory = tmp_path / ("directory-" + str(gc))
         result = subprocess.run([str(output), str(directory)], capture_output=True, text=True,

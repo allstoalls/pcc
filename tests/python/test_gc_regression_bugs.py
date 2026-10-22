@@ -23,7 +23,7 @@ import textwrap
 import pytest
 
 def _compile_and_run(tmp_path, source: str) -> subprocess.CompletedProcess[str]:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -38,7 +38,7 @@ def _compile_and_run_capture_rss(
     tmp_path, source: str,
 ) -> tuple[subprocess.CompletedProcess[str], int]:
     """Run binary with /usr/bin/time -l and return (proc, peak_rss_kib)."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"

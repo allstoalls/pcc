@@ -146,7 +146,15 @@ def encode_float_bits(text: str, width: int) -> int:
             if special == "inf":
                 return infinity_bits(width, negative)
             if special == "nan":
-                return nan_bits(width, negative)
+                # IR tokens preserve the NaN sign, quiet bit and payload.
+                # Keep the binary32 significand's high 23 bits directly;
+                # constructing a host NaN can change all three properties.
+                fraction = (bits & ((1 << 52) - 1)) >> 29
+                if fraction == 0:
+                    # A payload entirely below binary32 precision must still
+                    # denote NaN rather than becoming infinity.
+                    fraction = 1
+                return _pack(int(negative), 255, fraction, width)
             return encode_ratio(numerator, denominator, width, negative)
         raise ValueError("extended LLVM constant needs 0xK or 0xL marker")
     if lower.endswith(("f", "l")):

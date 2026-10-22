@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import re
 import struct
 
 from pathlib import Path
@@ -68,6 +69,10 @@ from pcc.backend.self_backend_precise_stackmaps import (
 from pcc.backend.self_backend_prepare import prepare_module_for_target
 from pcc.backend.self_backend_value_arena import CompilerIntArena
 from pcc.backend.self_backend_x86_64_linux import emit_x86_64_linux_asm
+
+
+# Checks the serialized precise stack-map table, which objects carry only on request.
+pytestmark = pytest.mark.usefixtures("precise_stackmap_tables")
 
 
 def _location(arch: int, offset: int = -8) -> StackMapLocation:
@@ -193,21 +198,68 @@ def test_packed_root_state_reuses_transitions_and_sorts_locations() -> None:
     roots.close()
 
 
-def test_aarch64_label_offsets_skip_normalizing_ordinary_instructions():
-    class InstructionText(str):
-        def strip(self, *_args, **_kwargs):
-            raise AssertionError("ordinary instruction was normalized")
+def test_packed_root_state_indexes_grow_past_protocol_hints() -> None:
+    # Capacities start from call-protocol hints; a function's frame slots,
+    # groups, states and cached transitions are not bounded by those hints.
+    group_count = 64
+    roots = PackedRootStatePlane(block_count=1, protocol_hint=0)
+    initial_capacities = (
+        roots.group_index_capacity,
+        roots.registered_index_capacity,
+        roots.state_index_capacity,
+        roots.transition_index_capacity,
+    )
+    groups = [
+        roots.intern_group(
+            base_ref=100 + index,
+            origin_offset=0,
+            count=2,
+            owned=index % 2 == 0,
+            alloca_offset=16 * (index + 1),
+            frame_size=16 * (group_count + 1),
+        )
+        for index in range(group_count)
+    ]
+    states = [0]
+    for group in groups:
+        states.append(roots.transition(states[-1], group, True))
+
+    assert roots.group_index_capacity > initial_capacities[0]
+    assert roots.registered_index_capacity > initial_capacities[1]
+    assert roots.state_index_capacity > initial_capacities[2]
+    assert roots.transition_index_capacity > initial_capacities[3]
+    for index, group in enumerate(groups):
+        base_ref = 100 + index
+        assert roots.group_id(base_ref, 0) == group
+        assert roots.registered_root_offset(base_ref, 0) == -16 * (index + 1)
+        assert roots.registered_root_offset(base_ref, 8) == -16 * (index + 1) + 8
+    assert roots.registered_root_offset(99, 0) == NO_OFFSET
+    assert roots.group_id(99, 0) == -1
+    state_count = len(roots.state_spans) // 4
+    for index, group in enumerate(groups):
+        assert roots.transition(states[index], group, True) == states[index + 1]
+    assert len(roots.state_spans) // 4 == state_count
+    locations = roots.ensure_state_locations(states[-1])
+    assert locations.second == group_count * 2
+    roots.close()
+
+
+def test_aarch64_label_offsets_follow_canonical_assembler_contract():
+    from pcc.backend.arm64_encode import EncodeError
 
     lines = [
         ".section __TEXT,__text,regular,pure_instructions",
         ".p2align 2",
         "_entry:",
-        InstructionText("  add x0, x0, #1"),
-        InstructionText("  ret"),
-        ".p2align 3",
+        "  add x0, x0, #1",
+        "  ret",
+        ".p2align 2",
         "L_next:",
+        ".data_region",
         "  .long 1, 2",
         ".space 4",
+        ".end_data_region",
+        "L_end:",
         ".section __DATA,__data",
         "_ignored:",
     ]
@@ -215,7 +267,16 @@ def test_aarch64_label_offsets_skip_normalizing_ordinary_instructions():
     assert precise_stackmaps._aarch64_text_label_offsets(lines) == {
         "_entry": 0,
         "L_next": 8,
+        "L_end": 20,
     }
+    # Stack-map PCs use the final assembler's layout, not an independent
+    # instruction counter. Unsupported text alignment must fail identically.
+    unsupported = list(lines)
+    unsupported[5] = ".p2align 3"
+    for measure in (precise_stackmaps._aarch64_text_label_offsets,
+                    lambda chunks: assemble_file("\n".join(chunks))):
+        with pytest.raises(EncodeError, match=r"\.p2align > 2 in __text not proven"):
+            measure(unsupported)
 
 
 def test_stackmap_cfg_recovers_equal_block_labels_with_different_hashes():
@@ -858,13 +919,22 @@ def test_aarch64_emitter_finalizes_stackmap_after_machine_peepholes():
 
 
 def test_aarch64_loop_safepoint_keeps_distinct_pc_after_fallthrough_call():
+    # The registered root keeps both safepoints in the table: a call or loop
+    # record with no managed location is not written.
     assembly = emit_aarch64_darwin_asm(r'''
 target triple = "arm64-apple-darwin23.6.0"
 
+@frame_map = internal constant i32 1
+
+declare void @pcc_gc_frame_enter(ptr, ptr)
+declare void @pcc_gc_frame_leave(ptr)
 declare void @opaque_call()
 
-define void @probe(i1 %take_call, i64 %limit) {
+define void @probe(ptr %obj, i1 %take_call, i64 %limit) {
 entry:
+  %root = alloca ptr, align 8
+  store ptr %obj, ptr %root, align 8
+  call void @pcc_gc_frame_enter(ptr @frame_map, ptr %root)
   br label %loop
 
 loop:
@@ -883,6 +953,7 @@ latch:
   br label %loop
 
 done:
+  call void @pcc_gc_frame_leave(ptr %root)
   ret void
 }
 '''.strip())
@@ -1008,6 +1079,222 @@ def test_structured_parsed_aarch64_reloads_keep_final_instruction_order():
         assert transport.encoded_line_records is None
 
 
+@pytest.mark.parametrize(
+    "source_factory", [_target_final_stackmap_ir, _stale_managed_ssa_ir],
+)
+def test_native_function_retirement_matches_delayed_object_control(
+    monkeypatch, source_factory,
+):
+    from pcc.backend import self_backend_aarch64_darwin as emitter
+    from pcc.backend.native_object import encode_native_object_from_sections
+    from pcc.backend.self_backend_kernel import (
+        IndexedFunctionKernel,
+        get_indexed_function_kernel,
+    )
+    from pcc.backend.self_backend_parse import parse_self_backend_module
+
+    source = source_factory("arm64-apple-darwin23.6.0") + """
+
+define i64 @retirement_tail(i64 %value) {
+entry:
+  %result = add i64 %value, 1
+  ret i64 %result
+}
+"""
+    close = IndexedFunctionKernel.close_native_tables
+    emit_function = emitter._emit_function
+    release_capture = emitter._NativeAArch64Emission.release_captured_function
+    build_section = emitter.build_aarch64_stack_map_section
+
+    def emit_with_lifetime_assertions(*, delayed):
+        completed = []
+        released = set()
+        stackmaps_finished = False
+        suppressed_closes = []
+
+        def observe_function(func, plan, **kwargs):
+            assert kwargs.get("native_sink") is not None
+            for previous in completed:
+                assert previous.instruction_metadata._closed is (not delayed)
+            kernel = get_indexed_function_kernel(func)
+            assert not kernel.instruction_metadata._closed
+            result = emit_function(func, plan, **kwargs)
+            completed.append(kernel)
+            return result
+
+        def observe_release(sink):
+            assert not completed[-1].instruction_metadata._closed
+            release_capture(sink)
+            released.add(id(completed[-1]))
+
+        def observe_close(kernel):
+            assert id(kernel) in released
+            if delayed and not stackmaps_finished:
+                # Test-only original control: preserve tables until the
+                # unchanged late-close loop after stack-map serialization.
+                suppressed_closes.append(id(kernel))
+                return
+            close(kernel)
+
+        def observe_section(*args, **kwargs):
+            nonlocal stackmaps_finished
+            assert len(completed) == 2
+            assert all(
+                kernel.instruction_metadata._closed is (not delayed)
+                for kernel in completed
+            )
+            kernel_arenas = {
+                id(getattr(kernel, field))
+                for kernel in completed
+                for field in kernel.__slots__
+                if isinstance(getattr(kernel, field), CompilerIntArena)
+            }
+            for plan in args[1]:
+                packed = plan.packed_records
+                assert packed is not None
+                for field in packed.__slots__:
+                    value = getattr(packed, field)
+                    if isinstance(value, CompilerIntArena):
+                        assert id(value) not in kernel_arenas
+                        assert not value._closed
+            result = build_section(*args, **kwargs)
+            stackmaps_finished = True
+            return result
+
+        with monkeypatch.context() as patch:
+            patch.setattr(emitter, "_emit_function", observe_function)
+            patch.setattr(
+                emitter._NativeAArch64Emission,
+                "release_captured_function", observe_release,
+            )
+            patch.setattr(IndexedFunctionKernel, "close_native_tables", observe_close)
+            patch.setattr(emitter, "build_aarch64_stack_map_section", observe_section)
+            transport = emitter.emit_aarch64_darwin_indexed_transport(
+                parse_self_backend_module(source), optimize=False,
+            )
+        assert stackmaps_finished
+        assert len(released) == 2
+        assert len(suppressed_closes) == (2 if delayed else 0)
+        assert all(kernel.instruction_metadata._closed for kernel in completed)
+        sections, undefined = transport.assemble_sections()
+        names = {(section.segname, section.sectname) for section in sections}
+        assert ("__DATA", "__pcc_stackmaps") in names
+        assert ("__LD", "__compact_unwind") in names
+        stackmaps = next(
+            section for section in sections if section.sectname == "__pcc_stackmaps"
+        )
+        decoded = decode_stack_map(stackmaps.data, expected_arch=ARCH_AARCH64)
+        assert any(record.locations for fn in decoded.functions for record in fn.records)
+        encoded = encode_native_object_from_sections(sections, undefined=undefined)
+        return sections, undefined, encoded
+
+    expected = emit_with_lifetime_assertions(delayed=True)
+    assert emit_with_lifetime_assertions(delayed=False) == expected
+
+
+def test_native_function_retirement_preserves_nonconsuming_tables(monkeypatch):
+    from pcc.backend import self_backend_aarch64_darwin as emitter
+    from pcc.backend.native_object import encode_native_object_from_sections
+    from pcc.backend.self_backend_kernel import (
+        IndexedFunctionKernel,
+        get_indexed_function_kernel,
+    )
+    from pcc.backend.self_backend_parse import parse_self_backend_module
+
+    source = _stale_managed_ssa_ir("arm64-apple-darwin23.6.0")
+    expected = emitter.emit_aarch64_darwin_indexed_transport(
+        parse_self_backend_module(source), optimize=False,
+    ).assemble_sections()
+    prepared = emitter.prepare_parsed_module_for_target(
+        parse_self_backend_module(source),
+        aggregate_returned_indirect=emitter._aggregate_returned_indirect,
+        aggregate_returned_indirect_indexed=emitter._aggregate_returned_indirect_indexed,
+        materialize_legacy_slots=False,
+    )
+    kernels = [get_indexed_function_kernel(func) for func in prepared.functions]
+    close = IndexedFunctionKernel.close_native_tables
+    sections, undefined = [], []
+
+    def reject_close(kernel):
+        raise AssertionError("close_native_tables=False must preserve kernel tables")
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(IndexedFunctionKernel, "close_native_tables", reject_close)
+            lines = emitter._emit_prepared_aarch64_darwin_lines(
+                prepared, optimize=False, close_native_tables=False,
+                structured_sections=sections, structured_counts=[],
+                native_undefined=undefined, native_fallback_lines=[],
+            )
+        assert lines == []
+        assert all(not kernel.instruction_metadata._closed for kernel in kernels)
+        assert (sections, undefined) == expected
+        assert encode_native_object_from_sections(
+            sections, undefined=undefined,
+        ) == encode_native_object_from_sections(expected[0], undefined=expected[1])
+    finally:
+        for kernel in kernels:
+            close(kernel)
+
+
+@pytest.mark.parametrize("failure_phase", ["emit", "capture-retire"])
+def test_native_function_retirement_waits_for_success(monkeypatch, failure_phase):
+    from pcc.backend import self_backend_aarch64_darwin as emitter
+    from pcc.backend.self_backend_kernel import get_indexed_function_kernel
+    from pcc.backend.self_backend_parse import parse_self_backend_module
+
+    source = _stale_managed_ssa_ir("arm64-apple-darwin23.6.0") + """
+
+define i64 @retirement_tail(i64 %value) {
+entry:
+  ret i64 %value
+}
+"""
+    module = parse_self_backend_module(source)
+    emit_function = emitter._emit_function
+    release_capture = emitter._NativeAArch64Emission.release_captured_function
+    started = []
+    release_count = 0
+
+    def fail_emit(func, plan, **kwargs):
+        kernel = get_indexed_function_kernel(func)
+        started.append(kernel)
+        if len(started) == 2 and failure_phase == "emit":
+            raise BackendUnavailable("injected function retirement failure")
+        return emit_function(func, plan, **kwargs)
+
+    def fail_release(sink):
+        nonlocal release_count
+        release_count += 1
+        if release_count == 2 and failure_phase == "capture-retire":
+            raise BackendUnavailable("injected function retirement failure")
+        release_capture(sink)
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(emitter, "_emit_function", fail_emit)
+            patch.setattr(
+                emitter._NativeAArch64Emission,
+                "release_captured_function", fail_release,
+            )
+            with pytest.raises(BackendUnavailable, match="injected function retirement failure"):
+                emitter.emit_aarch64_darwin_indexed_transport(module, optimize=False)
+        assert len(started) == 2
+        assert started[0].instruction_metadata._closed
+        assert not started[1].instruction_metadata._closed
+        assert not emitter._AARCH64_EMISSION_ACTIVE
+        assert not emitter.direct_instruction_capture_active()
+        # A failed scope must not poison a fresh transport in the same process.
+        fresh = emitter.emit_aarch64_darwin_indexed_transport(
+            parse_self_backend_module(source), optimize=False,
+        )
+        assert fresh.native_finalized
+        assert fresh.assemble_sections()[0]
+    finally:
+        for func in module.functions:
+            get_indexed_function_kernel(func).close_native_tables()
+
+
 def test_both_target_emitters_refresh_live_managed_ssa_after_safepoint():
     aarch64 = emit_aarch64_darwin_asm(
         _stale_managed_ssa_ir("arm64-apple-darwin23.6.0")
@@ -1024,9 +1311,14 @@ def test_both_target_emitters_refresh_live_managed_ssa_after_safepoint():
     x86_after_safepoint = x86.split(
         "call pcc_thread_safepoint", 1
     )[1].split("call opaque_call", 1)[0]
-    assert "mov r11, QWORD PTR [rbp - " in x86_after_safepoint
-    assert "add r11, 24" in x86_after_safepoint
-    assert "mov QWORD PTR [rbp - " in x86_after_safepoint
+    # Post-selection forwarding can remove the intermediate SSA home store.
+    # The relocated root must still be reloaded after the safepoint, have its
+    # derived offset restored, and reach opaque_call's first ABI argument.
+    instructions = [line.strip() for line in x86_after_safepoint.splitlines()
+                    if line.strip() and not line.strip().endswith(":")]
+    assert len(instructions) == 3
+    assert re.fullmatch(r"mov r11, QWORD PTR \[rbp - [1-9][0-9]*\]", instructions[0])
+    assert instructions[1:] == ["add r11, 24", "mov rdi, r11"]
 
 
 @pytest.mark.parametrize(
@@ -1092,8 +1384,8 @@ done:
     assert "_module_top:" in assembly
 
 
-def _elf_stackmap_object() -> elf_x86_64.ElfObject:
-    value = _map(ARCH_X86_64, "_start")
+def _elf_stackmap_object(arch: int = ARCH_X86_64) -> elf_x86_64.ElfObject:
+    value = _map(arch, "_start")
     payload = encode_stack_map(value)
     address_offset = function_address_offsets(payload)[0]
     return elf_x86_64.ElfObject(
@@ -1114,7 +1406,7 @@ def _elf_stackmap_object() -> elf_x86_64.ElfObject:
                 relocations=(elf_x86_64.ElfRelocation(
                     address_offset,
                     1,
-                    elf_x86_64.R_X86_64_64,
+                    257 if arch == ARCH_AARCH64 else elf_x86_64.R_X86_64_64,
                 ),),
             ),
         ),
@@ -1129,6 +1421,7 @@ def _elf_stackmap_object() -> elf_x86_64.ElfObject:
                 elf_x86_64.STT_FUNC,
             ),
         ),
+        machine=elf_x86_64.EM_AARCH64 if arch == ARCH_AARCH64 else elf_x86_64.EM_X86_64,
     )
 
 
@@ -1155,6 +1448,180 @@ def test_owned_elf_stackmap_rejects_missing_function_relocation():
             obj,
             sections=(obj.sections[0], replace(stackmap, relocations=())),
         ))
+
+
+@pytest.mark.parametrize("arch", [ARCH_AARCH64, ARCH_X86_64])
+def test_owned_elf_stackmap_validation_never_materializes_maps(arch, monkeypatch):
+    """Required red: every old ELF boundary constructs decoded dataclasses."""
+    obj = _elf_stackmap_object(arch)
+
+    def reject_materialization(*args, **kwargs):
+        pytest.fail("ELF validation must not materialize a decoded stack map")
+
+    for name in (
+        "StackMapLocation", "SafepointRecord", "FunctionStackMap", "PreciseStackMap",
+    ):
+        monkeypatch.setattr(wire_stackmaps, name, reject_materialization)
+    # Reconstruct to cover ElfObject.__post_init__, then the independently
+    # validating serializer, parser, and final-image publication boundaries.
+    obj = replace(obj)
+    encoded = elf_x86_64.emit_relocatable(obj)
+    parsed = elf_x86_64.parse_relocatable(encoded)
+    assert parsed == obj
+    image = elf_x86_64.link_static_executable([parsed], entry="_start")
+    assert elf_x86_64.parse_static_executable(image)["entry"] != 0
+
+
+def _elf_stackmap_payload_cases(payload: bytes):
+    """Single-fault corpus plus accepted edge cases for the old/new boundary."""
+    record = HEADER_SIZE + FUNCTION_SIZE
+    _count, _functions, table, _locations = wire_stackmaps._scan_stack_map_payload(payload)
+    cases = [("valid", payload, True)]
+
+    def changed(name, offset, format_, value, accepted=False):
+        mutated = bytearray(payload)
+        struct.pack_into(format_, mutated, offset, value)
+        cases.append((name, bytes(mutated), accepted))
+
+    changed("magic", 0, "<B", 0)
+    changed("version", 8, "<H", 1)
+    changed("unknown_arch", 10, "<B", 255)
+    changed("wrong_arch", 10, "<B", ARCH_X86_64 if payload[10] == ARCH_AARCH64 else ARCH_AARCH64)
+    changed("pointer_width", 11, "<B", 4)
+    changed("function_count", 12, "<I", 2)
+    changed("location_table_count", 16, "<I", 0xFFFFFFFF)
+    # The existing wire ABI deliberately ignores this header field and
+    # accepts uint32 function flags. The fast validator must agree exactly.
+    changed("reserved_header", 20, "<I", 1, True)
+    changed("function_flags", HEADER_SIZE + 28, "<I", 0xFFFFFFFF, True)
+    changed("function_id_zero", HEADER_SIZE, "<Q", 0)
+    changed("function_id_mismatch", HEADER_SIZE, "<Q", 1 << 63)
+    changed("nonzero_relocatable_address", HEADER_SIZE + 8, "<Q", 1)
+    changed("code_size_zero", HEADER_SIZE + 16, "<I", 0)
+    changed("frame_unaligned", HEADER_SIZE + 20, "<I", 1)
+    changed("frame_too_small", HEADER_SIZE + 20, "<I", 0)
+    changed("safepoint_id_zero", record, "<Q", 0)
+    changed("high_safepoint_id", record, "<Q", (1 << 64) - 1, True)
+    changed("duplicate_safepoint_id", record + RECORD_SIZE, "<Q", struct.unpack_from("<Q", payload, record)[0])
+    changed("pc_outside_function", record + 8, "<I", 48)
+    changed("pc_unordered", record + RECORD_SIZE + 8, "<I", 4)
+    changed("reserved_count", record + 22, "<H", 1)
+    changed("reserved_short", record + 26, "<H", 1)
+    changed("safepoint_kind", record + 24, "<B", 255)
+    changed("record_flags", record + 25, "<B", 128)
+    changed("exception_flag_mismatch", record + 12, "<I", 8)
+    changed("exception_outside_function", record + RECORD_SIZE + 12, "<I", 48)
+    changed("continuation_missing", record + 2 * RECORD_SIZE + 16, "<I", 0)
+    changed("suspended_flag_missing", record + 2 * RECORD_SIZE + 25, "<B", 0)
+    changed("location_index", record + 28, "<I", 0xFFFFFFFF)
+    changed("location_count", record + 20, "<H", 0xFFFF)
+    changed("location_kind", table, "<B", 255)
+    changed("location_flags", table + 1, "<B", 128)
+    changed("raw_pointer", table + 1, "<B", 0)
+    changed("location_size", table + 2, "<H", 4)
+    changed("location_register", table + 4, "<H", 0xFFFF)
+    changed("location_base", table + 6, "<h", -2)
+    changed("positive_location_offset", table + 8, "<i", 8)
+    changed("location_offset_int32_min", table + 8, "<i", -(1 << 31))
+    changed("location_offset_unaligned", table + 8, "<i", -7)
+    changed("location_extent", table + 12, "<I", 4)
+    for name, end in (
+        ("short_header", 1),
+        ("short_function", HEADER_SIZE + 1),
+        ("short_record", record + RECORD_SIZE - 1),
+        ("short_locations", len(payload) - 1),
+    ):
+        cases.append((name, payload[:end], False))
+    cases.append(("trailing_bytes", payload + b"x", False))
+    return cases
+
+
+@pytest.mark.parametrize("arch", [ARCH_AARCH64, ARCH_X86_64])
+def test_owned_elf_stackmap_wire_validation_matches_decoded_boundary(arch, monkeypatch):
+    obj = _elf_stackmap_object(arch)
+    stackmap = obj.sections[1]
+
+    def outcome(payload, validator):
+        with monkeypatch.context() as context:
+            context.setattr(elf_x86_64, "validate_stack_map_payload", validator)
+            try:
+                replacement = replace(stackmap, data=payload)
+                candidate = replace(obj, sections=(obj.sections[0], replacement))
+                encoded = elf_x86_64.emit_relocatable(candidate)
+                parsed = elf_x86_64.parse_relocatable(encoded)
+                image = elf_x86_64.link_static_executable([parsed], entry="_start")
+            except elf_x86_64.ElfError as error:
+                return ("error", str(error))
+            return ("accepted", encoded, image)
+
+    for name, payload, accepted in _elf_stackmap_payload_cases(stackmap.data):
+        reference = outcome(payload, decode_stack_map)
+        actual = outcome(payload, validate_stack_map_payload)
+        assert actual == reference, name
+        assert (actual[0] == "accepted") == accepted, (name, actual)
+
+
+@pytest.mark.parametrize("arch", [ARCH_AARCH64, ARCH_X86_64])
+def test_owned_elf_stackmap_wire_validation_keeps_relocation_contract(arch, monkeypatch):
+    obj = _elf_stackmap_object(arch)
+    section = obj.sections[1]
+    relocation = section.relocations[0]
+    mutations = (
+        ("missing", replace(section, relocations=()), obj.symbols),
+        ("duplicate", replace(section, relocations=(relocation, relocation)), obj.symbols),
+        ("extra", replace(section, relocations=(relocation, replace(relocation, offset=0))), obj.symbols),
+        ("wrong_offset", replace(section, relocations=(replace(relocation, offset=0),)), obj.symbols),
+        ("addend", replace(section, relocations=(replace(relocation, addend=1),)), obj.symbols),
+        ("wrong_type", replace(section, relocations=(replace(relocation, type=261 if arch == ARCH_AARCH64 else elf_x86_64.R_X86_64_PC32),)), obj.symbols),
+        ("absolute_target", section, (obj.symbols[0], replace(obj.symbols[1], section_index=elf_x86_64.SHN_ABS))),
+        ("undefined_target", section, (obj.symbols[0], replace(obj.symbols[1], section_index=elf_x86_64.SHN_UNDEF))),
+        ("symbol_identity", section, (obj.symbols[0], replace(obj.symbols[1], name="different"))),
+    )
+    for name, changed, symbols in mutations:
+        errors = []
+        for validator in (decode_stack_map, validate_stack_map_payload):
+            with monkeypatch.context() as context:
+                context.setattr(elf_x86_64, "validate_stack_map_payload", validator)
+                with pytest.raises(elf_x86_64.ElfError) as caught:
+                    replace(obj, sections=(obj.sections[0], changed), symbols=symbols)
+                errors.append(str(caught.value))
+        assert errors[0] == errors[1], name
+
+
+@pytest.mark.parametrize("arch", [ARCH_AARCH64, ARCH_X86_64])
+def test_owned_elf_stackmap_function_identity_is_unsigned(arch, monkeypatch):
+    obj = _elf_stackmap_object(arch)
+    section = obj.sections[1]
+    payload = bytearray(section.data)
+    high_id = (1 << 64) - 1
+    struct.pack_into("<Q", payload, HEADER_SIZE, high_id)
+    monkeypatch.setattr(elf_x86_64, "function_id", lambda _name: high_id)
+    changed = replace(obj, sections=(obj.sections[0], replace(section, data=bytes(payload))))
+    assert elf_x86_64.parse_relocatable(elf_x86_64.emit_relocatable(changed)) == changed
+
+
+@pytest.mark.parametrize("arch", [ARCH_AARCH64, ARCH_X86_64])
+def test_owned_elf_final_stackmap_wire_validation_matches_decode(arch, monkeypatch):
+    obj = _elf_stackmap_object(arch)
+    stackmap = obj.sections[1]
+    for name, payload, _accepted in _elf_stackmap_payload_cases(stackmap.data):
+        # Bypass only the earlier object boundary so corrupt input must reach
+        # final-image publication. This is a test-only injected bad object.
+        candidate = replace(obj)
+        object.__setattr__(candidate, "sections", (
+            obj.sections[0], replace(stackmap, data=payload),
+        ))
+        outcomes = []
+        for validator in (decode_stack_map, validate_stack_map_payload):
+            with monkeypatch.context() as context:
+                context.setattr(elf_x86_64, "validate_stack_map_payload", validator)
+                try:
+                    image = elf_x86_64.link_static_executable([candidate], entry="_start")
+                except elf_x86_64.ElfError as error:
+                    outcomes.append(("error", str(error)))
+                else:
+                    outcomes.append(("accepted", image))
+        assert outcomes[0] == outcomes[1], name
 
 
 def test_stable_id_prefix_streaming_matches_one_shot():
@@ -1375,3 +1842,280 @@ def test_a_compiler_shaped_frame_with_an_untraceable_slots_pointer_still_fails_c
             [_SM_FRAME_MAP_GLOBAL],
             target=target,
         )
+
+
+def _local_registry_frame_ir(triple, body):
+    return f'''
+target triple = "{triple}"
+declare void @pcc_gc_frame_enter(ptr, ptr)
+declare void @pcc_gc_frame_leave(ptr)
+declare void @opaque_call()
+define void @local_registry_frame(i1 %pick) {{
+entry:
+  %map = alloca [1 x i32], align 4
+  %roots = alloca [2 x ptr], align 8
+  %count = getelementptr [1 x i32], ptr %map, i64 0, i64 0
+  store i32 1, ptr %count
+  %map.alias = bitcast ptr %count to ptr
+  %first = getelementptr [2 x ptr], ptr %roots, i64 0, i64 0
+  %first.alias = bitcast ptr %first to ptr
+  %second = getelementptr [2 x ptr], ptr %roots, i64 0, i64 1
+  {body}
+}}
+'''
+
+
+@pytest.mark.parametrize(
+    ("triple", "emitter"),
+    [("arm64-apple-darwin23.6.0", emit_aarch64_darwin_asm),
+     ("x86_64-unknown-linux-gnu", emit_x86_64_linux_asm)],
+)
+@pytest.mark.parametrize("body", [
+    '''call void @pcc_gc_frame_enter(ptr %map.alias, ptr %first.alias)
+       call void @opaque_call()
+       call void @pcc_gc_frame_leave(ptr %roots)
+       ret void''',
+    '''call void @pcc_gc_frame_enter(ptr %map.alias, ptr %first)
+       call void @pcc_gc_frame_enter(ptr %map.alias, ptr %second)
+       call void @opaque_call()
+       call void @pcc_gc_frame_leave(ptr %second)
+       call void @pcc_gc_frame_leave(ptr %first.alias)
+       ret void''',
+    '''br i1 %pick, label %left, label %right
+     left:
+       call void @pcc_gc_frame_enter(ptr %map.alias, ptr %roots)
+       br label %join
+     right:
+       call void @pcc_gc_frame_enter(ptr %map.alias, ptr %first.alias)
+       br label %join
+     join:
+       call void @opaque_call()
+       call void @pcc_gc_frame_leave(ptr %first)
+       ret void''',
+    '''call void @pcc_gc_frame_enter(ptr %map.alias, ptr %first.alias)
+       br label %loop
+     loop:
+       call void @pcc_gc_frame_enter(ptr %map.alias, ptr %second)
+       call void @opaque_call()
+       call void @pcc_gc_frame_leave(ptr %second)
+       br i1 %pick, label %loop, label %done
+     done:
+       call void @pcc_gc_frame_leave(ptr %roots)
+       ret void''',
+], ids=["aliases", "nested", "branch_join", "loop_backedge"])
+def test_local_registry_frames_keep_matched_lifetimes(triple, emitter, body):
+    source = _local_registry_frame_ir(triple, body)
+    assembly = emitter(source)
+    assert "local_registry_frame:" in assembly
+    prepared = prepare_module_for_target(
+        source, aggregate_returned_indirect=lambda _ty: False,
+    )
+    target = "aarch64-darwin" if "apple" in triple else "x86_64-linux"
+    plans = build_stack_map_plans(prepared.functions, prepared.globals_, target=target)
+    records = plans[0].diagnostic_records()
+    assert any(record.kind == SAFEPOINT_CALL for record in records)
+    assert all(record.locations == () for record in records)
+
+
+@pytest.mark.parametrize(
+    ("triple", "emitter"),
+    [("arm64-apple-darwin23.6.0", emit_aarch64_darwin_asm),
+     ("x86_64-unknown-linux-gnu", emit_x86_64_linux_asm)],
+)
+@pytest.mark.parametrize("body,message", [
+    ('''call void @pcc_gc_frame_leave(ptr %first)
+        ret void''', "leaves without an active enter"),
+    ('''call void @pcc_gc_frame_enter(ptr %map.alias, ptr %roots)
+        call void @pcc_gc_frame_enter(ptr %map.alias, ptr %first.alias)
+        ret void''', "registered twice"),
+    ('''call void @pcc_gc_frame_enter(ptr %map.alias, ptr %first)
+        call void @pcc_gc_frame_leave(ptr %second)
+        ret void''', "leaves without an active enter"),
+    ('''br i1 %pick, label %left, label %right
+      left:
+        call void @pcc_gc_frame_enter(ptr %map.alias, ptr %first)
+        br label %join
+      right:
+        br label %join
+      join:
+        ret void''', "state disagrees at block join"),
+    ('''br label %loop
+      loop:
+        call void @pcc_gc_frame_enter(ptr %map.alias, ptr %first)
+        br i1 %pick, label %loop, label %done
+      done:
+        ret void''', "state disagrees at block join"),
+], ids=["no_enter", "duplicate_enter", "wrong_slot", "branch_mismatch", "loop_mismatch"])
+def test_local_registry_frame_mismatches_still_fail_closed(triple, emitter, body, message):
+    with pytest.raises(BackendUnavailable, match=message):
+        emitter(_local_registry_frame_ir(triple, body))
+
+
+_ROOT_CONSTRUCTION_ARENAS = (
+    "group_keys", "group_index", "registered_roots", "registered_index",
+    "state_index", "transition_index", "queue",
+)
+_ROOT_PLAN_ARENAS = (
+    "group_location_spans", "group_locations", "state_spans", "state_group_ids",
+    "state_location_spans", "state_locations", "entry_state_ids", "scratch",
+)
+
+
+def test_root_construction_retirement_keeps_lazy_locations_and_final_owner():
+    roots = PackedRootStatePlane(block_count=2, protocol_hint=1)
+    near = roots.intern_group(1, 0, 2, True, 32, 64)
+    far = roots.intern_group(2, 0, 2, False, 64, 64)
+    state = roots.transition(roots.transition(0, near, True), far, True)
+    roots.entry_state_ids.set_unchecked(0, state)
+    roots.queue.append(0)
+    retained = {name: tuple(getattr(roots, name).diagnostic_values())
+                for name in _ROOT_PLAN_ARENAS}
+    assert roots.registered_root_offset(1, 0) == -32
+    assert roots.state_location_spans.get2_unchecked(state).first == -1
+    retired = [getattr(roots, name) for name in _ROOT_CONSTRUCTION_ARENAS]
+    assert all(not arena._closed for arena in retired)
+    assert sum(len(arena) for arena in retired) > 0
+
+    roots.retire_construction_state()
+    roots.retire_construction_state()
+    assert all(arena._closed and len(arena) == 0 and not arena._values
+               and arena._address == 0 for arena in retired)
+    for name in _ROOT_PLAN_ARENAS:
+        arena = getattr(roots, name)
+        assert not arena._closed
+        assert tuple(arena.diagnostic_values()) == retained[name]
+    span = roots.ensure_state_locations(state)
+    assert [roots.state_locations.get2_unchecked(span.first + index)
+            for index in range(span.second)] == [
+                precise_stackmaps.CompilerInt2(-64, 0),
+                precise_stackmaps.CompilerInt2(-56, 0),
+                precise_stackmaps.CompilerInt2(-32, 1),
+                precise_stackmaps.CompilerInt2(-24, 1),
+            ]
+    assert roots.has_location_offset(state, -56)
+    assert not roots.has_location_offset(state, -40)
+    packed = precise_stackmaps.PackedPlannedSafepoints()
+    packed.adopt_root_state_locations(roots)
+    reloads = precise_stackmaps.PackedReloadScratch()
+    packed.append_native(1, "root-retirement", SAFEPOINT_CALL, roots, state,
+                         0, "", 0, reloads)
+    expected_records = packed.diagnostic_records()
+    reloads.close()
+    roots.close()
+    roots.close()
+    assert packed.diagnostic_records() == expected_records
+    assert len(expected_records[0].locations) == 4
+    assert not packed.location_scalars._closed
+    assert packed.location_scalars.diagnostic_values() == [-64, 0, -56, 0, -32, 1, -24, 1]
+    packed.close()
+    assert all(getattr(roots, name)._closed
+               for name in (*_ROOT_CONSTRUCTION_ARENAS, *_ROOT_PLAN_ARENAS))
+
+
+@pytest.mark.parametrize("source_kind", ["loop-exception", "managed-reload"])
+def test_root_construction_retirement_matches_delayed_pco_bytes(monkeypatch, source_kind):
+    from pcc.backend.self_backend_parse import parse_self_backend_module
+    from pcc.backend.self_backend_aarch64_darwin import emit_aarch64_darwin_indexed_transport
+    from pcc.backend.native_object import encode_native_object_from_sections
+
+    triple = "arm64-apple-darwin23.6.0"
+    source = (_target_final_stackmap_ir(triple) if source_kind == "loop-exception"
+              else _stale_managed_ssa_ir(triple))
+    retire = PackedRootStatePlane.retire_construction_state
+    root_builder = precise_stackmaps._native_root_states
+    liveness = precise_stackmaps._native_managed_liveness
+    payloads = []
+    snapshots = []
+
+    class RetiredStorage(list):
+        def __getitem__(self, key):
+            raise AssertionError("retired root construction storage was read")
+
+        def __setitem__(self, key, value):
+            raise AssertionError("retired root construction storage was written")
+
+        def append(self, value):
+            raise AssertionError("retired root construction storage was extended")
+
+    for delayed in (True, False):
+        roots_seen = []
+        with monkeypatch.context() as patch:
+            if delayed:
+                patch.setattr(PackedRootStatePlane, "retire_construction_state", lambda self: None)
+            else:
+                patch.setattr(PackedRootStatePlane, "retire_construction_state", retire)
+
+            def capture_roots(*args, **kwargs):
+                roots = root_builder(*args, **kwargs)
+                roots_seen.append(roots)
+                return roots
+
+            def observe_liveness(*args, **kwargs):
+                roots = roots_seen[-1]
+                assert all(getattr(roots, name)._closed == (not delayed)
+                           for name in _ROOT_CONSTRUCTION_ARENAS)
+                assert all(not getattr(roots, name)._closed for name in _ROOT_PLAN_ARENAS)
+                snapshots.append(tuple((name, getattr(roots, name)._closed)
+                                       for name in _ROOT_CONSTRUCTION_ARENAS))
+                if not delayed:
+                    for name in _ROOT_CONSTRUCTION_ARENAS:
+                        getattr(roots, name)._values = RetiredStorage()
+                return liveness(*args, **kwargs)
+
+            patch.setattr(precise_stackmaps, "_native_root_states", capture_roots)
+            patch.setattr(precise_stackmaps, "_native_managed_liveness", observe_liveness)
+            module = parse_self_backend_module(source)
+            transport = emit_aarch64_darwin_indexed_transport(module, optimize=False)
+            sections, undefined = transport.assemble_sections()
+            payloads.append(encode_native_object_from_sections(sections, undefined=undefined))
+            assert all(getattr(root, name)._closed for root in roots_seen
+                       for name in _ROOT_CONSTRUCTION_ARENAS)
+    assert snapshots and payloads[0] == payloads[1]
+    assert payloads[0]
+
+
+@pytest.mark.parametrize("failure", ["roots", "origins", "liveness", "finish"])
+def test_root_construction_retirement_preserves_planner_errors(monkeypatch, failure):
+    from pcc.backend.self_backend_aarch64_darwin import _aggregate_returned_indirect
+    from pcc.backend.self_backend_kernel import get_indexed_function_kernel
+
+    prepared = prepare_module_for_target(
+        _stale_managed_ssa_ir("arm64-apple-darwin23.6.0"),
+        aggregate_returned_indirect=_aggregate_returned_indirect,
+        materialize_legacy_slots=False,
+    )
+    captured = {}
+    error = RuntimeError("original " + failure)
+    for name, phase in (("_native_root_states", "roots"),
+                        ("_native_managed_origins", "origins"),
+                        ("_native_managed_liveness", "liveness")):
+        original = getattr(precise_stackmaps, name)
+
+        def observe(*args, _original=original, _phase=phase, **kwargs):
+            if _phase == "liveness":
+                roots = captured["roots"]
+                assert all(getattr(roots, name)._closed for name in _ROOT_CONSTRUCTION_ARENAS)
+                assert all(not getattr(roots, name)._closed for name in _ROOT_PLAN_ARENAS)
+            result = _original(*args, **kwargs)
+            captured[_phase] = result
+            if failure == _phase:
+                raise error
+            return result
+
+        monkeypatch.setattr(precise_stackmaps, name, observe)
+    if failure == "finish":
+        def fail_finish(self):
+            captured["packed"] = self
+            raise error
+        monkeypatch.setattr(precise_stackmaps.PackedPlannedSafepoints, "finish_build", fail_finish)
+    with pytest.raises(RuntimeError) as raised:
+        precise_stackmaps.build_function_stack_map_plan(
+            prepared.functions[0], prepared.globals_, target="aarch64-darwin",
+        )
+    assert raised.value is error
+    roots = captured["roots"]
+    assert all(getattr(roots, name)._closed == (failure in ("liveness", "finish"))
+               for name in _ROOT_CONSTRUCTION_ARENAS)
+    for value in captured.values():
+        value.close()
+    get_indexed_function_kernel(prepared.functions[0]).close_native_tables()

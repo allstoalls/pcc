@@ -1,0 +1,71 @@
+{
+  "c_ir_sha256": "8f699dfeddf992639616d2c2f6823e5deb23fd2f7208369b4e21cb3c4ff40c2c",
+  "candidate_source_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "comparison_scope": "same candidate compiler/runtime; generated former-inline and candidate probes in one unchanged C fixture",
+  "compile_packet_manifest_sha256": "ab3a361bed5bbe8ecf28532e4f4fd621cdfcdc46e68f3a8787a70bc0af524ae2",
+  "compile_packet_preservation_commit": "4e7a86695ddfc1dd61b0ed43d22c6b90c7ccaaad",
+  "compiler_sha256": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+  "date_utc": "2026-10-09",
+  "executable_bytes": 25676384,
+  "executable_sha256": "a4a2d9007a64b69aa0717460ed6a049f72c3935548eddb6ebfe625cc88827b61",
+  "generated_probes": [
+    {
+      "ir_bytes": 62023,
+      "ir_sha256": "e482c135acd2824dd9caf83a93774c21a9e27da967d18593fe7c62e62585bc01",
+      "owned_verification": "PASS",
+      "reporter": null,
+      "status_sites": 2,
+      "symbol": "baseline_probe"
+    },
+    {
+      "ir_bytes": 61981,
+      "ir_sha256": "7276380482f6217ea0e30e524f97613b645cd73944d5425884f999de25d4d5df",
+      "owned_verification": "PASS",
+      "reporter": "pcc_slot_call_status_report.3",
+      "status_sites": 2,
+      "symbol": "candidate_probe"
+    }
+  ],
+  "native_execution": "UNRUN at this compile receipt",
+  "performance_claim": "None; compile elapsed is diagnostic only",
+  "remaining_native_gate": "Exact same ELF once each under observed GC0/GC1, with the selected GC as its sole argument, exact output, empty stderr and complete cleanup",
+  "route": "ordinary CEvaluator, one translation unit, default jobs=1, internal preprocessor, normal C frontend passes; owned self backend and ELF linker",
+  "runtime_configuration": {
+    "members": 191,
+    "refcount": "atomic",
+    "target": "x86_64-unknown-linux-gnu",
+    "threads": true
+  },
+  "runtime_selections": [
+    {
+      "archive_sha256": "a6645f903e03f6766ecc7466b76f2993318582d287a393831aa5522158421915",
+      "same_sealed_runtime": true
+    }
+  ],
+  "runtime_sha256": "a6645f903e03f6766ecc7466b76f2993318582d287a393831aa5522158421915",
+  "schema": "pcc.cold_slot_fresh_c_compile_public.v1",
+  "sealed_compile_qualification_sha256": "ec1b7c1697c3d0d6c0a406b35bc22c8fda5e6f0f348d8dd26ff5d41103852d82",
+  "source_guards": "Complete candidate/canonical inventories passed before and after; imported PCC roots and archive/sidecars unchanged",
+  "status": "COMPILE_PASS",
+  "supervision": {
+    "cleanup": "CLEAN; root reaped; ECHILD",
+    "continuous_free_space_reserve_bytes": 4294967296,
+    "ctypes_boundary": "Pinned standard-library declaration initialization only; subsequent library/symbol/call access and process creation remained denied",
+    "denied_audit_events": 0,
+    "elapsed_seconds": 8.658205192001333,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "outer_seconds": 300,
+    "peak_sampled_rss_bytes": 125747200,
+    "permitted_ctypes_initialization_events": 3
+  },
+  "unchanged_c_fixture_sha256": "59dcef5fd8245372e3d3052d466a1bf14450d1b8dbf8036a857043e6a0c14af7",
+  "unrun": [
+    "GC2",
+    "GC3",
+    "GC4",
+    "pcc1",
+    "macOS",
+    "full async/gateway"
+  ]
+}

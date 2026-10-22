@@ -91,3 +91,30 @@ def test_set_comparison_operators(tmp_path):
         "True", "False", "True", "True", "False",
         "True", "False", "True", "False", "False", "False",
     ], out
+
+
+def test_set_copy_is_a_new_set_for_typed_and_dynamic_receivers(tmp_path):
+    # A set-typed copy() is union() with no arguments, published into its
+    # consumer's slot (sorted(s.copy())). A dynamic receiver takes the dict
+    # route's copy, which still calls a non-container's own copy().
+    out = _run(tmp_path,
+        "class Box:\n"
+        "    def copy(self):\n"
+        "        return 'box copy'\n"
+        "def dup(value):\n"
+        "    return value.copy()\n"
+        "def main():\n"
+        "    a = {1, 2, 3}\n"
+        "    b = a.copy()\n"
+        "    b.add(9)\n"
+        "    print(sorted(a), sorted(b), b is a)\n"
+        "    c = dup(a)\n"
+        "    c.discard(1)\n"
+        "    print(sorted(a), sorted(c), sorted(dup(set())))\n"
+        "    print(dup(Box()))\n"
+        "main()\n")
+    assert out.split("\n")[:3] == [
+        "[1, 2, 3] [1, 2, 3, 9] False",
+        "[1, 2, 3] [2, 3] []",
+        "box copy",
+    ], out

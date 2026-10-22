@@ -3,7 +3,7 @@ import platform
 import subprocess
 import sys
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 def _compile_page_probe(tmp_path: Path) -> Path:
@@ -146,7 +146,7 @@ def test_self_backend_page_provider_roundtrips_through_platform_boundary(tmp_pat
 
 def test_linux_x86_64_page_provider_lowers_to_raw_syscalls(tmp_path, monkeypatch):
     from pcc.backend.self_backend_dispatch import emit_self_asm
-    from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+    from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
     monkeypatch.setattr(
         UnsafeIntrinsicMixin,

@@ -29,7 +29,7 @@ MSG = b"pcc syscall6 ok\n"
 
 
 def _build_syscall6_module(triple: str = X86_64_LINUX_TRIPLE) -> str:
-    from pcc.llvm_capi import ir
+    from pcc.ir import ir
 
     mod = ir.Module(name="syscall6_smoke")
     mod.triple = triple
@@ -115,7 +115,7 @@ def test_syscall6_frontend_policy_matches_the_target(tmp_path):
     """Darwin (and any non-linux-x86_64 host) must reject the intrinsic."""
     import platform
 
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "syscall6_policy.py"
     out = tmp_path / "syscall6_policy.ll"

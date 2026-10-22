@@ -1,0 +1,383 @@
+name: Compiler invocation guard host tests
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "scripts/compiler_invocation_guard.py"
+      - "scripts/run_process_tree_sample.py"
+      - "scripts/run_pcc_compile_ab.py"
+      - "tests/python/test_compiler_invocation_guard.py"
+      - "tests/python/test_process_tree_sample_tool.py"
+      - "tests/python/test_process_tree_manifest_evidence.py"
+      - "tests/python/test_package_process_timeout.py"
+      - "tests/python/process_timeout.py"
+      - "tests/test_compiler_invocation_guard_ci.py"
+      - "tests/python/test_cli_bootstrap_pytest_extract.py"
+      - "tests/python/test_py_parse_relative_imports.py"
+      - "tests/python/test_aarch64_final_layout_metadata.py"
+      - "tests/python/test_arm64_raw_branch_fixups.py"
+      - "tests/python/test_x86_64_phi_shell_completeness.py"
+      - "tests/python/test_aarch64_suffix_scratch.py"
+      - "tests/python/test_x86_64_indexed_instruction_ids.py"
+      - "pcc/backend/arm64_encode.py"
+      - "pcc/backend/arm64_asm_driver.py"
+      - "pcc/backend/arm64_elf_driver.py"
+      - "pcc/backend/self_backend_aarch64_darwin.py"
+      - "pcc/backend/self_backend_x86_64_linux.py"
+      - "pcc/backend/self_backend_kernel.py"
+      - "pcc/backend/self_backend_precise_stackmaps.py"
+      - "pcc/frontends/python/py_parse.py"
+      - "pcc/frontends/python/py_lex.py"
+      - "pcc/frontends/python/py_lift.py"
+      - "pcc/frontends/python/py_ast.py"
+      - "projects/numpy-2.4.4/vendored-meson/meson/mesonbuild/compilers/mixins/gnu.py"
+      - "pcc/driver/cli_bootstrap.py"
+      - "pcc/driver/cli_bootstrap_pytest.py"
+      - "pcc/frontends/python/pipeline_dependency_closure.py"
+      - "pcc/frontends/python/codegen/layer1_support.py"
+      - "conftest.py"
+      - "tests/conftest.py"
+      - "tests/xdist_cpu_budget.py"
+      - "scripts/pytest_live_report.py"
+      - "tests/native_provisioning.py"
+      - "tests/runtime_build_cache.py"
+      - "tests/test_runtime_build_source_override.py"
+      - "tests/test_runtime_archive_consumers.py"
+      - "pcc/frontends/python/owned_runtime_build.py"
+      - "pcc/frontends/python/thread_runtime_config.py"
+      - "pcc/tools/runtime_archive_provenance.py"
+      - "pcc/frontends/python/pipeline_runtime_archive.py"
+      - "tests/runtime_fixture_provenance.py"
+      - "run.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - ".github/workflows/compiler-invocation-guard.yml"
+  pull_request:
+    paths:
+      - "scripts/compiler_invocation_guard.py"
+      - "scripts/run_process_tree_sample.py"
+      - "scripts/run_pcc_compile_ab.py"
+      - "tests/python/test_compiler_invocation_guard.py"
+      - "tests/python/test_process_tree_sample_tool.py"
+      - "tests/python/test_process_tree_manifest_evidence.py"
+      - "tests/python/test_package_process_timeout.py"
+      - "tests/python/process_timeout.py"
+      - "tests/test_compiler_invocation_guard_ci.py"
+      - "tests/python/test_cli_bootstrap_pytest_extract.py"
+      - "tests/python/test_py_parse_relative_imports.py"
+      - "tests/python/test_aarch64_final_layout_metadata.py"
+      - "tests/python/test_arm64_raw_branch_fixups.py"
+      - "tests/python/test_x86_64_phi_shell_completeness.py"
+      - "tests/python/test_aarch64_suffix_scratch.py"
+      - "tests/python/test_x86_64_indexed_instruction_ids.py"
+      - "pcc/backend/arm64_encode.py"
+      - "pcc/backend/arm64_asm_driver.py"
+      - "pcc/backend/arm64_elf_driver.py"
+      - "pcc/backend/self_backend_aarch64_darwin.py"
+      - "pcc/backend/self_backend_x86_64_linux.py"
+      - "pcc/backend/self_backend_kernel.py"
+      - "pcc/backend/self_backend_precise_stackmaps.py"
+      - "pcc/frontends/python/py_parse.py"
+      - "pcc/frontends/python/py_lex.py"
+      - "pcc/frontends/python/py_lift.py"
+      - "pcc/frontends/python/py_ast.py"
+      - "projects/numpy-2.4.4/vendored-meson/meson/mesonbuild/compilers/mixins/gnu.py"
+      - "pcc/driver/cli_bootstrap.py"
+      - "pcc/driver/cli_bootstrap_pytest.py"
+      - "pcc/frontends/python/pipeline_dependency_closure.py"
+      - "pcc/frontends/python/codegen/layer1_support.py"
+      - "conftest.py"
+      - "tests/conftest.py"
+      - "tests/xdist_cpu_budget.py"
+      - "scripts/pytest_live_report.py"
+      - "tests/native_provisioning.py"
+      - "tests/runtime_build_cache.py"
+      - "tests/test_runtime_build_source_override.py"
+      - "tests/test_runtime_archive_consumers.py"
+      - "pcc/frontends/python/owned_runtime_build.py"
+      - "pcc/frontends/python/thread_runtime_config.py"
+      - "pcc/tools/runtime_archive_provenance.py"
+      - "pcc/frontends/python/pipeline_runtime_archive.py"
+      - "tests/runtime_fixture_provenance.py"
+      - "run.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - ".github/workflows/compiler-invocation-guard.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  linux-host:
+    name: Linux host invocation containment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      PCC_TEST_NO_NATIVE_PROVISIONING: "1"
+      PCC_NO_AUTO_PCC1: "1"
+      PCC_PYTEST_AUTO_CLEAN: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Keep normal conftests and xdist controls, plus the Meson fixture.
+          # Omit other project subtrees so collection does not configure nginx.
+          sparse-checkout: |
+            .github/workflows
+            pcc
+            utils
+            scripts
+            tests
+            projects/numpy-2.4.4/vendored-meson/meson/mesonbuild/compilers/mixins
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install host test dependencies without the native build hook
+        run: env -u LC_ALL uv sync --frozen --dev --no-install-project
+
+      - name: Require working Linux process handles
+        shell: env -u LC_ALL uv run --frozen --no-sync python {0}
+        run: |
+          import os
+          import signal
+
+          descriptor = os.pidfd_open(os.getpid(), 0)
+          try:
+              signal.pidfd_send_signal(descriptor, 0)
+          finally:
+              os.close(descriptor)
+
+      - name: Run guard regressions with the normal six-worker pytest default
+        timeout-minutes: 2
+        run: |
+          env -u LC_ALL uv run --frozen --no-sync python -m pytest -x -vv --tb=short \
+            --junitxml=build/compiler-invocation-guard.xml \
+            tests/python/test_compiler_invocation_guard.py \
+            tests/python/test_process_tree_sample_tool.py \
+            tests/python/test_process_tree_manifest_evidence.py \
+            tests/python/test_package_process_timeout.py \
+            tests/test_compiler_invocation_guard_ci.py \
+            tests/python/test_cli_bootstrap_pytest_extract.py \
+            tests/python/test_py_parse_relative_imports.py \
+            tests/python/test_aarch64_final_layout_metadata.py \
+            tests/python/test_arm64_raw_branch_fixups.py \
+            tests/python/test_x86_64_phi_shell_completeness.py \
+            tests/python/test_aarch64_suffix_scratch.py \
+            tests/python/test_x86_64_indexed_instruction_ids.py \
+            tests/test_runtime_build_source_override.py::test_default_runtime_forwards_effective_thread_configuration \
+            tests/test_runtime_build_source_override.py::test_single_thread_runtime_request_fails_explicitly \
+            tests/test_runtime_build_source_override.py::test_threaded_runtime_helper_uses_the_one_build \
+            tests/test_runtime_archive_consumers.py::test_pcc_runtime_cache_reuses_only_a_bound_verified_entry \
+            tests/test_runtime_archive_consumers.py::test_pcc_runtime_cache_mock_admission_preserves_unmocked_provisioning_guard
+
+      - name: Require executed guard tests without skips
+        shell: env -u LC_ALL uv run --frozen --no-sync python {0}
+        run: |
+          from collections import Counter
+          from xml.etree import ElementTree
+
+          cases = ElementTree.parse("build/compiler-invocation-guard.xml").findall(".//testcase")
+          for name in ("test_compiler_invocation_guard", "test_process_tree_sample_tool", "test_process_tree_manifest_evidence"):
+              assert any(case.get("classname") == "tests.python." + name for case in cases), name + " guard tests were not executed"
+          harness_names = sorted(
+              case.get("name") for case in cases
+              if case.get("classname") == "tests.python.test_cli_bootstrap_pytest_extract"
+          )
+          assert harness_names == sorted((
+              "test_cli_keeps_both_native_pytest_request_spellings",
+              "test_cli_pytest_facade_forwards_current_stage_and_timeout",
+              "test_extracted_harness_launcher_uses_supplied_stage_and_bounded_runs",
+              "test_pytest_harness_source_is_owned_by_sibling_and_facade_stays_thin",
+              "test_repo_main_closure_and_static_exports_include_pytest_harness",
+          )), "pytest harness tests were not fully executed"
+          relative_import_names = [
+              case.get("name") for case in cases
+              if case.get("classname") == "tests.python.test_py_parse_relative_imports"
+          ]
+          assert len(relative_import_names) == len(set(relative_import_names)), "relative import tests contain duplicate cases"
+          assert Counter(name.split("[", 1)[0] for name in relative_import_names) == {
+              "test_relative_import_depth_matches_python": 18,
+              "test_from_import_token_and_name_forms_match_python": 7,
+              "test_ellipsis_token_and_expression_remain_unchanged": 1,
+              "test_malformed_imports_are_still_rejected": 4,
+              "test_vendored_meson_gnu_mixin_parses_and_lifts": 1,
+          }, "relative import tests were not fully executed"
+          final_layout_names = [
+              case.get("name") for case in cases
+              if case.get("classname") == "tests.python.test_aarch64_final_layout_metadata"
+          ]
+          expected_final_layout_names = [
+              f"test_emitted_metadata_uses_final_relaxed_layout[{padding}-{route}-{triple}]"
+              for padding in ("near", "far")
+              for route in ("native", "optimized-structured", "optimized-rendered")
+              for triple in ("arm64-apple-darwin", "aarch64-unknown-linux-gnu", "arm64-apple-darwin-debug")
+          ] + [
+              f"test_finalized_text_layout_is_idempotent_and_immutable[{structured}-{padding}]"
+              for structured in ("text", "encoded")
+              for padding in ("near", "far")
+          ] + ["test_module_layout_freeze_still_allows_nontext_metadata"]
+          assert len(final_layout_names) == len(set(final_layout_names)), "final layout metadata tests contain duplicate cases"
+          assert sorted(final_layout_names) == sorted(expected_final_layout_names), "final layout metadata tests were not fully executed"
+          raw_branch_names = [
+              case.get("name") for case in cases
+              if case.get("classname") == "tests.python.test_arm64_raw_branch_fixups"
+          ]
+          expected_raw_branch_names = [
+              f"test_raw_branch19_rejects_invalid_source_entries[{entry}-{padding}]"
+              for entry in ("nop", "patched-condition", "patched-cbz", "negative-word",
+                            "wide-word", "unknown-kind", "text-kind")
+              for padding in ("near", "far")
+          ] + [
+              f"test_raw_branch19_preserves_relocation_validation[{shape}-{padding}]"
+              for shape in ("duplicate", "unordered", "trailing", "negative-entry", "data-entry",
+                            "negative-symbol", "missing-symbol", "unknown-fixup")
+              for padding in ("near", "far")
+          ] + [
+              f"test_valid_raw_branch19_still_matches_text_relaxation[{branch}-{direction}-{padding}]"
+              for branch in ("condition", "cbz", "cbnz")
+              for direction in ("forward", "backward")
+              for padding in ("near", "far")
+          ] + [
+              f"test_raw_none_relocation_keeps_existing_adapter_contract[{padding}]"
+              for padding in ("near", "far")
+          ] + [
+              f"test_raw_unconditional_condition_codes_keep_original_range_contract[{condition}-{padding}]"
+              for condition in ("al", "nv")
+              for padding in ("near", "far")
+          ] + [
+              f"test_raw_entries_reject_invalid_data_indices[{index}-{padding}]"
+              for index in ("negative", "missing")
+              for padding in ("near", "far")
+          ] + [
+              f"test_raw_entries_reject_unaligned_instructions[{padding}]"
+              for padding in ("near", "far")
+          ] + [
+              f"test_conditional_cross_atom_target_alignment[{branch}-{residue}-{direction}-{padding}-{route}]"
+              for branch in ("condition", "cbz", "cbnz")
+              for residue in ("mod1", "mod2", "mod3")
+              for direction in ("forward", "backward")
+              for padding in ("near", "far")
+              for route in ("raw", "text")
+          ] + [
+              f"test_aligned_cross_atom_conditional_relocations[{branch}-{direction}-{padding}]"
+              for branch in ("condition", "cbz", "cbnz")
+              for direction in ("forward", "backward")
+              for padding in ("near", "far")
+          ] + [
+              f"test_misaligned_layout_rejection_preserves_builder_state[{representation}]"
+              for representation in ("text", "encoded")
+          ]
+          assert len(raw_branch_names) == len(set(raw_branch_names)), "raw branch fixup tests contain duplicate cases"
+          assert sorted(raw_branch_names) == sorted(expected_raw_branch_names), "raw branch fixup tests were not fully executed"
+          backend_regressions = {
+              "test_x86_64_phi_shell_completeness": [
+                  f"test_fresh_indexed_shells_are_phi_complete_without_repair[{packed}-{source}]"
+                  for packed in ("symbolic", "packed")
+                  for source in ("zero", "mixed")
+              ] + [
+                  f"test_compatibility_owners_still_repair_released_scalar_phis[{owner}]"
+                  for owner in ("legacy", "function", "kernel", "blocks", "block-map")
+              ],
+              "test_aarch64_suffix_scratch": [
+                  f"test_suffix_scratch_is_per_invocation_and_preserves_route_order[{shape}-{sink}]"
+                  for shape in ("ordinary", "nested", "label-exception", "reload-exception")
+                  for sink in ("buffered", "native-sink")
+              ] + [
+                  f"test_owned_empty_reload_fragments_preserve_output_and_reset[nonempty{index}]"
+                  for index in range(3)
+              ] + [
+                  f"test_empty_reload_guard_retains_failure_fallback[{failure}]"
+                  for failure in ("subclass-hook", "incomplete", "wrong-target", "closed")
+              ] + [
+                  "test_empty_reload_owner_guards_are_outside_instruction_loops",
+              ],
+              "test_x86_64_indexed_instruction_ids": [
+                  f"test_adapter_uses_absolute_id_without_reprojecting_block[{packed}-{source}]"
+                  for packed in ("symbolic", "packed")
+                  for source in ("call", "fixed-gep-cold", "later-blocks")
+              ] + [
+                  f"test_adapter_preserves_authoritative_payload_and_tuple_fallback[{replacement}]"
+                  for replacement in ("negative", "tuple")
+              ] + [
+                  "test_absolute_decoder_preserves_missing_arithmetic_flag_failure",
+                  "test_inconsistent_kind_metadata_is_still_rejected_before_emission",
+              ],
+          }
+          for module, expected_names in backend_regressions.items():
+              names = [
+                  case.get("name") for case in cases
+                  if case.get("classname") == "tests.python." + module
+              ]
+              assert len(names) == len(set(names)), module + " tests contain duplicate cases"
+              assert sorted(names) == sorted(expected_names), module + " tests were not fully executed"
+          package_process_cases = [
+              case for case in cases
+              if case.get("classname") == "tests.python.test_package_process_timeout"
+          ]
+          package_process_names = [case.get("name") for case in package_process_cases]
+          expected_package_process_names = [
+              "test_package_process_capture_preserves_success_and_nonzero",
+              "test_package_process_timeout_cleans_separate_session_and_retains_output",
+              "test_package_process_check_preserves_called_process_error",
+              "test_package_deadline_expiring_during_telemetry_is_timeout",
+          ] + [
+              f"test_package_process_output_limit_is_bounded_and_fails[{stream}]"
+              for stream in ("stdout", "stderr")
+          ] + [
+              f"test_package_process_cleanup_error_does_not_mask_original[error{error}]"
+              for error in range(2)
+          ] + [
+              f"test_package_teardown_errors_preserve_original_and_attempt_both_streams[error{error}-{kind}]"
+              for error in range(3)
+              for kind in ("pipe", "log")
+          ]
+          # loadgroup appends the existing serialization group to JUnit names.
+          expected_package_process_names = [
+              name + "@package-process-timeout" for name in expected_package_process_names
+          ]
+          assert len(package_process_names) == len(set(package_process_names)), "package process timeout tests contain duplicate cases"
+          assert sorted(package_process_names) == sorted(expected_package_process_names), "package process timeout tests were not fully executed"
+          assert not any(
+              case.find("failure") is not None or case.find("error") is not None
+              for case in package_process_cases
+          ), "package process timeout tests must pass"
+          runtime_cache_tests = {
+              "test_runtime_build_source_override": [
+                  f"test_default_runtime_forwards_effective_thread_configuration[{value}]"
+                  for value in ("None", "", "1", "true", "yes", "on", " YES ")
+              ] + [
+                  f"test_single_thread_runtime_request_fails_explicitly[{value}]"
+                  for value in ("0", "false", "no", "off")
+              ] + ["test_threaded_runtime_helper_uses_the_one_build"],
+              "test_runtime_archive_consumers": [
+                  "test_pcc_runtime_cache_reuses_only_a_bound_verified_entry",
+                  "test_pcc_runtime_cache_mock_admission_preserves_unmocked_provisioning_guard",
+              ],
+          }
+          for module, expected_names in runtime_cache_tests.items():
+              selected = [case for case in cases if case.get("classname") == "tests." + module]
+              names = [case.get("name") for case in selected]
+              assert len(names) == len(set(names)), module + " runtime cache tests contain duplicate cases"
+              assert sorted(names) == sorted(expected_names), module + " runtime cache tests were not fully executed"
+              assert not any(
+                  case.find("failure") is not None or case.find("error") is not None
+                  for case in selected
+              ), module + " runtime cache tests must pass"
+          assert not any(case.find("skipped") is not None for case in cases), "host guard coverage must not skip tests"
+
+      - name: Preserve host test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiler-invocation-guard-host
+          retention-days: 7
+          if-no-files-found: warn
+          path: build/compiler-invocation-guard.xml

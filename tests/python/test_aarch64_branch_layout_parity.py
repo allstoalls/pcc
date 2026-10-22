@@ -15,12 +15,17 @@ from __future__ import annotations
 
 import pytest
 
+from pcc.backend import self_backend_aarch64_darwin as darwin_backend
 from pcc.backend.arm64_asm_driver import assemble_file, assemble_lines
 from pcc.backend.self_backend_aarch64_darwin import (
     emit_aarch64_darwin_indexed_module,
     emit_aarch64_darwin_indexed_transport,
 )
-from pcc.llvm_capi import ir
+from pcc.ir import ir
+
+
+# Checks the serialized precise stack-map table, which objects carry only on request.
+pytestmark = pytest.mark.usefixtures("precise_stackmap_tables")
 
 
 def _function(module, name, arg_count):
@@ -170,3 +175,134 @@ def test_branch_layout_shapes_match_between_asm_and_native_transport(monkeypatch
         if line.strip().startswith(("b ", "b.", "cbz ", "cbnz "))
     ]
     assert branches == ["b.le"], entry
+
+
+def test_no_suffix_parts_are_not_sliced_or_extended_twice(monkeypatch):
+    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "1")
+    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_EMIT", "1")
+    expected = assemble_file(
+        emit_aarch64_darwin_indexed_module(_build_shapes(), optimize=False)
+    )
+
+    class UnslicedParts(list):
+        def __getitem__(self, index):
+            if isinstance(index, slice):
+                raise AssertionError("no-suffix instruction parts were sliced")
+            return super().__getitem__(index)
+
+    original_parts = darwin_backend._emit_dense_indexed_instruction_parts
+    original_extend = darwin_backend._NativeAArch64Emission.extend
+    counts = {"parts": 0, "native_extends": 0}
+    plan_type = darwin_backend.FunctionStackMapPlan
+    original_entry = plan_type.append_packed_entry_span
+    original_terminator = plan_type.append_packed_terminator_span
+    fragment_counts = {"entry": 0, "terminator": 0}
+
+    def nonempty_entry(plan, owner, fragment, block_id):
+        assert plan.packed_records.entry_route_spans.get_unchecked(block_id * 2 + 1) > 0
+        fragment_counts["entry"] += 1
+        return original_entry(plan, owner, fragment, block_id)
+
+    def nonempty_terminator(plan, owner, fragment, block_id):
+        assert plan.packed_records.terminator_route_spans.get_unchecked(block_id * 2 + 1) > 0
+        fragment_counts["terminator"] += 1
+        return original_terminator(plan, owner, fragment, block_id)
+
+    # Like empty suffix lists, absent block routes must not create/publish an
+    # empty fragment. Nonempty routes still use the canonical producers, and
+    # the complete assembly oracle below preserves labels, NOPs and metadata.
+    monkeypatch.setattr(plan_type, "append_packed_entry_span", nonempty_entry)
+    monkeypatch.setattr(plan_type, "append_packed_terminator_span", nonempty_terminator)
+
+    def tracked_parts(*args, **kwargs):
+        parts = UnslicedParts(original_parts(*args, **kwargs))
+        counts["parts"] += 1
+        return parts
+
+    def tracked_native_extend(self, parts):
+        if isinstance(parts, UnslicedParts):
+            counts["native_extends"] += 1
+        return original_extend(self, parts)
+
+    monkeypatch.setattr(
+        darwin_backend, "_emit_dense_indexed_instruction_parts", tracked_parts
+    )
+    monkeypatch.setattr(
+        darwin_backend._NativeAArch64Emission, "extend", tracked_native_extend
+    )
+    buffered = emit_aarch64_darwin_indexed_module(_build_shapes(), optimize=False)
+    assert counts["parts"] > 0
+    assert assemble_file(buffered) == expected
+    counts["parts"] = 0
+    transport = emit_aarch64_darwin_indexed_transport(_build_shapes(), optimize=False)
+    actual = assemble_lines(
+        transport.line_chunks, transport.structured_sections,
+        transport.encoded_line_records, transport.structured_symbol_names,
+    )
+    assert transport.native_finalized
+    assert transport.fallback_instruction_count == 0
+    assert counts["parts"] > 0
+    assert counts["native_extends"] == counts["parts"]
+    assert fragment_counts["entry"] > 0
+    assert fragment_counts["terminator"] > 0
+    assert actual == expected
+
+
+@pytest.mark.parametrize("shape", ("branches", "root-reloads"))
+@pytest.mark.parametrize("mode", ("default", "function", "local"))
+def test_regalloc_scan_reuse_preserves_assembly_native_sections_and_stackmaps(
+    monkeypatch, shape, mode,
+):
+    from pcc.backend import self_backend_aarch64_darwin_prologue as prologue
+    from pcc.backend import self_backend_aarch64_darwin_regalloc as regalloc
+    from pcc.backend.native_object import encode_native_object_from_sections
+    from pcc.backend.precise_stackmap import decode_stack_map
+    from pcc.backend.self_backend_parse import parse_self_backend_module
+    from tests.aarch64_regalloc_scan_reference import (
+        allocation_state, old_scan_allocator, select_mode,
+    )
+    from tests.python.test_precise_stackmap_abi import _stale_managed_ssa_ir
+
+    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "1")
+    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_EMIT", "1")
+    select_mode(monkeypatch, mode)
+
+    def module():
+        if shape == "branches":
+            return _build_shapes()
+        return parse_self_backend_module(_stale_managed_ssa_ir("arm64-apple-darwin23.6.0"))
+
+    from tests.scalar_arena_projection_ci_reference import disable_scalar_projections
+
+    outputs = []
+    for index, allocator in enumerate((old_scan_allocator(), regalloc.allocate_aarch64_block_registers)):
+        states = []
+
+        def allocate(func):
+            allocator(func)
+            states.append((func.name, allocation_state(func)))
+
+        with monkeypatch.context() as patch:
+            patch.setattr(prologue, "allocate_aarch64_block_registers", allocate)
+            if index == 0:
+                disable_scalar_projections(patch, allocator)
+            assembly = emit_aarch64_darwin_indexed_module(module(), optimize=False)
+            assembly_states = list(states)
+            states.clear()
+            transport = emit_aarch64_darwin_indexed_transport(module(), optimize=False)
+        sections, undefined = transport.assemble_sections()
+        assert transport.native_finalized
+        assert transport.fallback_instruction_count == 0
+        assert states == assembly_states
+        assert (sections, undefined) == assemble_file(assembly)
+        encoded = encode_native_object_from_sections(sections, undefined=undefined)
+        if shape == "root-reloads":
+            stackmap = next(section for section in sections if section.sectname == "__pcc_stackmaps")
+            decoded = decode_stack_map(stackmap.data)
+            assert any(record.locations for function in decoded.functions for record in function.records)
+            assert any(state["reload_offsets"] for _, state in states)
+            assert undefined
+        outputs.append((assembly, states, sections, undefined, encoded))
+    # Complete sections include instruction words, symbols, relocations, unwind
+    # and stackmaps. This compares two allocators, not just two emitter routes.
+    assert outputs[0] == outputs[1]

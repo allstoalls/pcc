@@ -12,7 +12,7 @@ import textwrap
 
 import pytest
 
-from pcc.py_frontend.codegen.runtime_abi import (
+from pcc.frontends.python.codegen.runtime_abi import (
     FREESTANDING_GC_CROSS_OBJECT_SIGNATURES,
     FREESTANDING_GC_I64_GLOBALS,
     RUNTIME_SIGNATURES,
@@ -24,90 +24,81 @@ from tests.runtime_build_cache import (
 
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_HEADER = REPO_ROOT / "pcc" / "py_runtime" / "include" / "py_runtime.h"
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
-RUNTIME_MAKEFILE = REPO_ROOT / "pcc" / "py_runtime" / "Makefile"
-PY_OBJ_PORT = REPO_ROOT / "pcc" / "py_runtime" / "py" / "py_obj.py"
+RUNTIME_HEADER = REPO_ROOT / "pcc" / "runtime" / "include" / "py_runtime.h"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
+RUNTIME_MAKEFILE = REPO_ROOT / "pcc" / "runtime" / "Makefile"
+PY_OBJ_PORT = REPO_ROOT / "pcc" / "runtime" / "py" / "py_obj.py"
 THREAD_KERNEL = (
-    REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_thread_kernel.py"
+    REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_thread_kernel.py"
 )
 THREAD_KERNEL_PTHREAD = (
     REPO_ROOT
-    / "pcc"
-    / "py_runtime"
+    / "pcc" / "runtime"
     / "py"
     / "freestanding_thread_kernel_pthread.py"
 )
-RUNTIME_LOG_PORT = REPO_ROOT / "pcc" / "py_runtime" / "py" / "py_runtime_log.py"
+RUNTIME_LOG_PORT = REPO_ROOT / "pcc" / "runtime" / "py" / "py_runtime_log.py"
 PY_OBJ_GC_PORT = (
     REPO_ROOT
-    / "pcc"
-    / "py_runtime"
+    / "pcc" / "runtime"
     / "py"
     / "freestanding_gc_backend0_collector.py"
 )
-PY_GC_BACKEND_PORT = REPO_ROOT / "pcc" / "py_runtime" / "py" / "py_gc_backend.py"
+PY_GC_BACKEND_PORT = REPO_ROOT / "pcc" / "runtime" / "py" / "py_gc_backend.py"
 PY_GC_BARRIER_DISPATCHER = (
     REPO_ROOT
-    / "pcc"
-    / "py_runtime"
+    / "pcc" / "runtime"
     / "py"
     / "freestanding_gc_barrier_dispatcher.py"
 )
 PY_GC_GENERATIONAL_SCHEDULER = (
     REPO_ROOT
-    / "pcc"
-    / "py_runtime"
+    / "pcc" / "runtime"
     / "py"
     / "freestanding_gc_generational_scheduler.py"
 )
 PY_GC_GENERATIONAL_PROMOTION = (
     REPO_ROOT
-    / "pcc"
-    / "py_runtime"
+    / "pcc" / "runtime"
     / "py"
     / "freestanding_gc_generational_promotion.py"
 )
 PY_GC_OBJECT_SLOTS = (
     REPO_ROOT
-    / "pcc"
-    / "py_runtime"
+    / "pcc" / "runtime"
     / "py"
     / "freestanding_gc_object_slots.py"
 )
 PY_GC_RELOCATION_SELECTOR = (
     REPO_ROOT
-    / "pcc"
-    / "py_runtime"
+    / "pcc" / "runtime"
     / "py"
     / "freestanding_gc_relocation_selector.py"
 )
 PY_GC_STATE = (
-    REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_gc_state.py"
+    REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_gc_state.py"
 )
 PY_GC_COMMON_MARK_CYCLE = (
     REPO_ROOT
-    / "pcc"
-    / "py_runtime"
+    / "pcc" / "runtime"
     / "py"
     / "freestanding_gc_common_mark_cycle.py"
 )
 PY_GC_INCREMENTAL_CONCURRENT_SCHEDULER = (
     REPO_ROOT
-    / "pcc"
-    / "py_runtime"
+    / "pcc" / "runtime"
     / "py"
     / "freestanding_gc_incremental_concurrent_scheduler.py"
 )
-CORE_HELPERS = REPO_ROOT / "pcc" / "py_frontend" / "codegen" / "core_helpers.py"
+CORE_HELPERS = REPO_ROOT / "pcc" / "frontends" / "python" / "codegen" / "core_helpers.py"
 CONTROL_FLOW_LOWERING = (
-    REPO_ROOT / "pcc" / "py_frontend" / "codegen" / "control_flow_lowering.py"
+    REPO_ROOT / "pcc" / "frontends" / "python" / "codegen" / "control_flow_lowering.py"
 )
 FOR_LOOP_LOWERING = (
-    REPO_ROOT / "pcc" / "py_frontend" / "codegen" / "for_loop_lowering.py"
+    REPO_ROOT / "pcc" / "frontends" / "python" / "codegen" / "for_loop_lowering.py"
 )
 USER_FUNCTION_LOWERING = (
-    REPO_ROOT / "pcc" / "py_frontend" / "codegen" / "user_function_lowering.py"
+    REPO_ROOT / "pcc" / "frontends" / "python" / "codegen" / "user_function_lowering.py"
 )
 
 

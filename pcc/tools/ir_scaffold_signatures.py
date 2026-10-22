@@ -175,8 +175,8 @@ def audit_simple_signatures(
 def current_signature_issues(provider: Path | None = None) -> list[SignatureIssue]:
     root = Path(__file__).resolve().parents[1]
     if provider is None:
-        provider = root / "llvm_capi" / "ir.py"
-    scaffold = root / "py_frontend/codegen/ir_scaffold_lowering.py"
+        provider = root / "ir" / "ir.py"
+    scaffold = root / "frontends/python/codegen/ir_scaffold_lowering.py"
     tables = {}
     wanted = {"_IR_SCAFFOLD_SIMPLE_METHODS", "_IR_SCAFFOLD_METHOD_OPTIONAL_PARAMS"}
     for node in ast.parse(scaffold.read_text(encoding="utf-8")).body:

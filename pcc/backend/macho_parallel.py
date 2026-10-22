@@ -25,19 +25,6 @@ import threading
 from dataclasses import dataclass
 from typing import BinaryIO, Callable, Sequence, TypeVar, cast
 
-try:
-    import mmap as _mmap
-except ImportError:  # pragma: no cover - exercised by the self-hosted stage
-    # pcc1's closed-world stdlib has no `mmap` provider, so importing it at
-    # module scope made the whole owned in-process link unavailable: the
-    # failure surfaced as `No module named 'mmap'` from inside the linker, and
-    # (before the guarded reporting fix) as the single word "returncode".
-    # Nothing here needs the mapping itself -- the chunk writer only does
-    # slice assignment -- so the file-backed path degrades to a buffered
-    # read/patch/write that preserves the same bytes.
-    _mmap = None
-
-
 PARALLEL_JOBS_ENV = "PCC_MACHO_LINK_JOBS"
 _OUTER_PARALLELISM_ENV = "PCC_OUTER_PARALLELISM"
 
@@ -380,7 +367,7 @@ def _output_chunks(regions: Sequence[OutputRegion]) -> list[_OutputChunk]:
 
 
 def _write_output_chunks(
-    destination: "bytearray | _mmap.mmap",
+    destination: bytearray,
     chunks: Sequence[_OutputChunk],
     *,
     total_bytes: int,
@@ -434,6 +421,68 @@ def materialize_output(
     return bytes(materialize_output_buffer(size, regions, jobs=jobs))
 
 
+def write_file_output(
+    file: BinaryIO,
+    size: int,
+    regions: Sequence[OutputRegion],
+    *,
+    jobs: int | None = None,
+) -> None:
+    """Patch disjoint regions through bounded POSIX positional writes.
+
+    Validate layout, scheduling and descriptor flags before mutation. The
+    caller retains the descriptor and its cursor; bytes outside the regions
+    survive resizing, with newly extended gaps supplied as zeroes by the OS.
+    The descriptor must be seekable and open for read/write without O_APPEND.
+    Workers use the same frozen contiguous partition as buffer publication,
+    with at most two 1 MiB slices per active worker and no image-sized copy.
+    """
+    import fcntl
+
+    validated = _validated_regions(size, regions)
+    chunks = _output_chunks(validated)
+    worker_count = resolve_link_jobs(len(chunks), size, requested=jobs)
+    try:
+        descriptor = file.fileno()
+        flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+        if flags & os.O_APPEND:
+            raise ParallelLinkError("file-backed output cannot use O_APPEND")
+        if flags & os.O_ACCMODE != os.O_RDWR:
+            raise ParallelLinkError("file-backed output requires a read/write descriptor")
+        # Synchronize buffered seed bytes before resizing. In particular,
+        # flushing after a shrink could otherwise put the old tail back.
+        file.flush()
+        os.ftruncate(descriptor, size)
+    except (OSError, ValueError) as exc:
+        raise ParallelLinkError(
+            "could not prepare the file-backed Mach-O output file"
+        ) from exc
+
+    def write_chunk(chunk: _OutputChunk) -> None:
+        payload = chunk.source[chunk.source_start:chunk.source_end]
+        written = 0
+        while written < len(payload):
+            count = os.pwrite(descriptor, payload[written:], chunk.destination + written)
+            if count <= 0 or count > len(payload) - written:
+                raise ParallelLinkError("file-backed output write made invalid progress")
+            written += count
+
+    try:
+        ordered_parallel_map(
+            chunks,
+            write_chunk,
+            total_bytes=size,
+            jobs=worker_count,
+        )
+        # Retain mmap.flush's synchronous publication boundary. The caller
+        # still decides whether and how to atomically publish this inode.
+        os.fsync(descriptor)
+    except (OSError, ValueError) as exc:
+        raise ParallelLinkError(
+            "could not write the file-backed Mach-O output file"
+        ) from exc
+
+
 def write_mmap_output(
     file: BinaryIO,
     size: int,
@@ -441,63 +490,8 @@ def write_mmap_output(
     *,
     jobs: int | None = None,
 ) -> None:
-    """Patch frozen regions into an exact-size, file-backed mmap.
-
-    Validation happens before the file is resized, and the caller retains
-    ownership of the file descriptor.  Existing bytes outside ``regions`` are
-    preserved; this lets the incremental publisher seed a temporary file from
-    its previous artifact and patch only changed chunks.  A new zero-filled
-    file plus a complete-image region implements the from-scratch path.
-    """
-
-    validated = _validated_regions(size, regions)
-    chunks = _output_chunks(validated)
-    # Resolve and validate configuration before truncating the caller's file.
-    # Passing the frozen count into the worker helper also prevents an ambient
-    # environment mutation from changing scheduling halfway through publish.
-    worker_count = resolve_link_jobs(len(chunks), size, requested=jobs)
-    try:
-        file.truncate(size)
-        file.flush()
-        if size == 0:
-            return
-        if _mmap is None:
-            # No mapping available: read the truncated file back, patch it
-            # with the same writer, and write it out. Same resulting bytes,
-            # one image held in memory instead of a mapping.
-            file.seek(0)
-            buffered = bytearray(file.read(size))
-            if len(buffered) < size:
-                buffered.extend(bytes(size - len(buffered)))
-            _write_output_chunks(
-                buffered,
-                chunks,
-                total_bytes=size,
-                jobs=worker_count,
-            )
-            file.seek(0)
-            file.write(bytes(buffered))
-            file.flush()
-            return
-        image = _mmap.mmap(file.fileno(), size, access=_mmap.ACCESS_WRITE)
-    except (OSError, ValueError) as exc:
-        raise ParallelLinkError(
-            "could not create the file-backed Mach-O output mapping"
-        ) from exc
-    try:
-        _write_output_chunks(
-            image,
-            chunks,
-            total_bytes=size,
-            jobs=worker_count,
-        )
-        image.flush()
-    except (OSError, ValueError) as exc:
-        raise ParallelLinkError(
-            "could not write the file-backed Mach-O output mapping"
-        ) from exc
-    finally:
-        image.close()
+    """Compatibility entry for the owned positional file-region writer."""
+    write_file_output(file, size, regions, jobs=jobs)
 
 
 __all__ = [
@@ -509,5 +503,6 @@ __all__ = [
     "materialize_output",
     "ordered_parallel_map",
     "resolve_link_jobs",
+    "write_file_output",
     "write_mmap_output",
 ]

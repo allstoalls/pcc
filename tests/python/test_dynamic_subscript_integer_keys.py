@@ -4,10 +4,10 @@ import os
 import subprocess
 import sys
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
-def test_dynamic_getitem_preserves_wide_integers_and_bool_keys(tmp_path, pcc_py_runtime_archive):
+def test_dynamic_getitem_preserves_wide_integers_and_bool_keys(tmp_path, pcc_runtime_archive):
     source = tmp_path / "dynamic_keys.py"
     source.write_text('''
 def mapping(flag: bool):
@@ -38,7 +38,7 @@ main()
     assert expected.returncode == 0, expected.stderr
     output = tmp_path / "dynamic_keys"
     compile_python(str(source), str(output), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         result = subprocess.run([str(output)], capture_output=True, text=True, timeout=15,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(gc)))
@@ -46,7 +46,7 @@ main()
         assert result.stdout == expected.stdout, f"GC{gc}: {result.stdout}"
 
 
-def test_extern_object_dict_keeps_arbitrary_precision_keys(tmp_path, pcc_py_runtime_archive):
+def test_extern_object_dict_keeps_arbitrary_precision_keys(tmp_path, pcc_runtime_archive):
     source = tmp_path / "extern_dict_keys.py"
     source.write_text('''
 from pcc.extern import c_obj, c_int64, extern
@@ -62,7 +62,7 @@ main()
 ''', encoding="utf-8")
     output = tmp_path / "extern_dict_keys"
     compile_python(str(source), str(output), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         result = subprocess.run([str(output)], capture_output=True, text=True, timeout=15,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(gc)))
@@ -70,7 +70,7 @@ main()
         assert result.stdout == str(1 << 70) + "\n42\n42\n"
 
 
-def test_computed_wide_mapping_keys_release_temporary_objects(tmp_path, pcc_py_runtime_archive):
+def test_computed_wide_mapping_keys_release_temporary_objects(tmp_path, pcc_runtime_archive):
     source = tmp_path / "wide_key_lifetime.py"
     source.write_text('''
 from pcc.extern import c_obj, c_int64, extern
@@ -110,7 +110,7 @@ main()
 ''', encoding="utf-8")
     output = tmp_path / "wide_key_lifetime"
     compile_python(str(source), str(output), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         result = subprocess.run([str(output)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(gc)))

@@ -1,0 +1,43 @@
+{
+  "arms": {
+    "candidate": {
+      "compile_result_sha256": "6571f3e04c0e74483ea54cf27e4c601b5f30abfd8bf58e424c6054840afeef7b",
+      "executable_bytes": 27793384,
+      "executable_sha256": "68c60e691451a2764623301abd7a0c5809676f0ddb29d7642b753a3573faf84d",
+      "generated_ir_sha256": "22e18d285c37368e904b87c7c5e7061ba82e421c2e80205d36285f8f5fc69cef"
+    }
+  },
+  "candidate_source_manifest_sha256": "03538c5d750db4b1e8541cae229d0c5695a376a2b5ed80b6a451cb7818319c19",
+  "codegen_checksum": "819d8a565812fb28205d0056fc859ac8810d2cd5518ca3129a80e8674173fc35",
+  "compile_packet_manifest_sha256": "406f9305b0a4126549a9a4a2d31cb73b9b146dc69d4a042b31400c8f9afdbc1a",
+  "compile_qualification_sha256": "7dcb140d04060ab744fc7fd3056ca294ef95bc9bfffc0220cebd8d217dc81d06",
+  "execution": "UNRUN",
+  "expected_stdout": "OPEN_ERRNO_OK\n",
+  "files": {
+    "README.md": {
+      "bytes": 3380,
+      "sha256": "863d3eb84cad9784db13e9c9755278844745496473e7c7b930234dd2495da519"
+    },
+    "launch_elf.py": {
+      "bytes": 7986,
+      "sha256": "5917fe53c45293e1b4670cadb3b2839ef6e7ea41312ffc5cf1593fb55c152bfb"
+    },
+    "validate_native.py": {
+      "bytes": 6080,
+      "sha256": "4cdac512327ef6eace67fc2590843fa68ba9fe28e334c742e92ebb484e2f7331"
+    }
+  },
+  "fixed_argv": "executable name only; no program arguments",
+  "fixture_path": "tests/python/test_native_open_errno.py",
+  "fixture_sha256": "7d0ee61bb23e1e75132dfc2c9c8480cda828f520e628eb0812a1d2982c54821a",
+  "host_interpreter_sha256": "56045822d9c10027323c6f24ac5876901915b1c3ff8bfc6591d363c280246c82",
+  "predecessor_python_launcher_manifest_sha256": "c2f6ba10e39ffa3dc406e649bdfdb6358c952fae3d4d166cb3b16e62df3d427d",
+  "program_sha256": "4b2bddca6830f26c7b9f1d7148fe494906694a04188f191ab08bca939b6ab35d",
+  "provenance_probe": "2",
+  "review_at_freeze": "PENDING",
+  "runtime_result_sha256": "252f882546155bf9ed91dfc5e686d8b40c377e4f226de66f867243f0a6cccd58",
+  "runtime_sha256": "42ed3029a7fdf560dba6ba8f8c22133f736e2cba0a0ed65267505f25d51af97a",
+  "schema": "pcc.oserror_open_native_packet.v1",
+  "supervisor_sha256": "b1067df943a4cd992ecf10efbe9132fd7bc7d4f087a7b324b2fcc006f3de092a",
+  "temporary_directory": "fresh private output/tmp; must be empty after fixture exit"
+}

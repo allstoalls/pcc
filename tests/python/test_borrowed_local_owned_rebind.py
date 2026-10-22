@@ -20,15 +20,15 @@ main()
 '''
 
 
-def test_owned_rebind_preserves_borrowed_source_on_all_gc_backends(tmp_path, pcc_py_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+def test_owned_rebind_preserves_borrowed_source_on_all_gc_backends(tmp_path, pcc_runtime_archive):
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "borrowed_rebind.py"
     source.write_text(SOURCE)
     expected = subprocess.check_output([sys.executable, str(source)], text=True, timeout=10)
     binary = tmp_path / "borrowed_rebind"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
                                 capture_output=True, text=True, timeout=10)
@@ -37,7 +37,7 @@ def test_owned_rebind_preserves_borrowed_source_on_all_gc_backends(tmp_path, pcc
 
 
 def test_loop_borrowed_rebind_clears_previous_iteration_owner(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     source = tmp_path / "borrowed_loop.py"
     source.write_text('''
@@ -60,7 +60,7 @@ main()
 ''')
     binary = tmp_path / "borrowed_loop"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10,
             env=dict(os.environ, PCC_GC_BACKEND=str(backend),
@@ -70,7 +70,7 @@ main()
 
 
 def test_loop_borrowed_rebind_releases_previous_owned_value_once(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     source = tmp_path / "loop_finalizers.py"
     source.write_text('''
@@ -100,7 +100,7 @@ main()
 ''')
     binary = tmp_path / "loop_finalizers"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)))

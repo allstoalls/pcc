@@ -7233,4 +7233,5 @@ about 190 `pcc_gc_release` calls from the compiler's own ownership-cleanup code
 on libmalloc addresses with `malloc_size == 0` (stale releases the probe
 absorbs). The probe therefore masks real over-releases in pcc1's compiled code;
 removing it requires immortal-header sentinels and fixing those releases first.
-Both mirrors keep the probe. Handoff: `docs/knowledge/2026-09-06-session-handoff.md`.
+Both mirrors keep the probe. The original September 6 session handoff is preserved
+in the external recovery archive; see [current status](../status.md#evidence-and-recovery).

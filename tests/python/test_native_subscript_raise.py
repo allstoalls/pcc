@@ -27,7 +27,7 @@ from pathlib import Path
 
 
 def _compile_to_ll(tmp_path: Path, source: str, name: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / f"{name}.py"
     out = tmp_path / f"{name}.ll"
@@ -92,9 +92,9 @@ def test_dict_keyerror_list_indexerror_catch_no_libpython(tmp_path):
 
 
 def test_exact_container_getitem_has_one_behavior_owner():
-    from pcc.py_frontend.codegen.exact_int_lowering import ExactIntLoweringMixin
-    from pcc.py_frontend.codegen.host_contract import L1_CODEGEN_HOST_METHODS
-    from pcc.py_frontend.codegen.subscript_lowering import SubscriptLoweringMixin
+    from pcc.frontends.python.codegen.exact_int_lowering import ExactIntLoweringMixin
+    from pcc.frontends.python.codegen.host_contract import L1_CODEGEN_HOST_METHODS
+    from pcc.frontends.python.codegen.subscript_lowering import SubscriptLoweringMixin
 
     owner = inspect.getsource(
         SubscriptLoweringMixin._emit_exact_container_subscript_load_object

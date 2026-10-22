@@ -8,9 +8,9 @@ import textwrap
 from pathlib import Path
 
 
-def test_pcc_log_file_records_alloc_and_gc_from_native_runtime(tmp_path, pcc_py_runtime_archive):
+def test_pcc_log_file_records_alloc_and_gc_from_native_runtime(tmp_path, pcc_runtime_archive):
     repo = Path(__file__).absolute().parents[2]
-    runtime = repo / "pcc" / "py_runtime"
+    runtime = repo / "pcc" / "runtime"
 
     src = tmp_path / "runtime_log_probe.c"
     exe = tmp_path / "runtime_log_probe"
@@ -47,7 +47,7 @@ def test_pcc_log_file_records_alloc_and_gc_from_native_runtime(tmp_path, pcc_py_
         "-std=c11",
         f"-I{runtime / 'include'}",
         str(src),
-        str(pcc_py_runtime_archive),
+        str(pcc_runtime_archive),
         "-lm",
         "-pthread",
         "-o",
@@ -71,7 +71,7 @@ def test_pcc_log_file_records_alloc_and_gc_from_native_runtime(tmp_path, pcc_py_
 
     events = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert events
-    assert {event["schema"] for event in events} == {"pcc.runtime_log.v1"}
+    assert {event["schema"] for event in events} == {"pcc.diagnostics.runtime_log.v1"}
     names = {(event["category"], event["event"]) for event in events}
     alloc_tags = {
         event["value1"] for event in events

@@ -1,0 +1,130 @@
+{
+  "schema": "pcc.windows_packed_stackmaps_source_candidate.v1",
+  "status": "UNAPPLIED_UNRUN_SOURCE_CANDIDATE",
+  "base_inventory_sha256": "3185fc1e4a56d5eda5723941f3bb9dcd8b26f289495620ccd84cd83a00d36153",
+  "base_pcc_tree_prefix": "43d09241",
+  "base_published_commit_prefix": "db183",
+  "partial_source": true,
+  "files": [
+    {
+      "path": "pcc/backend/coff_x86_64.py",
+      "preimage_sha256": "15939bf25b6b8cffd853ac82cd99fbbe1708a3e8d3c8b7bf6599578a8bc440f5",
+      "preimage_bytes": 14262,
+      "postimage_sha256": "6a2aa9678c79e4df0d34fbb42bb16f4954c214c1ee753c087fad6cfa2f8f5e67",
+      "postimage_bytes": 15228
+    },
+    {
+      "path": "pcc/backend/self_backend_indexed_emit.py",
+      "preimage_sha256": "9747b3ed978590cb8189caea1a34aff2c45548416419126572d372d881a95ed5",
+      "preimage_bytes": 5617,
+      "postimage_sha256": "74195ec97ad9d2afefe7d39b9d89877cb98eec93a92112ec37804d746f82a673",
+      "postimage_bytes": 5806
+    },
+    {
+      "path": "pcc/backend/self_backend_x86_64_linux.py",
+      "preimage_sha256": "4d866d533c945debc79ca793eb1273999054b083ad7a84e48f2a04617d4c894e",
+      "preimage_bytes": 134423,
+      "postimage_sha256": "72e4a95da0b0a5163a3d1d795f3d21255733488cf6fa89c62b395d30aeb9cfb5",
+      "postimage_bytes": 134284
+    },
+    {
+      "path": "pcc/backend/target_objects.py",
+      "preimage_sha256": "5ea98a6c8b37ff5b0555865164df73ea14a4b58e50e2e3abdc4833cb0a57e4a8",
+      "preimage_bytes": 3710,
+      "postimage_sha256": "09e8ea6c9df872f5e31a1382e8be9c4cd6621f571dd0dea4fb0ceb6eed3ff9eb",
+      "postimage_bytes": 4029
+    },
+    {
+      "path": "pcc/backend/x86_64_asm_driver.py",
+      "preimage_sha256": "a85b7b1fcfa7cb6fec61e08b1cb8a95096cb03b9ebe38778d2d0de1472fc88b4",
+      "preimage_bytes": 34692,
+      "postimage_sha256": "e99b858802690ebb21698fd26ff91756922e07e3109132b1d94b378c447e02c7",
+      "postimage_bytes": 35266
+    },
+    {
+      "path": "pcc/frontends/python/pipeline_frontend_worker_execution.py",
+      "preimage_sha256": "699cf16413e750d9c50c2ebff63332a393f412f94d208a1e77fd472ab75a0f18",
+      "preimage_bytes": 55067,
+      "postimage_sha256": "d47f682f1c5c21443af6f8b4276ceeba96a75be56e0c7efa7a4ab6ea3a13f623",
+      "postimage_bytes": 55280
+    },
+    {
+      "path": "tests/python/test_x86_64_windows_packed_stackmaps.py",
+      "preimage_sha256": null,
+      "preimage_bytes": null,
+      "postimage_sha256": "b3ba46e56065d556ac19088811d2c6cb25d36d4ae8e7705986a7b3b9a9665895",
+      "postimage_bytes": 12213
+    }
+  ],
+  "patch_sha256": "f01fdee685dcaa3ead1b3d53e8c8615541fd5fdc30e430d15be70c9d5e9fff89",
+  "patch_bytes": 19892,
+  "checks": {
+    "source_readback": "COMPLETED",
+    "python_import_compile_or_test": "NOT_RUN",
+    "native_emitted_execution": "NOT_RUN",
+    "runtime_build": "NOT_RUN",
+    "stage1": "NOT_RUN",
+    "performance": "NOT_RUN",
+    "git_operations": "NONE"
+  },
+  "scope": "Reuse target-final x86 packed stack maps for Windows COFF object emission; retain ordinary ASM export, SEH marker retention, relocation conversion and packed schema validation. No assembler rewrite, cap changes or liveness changes.",
+  "merge_note": "Independent db183 preimage. The stage bridge also changes pipeline_frontend_worker_execution.py and self_backend_indexed_emit.py. Compose hunks onto its precise postimages while retaining sidecar exclusion, handoff validation and phase_timing; do not overwrite either whole postimage.",
+  "base_published_commit": "db1830cf83174428c48607819ae98e84f887c9b9",
+  "new_test_declared_cases": 17,
+  "recommended_unrun_selectors": [
+    "tests/python/test_x86_64_windows_packed_stackmaps.py",
+    "tests/python/test_indexed_phase_timing.py",
+    "tests/python/test_x86_64_packed_stackmaps.py",
+    "tests/python/test_x86_64_consumed_stackmap_plans.py",
+    "tests/python/test_x86_64_numeric_data_batching.py",
+    "tests/python/test_owned_platform_targets.py"
+  ],
+  "qualification_limits": [
+    "New tests and all existing gates are UNRUN; no syntax/import/compile or native execution claim.",
+    "Host object/dispatch parity cannot qualify native closed-world compilation, the Windows runtime, five-GC execution or end-to-end Stage1.",
+    "No measured speedup; Windows backend_finalize work shifts partly into object_assemble packing.",
+    "Standalone direct Windows packed public calls share existing x86 module-symbol callback state, as the Linux packed route does.",
+    "Malformed structured plans can fail at a different validation stage from the text path; exact first-error precedence is not claimed. Final packed semantic and aggregate resource-limit validation still precedes COFF output."
+  ],
+  "base_repository": "ikshengmin/pcc",
+  "base_scope": "Verified compiler/runtime/build compilation closure, not a complete repository snapshot.",
+  "source_review": {
+    "status": "CLEAR_WITH_LIMITS",
+    "reviewed_patch_sha256": "f01fdee685dcaa3ead1b3d53e8c8615541fd5fdc30e430d15be70c9d5e9fff89",
+    "date_utc": "2026-10-10",
+    "remaining_source_blockers": 0,
+    "declared_test_cases_statically_reviewed": 17,
+    "execution_status": "UNRUN",
+    "verified_boundaries": [
+      "COFF long section names remain string-table backed; final PE mapping is unchanged.",
+      "SEH marker retention and ADDR32NB unwind relocations remain unchanged.",
+      "Final-offset stack-map address relocations remain zero-addend R_X86_64_64 before unchanged COFF ADDR64 conversion.",
+      "Existing packed semantic, symbol-identity, relocation-coverage and aggregate-limit validation precedes COFF output.",
+      "Ordinary text/ASM routing remains available; explicit consumption clears plans after packing."
+    ],
+    "resolved_test_findings": [
+      "AST selection excludes the False initializer and selects only the bool eligibility expression.",
+      "Consumption case drops the extra plan owner and uses weak references for host reclamation.",
+      "Worker case includes actual Windows frontend execution and a text-control COFF oracle when the test is eventually run."
+    ]
+  },
+  "public_materials": {
+    "readme_sha256": "ca3c4a5b60834c5d20963122942156b6dda6b5fe092291b6d2594508cc863b8e",
+    "private_workspace_paths": false
+  },
+  "composition_review": {
+    "status": "SOURCE_CLEAR_WITH_LIMITS",
+    "windows_over_bridge_patch_sha256": "2cef733b1354757495d87e54ca0803ca0bf9df758f76ab519a8cc7f4c88d0720",
+    "postimages": {
+      "pcc/frontends/python/pipeline_frontend_worker_execution.py": "72bc54658602f69b17b37ed7ae23207f91046aa22553854c222e91001fde4da1",
+      "pcc/backend/self_backend_indexed_emit.py": "de3d9c409616020b0d2b0d85dbf3284186f742cdc8b93aec189a0d779070241e"
+    },
+    "contracts_retained": [
+      "sidecar exclusion",
+      "handoff validation",
+      "phase timing",
+      "backward-compatible indexed-emitter call signatures"
+    ],
+    "execution_status": "UNRUN"
+  }
+}

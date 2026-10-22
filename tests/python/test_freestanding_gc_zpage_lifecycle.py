@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_zpage_lifecycle.py"
 MANAGED_SOURCE = RUNTIME_DIR / "py" / "py_gc_backend.py"
 DEALLOC_SOURCE = RUNTIME_DIR / "py" / "py_obj_dealloc.py"
@@ -43,6 +43,11 @@ OWNED_SYMBOLS = {
 RAW_FUNCTION_IMPORTS = {
     "free",
     "pcc_dealloc_cascade_active",
+    # Dealloc cascades are per thread: the zpage paths read the process
+    # count of queued deaths and sweep deferred recycles under the graph lock.
+    "pcc_dealloc_trash_pending",
+    "pcc_py_gc_minor_graph_lock",
+    "pcc_py_gc_minor_graph_unlock",
     "pcc_gc_backend4_zpage_clear_active_page",
     "pcc_gc_backend4_zpage_node_release",
     "pcc_gc_object_index_find",
@@ -54,7 +59,6 @@ RAW_FUNCTION_IMPORTS = {
     "pcc_gc_zpage_owner_index_remove",
 }
 RAW_GLOBAL_IMPORTS = {
-    "pcc_dealloc_trash_head",
     "pcc_gc_backend4_deferred_recycle_pages",
     "pcc_gc_backend4_free_page_head",
     "pcc_gc_backend4_page_head",
@@ -112,7 +116,9 @@ def test_zpage_lifecycle_has_one_strict_source_owner() -> None:
         assert f'@c_abi_export("{symbol}")' not in managed
     assert '"pcc_gc_backend4_sweep_deferred_recycles"' in dealloc
     assert '@c_abi_export("pcc_gc_backend4_sweep_deferred_recycles")' not in dealloc
-    assert 'define_global_ptr_null("pcc_dealloc_trash_head")' in dealloc
+    # Each thread queues and drains its own deep deaths.
+    assert 'define_thread_local_ptr_null("pcc_dealloc_trash_head")' in dealloc
+    assert 'define_global_i64("pcc_dealloc_trash_pending_count", 0)' in dealloc
 
 
 @pytest.mark.parametrize("emitter", ["llvm", "self"])
@@ -181,8 +187,38 @@ def test_zpage_lifecycle_preserves_cache_and_forwarding_safety_contract() -> Non
     assert "offset + size" in strict
     assert "pcc_gc_zpage_owner_index_remove(load_ptr(node, 0))" in strict
     assert "load_i64(page, 96) <= 0" in strict
-    assert 'global_load_ptr("pcc_dealloc_trash_head")' in strict
+    # A death queued by any thread keeps the page tail reserved.
+    assert "pcc_dealloc_trash_pending() == 0" in strict
+    sweep = strict[strict.index("def pcc_gc_backend4_sweep_deferred_recycles("):]
+    sweep = sweep[:sweep.index("\n\n\n")]
+    assert "pcc_py_gc_minor_graph_lock()" in sweep and "pcc_dealloc_cascade_active() == 0" in sweep
     assert "store_i32(page, 104, 1)" in strict
+
+
+def _function_source(source: str, name: str) -> str:
+    start = source.index("def " + name + "(")
+    end = source.find("\n\n@c_abi_export(", start)
+    return source[start:] if end < 0 else source[start:end]
+
+
+def test_backend4_deferred_sweep_counts_only_pages_it_can_complete() -> None:
+    """page+104: 1 is counted for the post-drain sweep, 2 waits on forwarding.
+
+    A pcc1 GC4 compile held hundreds of deferred pages whose forwarding had
+    not retired; all were counted, so every top-level cascade walked the
+    whole live page list (~7000 pages) without completing any.
+    """
+    strict = STRICT_SOURCE.read_text(encoding="utf-8")
+    sweep = _function_source(strict, "pcc_gc_backend4_sweep_deferred_recycles")
+    assert "if load_i32(page, 104) == 1:" in sweep
+    assert "load_i32(page, 104) != 0" not in sweep
+    assert sweep.index("if load_i64(page, 96) > 0:") < sweep.index("store_i32(page, 104, 2)")
+    detach = _function_source(strict, "pcc_gc_backend4_zpage_detach_for_relocation")
+    forwarded = detach.index("if load_i64(page, 96) > 0:")
+    assert forwarded < detach.index("store_i32(page, 104, 2)") < detach.index("store_i32(page, 104, 1)")
+    assert "if flag != 1:" in detach
+    clear = _function_source(strict, "pcc_gc_backend4_zpage_clear_reusable_state")
+    assert clear.index("if load_i32(page, 104) == 1:") < clear.index("store_i32(page, 104, 0)")
 
 
 def test_backend4_free_path_never_scans_all_zpage_lists_for_origin() -> None:
@@ -199,10 +235,10 @@ def test_backend4_free_path_never_scans_all_zpage_lists_for_origin() -> None:
 
 
 def test_production_archive_has_one_zpage_lifecycle_owner(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -379,10 +415,10 @@ def _link_zpage_tail_reuse_probe(
 
 def test_zpage_lifecycle_for_cache_limit_reuse_and_large_retire(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     implementation = _link_zpage_lifecycle_probe(
-        tmp_path, "zpage_lifecycle_pcc_python", pcc_py_runtime_archive
+        tmp_path, "zpage_lifecycle_pcc_python", pcc_runtime_archive
     )
     result = subprocess.run(
         [str(implementation)], capture_output=True, text=True, timeout=30
@@ -401,10 +437,10 @@ def test_zpage_lifecycle_for_cache_limit_reuse_and_large_retire(
 
 def test_zpage_lifecycle_for_owner_payload_tail_reuse(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     implementation = _link_zpage_tail_reuse_probe(
-        tmp_path, "zpage_tail_reuse_pcc_python", pcc_py_runtime_archive
+        tmp_path, "zpage_tail_reuse_pcc_python", pcc_runtime_archive
     )
     result = subprocess.run(
         [str(implementation)], capture_output=True, text=True, timeout=30

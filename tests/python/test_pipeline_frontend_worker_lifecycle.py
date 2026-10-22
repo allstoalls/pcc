@@ -3,7 +3,7 @@ from __future__ import annotations
 import gc
 from types import SimpleNamespace
 
-from pcc.py_frontend import pipeline_frontend_worker_execution as worker_execution
+from pcc.frontends.python import pipeline_frontend_worker_execution as worker_execution
 
 
 def test_direct_frontend_release_clears_top_level_owners_and_collects_cycles(

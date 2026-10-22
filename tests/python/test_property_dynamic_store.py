@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 from tests.python.test_class_lookup_cache_runtime import _compile_and_run
 
 PROGRAM = '''
@@ -185,12 +185,12 @@ SOURCE = r'''
 
 def test_runtime_property_store_and_delete_in_both_runtimes(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     for backend in range(5):
         backend_source = SOURCE.replace("STORE_BACKEND", str(backend))
         for runtime_name, archive in (
-            ("pcc_py", pcc_py_runtime_archive),
+            ("pcc_py", pcc_runtime_archive),
         ):
             result = _compile_and_run(
                 tmp_path,

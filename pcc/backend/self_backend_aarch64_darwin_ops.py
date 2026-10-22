@@ -14,6 +14,7 @@ from .self_backend_aarch64_darwin_mem import (
 )
 from .self_backend_ir import TypeDesc
 from .self_backend_kernel import (
+    _scalar_window_is_complete,
     TYPE_KIND_FP,
     TYPE_KIND_INT,
     TYPE_KIND_PTR,
@@ -62,8 +63,21 @@ def emit_binop_indexed(
     kernel: IndexedFunctionKernel, op: str, type_id: int,
     lhs_register: int = 9, rhs_register: int = 10, result_register: int = 11,
 ) -> list[str]:
-    header: CompilerInt4 = kernel.type_header(type_id)
-    if header.first != TYPE_KIND_INT:
+    header_is_scalar = False
+    if type(kernel) is IndexedFunctionKernel:
+        header_scalar_id = type_id
+        header_is_scalar = _scalar_window_is_complete(
+            kernel.type_scalars, header_scalar_id, 12, 0
+        )
+        if header_is_scalar:
+            header_scalar = kernel.type_scalars.get_unchecked(
+                header_scalar_id * 12 + 0
+            )
+        else:
+            header: CompilerInt4 = kernel.type_header(header_scalar_id)
+    else:
+        header: CompilerInt4 = kernel.type_header(type_id)
+    if (header_scalar if header_is_scalar else header.first) != TYPE_KIND_INT:
         raise BackendUnavailable(
             f"self backend only supports integer binops, got type_id={type_id}"
         )
@@ -218,6 +232,10 @@ def emit_cast(op: str, src_type: TypeDesc, dst_type: TypeDesc) -> list[str]:
             )
         if src_type.width == 1:
             return ["  and w10, w9, #1"]
+        if src_type.width not in (8, 16, 32, 64):
+            return _zero_extend_odd_width("x10" if src_type.width > 32 else "w10",
+                                          "x9" if src_type.width > 32 else "w9",
+                                          src_type.width)
         if src_type.width <= 32 and dst_type.width > 32:
             return [emitted_move_register_line("w10", "w9")]
         return [emitted_move_register_line(dst10, src9)]
@@ -245,6 +263,10 @@ def emit_cast(op: str, src_type: TypeDesc, dst_type: TypeDesc) -> list[str]:
                     "  neg x10, x10",
                 ]
             )
+        if src_type.width not in (8, 16, 32, 64):
+            wide = dst_type.width > 32
+            return _sign_extend_odd_width("x10" if wide else "w10", "x9" if wide else "w9",
+                                          src_type.width, 64 if wide else 32)
         return [emitted_move_register_line(dst10, src9)]
 
     if op == "sitofp":
@@ -352,6 +374,10 @@ def emit_cast_indexed(
             raise BackendUnavailable("self backend zext type mismatch")
         if src.second == 1:
             return ["  and " + dst_w + ", " + src_w + ", #1"]
+        if src.second not in (8, 16, 32, 64):
+            return _zero_extend_odd_width(dst_x if src.second > 32 else dst_w,
+                                          src_x if src.second > 32 else src_w,
+                                          src.second)
         if src.second <= 32 and dst.second > 32:
             return [emitted_move_register_line(dst_w, src_w)]
         return _cast_move(dst10, src9)
@@ -374,6 +400,10 @@ def emit_cast_indexed(
                 if dst.second <= 32
                 else ["  and " + dst_w + ", " + src_w + ", #1", "  neg " + dst_x + ", " + dst_x]
             )
+        if src.second not in (8, 16, 32, 64):
+            wide = dst.second > 32
+            return _sign_extend_odd_width(dst_x if wide else dst_w, src_x if wide else src_w,
+                                          src.second, 64 if wide else 32)
         return _cast_move(dst10, src9)
     if op == "sitofp" or op == "uitofp":
         if src.first != TYPE_KIND_INT or dst.first != TYPE_KIND_FP:
@@ -386,6 +416,22 @@ def emit_cast_indexed(
         mnemonic = "fcvtzs" if op == "fptosi" else "fcvtzu"
         return [f"  {mnemonic} {dst10}, {src9}"]
     raise BackendUnavailable(f"self backend does not support cast op {op!r}")
+
+
+def _zero_extend_odd_width(dst: str, src: str, width: int) -> list[str]:
+    """Keep exactly the low ``width`` bits of an arbitrary-width integer.
+
+    Values such as bit-field reads (i3, i28, i40) may carry bits above their
+    width after a truncation; extension must not expose those bits. A W
+    destination also clears the upper half of its X register.
+    """
+    return [f"  and {dst}, {src}, #{(1 << width) - 1}"]
+
+
+def _sign_extend_odd_width(dst: str, src: str, width: int, reg_bits: int) -> list[str]:
+    """Sign-extend from bit ``width - 1`` with the shift pair used elsewhere."""
+    shift = reg_bits - width
+    return [f"  lsl {dst}, {src}, #{shift}", f"  asr {dst}, {dst}, #{shift}"]
 
 
 def sign_extend_int_reg(value_type: TypeDesc, reg: str) -> list[str]:

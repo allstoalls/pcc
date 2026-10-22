@@ -4,7 +4,7 @@ Compiles `benchmarks/python/longrun_churn.py` once (strict
 no-libpython self-backend) and runs a SHORT bounded window on every
 GC backend (0..4), asserting clean exit, well-formed CSV samples,
 non-negative telemetry, live RSS, and no corruption sentinel. The
-minutes-scale tier is manual (scripts/gc_longrun.sh, future) — never
+minutes-scale tier is manual (scripts/run_test_gates.py --gate gc-longrun, future) — never
 default pytest. No cross-backend performance assertions here: smoke
 checks the MEASUREMENT SURFACE, not collector behavior.
 """
@@ -36,7 +36,7 @@ WORKLOADS = {
 
 @pytest.fixture(scope="module")
 def longrun_binaries(tmp_path_factory):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     out = {}
     base = tmp_path_factory.mktemp("longrun")

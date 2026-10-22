@@ -26,7 +26,7 @@
 
 ## 11.1 一副骨架,五种行走
 
-先把声明卫生立在前面。[pcc/py_runtime/src/py_gc_backend.c](../../pcc/py_runtime/src/py_gc_backend.c) 的文件头注释如实记录了出身:非引用计数的后端"以可选择的骨架起步:复用引用计数语义,同时暴露真实 Lua/Go/OCaml/ZGC 实现将驱动的屏障/安全点计数器"。两年的切片工作让这些骨架长出了真实算法——三色推进、并发工作线程、小堆晋升、转发与搬动——但 [docs/refs_docs/gc-research/README.md](../../docs/refs_docs/gc-research/README.md) 的状态表仍然写明:它们**不是** Lua、Go、OCaml、ZGC 的等价算法移植,而是朝各自参照系收敛的、逐切片验证的方向。本章按这个口径写:每节先说参照系要求什么,再说 pcc 今天实现到哪里、刻意没实现什么。
+先把声明卫生立在前面。[pcc/runtime/src/py_gc_backend.c](../../pcc/runtime/src/py_gc_backend.c) 的文件头注释如实记录了出身:非引用计数的后端"以可选择的骨架起步:复用引用计数语义,同时暴露真实 Lua/Go/OCaml/ZGC 实现将驱动的屏障/安全点计数器"。两年的切片工作让这些骨架长出了真实算法——三色推进、并发工作线程、小堆晋升、转发与搬动——但 [docs/refs_docs/gc-research/README.md](../../docs/refs_docs/gc-research/README.md) 的状态表仍然写明:它们**不是** Lua、Go、OCaml、ZGC 的等价算法移植,而是朝各自参照系收敛的、逐切片验证的方向。本章按这个口径写:每节先说参照系要求什么,再说 pcc 今天实现到哪里、刻意没实现什么。
 
 五个参照实现的源码快照就在仓库里([docs/refs_docs/gc-research/](../../docs/refs_docs/gc-research/) 下的 `<lang>/`),仓库规则要求移植前先读参照、不得重新发明:
 
@@ -42,7 +42,7 @@
 
 ZGC 快照特意钉在 OpenJDK `jdk-27+21`,因为 JDK 23(JEP 474)起分代模式成为默认、JDK 24(JEP 490)删除了非分代模式——后端 #4 必须对照**分代** ZGC 评估,不是已被删除的单代模式。
 
-进入各后端之前,先看一眼它们共用的入口,后面各节就不必重复了。`gc.collect()` 落到 [pcc/py_runtime/src/py_obj.c](../../pcc/py_runtime/src/py_obj.c) 的 `pcc_gc_collect()`,它对 #0 与追踪后端走两条完全不同的管线:
+进入各后端之前,先看一眼它们共用的入口,后面各节就不必重复了。`gc.collect()` 落到 [pcc/runtime/src/py_obj.c](../../pcc/runtime/src/py_obj.c) 的 `pcc_gc_collect()`,它对 #0 与追踪后端走两条完全不同的管线:
 
 ```text
 pcc_gc_collect(reason)
@@ -65,10 +65,10 @@ pcc_gc_collect(reason)
 
 **参照系。** `gc-research/python/gcmodule.c` 是 CPython 3.13 的分代环收集器(`gc_collect_main`、`visit_decref`、`move_unreachable`),`gc_free_threading.c` 是 PEP 703 无 GIL 变体,留作未来自由线程路径的参照。
 
-**核心算法。** 引用计数是第一收集器:`py_decref` 到零即释放,绝大多数对象从不进入任何追踪名单。环收集器只对被追踪的容器工作(`PY_FLAG_GC_TRACKED`,见第 9 章),实现于 [pcc/py_runtime/src/py_obj_gc.c](../../pcc/py_runtime/src/py_obj_gc.c):
+**核心算法。** 引用计数是第一收集器:`py_decref` 到零即释放,绝大多数对象从不进入任何追踪名单。环收集器只对被追踪的容器工作(`PY_FLAG_GC_TRACKED`,见第 9 章),实现于 [pcc/runtime/src/py_obj_gc.c](../../pcc/runtime/src/py_obj_gc.c):
 
 ```c
-// pcc/py_runtime/src/py_obj_gc.c
+// pcc/runtime/src/py_obj_gc.c
 int64_t py_gc_collect(void) {
     if (py_gc_collecting) return 0;
     py_gc_collecting = 1;
@@ -100,7 +100,7 @@ int64_t py_gc_collect(void) {
 **核心算法。** 三色直接放在对象头 flags 里(`PY_FLAG_GC_WHITE`/`GRAY`/`BLACK`,`py_internal.h`)。写屏障是 Dijkstra 前向式:黑色 owner 存入白色 value 时把 value 染灰:
 
 ```c
-// pcc/py_runtime/src/py_gc_backend.c
+// pcc/runtime/src/py_gc_backend.c
 void pcc_gc_store_ptr(PyObject *owner, PyObject **slot, PyObject *value) {
     if (pcc_gc_selected_backend == PCC_GC_KIND_INCREMENTAL_TRICOLOR) {
         if (owner != NULL && (owner->flags & PY_FLAG_GC_BLACK) &&
@@ -119,7 +119,7 @@ void pcc_gc_store_ptr(PyObject *owner, PyObject **slot, PyObject *value) {
 配速器是 Lua 模型的直接移植:`pcc_gc_note_alloc()` 把分配字节累进 `pcc_gc_debt_bytes`;债务越过阈值(`PCC_GC_DEFAULT_DEBT_THRESHOLD` 为 64KiB,或 `live_bytes × (gcpause − 100) / 100`,`PCC_GC_PAUSE` 默认 1000)时,`pcc_gc_maybe_auto_step()` 用 `pcc_gc_budget_from_debt()` 换算出的预算执行一次有界步进(债务除以 `PCC_GC_WORK_BYTES = 64`,乘 `PCC_GC_STEPMUL`,上限 65536);步进完成后 `pcc_gc_discharge_debt()` 按处理量冲销债务。标记步进 `pcc_gc_step_trace_cycle_unlocked()`:游标沿对象注册表推进,遇灰对象就 `pcc_gc_trace_referents()` 染灰其子并把自己转黑;游标走完且灰计数为零时进入终局——`pcc_gc_finish_tracing_cycle()` 在 STW 边界下重扫当前根集、排空新灰,然后把仍为白色的对象打上 `PY_FLAG_GC_SWEEP_CANDIDATE`。这对应 Lua 的 atomic 阶段:增量标记期间根可以变,最终的白色裁决必须原子。
 
 ```c
-// pcc/py_runtime/src/py_gc_backend.c
+// pcc/runtime/src/py_gc_backend.c
 void pcc_gc_step(int64_t work_limit) {
     switch (pcc_gc_selected_backend) {
     case PCC_GC_KIND_INCREMENTAL_TRICOLOR:

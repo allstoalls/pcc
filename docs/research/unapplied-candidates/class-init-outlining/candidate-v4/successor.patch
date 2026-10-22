@@ -1,0 +1,147 @@
+--- a/pcc/frontends/python/codegen/class_gen.py
++++ b/pcc/frontends/python/codegen/class_gen.py
+@@ -4728,6 +4728,10 @@
+         for ordinal, statement in enumerate(self.parent.ast_module.body):
+             if not _is_ast_node(statement, ClassDef):
+                 continue
++            # Declaration may strip no-op decorators. Preserve the original
++            # exclusion before normalization, for both runtime entrypoints.
++            if statement.decorators or statement.keywords:
++                continue
+             span = statement.span
+             if span is None:
+                 continue
+@@ -5093,6 +5097,11 @@
+                 parent.builder.ret(ir.Constant(_I32, 1))
+             # Deliberately no _instrument_python_activation call: an outline
+             # must not consume an additional Python recursion activation.
++        except BaseException as exc:
++            # Match function/method emission: retain the failing helper and
++            # expression context until its diagnostic has been recorded.
++            parent._codegen_trace_dump(exc)
++            raise
+         finally:
+             parent.builder = saved_builder
+             parent.current_function = saved_function
+--- a/tests/python/test_class_init_outlining.py
++++ b/tests/python/test_class_init_outlining.py
+@@ -12,6 +12,7 @@
+ 
+ from pcc.frontends.python.codegen.class_gen import ClassLowering
+ from pcc.frontends.python.codegen.layer1 import L1CodeGen
++from pcc.frontends.python.codegen.stmt_dispatch_lowering import StmtDispatchLoweringMixin
+ from pcc.frontends.python.compiled_owned_passes import run_owned_passes
+ from pcc.frontends.python.pipeline_pass_config import PYTHON_IR_PASS_DEFAULT_TIER
+ from pcc.frontends.python.py_ast import FuncDef
+@@ -46,7 +47,7 @@
+     monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_EMIT", "0")
+     monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "0")
+     monkeypatch.setenv("PCC_WITH_THREADS", "0")
+-    monkeypatch.setenv("PCC_DEBUG_CODEGEN", "0")
++    monkeypatch.delenv("PCC_DEBUG_CODEGEN_PHASES", raising=False)
+ 
+ 
+ def _generator(source, *, library=True):
+@@ -57,6 +58,8 @@
+     generator._prefer_native_callable_values = True
+     generator._skip_program_main = library
+     generator._target_triple = TARGET
++    generator.module.triple = TARGET
++    generator._python_library = library
+     return parsed, typed, generator
+ 
+ 
+@@ -93,11 +96,17 @@
+     match = re.search(r"(%[-\w.]+) = call i32(?: \(\))? @" + re.escape(helper) + r"\(\)", body)
+     assert match, (helper, body)
+     tail = body[match.end():]
+-    branch = re.search(r"\bbr i1 (%[-\w.]+), label %[-\w.]+, label %[-\w.]+", tail)
++    branch = re.search(r"\bbr i1 (%[-\w.]+), label %([-\w.]+), label %([-\w.]+)", tail)
+     assert branch, (helper, tail)
+     boundary = tail[:branch.end()]
+-    compare = re.search(r"(%[-\w.]+) = icmp [a-z]+ i32 " + re.escape(match.group(1)) + r", [01]\b", boundary)
+-    assert compare and compare.group(1) == branch.group(1)
++    comparison = re.search(
++        r"(%[-\w.]+) = icmp eq i32 " + re.escape(match.group(1)) + r", 1\b",
++        boundary,
++    )
++    assert comparison and branch.group(1) == comparison.group(1), (helper, boundary)
++    assert branch.group(2) != branch.group(3)
++    assert branch.group(3) == "err.exit", (helper, branch.groups())
++    assert re.search(r"(?m)^" + re.escape(branch.group(3)) + r":", body)
+     assert not re.search(r"\bcall\b", boundary), "outline call added a TLS poll/frame/activation before its status branch"
+ 
+ 
+@@ -162,10 +171,12 @@
+ @pytest.mark.parametrize("threads", ["0", "1"])
+ def test_inline_oracle_preserves_constructors_and_root_operations(monkeypatch, threads):
+     monkeypatch.setenv("PCC_WITH_THREADS", threads)
+-    _, _, _, outlined = _emit()
++    _, _, outlined_generator, outlined = _emit()
++    assert outlined_generator._runtime_threads_enabled == (threads == "1")
+     with monkeypatch.context() as disabled:
+         disabled.setattr(ClassLowering, "_maybe_emit_class_init_outline", lambda self, cd, info: False)
+-        _, _, _, inline = _emit()
++        _, _, inline_generator, inline = _emit()
++        assert inline_generator._runtime_threads_enabled == (threads == "1")
+     assert not _helpers(inline)
+     constructors = Counter()
+     selected = {
+@@ -196,14 +207,14 @@
+ def test_imports_assignments_and_function_bindings_keep_source_order(monkeypatch):
+     source = "import sys\nmarker = 'before'\n" + SIMPLE.replace("class Second", "marker = 'after'\nclass Second")
+     seen = []
+-    original = L1CodeGen._emit_stmt_impl
++    original = StmtDispatchLoweringMixin._emit_stmt_impl
+ 
+     def observe(self, stmt):
+         if self.current_function.name == TOP:
+             seen.append((type(stmt).__name__, getattr(stmt, "name", ""), stmt.span.line))
+         return original(self, stmt)
+ 
+-    monkeypatch.setattr(L1CodeGen, "_emit_stmt_impl", observe)
++    monkeypatch.setattr(StmtDispatchLoweringMixin, "_emit_stmt_impl", observe)
+     parsed, _, _, text = _emit(source)
+     expected = [(type(stmt).__name__, getattr(stmt, "name", ""), stmt.span.line) for stmt in parsed.body]
+     assert seen == expected
+@@ -230,6 +241,7 @@
+     ("mutable-default", "class Rejected:\n    def take(self, value=[]):\n        return value\n"),
+     ("method-decorator", "class Rejected:\n    @staticmethod\n    def take(value=None):\n        return value\n"),
+     ("class-decorator", "def decorate(cls):\n    return cls\n@decorate\nclass Rejected:\n    pass\n"),
++    ("no-op-decorator", "from typing import final\n@final\nclass Rejected:\n    value = ('kept',)\n"),
+     ("dataclass", "from dataclasses import dataclass\n@dataclass\nclass Rejected:\n    value: str = 'text'\n"),
+     ("metaclass", "class Meta(type):\n    pass\nclass Rejected(metaclass=Meta):\n    value = ('kept',)\n"),
+     ("inherited-metaclass", "class Meta(type):\n    pass\nclass Base(metaclass=Meta):\n    pass\nclass Rejected(Base):\n    pass\n"),
+@@ -266,6 +278,7 @@
+     original_outline = ClassLowering._maybe_emit_class_init_outline
+     original_body = ClassLowering._emit_class_init
+     observed = []
++    dumped = []
+     fields = (
+         "builder", "current_function", "current_func_def", "_current_entry_block",
+         "env", "env_class_hint", "env_class_object_hint", "env_list_elem_class_hint",
+@@ -311,6 +324,12 @@
+                 raise StopOutline()
+         return original_body(self, cd, info, **kwargs)
+ 
++    def observe_dump(self, exc):
++        if isinstance(exc, StopOutline):
++            function = self.current_function
++            dumped.append(("" if function is None else function.name, self.current_func_def, self.env))
++
++    monkeypatch.setattr(L1CodeGen, "_codegen_trace_dump", observe_dump)
+     monkeypatch.setattr(ClassLowering, "_maybe_emit_class_init_outline", scoped)
+     monkeypatch.setattr(ClassLowering, "_emit_class_init", body)
+     source = "class Admitted:\n    value = ('closed',)\n"
+@@ -320,6 +339,11 @@
+     else:
+         _emit(source)
+     assert len(observed) == 1
++    if fail:
++        assert dumped and dumped[0][0].startswith(PREFIX)
++        assert dumped[0][1] is None and not dumped[0][2]
++    else:
++        assert not dumped
+ 
+ 
+ @pytest.mark.parametrize("kind", ["native-exception", "bridge-null", "bridge-negative"])

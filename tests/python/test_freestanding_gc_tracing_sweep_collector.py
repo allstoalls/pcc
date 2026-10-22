@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = (
     RUNTIME_DIR / "py" / "freestanding_gc_tracing_sweep_collector.py"
 )
@@ -25,9 +25,13 @@ OWNED_SYMBOLS = {
     "pcc_gc_tracing_sweep_unreachable",
 }
 RAW_FUNCTION_IMPORTS = {
+    "pcc_gc_object_is_address_pinned",
     "pcc_capi_dealloc_cext_object",
     "pcc_capi_is_cext_type_tag",
     "pcc_gc_drain_all_gray_unlocked",
+    "pcc_gc_forwarding_index_find",
+    "pcc_gc_free_watch_begin",
+    "pcc_gc_free_watch_end",
     "pcc_gc_note_object_freeing",
     "pcc_gc_object_node_is_active",
     "pcc_gc_seed_roots",
@@ -133,16 +137,18 @@ def test_tracing_sweep_preserves_pep442_and_two_pass_order():
         '@c_abi_export("pcc_gc_tracing_sweep_unreachable")', 1
     )[1]
 
-    assert sweep.index("py_user_del_dispatch(obj)") < sweep.index(
-        "pcc_gc_tracing_recheck_reachability_after_finalizers()"
+    recheck = "pcc_gc_tracing_recheck_reachability_after_finalizers()"
+    assert sweep.count(recheck) == 2
+    assert sweep.index("if budget <= 0:") < sweep.index(recheck)
+    assert sweep.index(recheck) < sweep.index("py_user_del_dispatch(obj)")
+    assert sweep.index("py_user_del_dispatch(obj)") < sweep.rindex(recheck)
+    assert sweep.rindex(recheck) < sweep.index(
+        "pcc_gc_tracing_clear_unreachable(obj)"
     )
-    assert sweep.index(
-        "pcc_gc_tracing_recheck_reachability_after_finalizers()"
-    ) < sweep.index("pcc_gc_tracing_clear_unreachable(obj)")
     assert sweep.index("pcc_gc_tracing_clear_unreachable(obj)") < sweep.index(
         "pcc_gc_tracing_finalize_unreachable(obj)"
     )
-    assert "(flags & (64 | 16384)) == 0" in sweep
+    assert "(flags & 16384) == 0 and pcc_gc_object_is_address_pinned(obj) == 0" in sweep
     assert "pcc_capi_is_cext_type_tag(tag) == 0" in sweep
 
     finalize = strict.split(
@@ -189,10 +195,10 @@ def test_tracing_sweep_object_has_exact_raw_closure(tmp_path: Path, emitter: str
 
 
 def test_production_archive_has_one_tracing_sweep_owner(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ):
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,

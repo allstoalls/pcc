@@ -1,5 +1,5 @@
-from pcc.py_frontend.export_meta import decode_type, encode_type
-from pcc.py_frontend.py_ast import ClassType, DynType, IntType, ListType, SetType
+from pcc.frontends.python.export_meta import decode_type, encode_type
+from pcc.frontends.python.py_ast import ClassType, DynType, IntType, ListType, SetType
 
 
 def test_decode_type_caches_tuple_descriptors():

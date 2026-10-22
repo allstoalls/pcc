@@ -11,13 +11,13 @@ import sys
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from pcc.py_runtime.freestanding_abi_spec import ABI_SPEC, STDIO_FILE_FIELDS
+from pcc.runtime.freestanding_abi_spec import ABI_SPEC, STDIO_FILE_FIELDS
 
 
 PY_OUTPUT = (
-    REPO_ROOT / "pcc" / "py_frontend" / "codegen" / "freestanding_abi_constants.py"
+    REPO_ROOT / "pcc" / "frontends" / "python" / "codegen" / "freestanding_abi_constants.py"
 )
-HEADER_OUTPUT = REPO_ROOT / "pcc" / "py_runtime" / "include" / "pcc_stdio_abi.h"
+HEADER_OUTPUT = REPO_ROOT / "pcc" / "runtime" / "include" / "pcc_stdio_abi.h"
 
 
 def render_python() -> str:
@@ -72,6 +72,7 @@ def render_header() -> str:
             f"#define PCC_STDIO_FLAG_EOF {ABI_SPEC['stdio.flag.eof']}ULL",
             f"#define PCC_STDIO_FLAG_STANDARD {ABI_SPEC['stdio.flag.standard']}ULL",
             f"#define PCC_STDIO_FLAG_APPEND {ABI_SPEC['stdio.flag.append']}ULL",
+            f"#define PCC_STDIO_FLAG_BORROWED_DESCRIPTOR {ABI_SPEC['stdio.flag.borrowed_descriptor']}ULL",
             "",
         )
     )

@@ -12,8 +12,8 @@ from scripts import pcc_preload_compare as tool
 
 @pytest.fixture
 def comparison_inputs(tmp_path):
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.pipeline_exports import _write_native_exports_wire
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.pipeline_exports import _write_native_exports_wire
 
     source = Path(type_infer.__file__).read_text(encoding="utf-8")
     selected = [
@@ -40,7 +40,7 @@ def comparison_inputs(tmp_path):
 
 
 def test_real_wire_exact_index_links_baseline_functions_and_retains_order(comparison_inputs):
-    from pcc.py_frontend import type_infer
+    from pcc.frontends.python import type_infer
 
     baseline, wire, output, exports = comparison_inputs
     expected = type_infer.build_unique_external_class_preload_index(exports)
@@ -79,7 +79,7 @@ def build_unique_external_class_preload_index(exports):
 def test_difference_denies_semantic_changes_and_equal_dict_order_changes(
     comparison_inputs, monkeypatch, capsys, order_only,
 ):
-    from pcc.py_frontend import type_infer
+    from pcc.frontends.python import type_infer
 
     baseline, wire, output, _exports = comparison_inputs
     current = type_infer.build_unique_external_class_preload_index
@@ -121,7 +121,7 @@ def test_baseline_missing_or_duplicate_definition_publishes_nothing(
 
 @pytest.mark.parametrize("target", ["baseline", "wire"])
 def test_input_drift_rejects_comparison_without_receipt(comparison_inputs, monkeypatch, target):
-    from pcc.py_frontend import type_infer
+    from pcc.frontends.python import type_infer
 
     baseline, wire, output, _exports = comparison_inputs
     changed_path = baseline if target == "baseline" else wire
@@ -158,7 +158,7 @@ def test_existing_receipt_is_preserved_before_loading_inputs(comparison_inputs):
 
 
 def test_receipt_created_during_comparison_is_not_overwritten(comparison_inputs, monkeypatch):
-    from pcc.py_frontend import type_infer
+    from pcc.frontends.python import type_infer
 
     baseline, wire, output, _exports = comparison_inputs
     current = type_infer.build_unique_external_class_preload_index

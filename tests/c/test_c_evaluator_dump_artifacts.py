@@ -3,8 +3,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.project import TranslationUnit
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.driver.project import TranslationUnit
 
 
 _SOURCE = "int main(void) { return 0; }"

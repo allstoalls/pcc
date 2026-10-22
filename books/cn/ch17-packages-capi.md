@@ -32,8 +32,8 @@ CPython binary ABI            任意 .so/.pyd 假设 CPython 对象布局、PyOb
 
 由此产生两种"接受面"(acceptance surface),它们接受的工件集合不同,失败方式也不同:
 
-- **pcc-native**:扩展必须针对 pcc 的窄 `Python.h`/C-API shim 编译,导出返回 pcc `PyObject*` 的 `PyInit_<leaf>()`,由 [pcc/py_runtime/src/py_extension_loader.c](../../pcc/py_runtime/src/py_extension_loader.c) 在无 libpython 的进程里 dlopen。任何名字里带 CPython 扩展 ABI 标记(`cpython-NN`、`cpNN-cpNN`、`abi3`)的原生工件都被拒绝。
-- **cpython-compat / libpython**:编译产物链接宿主 CPython 的 libpython,第三方包的 import 蹦床到 [pcc/py_runtime/src/py_libpython.c](../../pcc/py_runtime/src/py_libpython.c) 的 `py_cpy_*` 包装层。该文件的设计注释写明关键决定:CPython 的 `PyObject*` 与 pcc 自己的 `PyObject*` 是**两个不相交的指针命名空间**,前者对代码生成只暴露为不透明 `void*`,二者决不混叠。
+- **pcc-native**:扩展必须针对 pcc 的窄 `Python.h`/C-API shim 编译,导出返回 pcc `PyObject*` 的 `PyInit_<leaf>()`,由 [pcc/runtime/src/py_extension_loader.c](../../pcc/runtime/src/py_extension_loader.c) 在无 libpython 的进程里 dlopen。任何名字里带 CPython 扩展 ABI 标记(`cpython-NN`、`cpNN-cpNN`、`abi3`)的原生工件都被拒绝。
+- **cpython-compat / libpython**:编译产物链接宿主 CPython 的 libpython,第三方包的 import 蹦床到 [pcc/runtime/src/py_libpython.c](../../pcc/runtime/src/py_libpython.c) 的 `py_cpy_*` 包装层。该文件的设计注释写明关键决定:CPython 的 `PyObject*` 与 pcc 自己的 `PyObject*` 是**两个不相交的指针命名空间**,前者对代码生成只暴露为不透明 `void*`,二者决不混叠。
 
 两种面各自诚实:pcc-native 拒绝它跑不了的东西并给出诊断码;cpython-compat 接受 CPython ABI 工件但明说自己依赖 libpython。声明卫生表(§0.10)里的 `cpython-compat pass != pcc-native pass` 就是禁止把一种面的通过说成另一种面的能力。
 
@@ -91,10 +91,10 @@ def _diagnostic_for_cpython_extension_abi(path: str) -> dict[str, object]:
 
 ### 17.3.1 pip 前门
 
-在 C-API shim 侧,[pcc/py_runtime/src/py_capi_shim.c](../../pcc/py_runtime/src/py_capi_shim.c) 实现了标准的 C-API 函数代理:
+在 C-API shim 侧,[pcc/runtime/src/py_capi_shim.c](../../pcc/runtime/src/py_capi_shim.c) 实现了标准的 C-API 函数代理:
 
 ```c
-// pcc/py_runtime/src/py_capi_shim.c
+// pcc/runtime/src/py_capi_shim.c
 PyObject *py_capi_PyObject_CallObject(PyObject *callable, PyObject *args) {
     if (callable == NULL) return NULL;
     return py_call_callable(callable, args, NULL);
@@ -106,10 +106,10 @@ void *py_capi_PyCapsule_GetPointer(PyObject *capsule, const char *name) {
 }
 ```
 
-在原生扩展加载器中,[pcc/py_runtime/src/py_extension_loader.c](../../pcc/py_runtime/src/py_extension_loader.c) 负责通过 `dlopen` 加载 pcc-native `.so` 并唤醒 `PyInit_<mod>`:
+在原生扩展加载器中,[pcc/runtime/src/py_extension_loader.c](../../pcc/runtime/src/py_extension_loader.c) 负责通过 `dlopen` 加载 pcc-native `.so` 并唤醒 `PyInit_<mod>`:
 
 ```c
-// pcc/py_runtime/src/py_extension_loader.c
+// pcc/runtime/src/py_extension_loader.c
 PyObject *py_extension_load_native_so(const char *so_path, const char *mod_name) {
     void *handle = dlopen(so_path, RTLD_NOW | RTLD_GLOBAL);
     if (handle == NULL) return NULL;
@@ -133,7 +133,7 @@ PyObject *py_extension_load_native_so(const char *so_path, const char *mod_name)
 
 ### 17.3.4 构建表面:include 重定向
 
-源码工件要变成 pcc-native 扩展,必须对着 pcc 的 `Python.h` 编译,而真实包的构建系统(NumPy 用 meson)在 `compile_commands.json` 里烤死了 CPython 的 `-I` 路径。[pcc/package/build_exec.py](../../pcc/package/build_exec.py) 的解法是两个通用函数:`_materialize_pcc_capi_include()` 把 [utils/fake_libc_include/](../../utils/fake_libc_include) 中**仅限** `_PCC_CAPI_HEADERS` 列出的八个 C-API 头(`Python.h`、`structmember.h`、`pymem.h`、`frameobject.h`、`pythread.h`、`pyerrors.h`、`abstract.h`、`datetime.h`)物化到 `<build>/pcc-package/pcc-capi-include`;`_redirect_pcc_native_includes()` 按 `_CPYTHON_INCLUDE_DIR_RE` 丢弃 CPython 头目录的 `-I`/`-isystem`,把 pcc 的 C-API 目录与 [pcc/py_runtime/include](../../pcc/py_runtime/include) **追加在末尾**——包自己的头永远优先,pcc 只填补被丢弃的 `Python.h` 空缺。
+源码工件要变成 pcc-native 扩展,必须对着 pcc 的 `Python.h` 编译,而真实包的构建系统(NumPy 用 meson)在 `compile_commands.json` 里烤死了 CPython 的 `-I` 路径。[pcc/package/build_exec.py](../../pcc/package/build_exec.py) 的解法是两个通用函数:`_materialize_pcc_capi_include()` 把 [utils/fake_libc_include/](../../utils/fake_libc_include) 中**仅限** `_PCC_CAPI_HEADERS` 列出的八个 C-API 头(`Python.h`、`structmember.h`、`pymem.h`、`frameobject.h`、`pythread.h`、`pyerrors.h`、`abstract.h`、`datetime.h`)物化到 `<build>/pcc-package/pcc-capi-include`;`_redirect_pcc_native_includes()` 按 `_CPYTHON_INCLUDE_DIR_RE` 丢弃 CPython 头目录的 `-I`/`-isystem`,把 pcc 的 C-API 目录与 [pcc/runtime/include](../../pcc/runtime/include) **追加在末尾**——包自己的头永远优先,pcc 只填补被丢弃的 `Python.h` 空缺。
 
 "仅限八个头"不是吝啬,是一次真实教训的固化:[utils/fake_libc_include/](../../utils/fake_libc_include) 整目录里有桩版 `math.h`/`complex.h`,整目录上 include 路径会遮蔽 NumPy C 核心需要的真实系统 libm。重定向只在 `abi_mode == "pcc-native"` 且语言为 C 时生效,头文件定位失败时发出 `PCC-PKG-CAPI-INCLUDE-MISSING` 诊断并跳过,而不是带病构建。
 
@@ -141,11 +141,11 @@ PyObject *py_extension_load_native_so(const char *so_path, const char *mod_name)
 
 ### 17.4.1 包边界的早失败
 
-[pcc/py_frontend/pipeline.py](../../pcc/py_frontend/pipeline.py) 的 `_validate_package_site_no_libpython_abi()` 在 `--python-libpython=off` 下对参与编译的安装包根目录重新扫描,任何名字带 CPython ABI 的原生扩展都让编译当场失败,错误信息携带 `PCC-PKG-004` 与修复指引("reinstall with --abi=pcc-native from source, or choose an explicit --abi=libpython / --abi=cpython-compat mode")。它的文档字符串解释了为什么不信任安装时清单而要重扫:旧安装可能产生于 ABI 闸存在之前;与其让 codegen 在后面生成"thousands of opaque `py_cpy_*` fallback calls",不如在包边界给一个可操作的失败。这是 pcc 错误哲学的缩影:回退(fallback)边界必须诚实,失败要发生在最能解释自己的位置。
+[pcc/frontends/python/pipeline.py](../../pcc/frontends/python/pipeline.py) 的 `_validate_package_site_no_libpython_abi()` 在 `--python-libpython=off` 下对参与编译的安装包根目录重新扫描,任何名字带 CPython ABI 的原生扩展都让编译当场失败,错误信息携带 `PCC-PKG-004` 与修复指引("reinstall with --abi=pcc-native from source, or choose an explicit --abi=libpython / --abi=cpython-compat mode")。它的文档字符串解释了为什么不信任安装时清单而要重扫:旧安装可能产生于 ABI 闸存在之前;与其让 codegen 在后面生成"thousands of opaque `py_cpy_*` fallback calls",不如在包边界给一个可操作的失败。这是 pcc 错误哲学的缩影:回退(fallback)边界必须诚实,失败要发生在最能解释自己的位置。
 
 ### 17.4.2 pcc-native 扩展的解析与低层化
 
-通过了 ABI 闸的 pcc-native 扩展,由 [pcc/py_frontend/codegen/import_lowering.py](../../pcc/py_frontend/codegen/import_lowering.py) 的 `_resolve_pcc_native_extension_path()` 在 `PCC_PACKAGE_SITE` 各 site 根下按 `模块点路径 → 目录路径 + {.so,.dylib,.pyd,.dll}` 搜索,候选名带 CPython ABI 标记的同样跳过——拒绝逻辑在低层化阶段重复出现,两道闸互为冗余。命中后 `_emit_native_extension_import()` 发射对运行时 `py_native_extension_import` 的调用,并立即跟一个 `_emit_post_call_err_check()`:第 8 章讲过 pcc 的异常模型没有栈展开,任何可能 raise 的运行时调用之后必须显式检查 `py_err_occurred()`,扩展导入不例外。
+通过了 ABI 闸的 pcc-native 扩展,由 [pcc/frontends/python/codegen/import_lowering.py](../../pcc/frontends/python/codegen/import_lowering.py) 的 `_resolve_pcc_native_extension_path()` 在 `PCC_PACKAGE_SITE` 各 site 根下按 `模块点路径 → 目录路径 + {.so,.dylib,.pyd,.dll}` 搜索,候选名带 CPython ABI 标记的同样跳过——拒绝逻辑在低层化阶段重复出现,两道闸互为冗余。命中后 `_emit_native_extension_import()` 发射对运行时 `py_native_extension_import` 的调用,并立即跟一个 `_emit_post_call_err_check()`:第 8 章讲过 pcc 的异常模型没有栈展开,任何可能 raise 的运行时调用之后必须显式检查 `py_err_occurred()`,扩展导入不例外。
 
 ### 17.4.3 cpython-compat 的蹦床
 
@@ -153,15 +153,15 @@ PyObject *py_extension_load_native_so(const char *so_path, const char *mod_name)
 
 ## 17.5 C-API shim:从符号目录到对象模型桥
 
-**2026-08 当前实现注。** 本章初稿中的 `src/py_capi_shim.c` 叙述保留下来作为机制来源与 host-C oracle 说明,但它不再是生产 pcc-Python 归档的 owner。当前生产实现分拆在 `pcc/py_runtime/py/py_capi_*_runtime.py`:exception/data symbols、dict/object/type/unicode/capsule/buffer、module state、descriptor、variadic call 与 visit surface 各有 Python owner;`py_extension_loader_runtime.py` 拥有原生扩展加载;CpyHandle ABI 由 `py_obj_dealloc.py` 拥有。`pcc/py_runtime/Makefile` 的 `LIB_PCC_PY` 只归档 `PCC_PY_OBJECTS`。因此下列 C shim 细节应读作 ABI 语义与迁移历史,不是“当前生产仍链接一个手写 C shim”的声明;第 14 章给出 source-ownership 与最终 no-C/zero-libc 验收边界。
+**2026-08 当前实现注。** 本章初稿中的 `src/py_capi_shim.c` 叙述保留下来作为机制来源与 host-C oracle 说明,但它不再是生产 pcc-Python 归档的 owner。当前生产实现分拆在 `pcc/runtime/py/py_capi_*_runtime.py`:exception/data symbols、dict/object/type/unicode/capsule/buffer、module state、descriptor、variadic call 与 visit surface 各有 Python owner;`py_extension_loader_runtime.py` 拥有原生扩展加载;CpyHandle ABI 由 `py_obj_dealloc.py` 拥有。`pcc/runtime/Makefile` 的 `LIB_PCC_PY` 只归档 `PCC_PY_OBJECTS`。因此下列 C shim 细节应读作 ABI 语义与迁移历史,不是“当前生产仍链接一个手写 C shim”的声明;第 14 章给出 source-ownership 与最终 no-C/zero-libc 验收边界。
 
 ### 17.5.1 可执行的优先级地图
 
-[pcc/capi_surface.py](../../pcc/capi_surface.py) 的文档字符串先声明自己不是什么:"This is not an implementation of every C-API symbol. It is the executable priority map used by extension-loader work so gaps are explicit and tested." 每个符号是一条 `CApiSymbol(name, header, priority, implemented, notes)` 记录,优先级枚举 `CApiPriority` 从 `IMPORT_BLOCKER`(0)经 `RUNTIME_CORE`、`ARRAY_CORE`、`NUMPY_CAPI` 到 `ACCELERATION`(5)。这个目录的价值在于它把"缺口"变成数据:`extension_abi_plan()` 接受一组需求符号(可用 `require_capsule`/`require_buffer`/`require_memoryview`/`require_numpy_capi` 批量展开),输出结构化诊断——`PCC-EXT-MISSING-CAPI-SYMBOL`(在目录里但未实现)、`PCC-EXT-UNKNOWN-CAPI-SYMBOL`(不在目录里)、`PCC-EXT-MISSING-CAPI-HEADER`(头文件缺失)、`PCC-EXT-ABI-VERSION-MISMATCH`(版本不符)。值得注意的是 NumPy C-API 符号(`PyArray_*`/`PyUFunc_*`)在目录里被显式标记 `implemented=False`,并带 `_NUMPY_CAPI_TABLE_SLOTS` 元数据(capsule 表名、槽号、失败模式)——未实现的部分不是被省略,而是被精确登记。[pcc/capi_abi.py](../../pcc/capi_abi.py) 则是一份七个符号的最小核心表,`extension_import_blockers()` 直接回答"还差什么才能 import"。
+[pcc/frontends/c/capi_surface.py](../../pcc/frontends/c/capi_surface.py) 的文档字符串先声明自己不是什么:"This is not an implementation of every C-API symbol. It is the executable priority map used by extension-loader work so gaps are explicit and tested." 每个符号是一条 `CApiSymbol(name, header, priority, implemented, notes)` 记录,优先级枚举 `CApiPriority` 从 `IMPORT_BLOCKER`(0)经 `RUNTIME_CORE`、`ARRAY_CORE`、`NUMPY_CAPI` 到 `ACCELERATION`(5)。这个目录的价值在于它把"缺口"变成数据:`extension_abi_plan()` 接受一组需求符号(可用 `require_capsule`/`require_buffer`/`require_memoryview`/`require_numpy_capi` 批量展开),输出结构化诊断——`PCC-EXT-MISSING-CAPI-SYMBOL`(在目录里但未实现)、`PCC-EXT-UNKNOWN-CAPI-SYMBOL`(不在目录里)、`PCC-EXT-MISSING-CAPI-HEADER`(头文件缺失)、`PCC-EXT-ABI-VERSION-MISMATCH`(版本不符)。值得注意的是 NumPy C-API 符号(`PyArray_*`/`PyUFunc_*`)在目录里被显式标记 `implemented=False`,并带 `_NUMPY_CAPI_TABLE_SLOTS` 元数据(capsule 表名、槽号、失败模式)——未实现的部分不是被省略,而是被精确登记。[pcc/frontends/c/capi_abi.py](../../pcc/frontends/c/capi_abi.py) 则是一份七个符号的最小核心表,`extension_import_blockers()` 直接回答"还差什么才能 import"。
 
 ### 17.5.2 shim 的自我设限与 PyModuleDef
 
-[pcc/py_runtime/src/py_capi_shim.c](../../pcc/py_runtime/src/py_capi_shim.c) 开头的注释是这份五千余行文件的契约:"deliberately narrow ... It does not claim CPython binary object-layout parity."。它自带一套 C-API 类型定义(`Py_buffer`、`PyMethodDef`、`PyModuleDef`),其中 `PyModuleDef` 上方的注释点出一条布局不变式:**必须与 [utils/fake_libc_include/Python.h](../../utils/fake_libc_include/Python.h) 的 `PyModuleDef` 完全一致**——扩展对着后者编译,shim 对着前者读 `m_slots`,两边漂移就是越界读。这与第 7 章 C/pcc-Python 镜像布局纪律同构,只是这次镜像的两端是"扩展看到的头文件"与"运行时自己的结构体"。
+[pcc/runtime/src/py_capi_shim.c](../../pcc/runtime/src/py_capi_shim.c) 开头的注释是这份五千余行文件的契约:"deliberately narrow ... It does not claim CPython binary object-layout parity."。它自带一套 C-API 类型定义(`Py_buffer`、`PyMethodDef`、`PyModuleDef`),其中 `PyModuleDef` 上方的注释点出一条布局不变式:**必须与 [utils/fake_libc_include/Python.h](../../utils/fake_libc_include/Python.h) 的 `PyModuleDef` 完全一致**——扩展对着后者编译,shim 对着前者读 `m_slots`,两边漂移就是越界读。这与第 7 章 C/pcc-Python 镜像布局纪律同构,只是这次镜像的两端是"扩展看到的头文件"与"运行时自己的结构体"。
 
 多阶段初始化(PEP 489)的处理是一个朴素而有效的标记技巧:`PyModuleDef_Init()` 把静态变量 `pcc_capi_moduledef_marker` 的地址盖进 `def->m_base.ob_base`;加载器拿到 `PyInit_*` 返回值后用 `pcc_capi_is_moduledef()` 检查这个标记——真模块的头 8 字节是 refcount,不可能等于该地址。命中则走 `pcc_capi_module_exec()`:先 `PyModule_Create2()` 建模块,再遍历 `m_slots` 执行每个 `Py_mod_exec` 槽(NumPy 正是在这里注册类型与 `PyArray_API` capsule)。
 
@@ -171,7 +171,7 @@ PyObject *py_extension_load_native_so(const char *so_path, const char *mod_name)
 
 ### 17.5.3 buffer 协议
 
-buffer 协议有两份实现,各司其职。[pcc/buffer_protocol.py](../../pcc/buffer_protocol.py) 是 Python 侧的规划模型:`PyBUF_*` 旗标常量与一个 `BufferView` 数据类,`check_flags()` 按 CPython 语义抛 `BufferError`(可写性、shape、strides 的请求校验)——它服务于包规划与测试,不碰内存。真正给扩展用的在 shim 里:`pcc_capi_buffer_data()` 认 pcc 的 bytes(只读)、bytearray(可写)、memoryview(经 `pcc_gc_load_ptr()` 读 base 递归——注意即使在 C-API shim 内部,指针槽读取也走 GC 读屏障,第 10 章的屏障纪律没有豁免区);`PyObject_GetBuffer()` 填出一维连续、`itemsize` 为 1、格式 `"B"` 的 `Py_buffer`,需要 shape/strides 时把一个 `PccBufferMeta` 挂在 `view->internal` 上,并对导出对象 `py_incref`;`PyBuffer_Release()` 对称地 decref 并释放。这是诚实的窄实现:足够 `bytes`/`bytearray`/`memoryview` 的 SIMPLE/一维场景,不假装支持多维 strided 视图。
+buffer 协议有两份实现,各司其职。[pcc/library/buffer_protocol.py](../../pcc/library/buffer_protocol.py) 是 Python 侧的规划模型:`PyBUF_*` 旗标常量与一个 `BufferView` 数据类,`check_flags()` 按 CPython 语义抛 `BufferError`(可写性、shape、strides 的请求校验)——它服务于包规划与测试,不碰内存。真正给扩展用的在 shim 里:`pcc_capi_buffer_data()` 认 pcc 的 bytes(只读)、bytearray(可写)、memoryview(经 `pcc_gc_load_ptr()` 读 base 递归——注意即使在 C-API shim 内部,指针槽读取也走 GC 读屏障,第 10 章的屏障纪律没有豁免区);`PyObject_GetBuffer()` 填出一维连续、`itemsize` 为 1、格式 `"B"` 的 `Py_buffer`,需要 shape/strides 时把一个 `PccBufferMeta` 挂在 `view->internal` 上,并对导出对象 `py_incref`;`PyBuffer_Release()` 对称地 decref 并释放。这是诚实的窄实现:足够 `bytes`/`bytearray`/`memoryview` 的 SIMPLE/一维场景,不假装支持多维 strided 视图。
 
 ### 17.5.4 类型桥与 ob_type:最硬的边界
 
@@ -187,7 +187,7 @@ buffer 协议有两份实现,各司其职。[pcc/buffer_protocol.py](../../pcc/b
 
 ### 17.6.2 CpyHandle:外来引用的装箱
 
-cpython-compat 模式有一个对象图难题:挂起的生成器帧只能持有 pcc 对象——帧保存走 `py_list` 的存储屏障,帧析构按 pcc 对象头解引用——但生成器局部变量可能是 `py_cpy_*` 拿回的 CPython 引用。[pcc/py_runtime/src/py_cpy_handle.c](../../pcc/py_runtime/src/py_cpy_handle.c)(类型标签 `PY_TYPE_CPY_HANDLE = 32`,定义于 `py_runtime.h`)给出装箱方案:`PyCpyHandleObject` 是一个 pcc 对象头加一个 `void *cpy_ref` 字段,文件注释强调该字段"**不是** pcc 槽"——GC 永远不解释这个外来指针。`py_cpy_handle_new()` 取得外来引用的所有权,`py_cpy_handle_get()` 借用,`py_dealloc_cpy_handle()` 在析构时通过注册的释放钩子归还外来引用——于是丢弃一个挂起的生成器,会**结构性地**释放它持有的活 CPython 迭代器,无需任何特判清理代码。
+cpython-compat 模式有一个对象图难题:挂起的生成器帧只能持有 pcc 对象——帧保存走 `py_list` 的存储屏障,帧析构按 pcc 对象头解引用——但生成器局部变量可能是 `py_cpy_*` 拿回的 CPython 引用。[pcc/runtime/src/py_cpy_handle.c](../../pcc/runtime/src/py_cpy_handle.c)(类型标签 `PY_TYPE_CPY_HANDLE = 32`,定义于 `py_runtime.h`)给出装箱方案:`PyCpyHandleObject` 是一个 pcc 对象头加一个 `void *cpy_ref` 字段,文件注释强调该字段"**不是** pcc 槽"——GC 永远不解释这个外来指针。`py_cpy_handle_new()` 取得外来引用的所有权,`py_cpy_handle_get()` 借用,`py_dealloc_cpy_handle()` 在析构时通过注册的释放钩子归还外来引用——于是丢弃一个挂起的生成器,会**结构性地**释放它持有的活 CPython 迭代器,无需任何特判清理代码。
 
 两个细节展示了运行时分层与五 GC 平等契约如何约束一个小文件。其一,释放钩子 `py_cpy_handle_set_release_fn()` 存在的原因是归档边界:`py_cpy_handle.c` 在主运行时归档里,而 `py_cpy_decref` 在独立的 libpython 归档里;不初始化 libpython 桥的进程不可能产生过外来引用,所以 NULL 钩子安全——依赖方向只从桥指向主归档,决不反向。其二,新类型标签必须接入对象生命周期的全部分派点:`py_obj.c` 与 `py_gc_backend.c` 的两处析构 switch 都登记了 `py_dealloc_cpy_handle`,后端 #4 的 `pcc_gc_relocate_copy_supported_tag()` 白名单也加入了它,旁注解释"CpyHandle 没有 pcc 指针槽——浅拷贝重定位与 str 一样安全"。一个 58 行的 C 文件,接口却横跨析构分派、重定位白名单与归档链接拓扑——这正是"新增运行时类型"在 pcc 里的真实成本。
 

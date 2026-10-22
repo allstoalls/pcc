@@ -19,11 +19,11 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend.codegen import runtime_abi
-from pcc.py_runtime.py import py_abi_constants as abi
+from pcc.frontends.python.codegen import runtime_abi
+from pcc.runtime.py import py_abi_constants as abi
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME = REPO_ROOT / "pcc" / "runtime"
 PY_OBJ_PORT = (RUNTIME / "py" / "py_obj.py").read_text(encoding="utf-8")
 GC_STATE_PORT = (RUNTIME / "py" / "freestanding_gc_state.py").read_text(
     encoding="utf-8"
@@ -145,7 +145,7 @@ def _fake_object_program() -> str:
 
 @pytest.fixture(scope="module")
 def fake_object_binary(tmp_path_factory) -> Path:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     tmp_path = tmp_path_factory.mktemp("refcount_probe")
     src = tmp_path / "prog.py"

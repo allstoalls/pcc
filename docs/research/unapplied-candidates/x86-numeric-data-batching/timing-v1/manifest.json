@@ -1,0 +1,70 @@
+{
+  "current_ci_speed_claim": false,
+  "driver_sha256": "985429b611a05e0a0716fb31c5eb8733b66810aa6f9ce862325bda4203ee5078",
+  "frontend_compilation": false,
+  "inputs": {
+    "assembly": {
+      "bytes": 76565862,
+      "sha256": "8ad079c23208ef05f5385e975d45421ac5c50f882a14b68d942cf9134567f919"
+    },
+    "corpus_qualification": {
+      "bytes": 10414,
+      "sha256": "c040e107db94637973cc639381278e904e7daf39df8b1bf28011138bd6c22ba5"
+    },
+    "corpus_result": {
+      "bytes": 4294,
+      "sha256": "82e106300dfde845a2fdcf21989cd53ce7048a705c20d4c1d5d8c823ea1048b2"
+    },
+    "reference_object": {
+      "bytes": 12228800,
+      "sha256": "4d910a121adc58f3f57f9d5041abcb406ff9ad3c6a5748581c6671d6cdcfcb6a"
+    }
+  },
+  "limits_per_slot": {
+    "exclusive_shared_lock": true,
+    "free_reserve_bytes": 4294967296,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "max_output_growth_bytes": 536870912,
+    "runs": 1,
+    "seconds": 300
+  },
+  "native_execution": false,
+  "public_files": [
+    "measure_entry.py",
+    "README.md",
+    "manifest.json"
+  ],
+  "readme_sha256": "234d9cc4407caaec6d1858d9834b54741ee8983949308fbd66c61e991ff4e620",
+  "retained_total_output_budget_bytes": 67108864,
+  "schema": "pcc.numeric-batching-unhooked-timing.v1",
+  "sequence": [
+    "b1",
+    "c1",
+    "c2",
+    "b2"
+  ],
+  "sources": {
+    "baseline": {
+      "assembler_sha256": "cc71a7b5b5c5db56d665fc83afe670b021c20f76403fb5a381a085cdf37cf84d",
+      "codegen_checksum": "e0145952375a080377be0084bcb6b91ce825102c213b5453473c3896d2fac36c",
+      "inventory_sha256": "568c44d837939cde5ab4da2c2f0115ab30f978716bc423a40e07d9cf2bdc0185",
+      "pcc_tree": "ee02ba6bf0d79e9706c1791aa650093f5f91c338"
+    },
+    "candidate": {
+      "assembler_sha256": "a85b7b1fcfa7cb6fec61e08b1cb8a95096cb03b9ebe38778d2d0de1472fc88b4",
+      "codegen_checksum": "ce75a8770afcdad0679e4fb854f4bb6752fec786ae7558bf07fa46ec52152eb6",
+      "inventory_sha256": "7430a30766c11a59e7185758b725b289388ae131498ce6a8a568bdf10ff773ba",
+      "pcc_tree": "930263bf204e578796c72dab5d4aa31fd7ab27ae"
+    }
+  },
+  "status": "UNRUN_REVIEW_PENDING",
+  "target": "x86_64-pc-windows-msvc",
+  "thresholds": {
+    "both_order_pairs_must_improve": true,
+    "first_candidate_wall_regression_stop_percent": 10,
+    "mean_reduction_must_exceed_baseline_spread": true,
+    "minimum_mean_wall_reduction_percent": 5
+  },
+  "whole_stage1_claim": false
+}

@@ -260,7 +260,7 @@ EXPECTED = (
 
 @pytest.mark.parametrize("typed_int_abi", ["auto", "unsafe-i64"])
 def test_int_float_comparison_is_exact(
-    tmp_path, monkeypatch, typed_int_abi, pcc_py_runtime_archive,
+    tmp_path, monkeypatch, typed_int_abi, pcc_runtime_archive,
     python_program_compiler,
 ):
     monkeypatch.setenv("PCC_PYTHON_TYPED_INT_ABI", typed_int_abi)
@@ -274,7 +274,7 @@ def test_int_float_comparison_is_exact(
     binary = tmp_path / "int_float_exact_compare"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         ran = subprocess.run(

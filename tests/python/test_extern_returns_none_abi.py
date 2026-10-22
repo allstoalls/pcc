@@ -15,11 +15,11 @@ schema round trip; class_gen's method plans already consume it. These
 tests pin the two plain-function consumers to the same contract.
 """
 
-from pcc.py_frontend.codegen.extern_func_info_lowering import (
+from pcc.frontends.python.codegen.extern_func_info_lowering import (
     ExternFuncInfoLoweringMixin,
 )
-from pcc.py_frontend.codegen.native_modules import NativeModuleAliasMixin
-from pcc.py_frontend.py_ast import NoneType
+from pcc.frontends.python.codegen.native_modules import NativeModuleAliasMixin
+from pcc.frontends.python.py_ast import NoneType
 
 
 class _Probe(NativeModuleAliasMixin, ExternFuncInfoLoweringMixin):

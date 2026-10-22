@@ -1,4 +1,4 @@
-"""Phase 9 ratchet: pcc/llvm_capi/ir.py py_cpy_* count is monotonically
+"""Phase 9 ratchet: pcc/ir/ir.py py_cpy_* count is monotonically
 decreasing.
 
 This is the gate test for Issue 1 closure. ir.py must reach 0 py_cpy_*
@@ -21,7 +21,7 @@ import pytest
 
 _REPO_ROOT = Path(__file__).absolute().parents[2]
 _BASELINE_JSON = _REPO_ROOT / "tests" / "ir_py_baseline.json"
-_IR_PY = _REPO_ROOT / "pcc" / "llvm_capi" / "ir.py"
+_IR_PY = _REPO_ROOT / "pcc" / "ir" / "ir.py"
 
 
 def _load_baseline() -> dict:
@@ -32,7 +32,7 @@ def _load_baseline() -> dict:
 @pytest.fixture(scope="module")
 def ir_py_on_text() -> str:
     """Compile ir.py in ON mode once for closure and hot-shape gates."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     with tempfile.TemporaryDirectory() as td:
         out = Path(td) / "ir.ll"
@@ -59,7 +59,7 @@ def ir_py_on_counts(ir_py_on_text: str) -> dict:
 @pytest.fixture(scope="module")
 def ir_py_contextual_text(tmp_path_factory) -> str:
     """Compile ir.py with the closed-world exports used by the real pcc1."""
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     entry = str(_REPO_ROOT / "pcc" / "__main__.py")
     srcs, mods = pipeline._collect_relative_module_closure(
@@ -84,13 +84,13 @@ def ir_py_contextual_text(tmp_path_factory) -> str:
     counts = pipeline.compile_contextual_per_module_fallback_counts(
         srcs,
         mods,
-        {"pcc.llvm_capi.ir"},
+        {"pcc.ir.ir"},
         ir_scaffold_mode="on",
         strict_no_libpython=True,
         emit_ir_dir=str(output),
     )
-    assert counts == {"pcc.llvm_capi.ir": 0}
-    return (output / "pcc_llvm_capi_ir.ll").read_text(encoding="utf-8")
+    assert counts == {"pcc.ir.ir": 0}
+    return (output / "pcc_ir_ir.ll").read_text(encoding="utf-8")
 
 
 def _function_body(ir_text: str, suffix: str) -> str:
@@ -125,7 +125,7 @@ def test_small_arity_call_wrapper_keeps_generic_native_root_contract(
     # call to the mutation-safe generic core; do not retain the rejected
     # fast/slow helper frames in the native closure.
     generic_symbol = (
-        "@user_pcc_llvm_capi_ir__irbuilder_call_from_args_list("
+        "@user_pcc_ir_ir__irbuilder_call_from_args_list("
     )
     assert body.count(generic_symbol) == 1
     assert "_irbuilder_call" + str(arity) + "_fast" not in ir_py_on_text
@@ -208,14 +208,14 @@ def test_declared_signature_uses_static_fields_without_memoization(
     # signature args field itself may be replaced with a list by supported
     # mutation, so even the exact branch must use the generic iterator ABI.
     assert call_body.count(
-        "@user_pcc_llvm_capi_ir__is_exact_function("
+        "@user_pcc_ir_ir__is_exact_function("
     ) == 1
     assert re.search(
         r"@py_obj_getattr\([^\n]*@\.pyattr\.__class__",
         exact_body,
     )
     assert re.search(
-        r"load ptr, ptr @\.class\.pcc_llvm_capi_ir\.Function",
+        r"load ptr, ptr @\.class\.pcc_ir_ir\.Function",
         exact_body,
     )
     assert "icmp eq i64" in exact_body

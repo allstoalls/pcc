@@ -37,7 +37,7 @@ def _owner_probe_body(text):
 
 
 def _emit_probe(tmp_path, source, mode):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     path = tmp_path / "owner_case.py"
     output = tmp_path / "owner_case.ll"
@@ -70,7 +70,7 @@ def test_unknown_builder_receiver_uses_owned_dynamic_calls(tmp_path, mode):
     assert ({"py_obj_load_method", "py_obj_call_method"} <= targets
             or {"py_obj_getattr", "py_obj_call"} <= targets), targets
     assert not any(target.startswith("py_cpy_") for target in targets), targets
-    assert not any(target.startswith("user_pcc_llvm_capi_ir_") for target in targets), targets
+    assert not any(target.startswith("user_pcc_ir_ir_") for target in targets), targets
 
 
 @pytest.mark.parametrize("mode", ["off", "on"])
@@ -85,23 +85,23 @@ def test_unknown_builder_keywords_keep_owned_dispatch(tmp_path, mode):
     assert ({"py_obj_load_method", "py_obj_call_method_kwargs"} <= targets
             or {"py_obj_getattr", "py_obj_call"} <= targets), targets
     assert not any(target.startswith("py_cpy_") for target in targets), targets
-    assert not any(target.startswith("user_pcc_llvm_capi_ir_") for target in targets), targets
+    assert not any(target.startswith("user_pcc_ir_ir_") for target in targets), targets
 
 
 def test_proven_provider_constructor_reaches_real_builder_method(tmp_path):
     body = _emit_probe(tmp_path, '''
-        from pcc.llvm_capi.compat import ir
+        from pcc.ir.compat import ir
         def owner_probe(left, right):
             builder = ir.IRBuilder()
             return builder.add(left, right)
     ''', "on")
     targets = _direct_call_targets(body)
-    assert "user_pcc_llvm_capi_ir_IRBuilder_add" in targets
+    assert "user_pcc_ir_ir_IRBuilder_add" in targets
     assert not any(target.startswith("py_cpy_") for target in targets), targets
 
 
 _NATIVE_SOURCE = '''
-from pcc.llvm_capi.compat import ir
+from pcc.ir.compat import ir
 
 class TextBuilder:
     def __init__(self, prefix: str):

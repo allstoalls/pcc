@@ -1,9 +1,9 @@
 import pytest
 
-from pcc.parse.c_parser import CParser
-from pcc.ssa import SSABinaryOp, SSABranch, SSABuilder, SSACall, SSACast, SSAConstant, SSAFieldAddr, SSAFieldExtract, SSAGlobalRef, SSALoad, SSAPhi, SSAReturn, SSAStackAlloc, SSAStore, SSAStringConstant
-from pcc.ssa.builder import SSAConstructionError
-from pcc.ssa.ir import SSAJump
+from pcc.frontends.c.parse.c_parser import CParser
+from pcc.frontends.c.ssa import SSABinaryOp, SSABranch, SSABuilder, SSACall, SSACast, SSAConstant, SSAFieldAddr, SSAFieldExtract, SSAGlobalRef, SSALoad, SSAPhi, SSAReturn, SSAStackAlloc, SSAStore, SSAStringConstant
+from pcc.frontends.c.ssa.builder import SSAConstructionError
+from pcc.frontends.c.ssa.ir import SSAJump
 
 
 _PARSER = CParser(lex_optimize=True, yacc_debug=False, yacc_optimize=True)

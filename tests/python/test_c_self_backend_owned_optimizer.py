@@ -7,10 +7,8 @@ without llvmlite -- the exact dependency `CEvaluator.__init__` documents this
 path as not having.  These tests pin the owned pipeline in place.
 """
 
-import pytest
-
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.py_frontend.pipeline_pass_config import PYTHON_IR_PASS_DEFAULT_TIER
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.frontends.python.pipeline_pass_config import PYTHON_IR_PASS_DEFAULT_TIER
 
 
 _UNIT_IR = """\
@@ -28,33 +26,21 @@ def _units():
     return [("unit0", _UNIT_IR, "i32", ())]
 
 
-def test_self_constructor_does_not_load_llvm_layout(monkeypatch):
-    import pcc.evaluater.c_evaluator as evaluator_module
+def test_self_constructor_does_not_load_llvm_layout():
+    import pcc.frontends.c.evaluator.c_evaluator as evaluator_module
 
-    def forbidden():
-        pytest.fail("self backend requested an external LLVM data layout")
-
-    monkeypatch.setattr(evaluator_module, "_host_data_layout_text", forbidden)
+    # The external LLVM data-layout loader is gone, not merely unused.
+    assert not hasattr(evaluator_module, "_host_data_layout_text")
     evaluator = CEvaluator(backend="self")
     assert evaluator.backend == "self"
 
 
 def test_prepare_self_backend_units_never_touches_the_llvm_target():
+    # ``target`` was the single door to llvmlite on this path (it called
+    # ``_llvm()``); the evaluator no longer has one to open.
+    assert not hasattr(CEvaluator, "target")
     evaluator = CEvaluator(backend="self")
-
-    def _explode(_self):
-        raise AssertionError(
-            "the self-backend C path built an LLVM target machine"
-        )
-
-    # The property is the single door to llvmlite on this path: `target`
-    # calls `_llvm()`, which raises ImportError when llvmlite is absent.
-    original = type(evaluator).target
-    type(evaluator).target = property(_explode)
-    try:
-        prepared = evaluator._prepare_self_backend_units(_units(), optimize=2)
-    finally:
-        type(evaluator).target = original
+    prepared = evaluator._prepare_self_backend_units(_units(), optimize=2)
 
     assert len(prepared) == 1
     unit_name, ir_text, return_type, external_defs = prepared[0]
@@ -68,7 +54,7 @@ def test_prepare_self_backend_units_runs_the_owned_default_tier(monkeypatch):
     evaluator = CEvaluator(backend="self")
     calls = []
 
-    import pcc.py_frontend.compiled_owned_passes as owned
+    import pcc.frontends.python.compiled_owned_passes as owned
 
     original = owned.run_owned_passes
 

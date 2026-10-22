@@ -4,9 +4,9 @@ import unittest
 # Run from the root dir
 sys.path.insert(0, '.')
 
-from pcc.parse import c_parser
-from pcc.generator import c_generator
-from pcc.ast import  c_ast
+from pcc.frontends.c.parse import c_parser
+from pcc.frontends.c.generator import c_generator
+from pcc.frontends.c.ast import  c_ast
 
 _c_parser = c_parser.CParser(
                 lex_optimize=True,

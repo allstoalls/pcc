@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend import pipeline_ir_text
+from pcc.frontends.python import pipeline
+from pcc.frontends.python import pipeline_ir_text
 
 
 def test_private_symbol_map_and_reference_rewrite_preserve_quoted_text():

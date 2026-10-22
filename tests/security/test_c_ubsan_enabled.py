@@ -39,24 +39,20 @@ import os
 import re
 import sys
 
-import llvmlite.binding as llvm
+from tests.owned_ir_validation import verify_ir_text
 
 this_dir = os.path.dirname(__file__)
 repo_root = os.path.dirname(os.path.dirname(this_dir))
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
-from pcc.codegen.c_codegen import LLVMCodeGenerator, postprocess_ir_text
-from pcc.parse import make_c_parser
+from pcc.frontends.c.codegen.c_codegen import CCodeGenerator, postprocess_ir_text
+from pcc.frontends.c.parse import make_c_parser
 
 # Same structural markers the characterization file greps for. A trap
 # instruction (or overflow intrinsic) appearing here is the deliberate flip.
 _OVERFLOW_INTRINSIC_RE = re.compile(r"llvm\.(?:s|u)(?:add|sub|mul)\.with\.overflow")
-# Both call spellings are the same instruction: llvmlite prints
-# `call void @llvm.trap()`, while the default in-repo builder
-# (pcc.llvm_capi.ir, see pcc/llvm_capi/compat.py) prints the explicit
-# function-type form `call void () @llvm.trap()` — also valid LLVM IR
-# (it round-trips through llvm.parse_assembly below).
+# Both accepted IR spellings denote the same trap instruction.
 _LLVM_TRAP_RE = re.compile(r"call void (?:\(\) )?@llvm\.trap\b")
 _TRAP_ASM_RE = re.compile(r"\b(?:brk\b|ud1\b|ud2\b|\.trap\b)")
 
@@ -67,20 +63,18 @@ def _codegen(source: str, *, fsanitize):
     Returns ``(ir_text, asm_text)``. We drive the codegen directly rather than
     ``CEvaluator.evaluate`` so the trapping ``main`` is never run in-process.
     """
-    llvm.initialize_all_targets()
-    llvm.initialize_all_asmprinters()
+    from pcc.backend.self_backend_dispatch import emit_self_asm
+    from pcc.frontends.python.pipeline_targets import host_target_triple
     ast = make_c_parser().parse(source)
-    cg = LLVMCodeGenerator()
-    triple = llvm.get_default_triple()
-    tm = llvm.Target.from_triple(triple).create_target_machine()
-    cg.set_target_machine(triple, tm)
+    cg = CCodeGenerator()
+    triple = host_target_triple()
+    cg.set_target_text(triple, "")
     if fsanitize:
         cg.configure_ubsan(fsanitize, mode="trap")
     cg.generate_code(ast)
     ir_text = postprocess_ir_text(str(cg.module))
-    mod = llvm.parse_assembly(ir_text)
-    mod.verify()
-    asm_text = tm.emit_assembly(mod)
+    verify_ir_text(ir_text)
+    asm_text = emit_self_asm(ir_text, triple)
     return ir_text, asm_text
 
 

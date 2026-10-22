@@ -7,8 +7,8 @@ from pathlib import Path
 import subprocess
 import sys
 
-from pcc.package_environment import resolve_package_environment
-from pcc.py_frontend.pipeline import (
+from pcc.package.environment import resolve_package_environment
+from pcc.frontends.python.pipeline import (
     _bootstrap_append_install_prefix_candidates,
     _pcc_dir_has_source_files,
     _runtime_archive_target_id,
@@ -111,7 +111,7 @@ def test_wheel_contract_exposes_native_pcc1_and_verified_reuse_input():
     hook = (REPO / "hatch_build.py").read_text(encoding="utf-8")
 
     assert (
-        'build_data.setdefault("shared_scripts", {})[str(out_binary)] = "pcc1"' in hook
+        'build_data.setdefault("shared_scripts", {})[str(out_binary)] = "pcc1.exe" if os.name == "nt" else "pcc1"' in hook
     )
     assert "PCC_BUILD_PCC1" in hook
     assert "_validate_prebuilt_pcc1" in hook
@@ -127,17 +127,17 @@ def test_wheel_contract_exposes_native_pcc1_and_verified_reuse_input():
     metadata = tomllib.loads(pyproject)
     assert metadata["project"]["dependencies"] == []
     assert metadata["build-system"]["requires"] == ["hatchling"]
-    assert '[project.scripts]\npcc = "pcc.cli_launcher:main"' in pyproject
+    assert '[project.scripts]\npcc = "pcc.driver.cli_launcher:main"' in pyproject
 
 
 def test_native_pcc1_finds_runtime_resources_under_installed_prefix(tmp_path):
     prefix = tmp_path / ".venv"
     pcc_dir = prefix / "lib" / "python3.13" / "site-packages" / "pcc"
     (pcc_dir / "backend").mkdir(parents=True)
-    (pcc_dir / "py_runtime" / "include").mkdir(parents=True)
+    (pcc_dir / "runtime" / "include").mkdir(parents=True)
     (pcc_dir / "__init__.py").write_text("", encoding="utf-8")
     (pcc_dir / "backend" / "self_backend_dispatch.py").write_text("", encoding="utf-8")
-    (pcc_dir / "py_runtime" / "include" / "py_runtime.h").write_text(
+    (pcc_dir / "runtime" / "include" / "py_runtime.h").write_text(
         "", encoding="utf-8"
     )
 

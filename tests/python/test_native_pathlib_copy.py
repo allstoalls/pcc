@@ -3,10 +3,10 @@
 import os
 import subprocess
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
-def test_path_copy_and_file_read(tmp_path, pcc_py_runtime_archive):
+def test_path_copy_and_file_read(tmp_path, pcc_runtime_archive):
     payload = tmp_path / "payload.txt"
     payload.write_text("payload", encoding="utf-8")
     source = tmp_path / "path_copy.py"
@@ -23,7 +23,7 @@ def test_path_copy_and_file_read(tmp_path, pcc_py_runtime_archive):
     )
     binary = tmp_path / "path_copy"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)))

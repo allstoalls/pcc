@@ -24,7 +24,9 @@ def test_run_native_uses_longer_timeout_under_xdist(monkeypatch, tmp_path):
     result = c_testsuite_cases.run_native(case_path, tmp_path)
 
     assert result.returncode == 0
-    assert timeouts == [c_testsuite_cases.XDIST_TIMEOUT, c_testsuite_cases.XDIST_TIMEOUT]
+    assert timeouts == [c_testsuite_cases.XDIST_TIMEOUT] * 3
+    assert [stage.stage for stage in result.stages] == ["compile", "link", "run"]
+    assert result.executed
 
 
 def test_run_pcc_uses_longer_timeout_under_xdist(monkeypatch, tmp_path):
@@ -39,7 +41,10 @@ def test_run_pcc_uses_longer_timeout_under_xdist(monkeypatch, tmp_path):
         return SimpleNamespace(
             timed_out=False,
             exitcode=0,
-            payload={"returncode": 0, "stdout": "", "stderr": ""},
+            payload={"returncode": 0, "stdout": "", "stderr": "", "stages": [
+                {"stage": stage, "returncode": 0, "stdout": "", "stderr": "", "completed": True}
+                for stage in ("compile", "link", "run")
+            ]},
         )
 
     monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
@@ -50,3 +55,4 @@ def test_run_pcc_uses_longer_timeout_under_xdist(monkeypatch, tmp_path):
     assert result.returncode == 0
     assert captured["timeout"] == c_testsuite_cases.XDIST_TIMEOUT
     assert captured["args"][2] == c_testsuite_cases.XDIST_TIMEOUT
+    assert result.executed

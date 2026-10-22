@@ -506,10 +506,10 @@ def build_metal_kernel_package(
             )
         dylib_path = out_dir / f"{launch_plan.kernel_entry}_metal_bridge.dylib"
         if bridge_linker is None:
-            from pcc.gpu_metal import link_metal_runtime_bridge_dylib
+            from pcc.backend.metal import link_metal_runtime_bridge_dylib
 
             bridge_linker = link_metal_runtime_bridge_dylib
-        from pcc.gpu_metal import MetalCompileError, MetalToolchainUnavailable
+        from pcc.backend.metal import MetalCompileError, MetalToolchainUnavailable
 
         try:
             linked_path = bridge_linker(
@@ -548,10 +548,10 @@ def build_metal_kernel_package(
             )
         bridge_library_symbol = metal_executor_bridge_symbol(launch_plan)
         if bridge_loader is None:
-            from pcc.gpu_metal import validate_dynamic_library_symbol
+            from pcc.backend.metal import validate_dynamic_library_symbol
 
             bridge_loader = validate_dynamic_library_symbol
-        from pcc.gpu_metal import MetalCompileError
+        from pcc.backend.metal import MetalCompileError
 
         try:
             loaded_symbol = bridge_loader(

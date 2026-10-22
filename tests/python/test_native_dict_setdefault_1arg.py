@@ -23,7 +23,7 @@ _BUILD.mkdir(parents=True, exist_ok=True)
 
 
 def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -90,7 +90,7 @@ def test_dict_setdefault_1arg_runtime_matches_cpython(tmp_path):
     native scalar. The scalar-valued (inferred ``dict[str, int]``) case is
     covered by ``test_dict_setdefault_1arg_scalar_valued_dict_is_none_gap``.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     program = textwrap.dedent("""
         def main() -> None:
@@ -150,7 +150,7 @@ def test_dict_setdefault_1arg_scalar_valued_dict_is_none_gap(tmp_path):
     and 1-arg ``get``/``setdefault`` results on scalar-valued dicts are
     typed ``dyn``, so the ``is None`` compare is a real pointer compare
     instead of constant-folding to False."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     program = textwrap.dedent("""
         def main() -> None:

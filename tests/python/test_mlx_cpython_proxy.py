@@ -284,7 +284,7 @@ def _assert_vllm_metal_proxy_ir(ir: str) -> None:
 
 
 def test_mlx_core_import_routes_through_cpython_proxy_ir(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _write_mlx_proxy_probe(tmp_path)
     out = tmp_path / "mlx_proxy_probe.ll"
@@ -301,7 +301,7 @@ def test_mlx_core_import_routes_through_cpython_proxy_ir(tmp_path):
 
 
 def test_vllm_import_routes_through_cpython_proxy_ir(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _write_vllm_proxy_probe(tmp_path)
     out = tmp_path / "vllm_proxy_probe.ll"
@@ -318,7 +318,7 @@ def test_vllm_import_routes_through_cpython_proxy_ir(tmp_path):
 
 
 def test_tilelang_import_routes_through_cpython_proxy_ir(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _write_tilelang_proxy_probe(tmp_path)
     out = tmp_path / "tilelang_proxy_probe.ll"
@@ -335,7 +335,7 @@ def test_tilelang_import_routes_through_cpython_proxy_ir(tmp_path):
 
 
 def test_vllm_metal_import_routes_through_cpython_proxy_ir(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _write_vllm_metal_proxy_probe(tmp_path)
     out = tmp_path / "vllm_metal_proxy_probe.ll"
@@ -374,8 +374,8 @@ def test_cpython_proxy_runtime_seeds_pcc_package_site(tmp_path):
 
 def test_compiled_module_registry_is_linked_outside_the_capi_shim():
     """libpython mode drops the shim but still needs pcc module imports."""
-    runtime_py = REPO / "pcc" / "py_runtime" / "py"
-    makefile_text = (REPO / "pcc" / "py_runtime" / "Makefile").read_text(
+    runtime_py = REPO / "pcc" / "runtime" / "py"
+    makefile_text = (REPO / "pcc" / "runtime" / "Makefile").read_text(
         encoding="utf-8"
     )
     for symbol in (

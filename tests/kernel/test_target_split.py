@@ -34,8 +34,7 @@ def test_resolve_self_metal():
     assert plan["device_finalize"] == "metal_device_finalize"
 
 
-def test_resolve_llvm_and_c_hosts():
-    assert resolve("llvm", "none").host.host_finalize == "llvm_host_finalize"
+def test_resolve_c_reference_host():
     c = resolve("c", "metal")
     assert c.host.host_finalize == "c_host_finalize"
     assert c.host.first_class_root is False  # c is not a first-class root
@@ -44,22 +43,20 @@ def test_resolve_llvm_and_c_hosts():
 def test_shared_front_half_is_target_neutral():
     # Both a device build and a host-only build share the identical front half.
     a = resolve("self", "metal").shared_front_half
-    b = resolve("llvm", "none").shared_front_half
+    b = resolve("c", "none").shared_front_half
     assert a == b
     assert "plain_tir_freeze" in a
     assert "split_host_device" in a
 
 
-def test_no_silent_llvm_fallback_from_self():
-    # Asking self to fall back to LLVM must RAISE loudly, not degrade silently.
-    with pytest.raises(TargetSplitError, match="never silently fall back"):
+def test_removed_llvm_host_is_rejected():
+    with pytest.raises(TargetSplitError, match="unknown host backend"):
+        resolve("llvm", "none")
+
+
+def test_removed_llvm_fallback_option_is_rejected():
+    with pytest.raises(TypeError, match="allow_llvm_fallback"):
         resolve("self", "none", allow_llvm_fallback=True)
-
-
-def test_llvm_fallback_flag_allowed_only_for_non_self():
-    # The flag is a no-op for non-self hosts (they are already LLVM/C).
-    m = resolve("llvm", "none", allow_llvm_fallback=True)
-    assert m.host.backend is HostBackend.LLVM
 
 
 def test_host_only_schedules_no_device_finalize():

@@ -8,11 +8,11 @@ from pcc.backend import macho_codesign
 from pcc.backend.arm64_asm_driver import assemble_file
 from pcc.backend.macho_exec import link_executable
 from pcc.backend.native_object import NativeObject
-from pcc.py_frontend.pipeline import compile_python_multi
+from pcc.frontends.python.pipeline import compile_python_multi
 
 
 def test_compiled_signature_validator_checks_padding_and_page_hashes(
-    tmp_path, pcc_py_runtime_archive,
+    tmp_path, pcc_runtime_archive,
 ):
     sections, undefined = assemble_file(
         ".section __TEXT,__text,regular,pure_instructions\n.globl _main\n"
@@ -48,7 +48,7 @@ main()
         [str(Path(macho_codesign.__file__)), str(source)], str(output),
         module_names=["pcc.backend.macho_codesign", "validate_signature"],
         entry_module="validate_signature", recursive_stdlib=True,
-        backend="self", libpython_mode="off", runtime_archive=str(pcc_py_runtime_archive),
+        backend="self", libpython_mode="off", runtime_archive=str(pcc_runtime_archive),
     )
     for gc in range(5):
         result = subprocess.run([str(output), str(target)], capture_output=True, text=True,

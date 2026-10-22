@@ -8,7 +8,7 @@ import os
 
 
 _ENV_BACKEND = "PCC_BACKEND"
-_DEFAULT_BACKEND = "llvm"
+_DEFAULT_BACKEND = "self"
 
 
 class BackendUnavailable(ValueError):
@@ -32,29 +32,6 @@ class BackendConfig:
 
 
 _BACKEND_TABLE = {
-    "llvm": {
-        "semver": "llvmlite-default",
-        "supported": True,
-        "capabilities": (
-            "llvm-ir",
-            "llvm-binding",
-            "mcjit",
-            "emit-object",
-        ),
-    },
-    "llvm_capi": {
-        "semver": "llvm-capi-wip",
-        # Placeholder backend in phase A/B: available path is tracked as a
-        # placeholder selection in the cache/config surface, but not mandatory for
-        # default-path execution.
-        "supported": True,
-        "capabilities": (
-            "llvm-ir",
-            "llvm-c",
-            "mcjit",
-            "emit-object",
-        ),
-    },
     "self": {
         # The self backend owns assembly, object emission, and native execution
         # for its registered targets.  Unsupported triples and instruction
@@ -65,7 +42,7 @@ _BACKEND_TABLE = {
         "capabilities": (
             "emit-asm",
             "emit-object",
-            "run-native-via-system-cc",
+            "run-native",
             "aarch64-darwin-mvp",
         ),
     },
@@ -78,10 +55,6 @@ def _normalize_backend_name(value: str | None) -> str:
     candidate = value.strip().lower()
     if not candidate:
         return _DEFAULT_BACKEND
-    if candidate == "llvmlite":
-        return "llvm"
-    if candidate == "llvm-capi":
-        return "llvm_capi"
     return candidate
 
 
@@ -101,7 +74,7 @@ def resolve_backend(
     """Resolve and return a concrete backend configuration.
 
     Args:
-      requested: user-supplied backend name (`llvm`, `llvm_capi`, `self`).
+      requested: user-supplied backend name (`self`).
       allow_unimplemented: compatibility switch for any future known-but-
         unavailable backend entries.  ``self`` is a supported backend whose
         individual target/IR boundaries still fail closed.

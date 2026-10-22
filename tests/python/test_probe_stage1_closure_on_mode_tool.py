@@ -132,5 +132,5 @@ def test_no_arguments_preserve_all_module_both_mode_diagnostic_run(closure, monk
     assert tool.main([]) == 0
     assert called == [(module, mode) for module in modules for mode in ("off", "on")]
     output = capsys.readouterr().out
-    assert "closure: 3 files (tight)" in output
+    assert "closure: 3 files (production discovery; standalone codegen)" in output
     assert "OFF FAIL: ValueError: diagnostic failure" in output

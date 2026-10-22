@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pcc.parse.py_lift import parse_and_lift
-from pcc.py_frontend.py_ast import Assign, Attr, ClassDef, FuncDef, Name
+from pcc.frontends.python.py_lift import parse_and_lift
+from pcc.frontends.python.py_ast import Assign, Attr, ClassDef, FuncDef, Name
 
 
 def test_class_info_declares_extern_method_defs_in_init_schema():
@@ -12,11 +12,11 @@ def test_class_info_declares_extern_method_defs_in_init_schema():
     It must be part of the declared instance layout rather than a CPython-style
     dynamic post-init attribute.
     """
-    src = Path("pcc/py_frontend/codegen/class_gen.py")
+    src = Path("pcc/frontends/python/codegen/class_gen.py")
     mod = parse_and_lift(
         src.read_text(encoding="utf-8"),
         str(src),
-        "pcc.py_frontend.codegen.class_gen",
+        "pcc.frontends.python.codegen.class_gen",
     )
 
     init_fn = None

@@ -60,7 +60,7 @@ print(Gate().enter())
 
 
 def test_parking_calls_from_synchronous_callers_match_python(
-    tmp_path, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, python_program_compiler, pcc_runtime_archive,
 ):
     source = tmp_path / "may_park_sync.py"
     source.write_text(PROGRAM, encoding="utf-8")
@@ -71,7 +71,7 @@ def test_parking_calls_from_synchronous_callers_match_python(
     binary = tmp_path / "may_park_sync"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         result = subprocess.run(

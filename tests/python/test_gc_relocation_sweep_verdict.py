@@ -24,21 +24,23 @@ source before oldify can copy it, which is the runtime consuming a verdict
 correctly, not the inheritance defect. The backend-3 hardening is exercised
 by the five-backend production contract instead.
 
+The forwarding source remains a physical shell until remap retirement. It
+must never run an independent finalizer, either while the replacement is
+rooted or when its last real owner is released. This also guards the logical
+object against duplicate finalization through the old address.
+
 Nonclaims: this probe does not exercise the concurrent-stepping window
-itself (the overlap probes own that), and it records but does not assert
-finalizations of the immortal forwarding shell -- shell visibility to a
-legitimately-cut sweep is a separate question from stale-verdict
-inheritance.
+itself (the overlap probes own that).
 """
 from pathlib import Path
+import hashlib
+import json
 import os
-import subprocess
 
 import pytest
 
-from tests.runtime_build_cache import (
-    cached_threaded_pcc_python_runtime,
-)
+from tests.owned_runtime_c_fixture import admitted_runtime, link_c_harness
+from tests.python.process_timeout import run_process_group_timeout
 
 PROBE_SOURCE = r"""
 #include "py_internal.h"
@@ -120,7 +122,8 @@ static int fail_state(
 
 int main(void) {
     const int32_t backend = @BACKEND@;
-    if (pcc_refcount_strategy() != PCC_REFCOUNT_STRATEGY_ATOMIC) return 1;
+    if (pcc_threads_enabled() != @EXPECTED_THREADS@) return 6;
+    if (pcc_refcount_strategy() != @EXPECTED_REFCOUNT_STRATEGY@) return 1;
     if (pcc_gc_set_backend(backend) != 0) return 2;
 
     struct PyClassObject *value_class =
@@ -173,6 +176,8 @@ int main(void) {
     /* The capture's consumer: an explicit collect consumes pending
      * candidates verbatim. The live copy must survive untouched. */
     (void)pcc_gc_collect(0);
+    if (del_other != 0)
+        return fail_state(27, "finalizer-ran-on-forwarding-shell", 0, 0);
     if ((flags_of(copy) & PY_FLAG_GC_SWEEP_CANDIDATE) != 0)
         return fail_state(22, "collect-recut-live-copy", source, copy);
     if (del_on_copy != 0)
@@ -196,6 +201,9 @@ int main(void) {
         return fail_state(26, "dead-copy-still-known", source, copy);
     }
 
+    if (del_other != 0)
+        return fail_state(27, "finalizer-ran-on-forwarding-shell", 0, 0);
+
     printf(
         "ok backend=%d del_other=%ld\n",
         backend,
@@ -206,31 +214,60 @@ int main(void) {
 """
 
 
-def _runtime_archive(kind: str) -> Path:
-    return cached_threaded_pcc_python_runtime() / "libpy_runtime_pcc_py.a"
+def _digest(path: Path) -> str:
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def _compile_probe(tmp_path: Path, kind: str, backend: int) -> Path:
-    runtime_dir = _runtime_archive(kind).parent
+def _compile_probe(
+    tmp_path: Path, kind: str, backend: int, *, expected_threads: bool = True,
+) -> Path:
+    assert type(expected_threads) is bool
+    archive = admitted_runtime()
+    provenance = Path(str(archive) + ".provenance.json")
+    manifest = json.loads(provenance.read_text(encoding="utf-8"))
+    assert manifest["members"]
+    assert all(member["runtime_build_config"]["threads"] is expected_threads
+               and member["runtime_build_config"]["refcount"] == "atomic"
+               for member in manifest["members"])
+    runtime_hashes = {
+        suffix: _digest(Path(str(archive) + suffix))
+        for suffix in ("", ".provenance.json", ".capi_syms")
+    }
+    runtime_dir = Path(__file__).resolve().parents[2] / "pcc/runtime"
     stem = f"sweep_verdict_gc{backend}_{kind}"
     source = tmp_path / f"{stem}.c"
     executable = tmp_path / stem
-    source.write_text(
-        PROBE_SOURCE.replace("@BACKEND@", str(backend)), encoding="utf-8"
+    # Admission records the requested refcount setting; the single-thread
+    # kernel deliberately implements the non-atomic runtime strategy.
+    expected_strategy = (
+        "PCC_REFCOUNT_STRATEGY_ATOMIC"
+        if expected_threads else "PCC_REFCOUNT_STRATEGY_NONATOMIC"
     )
-    command = [
-        os.environ.get("CC", "cc"),
-        "-std=c11",
-        f"-I{runtime_dir / 'include'}",
-        f"-I{runtime_dir / 'src'}",
-        str(source),
-        str(_runtime_archive(kind)),
-        "-lm",
-        "-o",
-        str(executable),
-    ]
-    build = subprocess.run(command, capture_output=True, text=True, timeout=60)
+    source.write_text(
+        PROBE_SOURCE.replace("@BACKEND@", str(backend))
+        .replace("@EXPECTED_THREADS@", str(int(expected_threads)))
+        .replace("@EXPECTED_REFCOUNT_STRATEGY@", expected_strategy),
+        encoding="utf-8",
+    )
+    build = link_c_harness(
+        source, executable, extra_include_dirs=(str(runtime_dir / "src"),),
+    )
     assert build.returncode == 0, build.stdout + build.stderr
+    assert all(_digest(Path(str(archive) + suffix)) == digest
+               for suffix, digest in runtime_hashes.items())
+    identity = {
+        "schema": "pcc.gc4-relocation-sweep-verdict.v1",
+        "compiler": "host-pcc0", "backend": "self", "gc_backend": backend,
+        "runtime_provisioning": False, "runtime_archive": str(archive),
+        "runtime_hashes": runtime_hashes,
+        "runtime_config": {"threads": expected_threads, "refcount": "atomic"},
+        "target_triple": manifest["target_triple"],
+        "source_sha256": _digest(source), "binary_sha256": _digest(executable),
+    }
+    executable.with_suffix(".identity.json").write_text(
+        json.dumps(identity, indent=2) + "\n", encoding="utf-8",
+    )
     return executable
 
 
@@ -239,20 +276,37 @@ def test_relocation_copy_clears_stale_sweep_verdict_backend4(
     tmp_path: Path, kind: str
 ) -> None:
     """Backend 4 colored evacuation must publish a verdict-free copy."""
-    executable = _compile_probe(tmp_path, kind, backend=4)
+    _run_probe(tmp_path, kind, expected_threads=True)
+
+
+@pytest.mark.integration
+def test_relocation_copy_clears_stale_sweep_verdict_backend4_single_thread(
+    tmp_path: Path,
+) -> None:
+    """Run the same native contract against the admitted CI compiler runtime."""
+    _run_probe(tmp_path, "pcc_python_single_thread", expected_threads=False)
+
+
+def _run_probe(tmp_path: Path, kind: str, *, expected_threads: bool) -> None:
+    executable = _compile_probe(tmp_path, kind, backend=4, expected_threads=expected_threads)
+    identity = json.loads(executable.with_suffix(".identity.json").read_text(encoding="utf-8"))
     run_env = {**os.environ}
     run_env.pop("PCC_REFCOUNT_STRATEGY", None)
-    run = subprocess.run(
-        [str(executable)],
-        capture_output=True,
-        text=True,
-        timeout=120,
-        env=run_env,
+    run = run_process_group_timeout(
+        [str(executable)], timeout=120, env=run_env,
     )
+    executable.with_suffix(".run.json").write_text(
+        json.dumps(dict(identity, command=[str(executable)], returncode=run.returncode,
+                        stdout=run.stdout, stderr=run.stderr), indent=2) + "\n",
+        encoding="utf-8",
+    )
+    assert all(_digest(Path(identity["runtime_archive"] + suffix)) == digest
+               for suffix, digest in identity["runtime_hashes"].items())
     assert run.returncode == 0, (
         f"{kind} gc4 sweep-verdict relocation probe returned "
         f"{run.returncode}: " + run.stdout + run.stderr
     )
+    assert run.stdout == "ok backend=4 del_other=0\n", run.stdout + run.stderr
 
 
 def test_source_sweep_verdict_clears_only_after_forwarding_commit() -> None:
@@ -260,7 +314,7 @@ def test_source_sweep_verdict_clears_only_after_forwarding_commit() -> None:
     repo = Path(__file__).absolute().parents[2]
 
     py_source = (
-        repo / "pcc/py_runtime/py/freestanding_gc_relocation_copy.py"
+        repo / "pcc/runtime/py/freestanding_gc_relocation_copy.py"
     ).read_text(encoding="utf-8")
     py_body = py_source.split(
         "def pcc_gc_backend4_relocate_copy_preallocated_unlocked(", 1

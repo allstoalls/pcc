@@ -64,3 +64,35 @@ def test_classifiers_match_on_generated_token_space():
         if _is_float_token(token) != bool(_FLOAT_RE.match(token)):
             mismatches.append(("float", token))
     assert not mismatches, mismatches[:20]
+
+
+# `_next_declaration_end` replaced a MULTILINE `^declare\s+` search over the
+# whole module text; the pcc-Python regex engine tried every offset of a
+# multi-megabyte shard there (91% of one pcc1 emit worker's samples). The IR
+# grammar's whitespace is ASCII, which is what these cases exercise.
+_DECLARE_RE = re.compile(r"^declare\s+", re.MULTILINE)
+
+_DECLARE_TEXTS = [
+    "",
+    "declare",
+    "declare ",
+    "declare\n",
+    "declared i64 @f()",
+    " declare i64 @f()",
+    "declare i64 @f()\n",
+    "x\ndeclare i64 @f()\n",
+    "\ndeclare",
+    "\ndeclare\t\tptr @h(ptr)\n",
+    "\r\ndeclare i64 @x()",
+    "declare\x0bi64 @y()\ndeclare\fi32 @z()",
+    "define void @g() {\n  ret void\n}\ndeclare  i32 @k(i32)\ndeclaree\ndeclare\n\ni64 @m()\n",
+]
+
+
+@pytest.mark.parametrize("text", _DECLARE_TEXTS)
+def test_declaration_scan_equals_the_retired_multiline_pattern(text):
+    from pcc.backend.self_backend_parse import _next_declaration_end
+
+    for position in range(len(text) + 1):
+        match = _DECLARE_RE.search(text, position)
+        assert _next_declaration_end(text, position) == (match.end() if match else -1), position

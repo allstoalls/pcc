@@ -1,5 +1,6 @@
 import argparse
 import json
+import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
@@ -22,16 +23,29 @@ def _classify_runtime(case_path, timeout):
 
     try:
         native = run_native(case_path, REPO_ROOT, timeout=timeout)
-    except Exception:
+    except subprocess.TimeoutExpired:
         return "runtime_timeout", case_path.name
+    except Exception:
+        return "runtime_build_or_execution_failure", case_path.name
 
     try:
         pcc = run_pcc(case_path, REPO_ROOT, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return "runtime_timeout", case_path.name
     except Exception:
-        return "runtime_timeout", case_path.name
+        return "runtime_build_or_execution_failure", case_path.name
 
-    if native.returncode == 124 or pcc.returncode == 124:
-        return "runtime_timeout", case_path.name
+    # Build/worker statuses are not program exits. A completed exit 124 is
+    # legitimate; only an incomplete stage record identifies a timeout.
+    if not native.executed or not pcc.executed:
+        if any(
+            result.stages
+            and not result.stages[-1].completed
+            and result.returncode == 124
+            for result in (native, pcc)
+        ):
+            return "runtime_timeout", case_path.name
+        return "runtime_build_or_execution_failure", case_path.name
 
     if native.returncode == 0 and pcc.returncode == 0:
         if pcc.stdout == native.stdout and pcc.stderr == native.stderr:

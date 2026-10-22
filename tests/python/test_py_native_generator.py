@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def _compile_and_run(tmp_path, name: str, source: str) -> subprocess.CompletedProcess[str]:

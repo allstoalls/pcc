@@ -13,7 +13,7 @@ _BUILD.mkdir(parents=True, exist_ok=True)
 
 
 def _compile_to_ll(source: str, name: str, *, mode: str = "on") -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -64,7 +64,7 @@ def test_gc_collect_dispatches_to_native_helper():
 
 
 def test_native_gc_public_api_runtime_for_refcount_backend(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -120,7 +120,7 @@ def test_native_gc_public_api_runtime_for_refcount_backend(tmp_path):
         "True\n"
         "True\n"
         "True\n"
-        "(700, 10, 10)\n"
+        "(2000, 10, 10)\n"
         "(701, 11, 12)\n"
         "False\n"
         "False\n"

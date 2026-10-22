@@ -7,20 +7,20 @@ from types import SimpleNamespace
 
 import pytest
 
-from pcc.py_frontend import owned_runtime_build as owned
-from pcc.py_frontend import pipeline_runtime_archive as selection
-from pcc.py_frontend import pipeline_targets
+from pcc.frontends.python import owned_runtime_build as owned
+from pcc.frontends.python import pipeline_runtime_archive as selection
+from pcc.frontends.python import pipeline_targets
 from pcc.tools import runtime_archive_provenance as provenance
 
 
-TARGETS = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+TARGETS = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "x86_64-pc-windows-msvc", "arm64-apple-darwin"]
 
 
 def _forbidden(*_args, **_kwargs):
     raise AssertionError("unexpected old archive shortcut, subprocess, or rebuild")
 
 
-def _manifest(runtime_dir, target, *, threads=False, refcount="atomic"):
+def _manifest(runtime_dir, target, *, threads=True, refcount="atomic"):
     config = {"threads": threads, "refcount": refcount}
     return {"target_triple": target, "members": [
         {"member": name + ".o", "runtime_build_config": dict(config)}
@@ -32,6 +32,7 @@ def _manifest(runtime_dir, target, *, threads=False, refcount="atomic"):
 def runtime_root(tmp_path, monkeypatch):
     monkeypatch.delenv("PCC_RUNTIME_DIR", raising=False)
     monkeypatch.delenv("PCC_RUNTIME_ARCHIVE", raising=False)
+    monkeypatch.delenv("PCC_RUNTIME_BUILD", raising=False)
     monkeypatch.delenv("PCC_WITH_THREADS", raising=False)
     monkeypatch.delenv("PCC_REFCOUNT_KIND", raising=False)
     root = tmp_path / "runtime"
@@ -39,8 +40,7 @@ def runtime_root(tmp_path, monkeypatch):
     (root / "Makefile").write_text(
         "PY_MODULES = py_obj py_threading\n"
         "PY_MODULES += freestanding_thread_kernel_pthread\n"
-        "FREESTANDING_PY_MODULES = freestanding_mem_str\n"
-        "FREESTANDING_PY_MODULES += freestanding_thread_kernel\n", encoding="utf-8")
+        "FREESTANDING_PY_MODULES = freestanding_mem_str\n", encoding="utf-8")
     return root
 
 
@@ -60,15 +60,17 @@ def _selection_options(root):
 
 
 @pytest.mark.parametrize("target", TARGETS)
-@pytest.mark.parametrize("initial_threads", [False, True])
-def test_native_runtime_switches_configuration_in_both_directions(runtime_root, monkeypatch, target, initial_threads):
+@pytest.mark.parametrize("initial_refcount", ["atomic", "biased"])
+def test_native_runtime_switches_configuration_in_both_directions(runtime_root, monkeypatch, target, initial_refcount):
+    # Every runtime is threaded; the refcount strategy is the remaining
+    # configuration axis, and the removed single-thread runtime fails.
     monkeypatch.setattr(selection, "sys", SimpleNamespace(platform="win32" if "windows" in target else "linux"))
     monkeypatch.setattr(pipeline_targets, "host_target_triple", lambda: target)
-    monkeypatch.setattr(provenance, "manifest_is_stale_for_current_codegen", lambda _receipt: False)
+    monkeypatch.setattr(provenance, "manifest_codegen_staleness_reason", lambda _receipt: "")
     options = _selection_options(runtime_root)
     packaged = Path(options["archive_pcc_py"])
     packaged.write_bytes(b"pre-existing runtime")
-    receipts = {str(packaged): _manifest(runtime_root, target, threads=initial_threads)}
+    receipts = {str(packaged): _manifest(runtime_root, target, refcount=initial_refcount)}
     builds = []
 
     def verify(path, *, runtime_root):
@@ -81,21 +83,26 @@ def test_native_runtime_switches_configuration_in_both_directions(runtime_root, 
         receipts[output] = _manifest(Path(root), target, **config)
         builds.append(output)
 
+    other = "biased" if initial_refcount == "atomic" else "atomic"
     monkeypatch.setattr(provenance, "verify_runtime_archive_manifest", verify)
     monkeypatch.setattr(owned, "build_runtime_archive", build)
-    monkeypatch.setenv("PCC_WITH_THREADS", "1" if initial_threads else "0")
+    monkeypatch.setenv("PCC_REFCOUNT_KIND", initial_refcount)
     assert selection.ensure_runtime(False, **options) == str(packaged)
     assert builds == []
-    monkeypatch.setenv("PCC_WITH_THREADS", "0" if initial_threads else "1")
+    monkeypatch.setenv("PCC_REFCOUNT_KIND", other)
     switched = selection.ensure_runtime(False, **options)
     assert switched != str(packaged)
-    assert ("single-" if initial_threads else "threads-") in switched
+    assert ("threads-" + other) in switched
     assert builds == [switched]
     assert selection.ensure_runtime(False, **options) == switched
     assert builds == [switched]
-    monkeypatch.setenv("PCC_WITH_THREADS", "1" if initial_threads else "0")
+    monkeypatch.setenv("PCC_REFCOUNT_KIND", initial_refcount)
     assert selection.ensure_runtime(False, **options) == str(packaged)
     assert builds == [switched]
+    monkeypatch.setenv("PCC_WITH_THREADS", "0")
+    # Selection reports configuration errors as its archive error.
+    with pytest.raises(Exception, match="single-thread runtime was removed"):
+        selection.ensure_runtime(False, **options)
 
 
 @pytest.mark.parametrize("mismatch", ["target", "threads", "refcount", "missing_config", "missing_module"])
@@ -107,7 +114,9 @@ def test_explicit_archive_rejects_mismatched_configuration(runtime_root, monkeyp
     if mismatch == "target":
         receipt["target_triple"] = TARGETS[1]
     elif mismatch == "threads":
-        receipt = _manifest(runtime_root, target, threads=True)
+        # A stale archive from the removed single-thread configuration.
+        for member in receipt["members"]:
+            member["runtime_build_config"]["threads"] = False
     elif mismatch == "refcount":
         receipt = _manifest(runtime_root, target, refcount="local")
     elif mismatch == "missing_config":
@@ -116,7 +125,7 @@ def test_explicit_archive_rejects_mismatched_configuration(runtime_root, monkeyp
         receipt["members"].pop()
     monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(path))
     monkeypatch.setattr(provenance, "verify_runtime_archive_manifest", lambda *_a, **_k: receipt)
-    monkeypatch.setattr(provenance, "manifest_is_stale_for_current_codegen", lambda _receipt: False)
+    monkeypatch.setattr(provenance, "manifest_codegen_staleness_reason", lambda _receipt: "")
     monkeypatch.setattr(owned, "build_runtime_archive", _forbidden)
     with pytest.raises(ValueError, match="target/source configuration"):
         owned.ensure_target_runtime(str(runtime_root), target)
@@ -142,7 +151,7 @@ def test_verified_wheel_reuses_matching_config_without_source_codegen(runtime_ro
     target_id = "win32:x86_64:" + target
     _write_wheel_bundle(archive, _manifest(runtime_root, target), target_id)
     monkeypatch.setattr(provenance, "verify_runtime_archive_manifest", _forbidden)
-    monkeypatch.setattr(provenance, "manifest_is_stale_for_current_codegen", _forbidden)
+    monkeypatch.setattr(provenance, "manifest_codegen_staleness_reason", _forbidden)
     monkeypatch.setattr(owned, "build_runtime_archive", _forbidden)
     if explicit:
         monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(archive))
@@ -157,7 +166,11 @@ def test_verified_explicit_wheel_does_not_bypass_thread_config(runtime_root, mon
     target = TARGETS[2]
     archive = runtime_root / "libpy_runtime_pcc_py.a"
     target_id = "win32:x86_64:" + target
-    _write_wheel_bundle(archive, _manifest(runtime_root, target), target_id)
+    # A wheel from the removed single-thread configuration.
+    stale = _manifest(runtime_root, target)
+    for member in stale["members"]:
+        member["runtime_build_config"]["threads"] = False
+    _write_wheel_bundle(archive, stale, target_id)
     monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(archive))
     monkeypatch.setenv("PCC_WITH_THREADS", "1")
     monkeypatch.setattr(provenance, "verify_runtime_archive_manifest", _forbidden)
@@ -171,13 +184,29 @@ def test_verified_explicit_wheel_does_not_bypass_thread_config(runtime_root, mon
 def test_runtime_dir_override_applies_to_cross_target_cache(runtime_root, tmp_path, monkeypatch):
     monkeypatch.setenv("PCC_RUNTIME_DIR", str(runtime_root))
     target = TARGETS[1]
-    expected = runtime_root / "build_owned" / target / "single-atomic" / "libpy_runtime_pcc_py.a"
+    expected = runtime_root / "build_owned" / target / "threads-atomic" / "libpy_runtime_pcc_py.a"
     expected.parent.mkdir(parents=True)
     expected.write_bytes(b"cached archive")
     monkeypatch.setattr(provenance, "verify_runtime_archive_manifest", lambda *_a, **_k: _manifest(runtime_root, target))
-    monkeypatch.setattr(provenance, "manifest_is_stale_for_current_codegen", lambda _receipt: False)
+    monkeypatch.setattr(provenance, "manifest_codegen_staleness_reason", lambda _receipt: "")
     monkeypatch.setattr(owned, "build_runtime_archive", _forbidden)
     assert owned.ensure_target_runtime(str(tmp_path / "absent-default"), target) == str(expected)
+
+
+def test_fresh_owned_build_must_pass_current_codegen_admission(runtime_root, monkeypatch):
+    target = TARGETS[3]
+    builds = []
+
+    def build(root, output, selected):
+        Path(output).write_bytes(b"simulated stale publication")
+        builds.append(output)
+
+    monkeypatch.setattr(owned, "build_runtime_archive", build)
+    monkeypatch.setattr(provenance, "verify_runtime_archive_manifest", lambda *_a, **_k: _manifest(runtime_root, target))
+    monkeypatch.setattr(provenance, "manifest_is_stale_for_current_codegen", lambda _receipt: True)
+    with pytest.raises(ValueError, match="stale codegen provenance"):
+        owned.ensure_target_runtime(str(runtime_root), target)
+    assert len(builds) == 1
 
 
 def test_native_libpython_request_rejected_before_explicit_fast_path(runtime_root, monkeypatch):
@@ -188,6 +217,154 @@ def test_native_libpython_request_rejected_before_explicit_fast_path(runtime_roo
     options["needs_libpython"] = True
     with pytest.raises(selection.RuntimeArchiveError, match="does not include libpython"):
         selection.ensure_runtime(False, **options)
+
+
+@pytest.mark.parametrize("target", TARGETS)
+def test_facade_default_native_entry_selects_in_process_owned_builder(runtime_root, monkeypatch, target):
+    from pcc.frontends.python import pipeline
+
+    calls = []
+    monkeypatch.setattr(pipeline_targets, "host_target_triple", lambda: target)
+    monkeypatch.setattr(pipeline, "_PY_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setattr(pipeline, "_run_runtime_make", _forbidden)
+    monkeypatch.setattr(selection.subprocess, "run", _forbidden)
+
+    def ensure(root, selected, **options):
+        calls.append((root, selected, options))
+        return str(runtime_root / "selected-owned.a")
+
+    monkeypatch.setattr(owned, "ensure_target_runtime", ensure)
+    assert pipeline._ensure_runtime(False) == str(runtime_root / "selected-owned.a")
+    assert len(calls) == 1 and calls[0][0:2] == (str(runtime_root), target)
+    assert calls[0][2]["packaged_archive"] == pipeline._PY_RUNTIME_ARCHIVE_PCC_PY
+    assert calls[0][2]["wheel_matches"] is pipeline._runtime_archive_wheel_stamp_matches
+
+
+@pytest.mark.parametrize("entry", ["default", "explicit"])
+def test_native_make_oracle_rejected_before_runtime_commands(runtime_root, monkeypatch, entry):
+    from pcc.frontends.python import pipeline
+
+    monkeypatch.setenv("PCC_RUNTIME_BUILD", "make")
+    monkeypatch.setattr(selection, "sys", SimpleNamespace(implementation=SimpleNamespace(name="pcc")))
+    monkeypatch.setattr(owned, "ensure_target_runtime", _forbidden)
+    monkeypatch.setattr(pipeline, "_run_runtime_make", _forbidden)
+    with pytest.raises(pipeline.PyPipelineError, match="native pcc1 requires the owned runtime builder"):
+        if entry == "default":
+            pipeline._ensure_runtime(False)
+        else:
+            pipeline._explicit_runtime_archive(str(runtime_root / "unused.a"))
+
+
+def test_explicit_make_host_reference_is_labelled_and_selected_only_explicitly(runtime_root, monkeypatch, capsys):
+    target = "arm64-apple-darwin"
+    monkeypatch.setenv("PCC_RUNTIME_BUILD", "make")
+    monkeypatch.setattr(pipeline_targets, "host_target_triple", lambda: target)
+    monkeypatch.setattr(owned, "ensure_target_runtime", _forbidden)
+    calls = []
+    monkeypatch.setattr(selection, "_ensure_runtime_make_reference", lambda *args, **kwargs: calls.append(kwargs) or "reference.a")
+    assert selection.ensure_runtime(False, **_selection_options(runtime_root)) == "reference.a"
+    assert len(calls) == 1
+    assert "explicit host runtime reference oracle PCC_RUNTIME_BUILD=make" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", ["cc", "fallback", "invalid"])
+def test_runtime_builder_selector_rejects_unknown_modes_before_construction(runtime_root, monkeypatch, value):
+    monkeypatch.setenv("PCC_RUNTIME_BUILD", value)
+    monkeypatch.setattr(owned, "ensure_target_runtime", _forbidden)
+    with pytest.raises(selection.RuntimeArchiveError, match="invalid PCC_RUNTIME_BUILD"):
+        selection.ensure_runtime(False, **_selection_options(runtime_root))
+
+
+def test_owned_runtime_frontend_uses_runtime_pass_policy_and_restores_application_env(tmp_path, monkeypatch):
+    from pcc.frontends.python import pipeline
+
+    monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "application-only")
+    monkeypatch.setenv("PCC_RUNTIME_PYTHON_IR_PASSES", "mem2reg,sroa")
+    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "1")
+    monkeypatch.setenv("PCC_WITH_THREADS", "1")
+    observed = []
+
+    def compile_module(source, output, **options):
+        import os
+        observed.append((os.environ.get("PCC_PYTHON_IR_PASSES"),
+                         os.environ.get("PCC_IMPLICIT_THREAD_SAFEPOINTS"),
+                         os.environ.get("PCC_DIRECT_INDEXED_KERNEL_CAPTURE"), options))
+
+    monkeypatch.setattr(pipeline, "compile_python", compile_module)
+    owned._compile_runtime_module(owned._THREAD_KERNEL_MODULE, "source.py", str(tmp_path / "module.ll"), TARGETS[3])
+    import os
+    assert observed[0][0:3] == ("mem2reg,sroa", "0", None)
+    assert observed[0][3] == dict(emit_llvm_only=True, python_library=True, libpython_mode="off", backend="self", target_triple=TARGETS[3])
+    assert os.environ["PCC_PYTHON_IR_PASSES"] == "application-only"
+    assert os.environ["PCC_WITH_THREADS"] == "1"
+    assert os.environ["PCC_DIRECT_INDEXED_KERNEL_CAPTURE"] == "1"
+
+
+def test_simulated_owned_darwin_builder_preserves_public_and_private_capi_inventory(runtime_root, monkeypatch):
+    from pcc.backend.macho_obj import Section, TextSymbol, emit_object
+    from pcc.backend import owned_object_emit
+    from pcc.ir.optimization import driver as optimizer
+
+    with (runtime_root / "Makefile").open("a") as stream:
+        stream.write("PCC_RUNTIME_IR_PASSES ?= mem2reg,sroa\n")
+    target = TARGETS[3]
+    names = owned.runtime_modules(str(runtime_root), target)
+    emitted = []
+
+    def compile_member(name, source, output, selected_target):
+        assert selected_target == target
+        Path(source).parent.mkdir(exist_ok=True)
+        Path(source).write_text("# simulated runtime frontend source\n")
+        Path(output).write_text("; " + name + "\n")
+
+    def emit_member(text, selected_target):
+        assert selected_target == target
+        emitted.append(text)
+        return emit_object([Section(sectname="__data", segname="__DATA", data=bytes(16),
+                                    symbols=(TextSymbol("_PyPublic", 0), TextSymbol("__PyPrivate", 8)))])
+
+    # Parent-local mocks exercise the serial build, not worker processes.
+    monkeypatch.setenv("PCC_RUNTIME_BUILD_JOBS", "1")
+    monkeypatch.setattr(owned, "_compile_runtime_module", compile_member)
+    monkeypatch.setattr(optimizer, "optimize_ir", lambda text, passes: text)
+    monkeypatch.setattr(owned_object_emit, "emit_owned_object", emit_member)
+    monkeypatch.setattr(selection.subprocess, "run", _forbidden)
+    monkeypatch.setattr(provenance, "codegen_checksum", lambda: "0" * 64)
+    archive = runtime_root / "simulated.a"
+    owned.build_runtime_archive(str(runtime_root), str(archive), target)
+    assert len(emitted) == len(names)
+    assert Path(str(archive) + ".capi_syms").read_text() == "_PyPublic\n__PyPrivate\n"
+    receipt = provenance.verify_runtime_archive_manifest(archive, runtime_root=runtime_root)
+    assert owned._manifest_matches_config(receipt, str(runtime_root), target, owned.runtime_build_config())
+
+
+@pytest.mark.parametrize("tamper", ["target_stamp", "archive", "manifest", "inventory"])
+def test_darwin_wheel_shortcut_rejects_wrong_target_or_mutated_payload(runtime_root, monkeypatch, tamper):
+    target = TARGETS[3]
+    archive = runtime_root / "libpy_runtime_pcc_py.a"
+    target_id = "darwin:arm64:" + target
+    _write_wheel_bundle(archive, _manifest(runtime_root, target), target_id)
+    suffix = {"target_stamp": ".wheel", "archive": "", "manifest": ".provenance.json", "inventory": ".capi_syms"}[tamper]
+    path = Path(str(archive) + suffix)
+    if tamper == "target_stamp":
+        lines = path.read_text().splitlines()
+        lines[1] = "target=win32:x86_64:" + TARGETS[2]
+        path.write_text("\n".join(lines) + "\n")
+    else:
+        path.write_bytes(path.read_bytes() + b"tampered")
+    assert not selection.wheel_stamp_matches(str(archive), target_id)
+    calls = []
+
+    def reject(path, **options):
+        calls.append(str(path))
+        raise ValueError("unverified wheel must pass ordinary archive admission")
+
+    monkeypatch.setattr(provenance, "verify_runtime_archive_manifest", reject)
+    monkeypatch.setattr(owned, "build_runtime_archive", _forbidden)
+    with pytest.raises(ValueError, match="ordinary archive admission"):
+        owned.ensure_target_runtime(str(runtime_root), target, explicit_archive=str(archive),
+                                    wheel_matches=lambda candidate: selection.wheel_stamp_matches(candidate, target_id))
+    assert calls == [str(archive)]
 
 
 @pytest.mark.parametrize("config", [
@@ -256,6 +433,12 @@ def _write_real_archive(root, target):
             data = emit_object(CoffObject(
                 (CoffSection(".data", bytes(8), 0xC0000040, align=8),),
                 (CoffSymbol(symbol, 1),)))
+        elif "darwin" in target:
+            from pcc.backend.macho_obj import Section, TextSymbol, emit_object as emit_macho
+
+            data = emit_macho([Section(sectname="__data", segname="__DATA", data=bytes(8),
+                                       symbols=(TextSymbol("_" + symbol, 0),))])
+            symbols[-1] = "_" + symbol
         else:
             data = emit_relocatable(ElfObject(
                 (ElfSection(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, data=bytes(8)),),
@@ -278,7 +461,7 @@ def _write_real_archive(root, target):
 @pytest.mark.parametrize("target", TARGETS)
 @pytest.mark.parametrize("entry", ["argument-native", "argument-cross", "env-native", "env-cross"])
 def test_public_runtime_routes_validate_real_archive_config(runtime_root, monkeypatch, target, entry):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     monkeypatch.setattr(provenance, "codegen_checksum", lambda: "0" * 64)
     archive = _write_real_archive(runtime_root, target)
@@ -304,7 +487,9 @@ def test_public_runtime_routes_validate_real_archive_config(runtime_root, monkey
     import os
     previous = os.environ["PCC_RUNTIME_ARCHIVE"]
     assert select() == str(archive)
-    monkeypatch.setenv("PCC_WITH_THREADS", "1")
+    # Threads are the one configuration; a different refcount strategy is
+    # a configuration the archive was not built with.
+    monkeypatch.setenv("PCC_REFCOUNT_KIND", "biased")
     with pytest.raises(pipeline.PyPipelineError, match="target/source configuration"):
         select()
     assert os.environ["PCC_RUNTIME_ARCHIVE"] == previous

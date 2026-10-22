@@ -53,7 +53,7 @@ def _require_gate() -> Path:
     pcc1 = pcc1_binary()
     if not pcc1.is_file():
         pytest.fail(
-            f"self-host pcc1 binary required: {pcc1} (set PCC1_BINARY or build via scripts/bootstrap.sh --stage 1)"
+            f"self-host pcc1 binary required: {pcc1} (set PCC1_BINARY or build via scripts/bootstrap.py --stage 1)"
         )
     if not WHEEL_FIXTURE.is_file():
         pytest.fail(f"pure-Python wheel fixture required: {WHEEL_FIXTURE}")

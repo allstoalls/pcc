@@ -141,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--backend",
         default="self",
-        choices=("llvm", "llvm_capi", "self"),
+        choices=("self",),
     )
     parser.add_argument(
         "--python-libpython",
@@ -160,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
 
     source, expected_stdout = _typed_loop_source(args.n)
     pcc_cmd = shlex.split(args.pcc_cmd)
-    with tempfile.TemporaryDirectory(prefix="pcc_py_runtime_bench_") as tmp_name:
+    with tempfile.TemporaryDirectory(prefix="pcc_runtime_bench_") as tmp_name:
         tmp = Path(tmp_name)
         src = tmp / "typed_loop.py"
         out = tmp / "typed_loop.out"

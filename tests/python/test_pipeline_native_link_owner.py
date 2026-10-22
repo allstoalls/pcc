@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend import pipeline_native_link
+from pcc.frontends.python import pipeline
+from pcc.frontends.python import pipeline_native_link
 
 
 def test_native_link_export_policy_has_one_owner():

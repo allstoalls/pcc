@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def test_starred_unpack_from_sys_version_info_tuple(tmp_path):
@@ -26,7 +26,7 @@ def test_starred_unpack_from_sys_version_info_tuple(tmp_path):
     compile_python(
         str(src),
         str(exe),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )
@@ -57,7 +57,7 @@ def test_starred_unpack_from_dynamic_sequence(tmp_path):
     compile_python(
         str(src),
         str(exe),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )

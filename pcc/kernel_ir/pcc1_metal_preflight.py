@@ -48,7 +48,7 @@ _CTYPES_ATTRIBUTE_BLOCKERS = {
 }
 
 _MODULE_PHASES = {
-    "pcc.gpu_metal": "build",
+    "pcc.backend.metal": "build",
 }
 
 

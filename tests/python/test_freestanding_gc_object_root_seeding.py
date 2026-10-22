@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import (
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import (
     FREESTANDING_GC_RUNTIME_GLOBALS,
     RUNTIME_SIGNATURES,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 SEED_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_object_root_seeding.py"
 MANAGED_SOURCE = RUNTIME_DIR / "py" / "py_gc_backend.py"
 MAKEFILE = RUNTIME_DIR / "Makefile"
@@ -24,6 +24,7 @@ OWNED_SYMBOLS = {
     "pcc_gc_prepare_object_list_mark",
 }
 RAW_FUNCTION_IMPORTS = {
+    "pcc_gc_object_is_address_pinned",
     "pcc_gc_gray_count_store_release",
     "pcc_gc_mark_root_gray_if_known",
     "pcc_gc_visit_registered_root_slots",
@@ -185,10 +186,10 @@ int main(void) {
 
 
 def test_archive_owns_object_root_seeding_and_executes_semantics(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ):
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -215,7 +216,7 @@ def test_archive_owns_object_root_seeding_and_executes_semantics(
             f"-I{RUNTIME_DIR / 'include'}",
             f"-I{RUNTIME_DIR / 'src'}",
             str(source),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-pthread",
             "-o",
             str(executable),

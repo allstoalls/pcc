@@ -4,7 +4,7 @@ import textwrap
 
 
 def test_class_method_symbol_avoids_top_level_wrapper_collision(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "symbol_collision.py"
     out = tmp_path / "symbol_collision.ll"
@@ -38,7 +38,7 @@ def test_class_method_symbol_avoids_top_level_wrapper_collision(tmp_path):
 
 
 def test_extern_class_method_symbol_preserves_wrapper_collision(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     lib_src = tmp_path / "lib.py"
     main_src = tmp_path / "main.py"
@@ -88,7 +88,7 @@ def test_extern_class_method_symbol_preserves_wrapper_collision(tmp_path):
 
 
 def test_extern_subclass_preserves_untyped_inherited_slot_order(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     lib_src = tmp_path / "ir_mod.py"
     main_src = tmp_path / "main.py"

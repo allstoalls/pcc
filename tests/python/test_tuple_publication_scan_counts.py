@@ -12,7 +12,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-RUNTIME = ROOT / "pcc/py_runtime"
+RUNTIME = ROOT / "pcc/runtime"
 FRESH_ALLOC = 16384
 
 
@@ -114,7 +114,7 @@ class _PortMemory:
 @pytest.mark.parametrize("backend", range(5))
 @pytest.mark.parametrize("initialized", [True, False])
 def test_python_port_completion_reads_and_publication_order(monkeypatch, backend, initialized):
-    from pcc.py_runtime.py import py_tuple
+    from pcc.runtime.py import py_tuple
 
     memory = _PortMemory(py_tuple, backend, initialized)
     memory.install(monkeypatch)
@@ -146,7 +146,7 @@ def test_python_port_completion_reads_and_publication_order(monkeypatch, backend
 
 @pytest.mark.parametrize("backend", range(5))
 def test_python_port_empty_null_and_invalid_stores_keep_publication_guards(monkeypatch, backend):
-    from pcc.py_runtime.py import py_tuple
+    from pcc.runtime.py import py_tuple
 
     memory = _PortMemory(py_tuple, backend, True)
     memory.install(monkeypatch)
@@ -167,7 +167,7 @@ def test_python_port_empty_null_and_invalid_stores_keep_publication_guards(monke
 
 
 def test_python_port_publication_backend_is_selected_per_call(monkeypatch):
-    from pcc.py_runtime.py import py_tuple
+    from pcc.runtime.py import py_tuple
 
     memory = _PortMemory(py_tuple, 0, True)
     memory.install(monkeypatch)
@@ -202,7 +202,7 @@ def test_python_port_publication_backend_is_selected_per_call(monkeypatch):
 def test_python_port_gc4_fill_orders_scan_in_linear_total(monkeypatch, order, expected):
     """Scanning every slot on every store made an n-item tuple O(n^2) load
     barriers under GC4; both common fill orders now stay O(1) per store."""
-    from pcc.py_runtime.py import py_tuple
+    from pcc.runtime.py import py_tuple
 
     memory = _PortMemory(py_tuple, 4, True)
     memory.install(monkeypatch)
@@ -218,8 +218,8 @@ def test_python_port_gc4_fill_orders_scan_in_linear_total(monkeypatch, order, ex
 
 
 def test_python_port_none_object_fills_a_slot_but_null_pointer_does_not(monkeypatch):
-    from pcc.py_runtime.py import py_tuple
-    from pcc.py_runtime.py.py_abi_constants import PY_TYPE_NONE
+    from pcc.runtime.py import py_tuple
+    from pcc.runtime.py.py_abi_constants import PY_TYPE_NONE
 
     memory = _PortMemory(py_tuple, 4, True)
     memory.install(monkeypatch)
@@ -291,7 +291,7 @@ int main(int argc, char **argv) {
 
 
 @pytest.fixture(scope="module")
-def tuple_publication_probe(tmp_path_factory, pcc_py_runtime_archive):
+def tuple_publication_probe(tmp_path_factory, pcc_runtime_archive):
     tmp_path = tmp_path_factory.mktemp("tuple_publication_probe")
     driver = tmp_path / "driver.c"
     driver.write_text(_C_DRIVER, encoding="utf-8")
@@ -305,7 +305,7 @@ def tuple_publication_probe(tmp_path_factory, pcc_py_runtime_archive):
             f"-I{RUNTIME / 'include'}",
             f"-I{RUNTIME / 'src'}",
             str(driver),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(executable),

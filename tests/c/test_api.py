@@ -2,9 +2,16 @@
 
 import ctypes
 import os
+import platform
 import tempfile
 
 import pytest
+
+
+_SHARED_HOST = os.sys.platform == "darwin" and platform.machine() == "arm64"
+_OWNED_SHARED_GATE = pytest.mark.pcc_gate(
+    unavailable=None if _SHARED_HOST else "owned shared libraries currently require Darwin arm64"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -67,6 +74,7 @@ class TestBuild:
         r = subprocess.run([artifact.output_path], capture_output=True)
         assert r.returncode == 0
 
+    @_OWNED_SHARED_GATE
     def test_build_sharedlib(self, simple_c):
         from pcc import build
         artifact = build(simple_c, kind="sharedlib")
@@ -82,6 +90,7 @@ class TestBuild:
         assert os.path.isfile(artifact.output_path)
         assert artifact.output_path.endswith(".o")
 
+    @_OWNED_SHARED_GATE
     def test_build_with_out_dir(self, simple_c, tmp_path):
         from pcc import build
         out = tmp_path / "output"
@@ -100,6 +109,7 @@ class TestBuild:
         r = subprocess.run([artifact.output_path], capture_output=True)
         assert r.returncode == 0
 
+    @_OWNED_SHARED_GATE
     def test_build_with_libs(self, tmp_path):
         from pcc import build
         src = tmp_path / "use_math.c"
@@ -136,13 +146,22 @@ class TestBuild:
         with pytest.raises(ValueError, match="unsupported kind"):
             build(simple_c, kind="invalid")
 
+    @_OWNED_SHARED_GATE
     def test_build_records_backend(self, simple_c):
         from pcc import build
 
-        artifact = build(simple_c, kind="sharedlib", backend="llvm")
+        artifact = build(simple_c, kind="sharedlib", backend="self")
 
-        assert artifact.backend == "llvm"
+        assert artifact.backend == "self"
 
+    @pytest.mark.parametrize("backend", ["llvm", "llvm_capi"])
+    def test_build_rejects_external_backend(self, simple_c, backend):
+        from pcc import build
+
+        with pytest.raises(ValueError, match="expected one of: self"):
+            build(simple_c, kind="sharedlib", backend=backend)
+
+    @_OWNED_SHARED_GATE
     def test_build_self_backend_sharedlib(self, simple_c):
         from pcc import build
 
@@ -160,6 +179,7 @@ class TestBuild:
 # ---------------------------------------------------------------------------
 
 class TestModule:
+    pytestmark = _OWNED_SHARED_GATE
 
     def test_module_call_function(self, simple_c):
         from pcc import module
@@ -204,6 +224,7 @@ class TestModule:
 # ---------------------------------------------------------------------------
 
 class TestDebugging:
+    pytestmark = _OWNED_SHARED_GATE
 
     def test_artifact_has_ir_text(self, simple_c):
         from pcc import build
@@ -232,6 +253,7 @@ class TestDebugging:
 # ---------------------------------------------------------------------------
 
 class TestCacheReuse:
+    pytestmark = _OWNED_SHARED_GATE
 
     def test_build_cache_reuse(self, simple_c):
         from pcc import build

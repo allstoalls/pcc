@@ -1,7 +1,7 @@
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def test_for_loop_falls_back_to_object_iterator_for_pointer_typed_iterable(tmp_path):

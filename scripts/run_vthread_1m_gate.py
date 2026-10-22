@@ -2,7 +2,7 @@
 """Build and run the production-runtime virtual-thread scale gate.
 
 The C harness links the pcc-Python runtime archive: ``PCC_RUNTIME_ARCHIVE``
-when set, otherwise a private copy of ``pcc/py_runtime`` built with ``make``.
+when set, otherwise a private copy of ``pcc/runtime`` built with ``make``.
 
 The default one-million run is manual-only and requires ``PCC_VTHREAD_1M=1``.
 Smaller ``--n`` values are intended only for focused regression coverage.
@@ -24,7 +24,7 @@ from typing import Any, Iterable
 
 
 REPO_ROOT = Path(__file__).absolute().parents[1]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 BENCHMARK_SOURCE = (
     REPO_ROOT / "tests" / "benchmarks" / "vthread" / "vthread_real_runtime.c"
 )

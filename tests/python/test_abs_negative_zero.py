@@ -36,7 +36,7 @@ EXPECTED = (
 
 
 def test_abs_of_negative_zero_is_positive_zero(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     source = tmp_path / "abs_negative_zero.py"
     source.write_text(PROGRAM, encoding="utf-8")
@@ -48,7 +48,7 @@ def test_abs_of_negative_zero_is_positive_zero(
     binary = tmp_path / "abs_negative_zero"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         ran = subprocess.run(

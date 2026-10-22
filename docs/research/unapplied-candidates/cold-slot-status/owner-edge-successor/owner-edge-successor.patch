@@ -1,0 +1,237 @@
+--- a/tests/python/test_slot_call_status_reporting_native.py
++++ b/tests/python/test_slot_call_status_reporting_native.py
+@@ -6,6 +6,7 @@
+ """
+ from __future__ import annotations
+ 
++import ast
+ import json
+ import os
+ import hashlib
+@@ -202,6 +203,173 @@
+ '''
+ 
+ 
++def _object_call_lines():
++    # Derive the three sites from the unchanged source rather than generated
++    # temporary names. A nested Temporary constructor is a different call.
++    tree = ast.parse(_PROGRAM)
++    main = next(node for node in tree.body
++                if isinstance(node, ast.FunctionDef) and node.name == "main")
++    lines = {node.lineno for node in ast.walk(main)
++             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
++             and node.func.id in {"takes", "fails"} and node.keywords}
++    assert len(lines) == 3
++    return lines
++
++
++def _capture_actual_status_edges(source, monkeypatch):
++    """Observe existing lowering without replacing its call or cleanup logic."""
++    from pcc.backend.self_backend_parse import decode_ssa_name
++
++    generated = []
++    witnesses = []
++    expected_lines = _object_call_lines()
++    source = source.resolve()
++    original_generate = L1CodeGen.generate
++    original_check = L1CodeGen._slot_call_check_status
++    key = "__pcc_slot_call_status_report"
++
++    def observe_check(self, status, operation, span=None):
++        witness = None
++        definition = self.current_func_def
++        if (operation == "object call" and definition is not None
++                and definition.name == "main" and span is not None
++                and span.line in expected_lines and Path(span.file).resolve() == source):
++            target = self._current_try_err_block()
++            assert target is not None, "Expected the actual operand-cleanup block"
++            before = tuple(str(instruction) for instruction in target.instructions)
++            witness = {
++                "instance": self,
++                "owner": self.current_function.name,
++                "line": span.line,
++                "status": decode_ssa_name(str(status)),
++                "status_block": self.builder.block.name,
++                "cleanup": target.name,
++            }
++        result = original_check(self, status, operation, span)
++        if witness is not None:
++            assert tuple(str(instruction) for instruction in target.instructions) == before
++            witness["helper"] = self.runtime[key].name
++            witness["ready"] = self.builder.block.name
++            witnesses.append(witness)
++        return result
++
++    def capture(self, module=None):
++        text = original_generate(self, module)
++        local = [dict(witness) for witness in witnesses if witness["instance"] is self]
++        if local:
++            owner = self.functions["main"].name
++            assert all(witness["owner"] == owner for witness in local)
++            for witness in local:
++                del witness["instance"]
++            generated.append({"owner": owner, "text": str(text), "witnesses": local,
++                              "target_triple": str(self.module.triple)})
++        return text
++
++    monkeypatch.setattr(L1CodeGen, "_slot_call_check_status", observe_check)
++    monkeypatch.setattr(L1CodeGen, "generate", capture)
++    return generated
++
++
++def _assert_actual_status_edges(capture):
++    """Prove actual instructions in main, never declarations or other owners."""
++    from pcc.backend.self_backend_kernel import get_indexed_function_kernel
++    from pcc.backend.self_backend_parse import parse_self_backend_module
++
++    parsed = parse_self_backend_module(capture["text"])
++    assert parsed.triple == capture["target_triple"]
++    owners = [function for function in parsed.functions if function.name == capture["owner"]]
++    assert len(owners) == 1
++    kernel = get_indexed_function_kernel(owners[0])
++    blocks = {
++        name: ([kernel.diagnostic_instruction(block_id, index)
++                for index in range(kernel.instruction_count(block_id))],
++               kernel.diagnostic_terminator(block_id))
++        for block_id, name in enumerate(kernel.block_names)
++    }
++    witnesses = capture["witnesses"]
++    assert len(witnesses) == 3
++    assert {witness["line"] for witness in witnesses} == _object_call_lines()
++    rows = []
++    for witness in witnesses:
++        assert witness["owner"] == capture["owner"]
++        instructions, branch = blocks[witness["status_block"]]
++        calls = [instruction.data for instruction in instructions
++                 if instruction.kind == "call" and instruction.data[0] == witness["status"]]
++        assert len(calls) == 1
++        call = calls[0]
++        assert call[1].is_int and call[1].width == 64
++        assert call[2:4] == ("py_obj_call_slots", False)
++        assert len(call[4]) == 4
++        assert all(ty.is_ptr and value != "null" for ty, value in call[4])
++        comparisons = [instruction.data for instruction in instructions
++                       if instruction.kind == "icmp" and instruction.data[0] == "slt"
++                       and instruction.data[3:] == (witness["status"], "0")]
++        assert len(comparisons) == 1
++        comparison = comparisons[0]
++        assert comparison[2].is_int and comparison[2].width == 64
++        assert branch.kind == "br_cond" and branch.data[0] == comparison[1]
++        error_name, ready_name = branch.data[1:]
++        assert error_name != ready_name and ready_name == witness["ready"]
++        error_instructions, error_branch = blocks[error_name]
++        reporters = [instruction.data for instruction in error_instructions
++                     if instruction.kind == "call" and instruction.data[2] == witness["helper"]]
++        assert len(reporters) == 1
++        reporter = reporters[0]
++        assert reporter[0] is None and reporter[1].is_void and not reporter[3]
++        assert len(reporter[4]) == 6
++        assert all(ty.is_ptr for ty, _ in reporter[4][:4])
++        line_type, line = reporter[4][4]
++        frame_type, frame = reporter[4][5]
++        assert line_type.is_int and line_type.width == 32 and line == str(witness["line"])
++        assert frame_type.is_int and frame_type.width == 1 and frame == "1"
++        assert error_branch.kind == "br" and error_branch.data == (witness["cleanup"],)
++        ready_instructions, _ = blocks[ready_name]
++        assert not any(instruction.kind == "call" and instruction.data[2] == witness["helper"]
++                       for instruction in ready_instructions)
++        cleanup_instructions, cleanup_branch = blocks[witness["cleanup"]]
++        cleanup_calls = [instruction.data for instruction in cleanup_instructions
++                         if instruction.kind == "call"]
++        cleanup_names = [call[2] for call in cleanup_calls]
++        clears = [call for call in cleanup_calls if call[2] == "pcc_gc_store_root"]
++        # Callable, positional tuple and kwargs are owned caller slots; an
++        # output sink may stay owned by the enclosing operation instead.
++        assert len(clears) >= 3
++        assert all(len(call[4]) == 2 and call[4][1][1] == "null" for call in clears)
++        assert cleanup_names == (
++            ["pcc_gc_frame_enter_lifo", "py_tls_exc_swap_slot"]
++            + ["pcc_gc_store_root"] * len(clears)
++            + ["py_clear_exception", "py_tls_exc_swap_slot"]
++            + ["pcc_gc_frame_leave_lifo"] * (len(clears) + 1)
++        )
++        aliases = {instruction.data[1]: instruction.data[3]
++                   for instruction in cleanup_instructions
++                   if instruction.kind == "cast" and instruction.data[0] == "bitcast"
++                   and instruction.data[2].is_ptr and instruction.data[4].is_ptr}
++
++        def root_slot(value):
++            seen = set()
++            while value in aliases:
++                assert value not in seen, "Cyclic pointer aliases in cleanup"
++                seen.add(value)
++                value = aliases[value]
++            return value
++
++        swaps = [call for call in cleanup_calls if call[2] == "py_tls_exc_swap_slot"]
++        assert all(len(call[4]) == 1 and call[4][0][0].is_ptr for call in swaps)
++        exception_slot = root_slot(swaps[0][4][0][1])
++        assert root_slot(swaps[1][4][0][1]) == exception_slot
++        assert root_slot(cleanup_calls[0][4][1][1]) == exception_slot
++        leaves = [call for call in cleanup_calls if call[2] == "pcc_gc_frame_leave_lifo"]
++        assert root_slot(leaves[0][4][0][1]) == exception_slot
++        assert [root_slot(call[4][0][1]) for call in leaves[1:]] == [
++            root_slot(call[4][0][1]) for call in clears
++        ]
++        assert cleanup_branch.kind == "br"
++        rows.append(dict(witness, error=error_name, cleanup_calls=cleanup_names,
++                         cleanup_successor=cleanup_branch.data[0]))
++    return rows
++
++
+ @pytest.mark.integration
+ @pytest.mark.parametrize("python_program_compiler", ("pcc0",), indirect=True)
+ def test_production_callsite_temporaries_exception_and_gc(
+@@ -210,33 +378,36 @@
+     source, _ = assert_reference_program(_PROGRAM, "slot-status-owned-callsite-ok\n", tmp_path)
+     for key in ("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "PCC_DIRECT_INDEXED_KERNEL_EMIT"):
+         monkeypatch.setenv(key, "0")
+-    generated = []
+-    original_generate = L1CodeGen.generate
+-
+-    def capture(self, module=None):
+-        text = original_generate(self, module)
+-        if "__pcc_slot_call_status_report" in self.runtime:
+-            generated.append(str(text))
+-        return text
+-
+-    monkeypatch.setattr(L1CodeGen, "generate", capture)
++    target = host_target_triple()
++    generated = _capture_actual_status_edges(source, monkeypatch)
+     executable = tmp_path / "ordinary-callsite"
+     try:
++        # An explicit host target selects the supported in-process frontend
++        # branch for the full ordinary import closure. Default multi-module
++        # worker subprocesses would not inherit these observation wrappers.
+         python_program_compiler(str(source), str(executable), backend="self", libpython_mode="off",
+-                                ir_scaffold_mode="on", runtime_archive=str(explicit_owned_runtime))
++                                ir_scaffold_mode="on", runtime_archive=str(explicit_owned_runtime),
++                                target_triple=target)
+     finally:
+         captured = capfd.readouterr()
+         (tmp_path / "compiler.stdout").write_text(captured.out)
+         (tmp_path / "compiler.stderr").write_text(captured.err)
+-    assert generated, "No actual host compiler-generated helper was observed"
+-    text = "\n".join(generated)
++    assert len(generated) == 1, "Expected one actual program-main lowering witness"
++    capture = generated[0]
++    assert capture["target_triple"] == target
++    text = capture["text"]
+     (tmp_path / "actual-generated.ll").write_text(text)
+-    assert "@py_obj_call_slots(" in text
+-    assert "@pcc_gc_frame_enter_lifo(" in text
+-    assert "@py_cleanup_one_root_preserving_exception(" in text or "@py_tls_exc_swap_slot(" in text
++    # Persist observations before checking them, including a failed edge proof.
++    (tmp_path / "observed-status-edges.json").write_text(
++        json.dumps(capture["witnesses"], indent=2) + "\n"
++    )
++    edges = _assert_actual_status_edges(capture)
++    (tmp_path / "verified-status-edges.json").write_text(json.dumps(edges, indent=2) + "\n")
+     assert executable.is_file()
+     (tmp_path / "identity.json").write_text(json.dumps({
+         "compiler_mode": "host-pcc0-production-pipeline",
++        "frontend_route": "explicit-host-target/in-process/full-import-closure",
++        "target_triple": target,
+         "program_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+         "runtime_sha256": hashlib.sha256(explicit_owned_runtime.read_bytes()).hexdigest(),
+         "binary_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),

@@ -14,7 +14,7 @@ from pcc.package.uv_lock_sync import (
     project_uv_lock,
     sync_uv_lock,
 )
-from pcc.package_environment import environment_info_json, resolve_package_environment
+from pcc.package.environment import environment_info_json, resolve_package_environment
 
 
 def _write_package(root: Path, name: str, value: int) -> None:

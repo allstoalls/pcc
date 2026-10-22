@@ -19,6 +19,19 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+
+INLINE_REGEX_PROGRAM = '''import re
+def main():
+    named = re.compile(r"(?P<word>a)")
+    assert named.match("a").group("word") == "a"
+    inline = re.compile(r"(?im)^a b$", flags=re.VERBOSE)
+    assert inline.search("prefix\\nAB").group(0) == "AB"
+    print("INLINE_REGEX_OWNER_OK")
+main()
+'''
+
 DISPATCH = (
     "import os\n"
     "N = int(os.environ.get('BENCH_N', '1000'))\n"
@@ -69,7 +82,10 @@ def test_every_pooled_literal_is_registered_once_before_module_code(tmp_path):
     assert m, "static literal init function missing"
     body = m.group(1)
     calls = re.findall(r"@pcc_gc_pointer_register\(", body)
-    registered = re.findall(r"bitcast ptr (@\.pystr\.obj\.\d+) to ptr", body)
+    # Each registration names its literal directly or through an identity alias.
+    aliases = dict(re.findall(r"(%[\w.]+) = bitcast ptr (@\.pystr\.obj\.\d+) to ptr", body))
+    registered = [aliases.get(argument, argument)
+                  for argument in re.findall(r"@pcc_gc_pointer_register\(ptr ([%@][\w.]+)", body)]
     assert len(calls) == len(pooled), (len(calls), len(pooled))
     assert set(registered) == {name.split(" ")[0] for name in pooled}, (registered, pooled)
     # Guarded: a second call must not re-register.
@@ -86,6 +102,7 @@ def test_every_pooled_literal_is_registered_once_before_module_code(tmp_path):
     assert init_pos < first_user_use, "static literals must be registered before module code runs"
 
 
+@pytest.mark.integration
 def test_dispatch_program_matches_cpython_on_every_backend(tmp_path):
     src, exe = _compile(tmp_path, "dispatch", DISPATCH, emit_llvm=False)
     env = _env()
@@ -96,3 +113,56 @@ def test_dispatch_program_matches_cpython_on_every_backend(tmp_path):
         run = subprocess.run([str(exe)], text=True, capture_output=True, timeout=60, env=env)
         assert run.returncode == 0, (backend, run.stderr)
         assert run.stdout == expected, (backend, run.stdout, expected)
+
+
+@pytest.mark.parametrize("target", [
+    "arm64-apple-darwin", "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu", "x86_64-pc-windows-msvc",
+])
+def test_c_abi_library_registers_literals_before_direct_entry(tmp_path, monkeypatch, target):
+    from pcc.backend.owned_object_emit import emit_owned_object
+    from pcc.frontends.python.pipeline import compile_python
+    from pcc.ir.optimization.driver import optimize_ir
+
+    monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
+    source = tmp_path / "literal_library.py"
+    output = tmp_path / "literal_library.ll"
+    source.write_text('''__pcc_runtime_port__ = True
+from pcc.extern import c_abi_export
+@c_abi_export("literal_marker")
+def literal_marker(value: str) -> bool:
+    return value == "marker"
+''')
+    compile_python(str(source), str(output), backend="self", libpython_mode="off",
+                   emit_llvm_only=True, python_library=True, target_triple=target)
+    text = output.read_text()
+    has_ctor = "@llvm.global_ctors = appending global" in text
+    assert has_ctor
+    ctor = re.search(r"^@llvm\.global_ctors = .*", text, re.M)
+    assert ctor is not None
+    assert "@_pcc_py_static_literals_literal_library" in ctor.group()
+    optimized = optimize_ir(text, "mem2reg,sroa,instsimplify,inline-defined,instsimplify,instcombine,dce")
+    retained_init = "define internal void @_pcc_py_static_literals_literal_library()" in optimized
+    assert retained_init
+    assert emit_owned_object(optimized, target)
+
+
+@pytest.mark.integration
+def test_runtime_regex_literals_have_provenance_on_every_backend(
+    tmp_path, pcc_runtime_archive, python_program_compiler,
+):
+    source = tmp_path / "regex_literal_owner.py"
+    binary = tmp_path / "regex_literal_owner"
+    source.write_text(INLINE_REGEX_PROGRAM)
+    python_program_compiler(
+        str(source), str(binary), backend="self", libpython_mode="off",
+        runtime_archive=str(pcc_runtime_archive),
+    )
+    for backend in range(5):
+        environment = _env()
+        environment.update(PCC_GC_BACKEND=str(backend), PCC_GC_REFCOUNT_PROVENANCE_PROBE="2")
+        result = subprocess.run([str(binary)], env=environment, capture_output=True,
+                                text=True, timeout=30)
+        assert result.returncode == 0, (backend, result.stderr)
+        assert result.stdout == "INLINE_REGEX_OWNER_OK\n"
+        assert result.stderr == ""

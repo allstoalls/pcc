@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from pcc.gpu_metal import MetalCompileError, MetalToolchainUnavailable
+from pcc.backend.metal import MetalCompileError, MetalToolchainUnavailable
 from pcc.kernel_ir.cpu_reference import KernelCpuReferenceError
 from pcc.kernel_ir.hmm_fence import PccBufferHandle, PccPackedArgs
 from pcc.kernel_ir.ir import (

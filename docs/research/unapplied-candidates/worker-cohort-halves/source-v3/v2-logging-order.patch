@@ -1,0 +1,16 @@
+--- a/pcc/frontends/python/worker_process_pool.py
++++ b/pcc/frontends/python/worker_process_pool.py
+@@ -153,11 +153,11 @@
+             + " reservation_bytes=" + str(reservation)
+             + " available_bytes=" + str(available)
+             + " peak_bytes=" + str(peak)
++            + " monotonic_s=" + str(time.monotonic())
+             + " input_count=" + str(len(inputs))
+             + " inputs=" + repr(inputs[:8])
+             + " class_sha256=" + class_digest
+-            + " cohort=" + str(cohort)
+-            + " monotonic_s=" + str(time.monotonic()) + "\n"
++            + " cohort=" + str(cohort) + "\n"
+         )
+         offset += 16
+     sys.stderr.flush()

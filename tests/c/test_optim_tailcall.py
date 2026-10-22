@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pcc.optim import OptimizationLog, is_tailcall_enabled, tailcall
+from pcc.library.optim import OptimizationLog, is_tailcall_enabled, tailcall
 
 
 def test_tailcall_decorator_marks_function_without_wrapping_identity():

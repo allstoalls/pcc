@@ -8,26 +8,26 @@
       "kind": "MISMATCH",
       "observed": "AttributeError: args  (runtime traceback; e.args unsupported on a builtin PY_TYPE_EXC object). Even ValueError(\"x\").args and ValueError().args raise AttributeError.",
       "expected": "('bad value', 42) for two args; ('just one',) for one arg; () for ValueError()",
-      "root_cause": "pcc/py_runtime/src/py_obj_ops_dispatch.c py_obj_getattr() PY_TYPE_EXC branch (~lines 772-790) handles __class__/__cause__/__context__/value but has NO 'args' case, so it falls through to py_obj_missing_attr(name). The pcc-Python mirror pcc/py_runtime/py/py_obj_ops_dispatch.py getattr EXC block (~lines 1087-1108) has the same omission. Note: pcc stores only the FIRST constructor arg as PyExceptionObject->message (py_exc_new takes a single cstr), so the bounded faithful fix returns (message,) when message is a non-None object and () when message is None/py_None. The full multi-arg tuple is a separate deeper gap (see exc-multiarg finding).",
+      "root_cause": "pcc/runtime/src/py_obj_ops_dispatch.c py_obj_getattr() PY_TYPE_EXC branch (~lines 772-790) handles __class__/__cause__/__context__/value but has NO 'args' case, so it falls through to py_obj_missing_attr(name). The pcc-Python mirror pcc/runtime/py/py_obj_ops_dispatch.py getattr EXC block (~lines 1087-1108) has the same omission. Note: pcc stores only the FIRST constructor arg as PyExceptionObject->message (py_exc_new takes a single cstr), so the bounded faithful fix returns (message,) when message is a non-None object and () when message is None/py_None. The full multi-arg tuple is a separate deeper gap (see exc-multiarg finding).",
       "owning_files": [
-        "pcc/py_runtime/src/py_obj_ops_dispatch.c",
-        "pcc/py_runtime/py/py_obj_ops_dispatch.py"
+        "pcc/runtime/src/py_obj_ops_dispatch.c",
+        "pcc/runtime/py/py_obj_ops_dispatch.py"
       ],
       "proposed_edits": [
         {
-          "file": "pcc/py_runtime/src/py_obj_ops_dispatch.c",
+          "file": "pcc/runtime/src/py_obj_ops_dispatch.c",
           "old_string": "        } else if (strcmp(name, \"value\") == 0) {\n            result = pcc_gc_load_ptr(o, &e->message);\n            if (result == NULL) result = py_None;\n        }\n        if (result) py_incref(result);\n        if (result != NULL || py_err_occurred()) return result;\n        return py_obj_missing_attr(name);\n    }",
           "new_string": "        } else if (strcmp(name, \"value\") == 0) {\n            result = pcc_gc_load_ptr(o, &e->message);\n            if (result == NULL) result = py_None;\n        } else if (strcmp(name, \"args\") == 0) {\n            PyObject *msg = pcc_gc_load_ptr(o, &e->message);\n            if (msg != NULL && msg != py_None) {\n                PyObject *t = py_tuple_new(1);\n                if (t == NULL) return NULL;\n                py_tuple_set_item(t, 0, msg);\n                return t;\n            }\n            return py_tuple_new(0);\n        }\n        if (result) py_incref(result);\n        if (result != NULL || py_err_occurred()) return result;\n        return py_obj_missing_attr(name);\n    }",
           "note": "C tier. py_tuple_set_item increfs the stored item, so the freshly-built tuple is returned directly (refcount 1, owned) bypassing the trailing py_incref(result). args=='args' (a/r/g/s). py_tuple_new declared via py_runtime.h (already included)."
         },
         {
-          "file": "pcc/py_runtime/py/py_obj_ops_dispatch.py",
+          "file": "pcc/runtime/py/py_obj_ops_dispatch.py",
           "old_string": "def _cstr_is_value(s) -> int:\n    if strlen(s) != 5:\n        return 0\n    if load_i8(s, 0) != 118:\n        return 0\n    if load_i8(s, 1) != 97:\n        return 0\n    if load_i8(s, 2) != 108:\n        return 0\n    if load_i8(s, 3) != 117:\n        return 0\n    if load_i8(s, 4) != 101:\n        return 0\n    return 1",
           "new_string": "def _cstr_is_value(s) -> int:\n    if strlen(s) != 5:\n        return 0\n    if load_i8(s, 0) != 118:\n        return 0\n    if load_i8(s, 1) != 97:\n        return 0\n    if load_i8(s, 2) != 108:\n        return 0\n    if load_i8(s, 3) != 117:\n        return 0\n    if load_i8(s, 4) != 101:\n        return 0\n    return 1\n\n\ndef _cstr_is_args(s) -> int:\n    if strlen(s) != 4:\n        return 0\n    if load_i8(s, 0) != 97:\n        return 0\n    if load_i8(s, 1) != 114:\n        return 0\n    if load_i8(s, 2) != 103:\n        return 0\n    if load_i8(s, 3) != 115:\n        return 0\n    return 1",
           "note": "Port tier helper for 'args' (a=97 r=114 g=103 s=115, len 4). Mirrors _cstr_is_value byte-compare style."
         },
         {
-          "file": "pcc/py_runtime/py/py_obj_ops_dispatch.py",
+          "file": "pcc/runtime/py/py_obj_ops_dispatch.py",
           "old_string": "        elif _cstr_is_value(name) != 0:\n            result = pcc_gc_load_ptr(o, ptr_add(o, 24))\n            if ptr_is_null(result) != 0:\n                result = global_load_ptr(\"py_None\")\n        if ptr_is_null(result) == 0:\n            py_incref(result)\n            return result\n        if py_err_occurred() != 0:\n            return result\n        return _raise_attribute_error(name)\n    return _raise_attribute_error(name)",
           "new_string": "        elif _cstr_is_value(name) != 0:\n            result = pcc_gc_load_ptr(o, ptr_add(o, 24))\n            if ptr_is_null(result) != 0:\n                result = global_load_ptr(\"py_None\")\n        elif _cstr_is_args(name) != 0:\n            msg = pcc_gc_load_ptr(o, ptr_add(o, 24))\n            none_ref = global_load_ptr(\"py_None\")\n            if ptr_is_null(msg) == 0 and ptr_eq(msg, none_ref) == 0:\n                t = py_tuple_new(1)\n                if ptr_is_null(t) != 0:\n                    return null()\n                py_tuple_set_item(t, 0, msg)\n                return t\n            return py_tuple_new(0)\n        if ptr_is_null(result) == 0:\n            py_incref(result)\n            return result\n        if py_err_occurred() != 0:\n            return result\n        return _raise_attribute_error(name)\n    return _raise_attribute_error(name)",
           "note": "Port tier. ptr_add(o,24) is ->message. ptr_eq/py_tuple_new/py_tuple_set_item/null/global_load_ptr already imported in this module. Returns owned tuple directly (set_item increfs)."
@@ -42,13 +42,13 @@
       "kind": "MISMATCH",
       "observed": "pcc prints only 'outer v' (inner finally is SKIPPED when the exception does not match any handler and propagates)",
       "expected": "CPython prints 'inner finally' then 'outer v' (finally always runs before propagation)",
-      "root_cause": "pcc/py_frontend/codegen/exception_lowering.py _emit_try(), the 'propagate' path (~lines 517-525): when the last handler test fails the code positions at propagate_bb and branches straight to `outer` WITHOUT emitting stmt.finally_body first. The no-handlers+finally path (lines 413-418) already does emit finally before branching to outer with a pending exception; verified (probe exc5_25/exc5_26) that emitting finally on a pending-exception path works (multi-statement finally completes then re-propagates). The propagate path just omits the same call.",
+      "root_cause": "pcc/frontends/python/codegen/exception_lowering.py _emit_try(), the 'propagate' path (~lines 517-525): when the last handler test fails the code positions at propagate_bb and branches straight to `outer` WITHOUT emitting stmt.finally_body first. The no-handlers+finally path (lines 413-418) already does emit finally before branching to outer with a pending exception; verified (probe exc5_25/exc5_26) that emitting finally on a pending-exception path works (multi-statement finally completes then re-propagates). The propagate path just omits the same call.",
       "owning_files": [
-        "pcc/py_frontend/codegen/exception_lowering.py"
+        "pcc/frontends/python/codegen/exception_lowering.py"
       ],
       "proposed_edits": [
         {
-          "file": "pcc/py_frontend/codegen/exception_lowering.py",
+          "file": "pcc/frontends/python/codegen/exception_lowering.py",
           "old_string": "                self.builder.cbranch(cond, body_bb, propagate_bb)\n                next_test_bb = None\n                self.builder.position_at_end(propagate_bb)\n                outer = prev_err_block or self._ensure_fn_err_exit()\n                self.builder.branch(outer)",
           "new_string": "                self.builder.cbranch(cond, body_bb, propagate_bb)\n                next_test_bb = None\n                self.builder.position_at_end(propagate_bb)\n                if stmt.finally_body:\n                    self._emit_stmts(stmt.finally_body)\n                if not self._builder_block_is_terminated():\n                    outer = prev_err_block or self._ensure_fn_err_exit()\n                    self.builder.branch(outer)",
           "note": "Mirrors the proven no-handlers+finally path (lines 413-418). _try_err_block is already restored to prev_err_block at line 402 before dispatch, so any raising calls inside the finally re-propagate to outer correctly. Guard with _builder_block_is_terminated() in case the finally itself returns/raises."
@@ -63,33 +63,33 @@
       "kind": "MISMATCH",
       "observed": "On the continue/break iteration the try's finally is SKIPPED. continue probe: pcc prints iter 0,1,3,4 (missing 'iter 2'); break probe exc5_18 missing 'cleanup 3'; nested-loop inner-break exc5_20 missing 'fin x 1'. The loop control value (total/result) is correct, only finally is dropped.",
       "expected": "finally runs on every iteration including the one that does continue/break (CPython prints iter 2 / cleanup 3 / fin x 1)",
-      "root_cause": "pcc/py_frontend/codegen/stmt_dispatch_lowering.py Break/Continue handling (lines 212-223) branches directly to the loop's break/continue block without emitting any pending finally bodies. `return` runs them via ReturnLoweringMixin._emit_pending_finally_blocks(); break/continue have no equivalent. The fix must be LOOP-SCOPED: an outer try/finally wrapping a loop (probe exc5_19) must NOT run on an inner break -- so we record the loop-nesting depth at which each finally frame was pushed and, on break/continue, run only the frames pushed inside the current innermost loop (depth == len(self.loop_stack), since the loop is still on loop_stack during break/continue emit).",
+      "root_cause": "pcc/frontends/python/codegen/stmt_dispatch_lowering.py Break/Continue handling (lines 212-223) branches directly to the loop's break/continue block without emitting any pending finally bodies. `return` runs them via ReturnLoweringMixin._emit_pending_finally_blocks(); break/continue have no equivalent. The fix must be LOOP-SCOPED: an outer try/finally wrapping a loop (probe exc5_19) must NOT run on an inner break -- so we record the loop-nesting depth at which each finally frame was pushed and, on break/continue, run only the frames pushed inside the current innermost loop (depth == len(self.loop_stack), since the loop is still on loop_stack during break/continue emit).",
       "owning_files": [
-        "pcc/py_frontend/codegen/exception_lowering.py",
-        "pcc/py_frontend/codegen/return_lowering.py",
-        "pcc/py_frontend/codegen/stmt_dispatch_lowering.py"
+        "pcc/frontends/python/codegen/exception_lowering.py",
+        "pcc/frontends/python/codegen/return_lowering.py",
+        "pcc/frontends/python/codegen/stmt_dispatch_lowering.py"
       ],
       "proposed_edits": [
         {
-          "file": "pcc/py_frontend/codegen/exception_lowering.py",
+          "file": "pcc/frontends/python/codegen/exception_lowering.py",
           "old_string": "        try_log(\"finally stack begin\")\n        if stmt.finally_body:\n            finally_stack = list(getattr(self, \"_finally_stack\", ()))\n            finally_stack.append(stmt.finally_body)\n            self._finally_stack = finally_stack\n        try_log(\"finally stack end\")",
           "new_string": "        try_log(\"finally stack begin\")\n        if stmt.finally_body:\n            finally_stack = list(getattr(self, \"_finally_stack\", ()))\n            finally_stack.append((stmt.finally_body, len(self.loop_stack)))\n            self._finally_stack = finally_stack\n        try_log(\"finally stack end\")",
           "note": "Try-body push site. Entries become (finally_body, loop_depth_at_push). loop_depth = len(self.loop_stack) captured at the moment the try is entered."
         },
         {
-          "file": "pcc/py_frontend/codegen/exception_lowering.py",
+          "file": "pcc/frontends/python/codegen/exception_lowering.py",
           "old_string": "                self._active_handler_excs = active_excs\n            if stmt.finally_body:\n                finally_stack = list(getattr(self, \"_finally_stack\", ()))\n                finally_stack.append(stmt.finally_body)\n                self._finally_stack = finally_stack\n            try:\n                self._emit_stmts(h.body)",
           "new_string": "                self._active_handler_excs = active_excs\n            if stmt.finally_body:\n                finally_stack = list(getattr(self, \"_finally_stack\", ()))\n                finally_stack.append((stmt.finally_body, len(self.loop_stack)))\n                self._finally_stack = finally_stack\n            try:\n                self._emit_stmts(h.body)",
           "note": "Handler-body push site (disambiguated by the preceding `self._active_handler_excs = active_excs` line). Same tuple shape."
         },
         {
-          "file": "pcc/py_frontend/codegen/return_lowering.py",
+          "file": "pcc/frontends/python/codegen/return_lowering.py",
           "old_string": "        prev = self._emitting_finally\n        self._emitting_finally = True\n        idx = len(stack) - 1\n        while idx >= 0:\n            if self._builder_block_is_terminated():\n                self._emitting_finally = prev\n                self._return_log(\"finally terminated\")\n                return\n            self._emit_stmts(stack[idx])\n            idx -= 1\n        self._emitting_finally = prev\n        self._return_log(\"finally end\")",
           "new_string": "        prev = self._emitting_finally\n        self._emitting_finally = True\n        idx = len(stack) - 1\n        while idx >= 0:\n            if self._builder_block_is_terminated():\n                self._emitting_finally = prev\n                self._return_log(\"finally terminated\")\n                return\n            self._emit_stmts(stack[idx][0])\n            idx -= 1\n        self._emitting_finally = prev\n        self._return_log(\"finally end\")\n\n    def _emit_loop_scoped_finally_blocks(self) -> None:\n        \"\"\"Run finally bodies that belong to the current innermost loop.\n\n        For break/continue: only the try/finally frames opened INSIDE the\n        innermost loop must run (an outer try/finally wrapping the whole\n        loop runs via natural fall-through, not on break/continue). A frame\n        opened inside the current loop was pushed when len(self.loop_stack)\n        equalled its current value (the loop is still on the stack during\n        break/continue emission), so match on that depth.\n        \"\"\"\n        stack = self._finally_stack\n        if not stack or self._emitting_finally:\n            return\n        cur_depth = len(self.loop_stack)\n        prev = self._emitting_finally\n        self._emitting_finally = True\n        idx = len(stack) - 1\n        while idx >= 0:\n            if self._builder_block_is_terminated():\n                self._emitting_finally = prev\n                return\n            body, depth = stack[idx]\n            if depth == cur_depth:\n                self._emit_stmts(body)\n            idx -= 1\n        self._emitting_finally = prev",
           "note": "Updates the return-path reader to unpack the new (body, depth) tuple (return runs ALL frames regardless of depth -- correct, it exits the whole function), and adds the loop-scoped variant for break/continue."
         },
         {
-          "file": "pcc/py_frontend/codegen/stmt_dispatch_lowering.py",
+          "file": "pcc/frontends/python/codegen/stmt_dispatch_lowering.py",
           "old_string": "        if isinstance(stmt, Break):\n            if not self.loop_stack:\n                raise L1CodegenError(\"break outside loop\")\n            _, break_bb = self.loop_stack[-1]\n            self.builder.branch(break_bb)\n            return\n        if isinstance(stmt, Continue):\n            if not self.loop_stack:\n                raise L1CodegenError(\"continue outside loop\")\n            cont_bb, _ = self.loop_stack[-1]\n            self.builder.branch(cont_bb)\n            return",
           "new_string": "        if isinstance(stmt, Break):\n            if not self.loop_stack:\n                raise L1CodegenError(\"break outside loop\")\n            _, break_bb = self.loop_stack[-1]\n            self._emit_loop_scoped_finally_blocks()\n            if self._builder_block_is_terminated():\n                return\n            self.builder.branch(break_bb)\n            return\n        if isinstance(stmt, Continue):\n            if not self.loop_stack:\n                raise L1CodegenError(\"continue outside loop\")\n            cont_bb, _ = self.loop_stack[-1]\n            self._emit_loop_scoped_finally_blocks()\n            if self._builder_block_is_terminated():\n                return\n            self.builder.branch(cont_bb)\n            return",
           "note": "Run loop-scoped finally before branching. Guard with _builder_block_is_terminated() in case the finally body itself returns/raises/breaks."
@@ -104,24 +104,24 @@
       "kind": "MISMATCH",
       "observed": "AttributeError: __cause__ when reading e.__cause__ on a USER exception subclass instance. (And the `from e` cause is silently dropped: py_exc_set_cause is a no-op for non-PY_TYPE_EXC objects.)",
       "expected": "e.__cause__ is the KeyError (CPython prints 'cause type KeyError'); __context__ likewise.",
-      "root_cause": "User exception subclasses are PyInstanceObject (PY_TYPE_INSTANCE), not the builtin PyExceptionObject (PY_TYPE_EXC). (1) pcc/py_runtime/src/py_exc_objects.c py_exc_set_cause/py_exc_set_context early-return unless py_type_of(exc)==PY_TYPE_EXC, so `raise UserExc(...) from e` stores nothing on the user instance. (2) py_obj_ops_dispatch.c instance getattr has no __cause__/__context__ defaulting, so reading e.__cause__ on a user instance hits missing-attr -> AttributeError instead of the CPython default None. Bounded fix: make py_exc_set_cause/py_exc_set_context store onto a PY_TYPE_INSTANCE via py_obj_setattr(exc, \"__cause__\"/\"__context__\", v); and make instance getattr return py_None for __cause__/__context__ when unset. This is a both-tier runtime change (py_exc_objects.c + py_exc_objects.py, plus py_obj_ops_dispatch instance getattr both tiers) and interacts with GC slot storage, so validate against the bootstrap gate.",
+      "root_cause": "User exception subclasses are PyInstanceObject (PY_TYPE_INSTANCE), not the builtin PyExceptionObject (PY_TYPE_EXC). (1) pcc/runtime/src/py_exc_objects.c py_exc_set_cause/py_exc_set_context early-return unless py_type_of(exc)==PY_TYPE_EXC, so `raise UserExc(...) from e` stores nothing on the user instance. (2) py_obj_ops_dispatch.c instance getattr has no __cause__/__context__ defaulting, so reading e.__cause__ on a user instance hits missing-attr -> AttributeError instead of the CPython default None. Bounded fix: make py_exc_set_cause/py_exc_set_context store onto a PY_TYPE_INSTANCE via py_obj_setattr(exc, \"__cause__\"/\"__context__\", v); and make instance getattr return py_None for __cause__/__context__ when unset. This is a both-tier runtime change (py_exc_objects.c + py_exc_objects.py, plus py_obj_ops_dispatch instance getattr both tiers) and interacts with GC slot storage, so validate against the bootstrap gate.",
       "owning_files": [
-        "pcc/py_runtime/src/py_exc_objects.c",
-        "pcc/py_runtime/py/py_exc_objects.py",
-        "pcc/py_runtime/src/py_obj_ops_dispatch.c",
-        "pcc/py_runtime/py/py_obj_ops_dispatch.py"
+        "pcc/runtime/src/py_exc_objects.c",
+        "pcc/runtime/py/py_exc_objects.py",
+        "pcc/runtime/src/py_obj_ops_dispatch.c",
+        "pcc/runtime/py/py_obj_ops_dispatch.py"
       ],
       "proposed_edits": [
         {
-          "file": "pcc/py_runtime/src/py_exc_objects.c",
-          "old_string": "void py_exc_set_cause(PyObject *exc, PyObject *cause) {\n    if (exc == NULL || py_type_of(exc) != PY_TYPE_EXC) return;\n    PyExceptionObject *e = (PyExceptionObject *)exc;\n    pcc_gc_store_ptr(exc, &e->cause, cause);\n    pcc_runtime_log_event_code(6, 5, cause != NULL ? 1 : 0, 0, exc);\n}",
-          "new_string": "void py_exc_set_cause(PyObject *exc, PyObject *cause) {\n    if (exc == NULL) return;\n    if (py_type_of(exc) != PY_TYPE_EXC) {\n        /* User exception subclass instance: store as an attribute so\n         * instance getattr can read it back. */\n        py_obj_setattr(exc, \"__cause__\", cause);\n        return;\n    }\n    PyExceptionObject *e = (PyExceptionObject *)exc;\n    pcc_gc_store_ptr(exc, &e->cause, cause);\n    pcc_runtime_log_event_code(6, 5, cause != NULL ? 1 : 0, 0, exc);\n}",
+          "file": "pcc/runtime/src/py_exc_objects.c",
+          "old_string": "void py_exc_set_cause(PyObject *exc, PyObject *cause) {\n    if (exc == NULL || py_type_of(exc) != PY_TYPE_EXC) return;\n    PyExceptionObject *e = (PyExceptionObject *)exc;\n    pcc_gc_store_ptr(exc, &e->cause, cause);\n    pcc_diagnostics_runtime_log_event_code(6, 5, cause != NULL ? 1 : 0, 0, exc);\n}",
+          "new_string": "void py_exc_set_cause(PyObject *exc, PyObject *cause) {\n    if (exc == NULL) return;\n    if (py_type_of(exc) != PY_TYPE_EXC) {\n        /* User exception subclass instance: store as an attribute so\n         * instance getattr can read it back. */\n        py_obj_setattr(exc, \"__cause__\", cause);\n        return;\n    }\n    PyExceptionObject *e = (PyExceptionObject *)exc;\n    pcc_gc_store_ptr(exc, &e->cause, cause);\n    pcc_diagnostics_runtime_log_event_code(6, 5, cause != NULL ? 1 : 0, 0, exc);\n}",
           "note": "LOW CONFIDENCE: storing __cause__ as an instance attr works for read-back via instance getattr, but reading an UNSET __cause__ on a user instance still needs a None default (separate edit in instance getattr) to fully match CPython. Verify py_obj_setattr is declared in this TU and handles PY_TYPE_INSTANCE."
         },
         {
-          "file": "pcc/py_runtime/src/py_exc_objects.c",
-          "old_string": "void py_exc_set_context(PyObject *exc, PyObject *context) {\n    if (exc == NULL || py_type_of(exc) != PY_TYPE_EXC) return;\n    PyExceptionObject *e = (PyExceptionObject *)exc;\n    pcc_gc_store_ptr(exc, &e->context, context);\n    pcc_runtime_log_event_code(6, 6, context != NULL ? 1 : 0, 0, exc);\n}",
-          "new_string": "void py_exc_set_context(PyObject *exc, PyObject *context) {\n    if (exc == NULL) return;\n    if (py_type_of(exc) != PY_TYPE_EXC) {\n        py_obj_setattr(exc, \"__context__\", context);\n        return;\n    }\n    PyExceptionObject *e = (PyExceptionObject *)exc;\n    pcc_gc_store_ptr(exc, &e->context, context);\n    pcc_runtime_log_event_code(6, 6, context != NULL ? 1 : 0, 0, exc);\n}",
+          "file": "pcc/runtime/src/py_exc_objects.c",
+          "old_string": "void py_exc_set_context(PyObject *exc, PyObject *context) {\n    if (exc == NULL || py_type_of(exc) != PY_TYPE_EXC) return;\n    PyExceptionObject *e = (PyExceptionObject *)exc;\n    pcc_gc_store_ptr(exc, &e->context, context);\n    pcc_diagnostics_runtime_log_event_code(6, 6, context != NULL ? 1 : 0, 0, exc);\n}",
+          "new_string": "void py_exc_set_context(PyObject *exc, PyObject *context) {\n    if (exc == NULL) return;\n    if (py_type_of(exc) != PY_TYPE_EXC) {\n        py_obj_setattr(exc, \"__context__\", context);\n        return;\n    }\n    PyExceptionObject *e = (PyExceptionObject *)exc;\n    pcc_gc_store_ptr(exc, &e->context, context);\n    pcc_diagnostics_runtime_log_event_code(6, 6, context != NULL ? 1 : 0, 0, exc);\n}",
           "note": "LOW CONFIDENCE: mirror of set_cause for context. Same caveats; the port py_exc_objects.py must be mirrored. The None-default-on-read for unset __context__ on user instances is a further separate change in instance getattr (both tiers)."
         }
       ],
@@ -134,13 +134,13 @@
       "kind": "MISMATCH",
       "observed": "pcc prints 'context None' (implicit __context__ is not set when a new exception is raised inside an except handler)",
       "expected": "CPython prints 'context first' (the in-flight ValueError becomes __context__ of the RuntimeError)",
-      "root_cause": "The runtime py_raise() (pcc/py_runtime/src/py_exc_tls.c ~line 133) auto-chains __context__ from the still-pending TLS exception. But the frontend (pcc/py_frontend/codegen/exception_lowering.py _emit_try) calls py_clear_exception() at handler ENTRY (line 532) BEFORE running the handler body, so by the time `raise RuntimeError(...)` runs the TLS slot is already clear and py_raise sees cur==NULL. Worse, for a handler with no `as` name and no bare re-raise, retain_handler_exc is False (line 529), so the handler exception is not even kept in _active_handler_excs. Bounded frontend fix: when a handler body may raise, keep handler_exc retained and, in _emit_raise for an explicit exc with no `from`, set __context__ to _active_handler_excs[-1] via py_exc_set_context. This touches the bootstrap-critical handler retain/release lifecycle, so validate against the bootstrap gate.",
+      "root_cause": "The runtime py_raise() (pcc/runtime/src/py_exc_tls.c ~line 133) auto-chains __context__ from the still-pending TLS exception. But the frontend (pcc/frontends/python/codegen/exception_lowering.py _emit_try) calls py_clear_exception() at handler ENTRY (line 532) BEFORE running the handler body, so by the time `raise RuntimeError(...)` runs the TLS slot is already clear and py_raise sees cur==NULL. Worse, for a handler with no `as` name and no bare re-raise, retain_handler_exc is False (line 529), so the handler exception is not even kept in _active_handler_excs. Bounded frontend fix: when a handler body may raise, keep handler_exc retained and, in _emit_raise for an explicit exc with no `from`, set __context__ to _active_handler_excs[-1] via py_exc_set_context. This touches the bootstrap-critical handler retain/release lifecycle, so validate against the bootstrap gate.",
       "owning_files": [
-        "pcc/py_frontend/codegen/exception_lowering.py"
+        "pcc/frontends/python/codegen/exception_lowering.py"
       ],
       "proposed_edits": [
         {
-          "file": "pcc/py_frontend/codegen/exception_lowering.py",
+          "file": "pcc/frontends/python/codegen/exception_lowering.py",
           "old_string": "            retain_handler_exc = h.name is not None or body_has_bare_raise(h.body)",
           "new_string": "            retain_handler_exc = (\n                h.name is not None\n                or body_has_bare_raise(h.body)\n                or body_has_any_raise(h.body)\n            )",
           "note": "LOW CONFIDENCE. Keep the handler exception alive whenever the handler body contains any raise, so a new exception raised in the handler can chain its __context__ to it. Requires adding a body_has_any_raise() helper (analogous to body_has_bare_raise but matching Raise nodes with exc != None too) and, in _emit_raise's explicit-exc branch, when getattr(self,'_active_handler_excs',()) is non-empty and stmt.cause is None, call self.builder.call(self.runtime['py_exc_set_context'], [exc_val, active_stack[-1]]) before py_raise. Needs careful GC validation; the runtime already guards existing_context==NULL but the frontend call would set unconditionally on a freshly-built exc (safe since its context starts NULL)."
@@ -155,12 +155,12 @@
       "kind": "MISMATCH",
       "observed": "pcc str(e) -> 'a' and repr(e) -> ValueError('a'); only the FIRST constructor argument is retained.",
       "expected": "str(e) -> (\"a\", \"b\", \"c\"); repr(e) -> ValueError('a', 'b', 'c')",
-      "root_cause": "Exception construction is single-arg-only end to end: pcc/py_frontend/codegen/exception_lowering.py _build_exception_value()/_message_cstr() pass only args[0] to py_exc_new(tag, cstr); PyExceptionObject has a single `message` PyObject field (pcc/py_runtime/src/py_internal.h ~line 770) and no args tuple; py_obj_str / repr for PY_TYPE_EXC format only `message`. Faithfully fixing multi-arg requires (a) capturing the full args tuple at construction (new runtime entrypoint e.g. py_exc_new_with_args(cls, args_tuple) and frontend lowering of all positional args), (b) storing an args field on PyExceptionObject, and (c) str/repr formatting per CPython BaseException rules (0 args -> '', 1 arg -> str(arg), >1 -> str(tuple)). This is a larger multi-file change; flagged for backlog, not a one-line patch.",
+      "root_cause": "Exception construction is single-arg-only end to end: pcc/frontends/python/codegen/exception_lowering.py _build_exception_value()/_message_cstr() pass only args[0] to py_exc_new(tag, cstr); PyExceptionObject has a single `message` PyObject field (pcc/runtime/src/py_internal.h ~line 770) and no args tuple; py_obj_str / repr for PY_TYPE_EXC format only `message`. Faithfully fixing multi-arg requires (a) capturing the full args tuple at construction (new runtime entrypoint e.g. py_exc_new_with_args(cls, args_tuple) and frontend lowering of all positional args), (b) storing an args field on PyExceptionObject, and (c) str/repr formatting per CPython BaseException rules (0 args -> '', 1 arg -> str(arg), >1 -> str(tuple)). This is a larger multi-file change; flagged for backlog, not a one-line patch.",
       "owning_files": [
-        "pcc/py_frontend/codegen/exception_lowering.py",
-        "pcc/py_runtime/src/py_internal.h",
-        "pcc/py_runtime/src/py_exc_objects.c",
-        "pcc/py_runtime/py/py_exc_objects.py"
+        "pcc/frontends/python/codegen/exception_lowering.py",
+        "pcc/runtime/src/py_internal.h",
+        "pcc/runtime/src/py_exc_objects.c",
+        "pcc/runtime/py/py_exc_objects.py"
       ],
       "proposed_edits": [],
       "needs_new_runtime_fn": true,

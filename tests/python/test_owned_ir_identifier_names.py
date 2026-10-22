@@ -4,8 +4,10 @@ import os
 from pathlib import Path
 import subprocess
 
-from pcc.native_ir.ir_mutator import MutableModule
-from pcc.py_frontend.compiled_owned_passes import run_owned_passes
+import pytest
+
+from pcc.ir.optimization.ir_mutator import MutableModule
+from pcc.frontends.python.compiled_owned_passes import run_owned_passes
 from pcc.backend.self_backend_parse import parse_self_backend_module
 from pcc.backend.self_backend_verify import verify_parsed_module
 
@@ -61,13 +63,14 @@ def test_owned_passes_keep_identifiers_whole_through_phi_insertion_and_inlining(
     assert "call i32 @worker$name" not in result
 
 
-def test_compiled_owned_parser_reads_full_identifier_names(tmp_path, pcc_py_runtime_archive):
-    from pcc.native_ir import ir_mutator, text_tokens
-    from pcc.py_frontend.pipeline import compile_python_multi
+@pytest.mark.integration
+def test_compiled_owned_parser_reads_full_identifier_names(tmp_path, pcc_runtime_archive):
+    from pcc.ir.optimization import ir_mutator, text_tokens
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     source = tmp_path / "parse_names.py"
     source.write_text(
-        "from pcc.native_ir.ir_mutator import MutableModule\n"
+        "from pcc.ir.optimization.ir_mutator import MutableModule\n"
         "def main():\n"
         "    module = MutableModule.parse(" + repr(IR) + ")\n"
         "    function = module.functions[0]\n"
@@ -80,9 +83,9 @@ def test_compiled_owned_parser_reads_full_identifier_names(tmp_path, pcc_py_runt
     output = tmp_path / "parse_names"
     compile_python_multi(
         [str(Path(text_tokens.__file__)), str(Path(ir_mutator.__file__)), str(source)],
-        str(output), module_names=["pcc.native_ir.text_tokens", "pcc.native_ir.ir_mutator", "parse_names"],
+        str(output), module_names=["pcc.ir.optimization.text_tokens", "pcc.ir.optimization.ir_mutator", "parse_names"],
         entry_module="parse_names", recursive_stdlib=True, backend="self",
-        libpython_mode="off", runtime_archive=str(pcc_py_runtime_archive),
+        libpython_mode="off", runtime_archive=str(pcc_runtime_archive),
     )
     for gc in range(5):
         result = subprocess.run([str(output)], capture_output=True, text=True,

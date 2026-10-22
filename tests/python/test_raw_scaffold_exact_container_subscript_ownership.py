@@ -17,9 +17,9 @@ def _generate_ir(
     *,
     module_name: str = "pcc.subscript_ownership_probe",
 ) -> str:
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
     module = parse_and_lift(source, "<test>", module_name)
     typed = type_infer.infer_module(module)
@@ -226,9 +226,9 @@ def _assert_owned_local_transfer(body: str, runtime_symbol: str) -> None:
 
 
 def test_unannotated_exact_container_element_is_inferred_dynamic():
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.py_ast import Assign, DynType, FuncDef, Subscript
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.py_ast import Assign, DynType, FuncDef, Subscript
 
     module = parse_and_lift(
         "def probe(values: list) -> None:\n    item = values[0]\n",

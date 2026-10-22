@@ -1,12 +1,13 @@
 """Batch saving keeps source/frame owners and the tracing-collector fallback."""
 
-from pathlib import Path
 import re
 import subprocess
 
+from tests.owned_c_execution import compile_owned_c_with_runtime
+
 
 def test_rejected_bulk_save_stays_out_of_application_codegen(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     monkeypatch.setenv("PCC_MOVE_GENERATOR_FRAME_OWNERS", "0")
 
@@ -31,13 +32,17 @@ print(next(iterator))
         body = re.search(r"define[^\n]*suspended__gen_resume[^\n]*\{\n(.*?)\n\}", text, re.S)
         assert body is not None
         calls.append(len(re.findall(r"call[^\n]*@py_gen_frame_save\(", body.group(1))))
-        assert re.search(r"call[^\n]*@py_list_set\(", body.group(1))
+        # Each yield retains all three live locals through the private-frame
+        # setter; terminal frame cleanup alone must not satisfy this control.
+        saved_slots = re.findall(
+            r"call[^\n]*@py_gen_frame_set\(ptr [^,]+, i64 ([0-9]+), ptr %gen\.save\.[^)]+\)",
+            body.group(1),
+        )
+        assert saved_slots == ["0", "1", "2", "0", "1", "2"]
     assert calls == [0, 0], "the rejected experiment must not alter application codegen"
 
 
-def test_bulk_save_keeps_aliases_and_falls_back_without_mutation(tmp_path, pcc_py_runtime_archive):
-    archive = pcc_py_runtime_archive
-    root = Path(__file__).resolve().parents[2]
+def test_bulk_save_keeps_aliases_and_falls_back_without_mutation(tmp_path, pcc_runtime_archive):
     source = tmp_path / "bulk_save.c"
     source.write_text('''#include "py_runtime.h"
 #include <stdio.h>
@@ -94,10 +99,7 @@ int main(int argc, char **argv) {
 }
 ''')
     executable = tmp_path / "bulk_save"
-    built = subprocess.run(["clang", "-I" + str(root / "pcc/py_runtime/include"),
-        str(source), str(archive), "-pthread", "-o", str(executable)],
-        capture_output=True, text=True, timeout=30)
-    assert built.returncode == 0, built.stdout + built.stderr
+    compile_owned_c_with_runtime(source, executable, runtime_archive=pcc_runtime_archive)
     for backend in range(5):
         ran = subprocess.run([str(executable), str(backend)], capture_output=True, text=True, timeout=15)
         assert ran.returncode == 0, f"GC{backend}: " + ran.stdout + ran.stderr

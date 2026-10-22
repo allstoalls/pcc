@@ -173,7 +173,7 @@ def _source(tmp_path):
 
 @pytest.mark.parametrize("scaffold", ("on","off"))
 def test_owned_error_real_ir_releases_before_all_root_leaves(tmp_path, monkeypatch, scaffold):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
     _configure(monkeypatch)
     output=tmp_path/"owned-errors.ll"
     compile_python_multi([str(_source(tmp_path))],str(output),module_names=["owned_errors"],
@@ -201,13 +201,13 @@ def explicit_runtime():
     requested=os.environ.get("PCC_RUNTIME_ARCHIVE","")
     assert requested,"explicit matching threaded runtime required; do not build"
     runtime=Path(requested).resolve(strict=True)
-    verify_runtime_archive_manifest(runtime,runtime_root=_ROOT/"pcc/py_runtime")
+    verify_runtime_archive_manifest(runtime,runtime_root=_ROOT/"pcc/runtime")
     return runtime
 
 @pytest.mark.integration
 @pytest.mark.parametrize("scaffold", ("on","off"))
 def test_host_emitted_owned_error_lifetimes(tmp_path,monkeypatch,explicit_runtime,scaffold):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
     _configure(monkeypatch)
     output=tmp_path/"owned-errors"
     compile_python_multi([str(_source(tmp_path))],str(output),module_names=["owned_errors"],
@@ -267,7 +267,7 @@ main()
 @pytest.mark.integration
 @pytest.mark.parametrize("scaffold", ("on", "off"))
 def test_source_generator_error_releases_frame_while_generator_lives(tmp_path, monkeypatch, explicit_runtime, scaffold):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
     _configure(monkeypatch)
     source = tmp_path / "source_generator_error.py"
     source.write_text(GENERATOR_SOURCE)
@@ -397,7 +397,7 @@ main()
 @pytest.mark.parametrize("case", ("normal", "return_alias", "caught"))
 @pytest.mark.parametrize("scaffold", ("on", "off"))
 def test_source_generator_terminal_value_owners(tmp_path, monkeypatch, explicit_runtime, scaffold, case):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
     _configure(monkeypatch)
     source = tmp_path / "source_generator_terminal.py"
     source.write_text(GENERATOR_PREFIX + GENERATOR_TERMINAL_CASES[case])
@@ -414,7 +414,7 @@ def test_source_generator_terminal_value_owners(tmp_path, monkeypatch, explicit_
 
 
 def test_source_generator_terminal_real_ir_keeps_frame_rooted(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
     _configure(monkeypatch)
     source = tmp_path / "source_generator_terminal.py"
     source.write_text(GENERATOR_PREFIX + GENERATOR_TERMINAL_CASES["return_alias"])
@@ -442,7 +442,7 @@ def test_source_generator_terminal_real_ir_keeps_frame_rooted(tmp_path, monkeypa
 @pytest.mark.integration
 @pytest.mark.parametrize("termination", ("normal", "error"))
 def test_terminal_frame_clears_heap_only_owners_during_finalizer_gc(tmp_path, monkeypatch, explicit_runtime, termination):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
     _configure(monkeypatch)
     terminal = "    return payload\n" if termination == "normal" else "    raise ValueError('heap-only-original')\n"
     handler = ("    except StopIteration as error:\n        assert error.value is payload\n"

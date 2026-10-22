@@ -20,7 +20,7 @@ L_test_component_whiledotbodydot2057dotouterdotouter:
 
 
 def test_native_threading_preserves_branch_string_owners(tmp_path, pcc_diagnostic_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     selected = os.environ.get("PCC_TEST_TARGET_PASS_DRIVER")
     if selected:

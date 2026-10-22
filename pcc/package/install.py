@@ -24,17 +24,9 @@ import zipfile
 from pathlib import Path
 from typing import Iterable
 
-from pcc.package_schema import (
-    PACKAGE_MANIFEST_SCHEMA,
-    PACKAGE_MANIFEST_SCHEMA_VERSION,
-    capability_profile,
-    distribution_filename_fields,
-    source_build_policy,
-    wheel_tag_fields,
-    wheel_tags,
-)
-from pcc.package_environment import default_package_cache, default_package_site
-from pcc.package_metadata_paths import package_metadata_member_paths, package_metadata_paths
+from pcc.package.schema import PACKAGE_MANIFEST_SCHEMA, PACKAGE_MANIFEST_SCHEMA_VERSION, capability_profile, distribution_filename_fields, source_build_policy, wheel_tag_fields, wheel_tags
+from pcc.package.environment import default_package_cache, default_package_site
+from pcc.package.metadata_paths import package_metadata_member_paths, package_metadata_paths
 
 from .inspect import inspect_package
 from .linkage import linkage_report

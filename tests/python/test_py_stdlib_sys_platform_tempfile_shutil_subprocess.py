@@ -4,11 +4,11 @@ import subprocess
 import sys as host_sys
 from pathlib import Path
 
-from pcc.py_stdlib import platform
-from pcc.py_stdlib import shlex
-from pcc.py_stdlib import shutil
-from pcc.py_stdlib import sys
-from pcc.py_stdlib import tempfile
+from pcc.stdlib import platform
+from pcc.stdlib import shlex
+from pcc.stdlib import shutil
+from pcc.stdlib import sys
+from pcc.stdlib import tempfile
 
 
 def test_sys_version_streams_and_implementation():
@@ -33,7 +33,7 @@ def test_platform_subset():
 
 
 def test_platform_provider_compiles_as_top_level_module_no_libpython(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     entry = tmp_path / "entry.py"
     entry.write_text(
@@ -45,8 +45,8 @@ def test_platform_provider_compiles_as_top_level_module_no_libpython(tmp_path):
     exe = tmp_path / "platform_provider.out"
     compile_python_multi(
         [
-            str(Path("pcc/py_stdlib/platform.py")),
-            str(Path("pcc/py_stdlib/sys.py")),
+            str(Path("pcc/stdlib/platform.py")),
+            str(Path("pcc/stdlib/sys.py")),
             str(entry),
         ],
         str(exe),
@@ -96,19 +96,19 @@ def test_shlex_existing_surface_still_works():
 
 
 def test_subprocess_runtime_wrapper_symbols_are_wired():
-    src = Path("pcc/py_stdlib/subprocess.py").read_text(encoding="utf-8")
+    src = Path("pcc/stdlib/subprocess.py").read_text(encoding="utf-8")
     assert "py_subprocess_check_output" in src
     assert "py_subprocess_run" in src
     assert "CompletedProcess" in src
 
 
-def test_subprocess_called_process_error_export_matches_raw_int_scaffold_abi():
-    from pcc.py_frontend.pipeline import build_closed_world_context
-    from pcc.py_frontend.codegen.layer1_support import (
+def test_subprocess_called_process_error_export_matches_object_int_scaffold_abi():
+    from pcc.frontends.python.pipeline import build_closed_world_context
+    from pcc.frontends.python.codegen.layer1_support import (
         _default_native_module_exports,
     )
 
-    provider = Path("pcc/py_stdlib/subprocess.py")
+    provider = Path("pcc/stdlib/subprocess.py")
     _modules, exports, _derived = build_closed_world_context(
         [str(provider)],
         ["subprocess"],
@@ -116,12 +116,12 @@ def test_subprocess_called_process_error_export_matches_raw_int_scaffold_abi():
     provider_export = exports["subprocess"]["CalledProcessError"]
     methods = provider_export["methods"]
     init_export = next(method for method in methods if method["name"] == "__init__")
-    assert init_export["box_int_abi"] is False
+    assert init_export["box_int_abi"] is True
 
-    static_exports = _default_native_module_exports("pcc.cli_bootstrap")
+    static_exports = _default_native_module_exports("pcc.driver.cli_bootstrap")
     static_export = static_exports["subprocess"]["CalledProcessError"]
     parallel_exports = _default_native_module_exports(
-        "pcc.py_frontend.pipeline_frontend_parallel"
+        "pcc.frontends.python.pipeline_frontend_parallel"
     )
     assert parallel_exports is not None
     assert parallel_exports["subprocess"]["CalledProcessError"] == static_export

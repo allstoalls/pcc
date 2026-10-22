@@ -7,7 +7,7 @@ pinned to `self`, which for an inherited body can be the *subclass*; the
 override-safety check then ran against the subclass, found nothing below it,
 and lowered a direct call to the subclass's override.
 
-`pcc/py_stdlib/hashlib.py` is the worked example.  `_SHA256.hexdigest` is
+`pcc/stdlib/hashlib.py` is the worked example.  `_SHA256.hexdigest` is
 inherited by `_SHA224`, so `self` inferred as `_SHA224`; `_SHA224` has no
 subclass, so `self.digest()` became a hard `bl _SHA224.digest`.  A plain
 `_SHA256` receiver then ran it:

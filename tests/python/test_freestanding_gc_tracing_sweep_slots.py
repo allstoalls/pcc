@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_sweep_slots.py"
 BACKEND0_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_backend0_slots.py"
 MANAGED_SOURCE = RUNTIME_DIR / "py" / "py_gc_backend.py"
@@ -27,6 +27,7 @@ OWNED_SYMBOLS = {
     "pcc_gc_tracing_is_sweep_candidate",
 }
 RAW_FUNCTION_IMPORTS = {
+    "pcc_gc_object_is_address_pinned",
     "pcc_gc_backend0_is_unreachable",
     "pcc_gc_object_is_known_no_lock",
     "pcc_gc_visit_object_slots",
@@ -137,9 +138,9 @@ def test_sweep_slot_object_has_exact_raw_closure(tmp_path: Path, emitter: str):
     assert defined == OWNED_SYMBOLS
 
 
-def test_production_archive_has_one_sweep_slot_owner(pcc_py_runtime_archive: Path):
+def test_production_archive_has_one_sweep_slot_owner(pcc_runtime_archive: Path):
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,

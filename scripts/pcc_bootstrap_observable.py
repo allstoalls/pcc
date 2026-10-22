@@ -4,12 +4,12 @@ from __future__ import annotations
 import argparse
 import sys
 
-from pcc.cli_observability import (
+from pcc.driver.cli_observability import (
     normalize_diagnostic_format,
     profile_scope,
     write_exception_diagnostic,
 )
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def main(argv=None) -> int:

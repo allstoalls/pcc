@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """scripts/extract_c_parser_actions.py — P6C.5 α1 step 2.
 
-Extract the action layer from ``pcc/parse/c_parser.py`` into
-``pcc/parse/c_parser_actions.py``. The result is a self-contained
+Extract the action layer from ``pcc/frontends/c/parse/c_parser.py`` into
+``pcc/frontends/c/parse/c_parser_actions.py``. The result is a self-contained
 module that:
 
 - has no PLY import
@@ -29,8 +29,8 @@ import textwrap
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-SRC = REPO / "pcc" / "parse" / "c_parser.py"
-OUT = REPO / "pcc" / "parse" / "c_parser_actions.py"
+SRC = REPO / "pcc" / "frontends" / "c" / "parse" / "c_parser.py"
+OUT = REPO / "pcc" / "frontends" / "c" / "parse" / "c_parser_actions.py"
 
 
 # Methods to drop from the extracted class — these are PLY-specific
@@ -83,33 +83,33 @@ def main() -> int:
 
     # Render the new module
     header = textwrap.dedent('''\
-        """pcc.parse.c_parser_actions — AUTO-GENERATED action layer.
+        """pcc.frontends.c.parse.c_parser_actions — AUTO-GENERATED action layer.
 
-        Extracted from ``pcc/parse/c_parser.py`` by
+        Extracted from ``pcc/frontends/c/parse/c_parser.py`` by
         ``scripts/extract_c_parser_actions.py``. Contains grammar-rule
         action methods + helpers, with PLY-specific glue removed.
 
-        Consumed by ``pcc.parse.c_parse_driver`` (P6C.5 α1 step 3).
+        Consumed by ``pcc.frontends.c.parse.c_parse_driver`` (P6C.5 α1 step 3).
 
         **Do not hand-edit.** If you need to change a grammar rule,
         edit ``c_parser.py`` and re-run the extractor.
         """
         from __future__ import annotations
 
-        from ..ast import c_ast
-        # ``Coord`` originally lived on ``pcc.parse.plyparser``; we
+        from pcc.frontends.c.ast import c_ast
+        # ``Coord`` originally lived on ``pcc.frontends.c.parse.plyparser``; we
         # re-use its location here because the legacy ``CParser`` and
         # the new driver must produce ``Coord`` instances that compare
         # equal (they're used in AST nodes). The import is data-only:
         # ``Coord`` is a small dataclass-style container, no PLY.
-        from .plyparser import Coord, ParseError, PLYParser
-        from ..ast.ast_transforms import fix_switch_cases
+        from pcc.frontends.c.parse.plyparser import Coord, ParseError, PLYParser
+        from pcc.frontends.c.ast.ast_transforms import fix_switch_cases
 
 
         class CParserActions(PLYParser):
             """Grammar-rule action layer + scope/typedef helpers,
             minus PLY-specific lexer/parser coupling. Instantiated by
-            the native LR driver (``pcc.parse.c_parse_driver``).
+            the native LR driver (``pcc.frontends.c.parse.c_parse_driver``).
 
             Inherits ``PLYParser`` purely for its ``_coord`` /
             ``_parse_error`` helpers — ``plyparser.py`` itself is

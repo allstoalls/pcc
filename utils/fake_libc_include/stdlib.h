@@ -4,3 +4,8 @@
 char *getenv(const char *name);
 char *mkdtemp(char *template);
 int system(const char *command);
+
+int atoi(const char *text);
+void exit(int status);
+void _Exit(int status);
+int atexit(void (*callback)(void));

@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import (
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import (
     FREESTANDING_GC_CROSS_OBJECT_SIGNATURES,
     FREESTANDING_GC_RUNTIME_GLOBALS,
     RUNTIME_SIGNATURES,
@@ -16,7 +16,7 @@ from pcc.py_frontend.codegen.runtime_abi import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_relocation_copy.py"
 FORWARDING_SOURCE = (
     RUNTIME_DIR / "py" / "freestanding_gc_forwarding_identity.py"
@@ -30,6 +30,7 @@ OWNED_SYMBOLS = {
     "pcc_gc_relocate_copy",
 }
 RAW_FUNCTION_IMPORTS = {
+    "pcc_gc_object_is_address_pinned",
     "free",
     "memmove",
     "pcc_gc_alloc",
@@ -44,6 +45,8 @@ RAW_FUNCTION_IMPORTS = {
     "pcc_gc_install_forwarding_preallocated_unlocked",
     "pcc_gc_memoryview_refresh_owned_buffer",
     "pcc_gc_object_known_size",
+    "pcc_gc_relocation_member_count",
+    "pcc_gc_relocation_member_forget",
     "pcc_gc_relocate_copy_payload_prepared_locked",
     "pcc_gc_relocation_payload_plan_finish",
     "pcc_gc_relocation_payload_plan_prepare",
@@ -627,10 +630,10 @@ def test_relocation_copy_batch_publishes_bounded_fresh_target_spans() -> None:
 
 
 def test_production_archive_has_one_relocation_copy_owner(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,

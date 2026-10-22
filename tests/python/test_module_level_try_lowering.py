@@ -7,7 +7,7 @@ branched into whichever basic block the previously lowered function left in
 ``_try_err_block`` -- invalid IR, and invisible on the host because whether the
 carried-over block happened to be ``None`` depended on lowering order.
 
-That is why ``pcc1`` could not compile ``pcc/py_frontend/pipeline.py`` (it has a
+That is why ``pcc1`` could not compile ``pcc/frontends/python/pipeline.py`` (it has a
 module-level ``try`` at its ``PCC_DEBUG_RUNTIME`` probe) and stage2 could not run
 at all, while the host compiler was green.
 
@@ -21,7 +21,7 @@ import textwrap
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def _build_and_run(tmp_path, source: str) -> str:

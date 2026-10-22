@@ -42,7 +42,7 @@ from tests.runtime_build_cache import cached_threaded_pcc_python_runtime
 
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 
 
 def _build_threaded_runtime(tmp_path: Path) -> Path:
@@ -53,7 +53,7 @@ def _build_threaded_runtime(tmp_path: Path) -> Path:
 def _compile_threaded(monkeypatch, tmp_path: Path, src: Path, exe: Path) -> None:
     monkeypatch.setenv("PCC_WITH_THREADS", "1")
     work_runtime = _build_threaded_runtime(tmp_path)
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     compile_python(
         str(src),

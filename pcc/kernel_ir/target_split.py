@@ -4,11 +4,9 @@ Row K-P0-TARGET-SPLIT. Borrows the *organization* of LLVM's ``TargetMachine``
 (a capability table + a pluggable finalize pipeline), NOT its class hierarchy.
 
 Responsibilities:
-  * resolve ``host=self|llvm|c`` + ``device=metal|none`` into a resolved
+  * resolve ``host=self|c`` + ``device=metal|none`` into a resolved
     ``TargetMachine`` describing which finalize pipelines run;
-  * enforce the hard rule: **``--backend=self`` NEVER silently falls back to
-    LLVM** (AGENTS.md obligation 4 / research report §五后端). A resolution that
-    would require such a fallback RAISES;
+  * retain self as the production execution root and reject unknown backends;
   * model the host/device split as the backend-organization root: the shared
     front-half (AST -> HIR -> Kernel IR -> plain TIR) is target-neutral; only
     the finalize back-half diverges;
@@ -34,7 +32,6 @@ class TargetSplitError(ValueError):
 
 class HostBackend(enum.Enum):
     SELF = "self"
-    LLVM = "llvm"
     C = "c"
 
 
@@ -81,7 +78,6 @@ class DeviceCaps:
 # registering its caps, not by hardcoding a codegen into the lowering.
 _HOST_REGISTRY: dict[HostBackend, HostCaps] = {
     HostBackend.SELF: HostCaps(HostBackend.SELF, first_class_root=True, host_finalize="self_host_finalize"),
-    HostBackend.LLVM: HostCaps(HostBackend.LLVM, first_class_root=True, host_finalize="llvm_host_finalize"),
     HostBackend.C: HostCaps(HostBackend.C, first_class_root=False, host_finalize="c_host_finalize"),
 }
 
@@ -166,26 +162,10 @@ def _coerce_device(device: str | DeviceTarget) -> DeviceTarget:
 def resolve(
     host: str | HostBackend = HostBackend.SELF,
     device: str | DeviceTarget = DeviceTarget.NONE,
-    *,
-    allow_llvm_fallback: bool = False,
 ) -> TargetMachine:
-    """Resolve a host+device pair into a :class:`TargetMachine`.
-
-    The hard rule: when ``host == self``, this NEVER downgrades to LLVM.
-    ``allow_llvm_fallback`` exists only so a caller can *ask* for the forbidden
-    behavior and get an explicit, loud :class:`TargetSplitError` — there is no
-    silent path. (AGENTS.md obligation 4: "No silent fallback to LLVM after
-    --backend=self".)
-    """
+    """Resolve a host+device pair through the declared capability registry."""
     host_kind = _coerce_host(host)
     device_kind = _coerce_device(device)
-
-    if host_kind == HostBackend.SELF and allow_llvm_fallback:
-        raise TargetSplitError(
-            "refusing to resolve host=self with allow_llvm_fallback=True: "
-            "--backend=self must never silently fall back to LLVM. The self "
-            "backend is a first-class execution root (LLVM is oracle, not owner)."
-        )
 
     host_caps = _HOST_REGISTRY.get(host_kind)
     if host_caps is None:  # pragma: no cover - registry is exhaustive

@@ -57,7 +57,7 @@ def _member_symbols(data: bytes) -> tuple[frozenset[str], frozenset[str]]:
             continue
         if kind == spec.N_SECT:
             defines.add(sym["name"])
-        elif kind == spec.N_UNDF:
+        elif kind == spec.N_UNDF and not (sym["n_desc"] & spec.N_WEAK_REF):
             undefined.add(sym["name"])
     return frozenset(defines), frozenset(undefined)
 
@@ -89,6 +89,9 @@ def read_archive(data: bytes) -> list[Member]:
             size = int(header[48:58].decode().strip())
         except ValueError as exc:
             raise ArchiveError(f"bad member size at {offset}") from exc
+        if size < 0:
+            # Skipped indexes must still advance past their own header.
+            raise ArchiveError(f"negative member size at {offset}")
         body = offset + _HEADER_SIZE
         if body + size > len(data):
             raise ArchiveError(f"member at {offset} runs past end of archive")
@@ -99,6 +102,8 @@ def read_archive(data: bytes) -> list[Member]:
                 name_len = int(raw_name[3:].decode())
             except ValueError as exc:
                 raise ArchiveError(f"bad extended name at {offset}") from exc
+            if name_len < 0 or name_len > size:
+                raise ArchiveError(f"bad extended name length at {offset}")
             name = data[body:body + name_len].rstrip(b"\0").decode(
                 "utf-8", "surrogateescape"
             )
@@ -138,6 +143,7 @@ def select_members(
     undefined: set[str],
     *,
     already_defined: set[str] | frozenset[str] = frozenset(),
+    selected_members: list[Member] | None = None,
 ) -> tuple[list[bytes], set[str]]:
     """Pull members that satisfy pending undefined symbols, repeatedly.
 
@@ -172,4 +178,6 @@ def select_members(
             changed = True
 
     ordered = [m for i, m in enumerate(members) if i in taken]
+    if selected_members is not None:
+        selected_members.extend(ordered)
     return [m.data for m in ordered], pending

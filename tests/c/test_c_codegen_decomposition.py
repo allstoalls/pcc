@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from pcc.codegen import c_codegen
-from pcc.codegen import c_declaration_state
-from pcc.codegen import c_declaration_lowering
-from pcc.codegen import c_control_flow
-from pcc.codegen import c_expression_flow
-from pcc.codegen import c_initializer_lowering
-from pcc.codegen import c_layout
-from pcc.codegen import c_libc_declarations
-from pcc.codegen import c_scope_context
-from pcc.codegen import c_ssa_lowering
-from pcc.codegen import c_switch_flow
-from pcc.codegen import c_types
+from pcc.frontends.c.codegen import c_codegen
+from pcc.frontends.c.codegen import c_declaration_state
+from pcc.frontends.c.codegen import c_declaration_lowering
+from pcc.frontends.c.codegen import c_control_flow
+from pcc.frontends.c.codegen import c_expression_flow
+from pcc.frontends.c.codegen import c_initializer_lowering
+from pcc.frontends.c.codegen import c_layout
+from pcc.frontends.c.codegen import c_libc_declarations
+from pcc.frontends.c.codegen import c_scope_context
+from pcc.frontends.c.codegen import c_ssa_lowering
+from pcc.frontends.c.codegen import c_switch_flow
+from pcc.frontends.c.codegen import c_types
 
 
 def test_c_codegen_reexports_file_scope_state_records():
@@ -54,10 +54,10 @@ def test_c_codegen_reexports_type_projection_contracts():
 
 def test_signedness_decision_owner_remains_in_c_codegen():
     assert c_codegen._decide_usual_integer_conversion.__module__ == (
-        "pcc.codegen.c_codegen"
+        "pcc.frontends.c.codegen.c_codegen"
     )
     assert c_codegen.IntegerConversionDecision.__module__ == (
-        "pcc.codegen.c_codegen"
+        "pcc.frontends.c.codegen.c_codegen"
     )
 
 
@@ -78,61 +78,61 @@ def test_c_codegen_reexports_libc_declaration_registry():
 
 
 def test_c_codegen_inherits_expression_and_control_flow_seams():
-    assert issubclass(c_codegen.LLVMCodeGenerator, c_expression_flow.CExpressionFlowMixin)
-    assert issubclass(c_codegen.LLVMCodeGenerator, c_control_flow.CControlFlowMixin)
-    assert c_codegen.LLVMCodeGenerator._codegen_short_circuit_and is (
+    assert issubclass(c_codegen.CCodeGenerator, c_expression_flow.CExpressionFlowMixin)
+    assert issubclass(c_codegen.CCodeGenerator, c_control_flow.CControlFlowMixin)
+    assert c_codegen.CCodeGenerator._codegen_short_circuit_and is (
         c_expression_flow.CExpressionFlowMixin._codegen_short_circuit_and
     )
-    assert c_codegen.LLVMCodeGenerator.codegen_If is (
+    assert c_codegen.CCodeGenerator.codegen_If is (
         c_control_flow.CControlFlowMixin.codegen_If
     )
-    assert c_codegen.LLVMCodeGenerator.codegen_DoWhile is (
+    assert c_codegen.CCodeGenerator.codegen_DoWhile is (
         c_control_flow.CControlFlowMixin.codegen_DoWhile
     )
-    assert issubclass(c_codegen.LLVMCodeGenerator, c_switch_flow.CSwitchFlowMixin)
-    assert c_codegen.LLVMCodeGenerator.codegen_Switch is (
+    assert issubclass(c_codegen.CCodeGenerator, c_switch_flow.CSwitchFlowMixin)
+    assert c_codegen.CCodeGenerator.codegen_Switch is (
         c_switch_flow.CSwitchFlowMixin.codegen_Switch
     )
-    assert c_codegen.LLVMCodeGenerator.codegen_Case is (
+    assert c_codegen.CCodeGenerator.codegen_Case is (
         c_switch_flow.CSwitchFlowMixin.codegen_Case
     )
-    assert c_codegen.LLVMCodeGenerator.codegen_Default is (
+    assert c_codegen.CCodeGenerator.codegen_Default is (
         c_switch_flow.CSwitchFlowMixin.codegen_Default
     )
 
 
 def test_c_codegen_inherits_complete_ssa_lowering_seam():
-    assert issubclass(c_codegen.LLVMCodeGenerator, c_ssa_lowering.CSSALoweringMixin)
-    assert c_codegen.LLVMCodeGenerator._lower_ssa_function is (
+    assert issubclass(c_codegen.CCodeGenerator, c_ssa_lowering.CSSALoweringMixin)
+    assert c_codegen.CCodeGenerator._lower_ssa_function is (
         c_ssa_lowering.CSSALoweringMixin._lower_ssa_function
     )
-    assert c_codegen.LLVMCodeGenerator._lower_ssa_instruction is (
+    assert c_codegen.CCodeGenerator._lower_ssa_instruction is (
         c_ssa_lowering.CSSALoweringMixin._lower_ssa_instruction
     )
-    assert c_codegen.LLVMCodeGenerator._ssa_convert is (
+    assert c_codegen.CCodeGenerator._ssa_convert is (
         c_ssa_lowering.CSSALoweringMixin._ssa_convert
     )
 
 
 def test_c_codegen_inherits_complete_initializer_lowering_seam():
     assert issubclass(
-        c_codegen.LLVMCodeGenerator,
+        c_codegen.CCodeGenerator,
         c_initializer_lowering.CInitializerLoweringMixin,
     )
-    assert c_codegen.LLVMCodeGenerator._build_const_init is (
+    assert c_codegen.CCodeGenerator._build_const_init is (
         c_initializer_lowering.CInitializerLoweringMixin._build_const_init
     )
-    assert c_codegen.LLVMCodeGenerator._init_runtime_aggregate is (
+    assert c_codegen.CCodeGenerator._init_runtime_aggregate is (
         c_initializer_lowering.CInitializerLoweringMixin._init_runtime_aggregate
     )
 
 
 def test_c_codegen_inherits_declaration_lowering_seam():
     assert issubclass(
-        c_codegen.LLVMCodeGenerator,
+        c_codegen.CCodeGenerator,
         c_declaration_lowering.CDeclarationLoweringMixin,
     )
-    assert c_codegen.LLVMCodeGenerator.codegen_Decl is (
+    assert c_codegen.CCodeGenerator.codegen_Decl is (
         c_declaration_lowering.CDeclarationLoweringMixin.codegen_Decl
     )
 
@@ -141,5 +141,5 @@ def test_ssa_seam_keeps_signedness_policy_on_the_codegen_facade():
     assert "_usual_arithmetic_conversion" not in c_ssa_lowering.__dict__
     assert "_decide_usual_integer_conversion" not in c_ssa_lowering.__dict__
     assert c_codegen._decide_usual_integer_conversion.__module__ == (
-        "pcc.codegen.c_codegen"
+        "pcc.frontends.c.codegen.c_codegen"
     )

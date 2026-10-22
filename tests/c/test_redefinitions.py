@@ -1,6 +1,6 @@
 import pytest
 
-from pcc.evaluater.c_evaluator import CEvaluator
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
 
 
 def test_global_redefinition_errors():

@@ -119,11 +119,11 @@ def _compile(tmp_path, name, source, python_program_compiler, runtime_archive):
 
 
 def test_literal_tuple_membership_matches_cpython(
-    tmp_path, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, python_program_compiler, pcc_runtime_archive,
 ):
     src, exe = _compile(
         tmp_path, "tuple_membership", SEMANTICS,
-        python_program_compiler, pcc_py_runtime_archive,
+        python_program_compiler, pcc_runtime_archive,
     )
     reference = subprocess.run(
         [sys.executable, str(src)], capture_output=True, text=True, timeout=60,
@@ -141,11 +141,11 @@ def test_literal_tuple_membership_matches_cpython(
 
 
 def test_membership_needles_and_valuebox_fields_do_not_leak(
-    tmp_path, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, python_program_compiler, pcc_runtime_archive,
 ):
     _src, exe = _compile(
         tmp_path, "membership_leak", LEAK,
-        python_program_compiler, pcc_py_runtime_archive,
+        python_program_compiler, pcc_runtime_archive,
     )
     for backend in (0, 4):
         run = subprocess.run(

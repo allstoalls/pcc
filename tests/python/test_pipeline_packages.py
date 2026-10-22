@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend import pipeline_packages
+from pcc.frontends.python import pipeline
+from pcc.frontends.python import pipeline_packages
 
 
 def test_native_extension_abi_names_are_classified_without_package_rules():

@@ -166,7 +166,7 @@ def _sources(tmp_path, lifetime=False):
 
 @pytest.mark.parametrize("scaffold", ("on", "off"))
 def test_pointer_attribute_real_ir_uses_provider_cell(tmp_path, monkeypatch, scaffold):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
     _configure(monkeypatch)
     output = tmp_path / "module-storage.ll"
     compile_python_multi(_sources(tmp_path), str(output),
@@ -185,8 +185,8 @@ def test_pointer_attribute_real_ir_uses_provider_cell(tmp_path, monkeypatch, sca
 
 @pytest.mark.parametrize("provider_name,boxed", (("storage_provider", True), ("pcc.storage_provider", False)))
 def test_source_constant_storage_survives_export_wire(tmp_path, provider_name, boxed):
-    from pcc.py_frontend.pipeline_context import build_closed_world_context
-    from pcc.py_frontend.pipeline_exports import _write_native_exports_wire, _read_native_exports_wire
+    from pcc.frontends.python.pipeline_context import build_closed_world_context
+    from pcc.frontends.python.pipeline_exports import _write_native_exports_wire, _read_native_exports_wire
     source = tmp_path / "provider.py"
     source.write_text("NUMBER = 7\nBIG = 1" + "0" * 30 + "\nTEXT = 'x'\nTOKEN = None\nFLAG = True\n")
     _, exports, derived = build_closed_world_context([str(source)], [provider_name], merge_exports=False)
@@ -194,8 +194,8 @@ def test_source_constant_storage_survives_export_wire(tmp_path, provider_name, b
     _write_native_exports_wire(str(path), exports, derived)
     restored, _ = _read_native_exports_wire(str(path))
     assert restored == exports
-    from pcc.py_frontend.pipeline_exports import _read_native_exports_wire_for_module
-    from pcc.py_frontend.type_infer import build_unique_external_class_preload_index
+    from pcc.frontends.python.pipeline_exports import _read_native_exports_wire_for_module
+    from pcc.frontends.python.type_infer import build_unique_external_class_preload_index
     indexed_path = tmp_path / "exports.indexed"
     _write_native_exports_wire(str(indexed_path), exports, derived,
                                module_dependencies={provider_name: ()},
@@ -216,7 +216,7 @@ def test_source_constant_storage_survives_export_wire(tmp_path, provider_name, b
 
 @pytest.mark.parametrize("declaration", ("FLAG = True", "FLAG = 1.5", "from pcc.extern import c_int64\nFLAG = 7"))
 def test_raw_module_attribute_mutation_fails_explicitly(tmp_path, monkeypatch, capfd, declaration):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
     _configure(monkeypatch)
     provider = tmp_path / "raw_provider.py"
     provider.write_text(declaration + "\n")
@@ -236,7 +236,7 @@ def explicit_runtime():
     requested = os.environ.get("PCC_RUNTIME_ARCHIVE", "")
     assert requested, "explicit matching threaded runtime required; never build implicitly"
     runtime = Path(requested).resolve(strict=True)
-    verify_runtime_archive_manifest(runtime, runtime_root=_ROOT / "pcc/py_runtime")
+    verify_runtime_archive_manifest(runtime, runtime_root=_ROOT / "pcc/runtime")
     return runtime
 
 
@@ -244,7 +244,7 @@ def explicit_runtime():
 @pytest.mark.parametrize("lifetime", (False, True), ids=("bindings", "finalizer"))
 @pytest.mark.parametrize("scaffold", ("on", "off"))
 def test_host_emitted_pointer_module_attributes(tmp_path, monkeypatch, explicit_runtime, scaffold, lifetime):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
     _configure(monkeypatch, explicit_runtime)
     binary = tmp_path / "module-storage"
     compile_python_multi(_sources(tmp_path, lifetime), str(binary),
@@ -261,8 +261,8 @@ def test_host_emitted_pointer_module_attributes(tmp_path, monkeypatch, explicit_
 
 
 def test_unsafe_provider_pointer_is_not_a_managed_mutation_target(tmp_path, monkeypatch, capfd):
-    from pcc.py_frontend.pipeline import compile_python_multi
-    from pcc.py_frontend.pipeline_context import build_closed_world_context
+    from pcc.frontends.python.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline_context import build_closed_world_context
     _configure(monkeypatch)
     provider = tmp_path / "raw_owner.py"
     provider.write_text("from pcc.unsafe import malloc\nBUFFER = malloc(32)\n")
@@ -295,7 +295,7 @@ def test_unsafe_provider_pointer_is_not_a_managed_mutation_target(tmp_path, monk
 
 
 def test_unsafe_rhs_cannot_become_a_managed_module_pointer(tmp_path, monkeypatch, capfd):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
     _configure(monkeypatch)
     provider = tmp_path / "object_owner.py"
     provider.write_text("TOKEN = None\n")

@@ -7,6 +7,9 @@
 ssize_t read(int fd, void *buf, size_t count);
 ssize_t write(int fd, const void *buf, size_t count);
 int close(int fd);
+int pipe(int pipefd[2]);
+pid_t fork(void);
+void _exit(int status);
 char *getcwd(char *buf, size_t size);
 off_t lseek(int fd, off_t offset, int whence);
 int isatty(int fd);

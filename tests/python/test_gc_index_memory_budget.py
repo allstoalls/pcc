@@ -9,7 +9,7 @@ import pytest
 
 
 def _capacity_function():
-    source = Path(__file__).resolve().parents[2] / "pcc/py_runtime/py/freestanding_gc_index_table.py"
+    source = Path(__file__).resolve().parents[2] / "pcc/runtime/py/freestanding_gc_index_table.py"
     tree = ast.parse(source.read_text())
     names = {"pcc_gc_index_py_next_pow2", "pcc_gc_index_py_rehash_capacity"}
     functions = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in names]
@@ -36,7 +36,7 @@ def test_capacity_compaction_keeps_minimum_and_lookup_headroom():
 
 
 def test_slot_size_query_has_only_its_exact_raw_gc_signature():
-    from pcc.py_frontend.pipeline_freestanding import freestanding_gc_cross_object_runtime_imports
+    from pcc.frontends.python.pipeline_freestanding import freestanding_gc_cross_object_runtime_imports
 
     assert freestanding_gc_cross_object_runtime_imports(
         'size = extern("pcc_gc_index_slot_size", (), c_int64)\n'
@@ -48,7 +48,7 @@ def test_slot_size_query_has_only_its_exact_raw_gc_signature():
 
 
 def test_native_index_growth_collision_and_deletion_budget(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, monkeypatch,
+    tmp_path, pcc_runtime_archive, python_program_compiler, monkeypatch,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = tmp_path / "index_budget.py"
@@ -99,7 +99,7 @@ main()
 ''')
     binary = tmp_path / "index_budget"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)))

@@ -95,7 +95,7 @@ def _strip_constant_expr_attrs(rest: str) -> str:
     return text
 
 
-def _parse_constant_expr_cast(text: str):
+def _parse_constant_expr_cast(text: str, *, type_context=None):
     pieces = text.strip().split(None, 1)
     if len(pieces) != 2 or pieces[0] not in _CONSTANT_EXPR_CASTS:
         return None
@@ -104,12 +104,12 @@ def _parse_constant_expr_cast(text: str):
     if not (rest.startswith("(") and rest.endswith(")")):
         return None
     body = rest[1:-1].strip()
-    src_type_text, remainder = extract_leading_type_token(body)
+    src_type_text, remainder = extract_leading_type_token(body, type_context=type_context)
     value_text, dst_type_text = split_top_level_keyword(remainder, " to ")
-    return op, parse_ir_type(src_type_text), value_text, parse_ir_type(dst_type_text)
+    return op, parse_ir_type(src_type_text, type_context=type_context), value_text, parse_ir_type(dst_type_text, type_context=type_context)
 
 
-def _parse_constant_expr_binop(text: str):
+def _parse_constant_expr_binop(text: str, *, type_context=None):
     pieces = text.strip().split(None, 1)
     if len(pieces) != 2 or pieces[0] not in _CONSTANT_EXPR_BINOPS:
         return None
@@ -121,10 +121,10 @@ def _parse_constant_expr_binop(text: str):
     parts = split_top_level(body)
     if len(parts) != 2:
         return None
-    lhs_type_text, lhs_value_text = extract_leading_type_token(parts[0])
-    rhs_type_text, rhs_value_text = extract_leading_type_token(parts[1])
-    value_type = parse_ir_type(lhs_type_text)
-    rhs_type = parse_ir_type(rhs_type_text)
+    lhs_type_text, lhs_value_text = extract_leading_type_token(parts[0], type_context=type_context)
+    rhs_type_text, rhs_value_text = extract_leading_type_token(parts[1], type_context=type_context)
+    value_type = parse_ir_type(lhs_type_text, type_context=type_context)
+    rhs_type = parse_ir_type(rhs_type_text, type_context=type_context)
     if value_type.describe() != rhs_type.describe():
         raise BackendUnavailable(
             "self backend constant expression binop expected matching operand types, got "
@@ -168,7 +168,7 @@ def _materialize_constant_expr_operand(
     module_symbols: PreparedModuleSymbols,
     available_regs: tuple[int, ...],
 ) -> list[str]:
-    decoded_value = decode_value_token(value_text)
+    decoded_value = decode_value_token(value_text, type_context=module_symbols.type_context)
     if decoded_value.startswith(_CONSTANT_EXPR_PREFIX):
         return _materialize_constant_expr_to_reg(
             func,
@@ -191,7 +191,7 @@ def _materialize_constant_expr_to_reg(
 ) -> list[str]:
     if reg_index not in available_regs:
         available_regs = (reg_index, *available_regs)
-    if cast := _parse_constant_expr_cast(text):
+    if cast := _parse_constant_expr_cast(text, type_context=module_symbols.type_context):
         op, src_type, value_text, dst_type = cast
         if dst_type.describe() != expected_type.describe():
             raise BackendUnavailable(
@@ -207,7 +207,7 @@ def _materialize_constant_expr_to_reg(
                 module_symbols,
                 available_regs,
             )
-    if binop := _parse_constant_expr_binop(text):
+    if binop := _parse_constant_expr_binop(text, type_context=module_symbols.type_context):
         op, value_type, lhs_value_text, rhs_value_text = binop
         if value_type.describe() != expected_type.describe():
             raise BackendUnavailable(
@@ -346,8 +346,11 @@ def store_large_aggregate_literal_to_address(
     data_reg_32: str = "w14",
     module_symbols: PreparedModuleSymbols | None = None,
 ) -> list[str]:
+    # Numeric literals need no symbols; callers may omit the optional module.
+    # Symbolic/named values still use the explicit owning module when supplied.
+    type_context = module_symbols.type_context if module_symbols is not None else None
     try:
-        literal_bytes = aggregate_literal_to_bytes(value_type, value)
+        literal_bytes = aggregate_literal_to_bytes(value_type, value, type_context=type_context)
     except BackendUnavailable:
         if module_symbols is None:
             raise
@@ -426,7 +429,7 @@ def _store_symbolic_aggregate_literal_fields(
             text = "[" + text[1:-1].strip() + "]"
         if not (text.startswith("[") and text.endswith("]")):
             return _store_literal_bytes_to_address(
-                aggregate_literal_to_bytes(value_type, value),
+                aggregate_literal_to_bytes(value_type, value, type_context=module_symbols.type_context),
                 base_addr_reg,
                 base_offset,
                 addr_scratch_reg=addr_scratch_reg,
@@ -441,7 +444,7 @@ def _store_symbolic_aggregate_literal_fields(
             lines.extend(
                 _store_symbolic_aggregate_literal_fields(
                     value_type.elem,
-                    strip_typed_initializer(item),
+                    strip_typed_initializer(item, type_context=module_symbols.type_context),
                     base_addr_reg,
                     base_offset + index * stride,
                     module_symbols,
@@ -454,7 +457,7 @@ def _store_symbolic_aggregate_literal_fields(
     if value_type.is_struct:
         if not (text.startswith("{") and text.endswith("}")):
             return _store_literal_bytes_to_address(
-                aggregate_literal_to_bytes(value_type, value),
+                aggregate_literal_to_bytes(value_type, value, type_context=module_symbols.type_context),
                 base_addr_reg,
                 base_offset,
                 addr_scratch_reg=addr_scratch_reg,
@@ -467,7 +470,7 @@ def _store_symbolic_aggregate_literal_fields(
             lines.extend(
                 _store_symbolic_aggregate_literal_fields(
                     field_type,
-                    strip_typed_initializer(item),
+                    strip_typed_initializer(item, type_context=module_symbols.type_context),
                     base_addr_reg,
                     base_offset + value_type.field_offset(index),
                     module_symbols,
@@ -487,7 +490,7 @@ def _store_symbolic_aggregate_literal_fields(
             data_reg_64=data_reg_64,
         )
     return _store_literal_bytes_to_address(
-        aggregate_literal_to_bytes(value_type, value),
+        aggregate_literal_to_bytes(value_type, value, type_context=module_symbols.type_context),
         base_addr_reg,
         base_offset,
         addr_scratch_reg=addr_scratch_reg,
@@ -512,7 +515,7 @@ def _store_symbolic_pointer_literal_to_address(
     data_reg_64: str,
 ) -> list[str]:
     lines: list[str] = []
-    decoded = decode_value_token(value)
+    decoded = decode_value_token(value, type_context=module_symbols.type_context)
     if decoded.startswith("gep0:"):
         lines.extend(
             materialize_global_address(
@@ -526,7 +529,7 @@ def _store_symbolic_pointer_literal_to_address(
         if offset:
             lines.extend(emit_add_offset(data_reg_64, data_reg_64, offset))
     elif value.startswith("getelementptr"):
-        base, offset = parse_constant_gep(value)
+        base, offset = parse_constant_gep(value, type_context=module_symbols.type_context)
         lines.extend(materialize_global_address(base, data_reg_64, module_symbols))
         if offset:
             lines.extend(emit_add_offset(data_reg_64, data_reg_64, offset))
@@ -589,7 +592,7 @@ def _materialize_symbolic_ptr_array_literal_to_regs(
             raise BackendUnavailable(
                 f"self backend expected GPR for ptr lane, got {reg}"
             )
-        lane_value = decode_value_token(strip_typed_initializer(item))
+        lane_value = decode_value_token(strip_typed_initializer(item, type_context=module_symbols.type_context), type_context=module_symbols.type_context)
         lines.extend(
             materialize_value(
                 func, lane_value, value_type.elem, int(reg[1:]), module_symbols
@@ -1192,7 +1195,7 @@ def materialize_value(
                 f"self backend aggregate literal used as non-aggregate in {func.name!r}: {value!r}"
             )
         try:
-            literal_bytes = aggregate_literal_to_bytes(expected_type, value)
+            literal_bytes = aggregate_literal_to_bytes(expected_type, value, type_context=module_symbols.type_context)
         except BackendUnavailable:
             if module_symbols is None:
                 raise

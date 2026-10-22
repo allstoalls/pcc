@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.pipeline_targets import host_target_triple
-from pcc.py_frontend.codegen.runtime_abi import (
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.pipeline_targets import host_target_triple
+from pcc.frontends.python.codegen.runtime_abi import (
     FREESTANDING_GC_CROSS_OBJECT_SIGNATURES,
     FREESTANDING_GC_RUNTIME_GLOBALS,
     FREESTANDING_GC_THREAD_LOCAL_GLOBALS,
@@ -20,7 +20,7 @@ from tests.runtime_build_cache import cached_threaded_pcc_python_runtime
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 FRAME_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_frame_registry.py"
 MANAGED_SOURCE = RUNTIME_DIR / "py" / "py_gc_backend.py"
 WRAPPER_SOURCE = RUNTIME_DIR / "py" / "py_obj.py"
@@ -477,10 +477,10 @@ def _frame_expected(pool_cap: int) -> str:
 
 def test_archive_owns_frame_registry_gc0_to_gc4(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ):
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -503,7 +503,7 @@ def test_archive_owns_frame_registry_gc0_to_gc4(
         tmp_path,
         "frame_registry_pcc_python",
         _frame_harness_source(),
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
     )
     for backend in range(5):
         output = _run_ok(implementation, {**os.environ, "PCC_GC_BACKEND": str(backend)})

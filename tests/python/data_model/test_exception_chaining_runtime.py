@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 def test_exception_chaining_traceback_and_unhandled_print_native(
-    tmp_path, pcc_py_runtime_archive
+    tmp_path, pcc_runtime_archive
 ):
     src = tmp_path / "exc_chain_probe.c"
     exe = tmp_path / "exc_chain_probe"
@@ -42,9 +42,9 @@ def test_exception_chaining_traceback_and_unhandled_print_native(
         [
             os.environ.get("CC", "cc"),
             "-I",
-            str(pcc_py_runtime_archive.parent / "include"),
+            str(pcc_runtime_archive.parent / "include"),
             str(src),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(exe),
@@ -60,7 +60,7 @@ def test_exception_chaining_traceback_and_unhandled_print_native(
     assert "RuntimeError: outer" in err
 
 
-def test_implicit_context_is_set_by_raise_native(tmp_path, pcc_py_runtime_archive):
+def test_implicit_context_is_set_by_raise_native(tmp_path, pcc_runtime_archive):
     src = tmp_path / "exc_context_probe.c"
     exe = tmp_path / "exc_context_probe"
     src.write_text(
@@ -85,9 +85,9 @@ def test_implicit_context_is_set_by_raise_native(tmp_path, pcc_py_runtime_archiv
         [
             os.environ.get("CC", "cc"),
             "-I",
-            str(pcc_py_runtime_archive.parent / "include"),
+            str(pcc_runtime_archive.parent / "include"),
             str(src),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(exe),

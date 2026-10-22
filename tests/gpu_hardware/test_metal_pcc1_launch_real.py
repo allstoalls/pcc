@@ -6985,7 +6985,7 @@ def test_level5_pcc1_preflight_reports_current_launcher_blockers():
     assert "host_subprocess_toolchain" in blocker_codes
     assert "pcc.kernel_ir.metal_source_runtime" in blocker_modules
     assert "pcc.kernel_ir.metal_buffer" in blocker_modules
-    assert "pcc.gpu_metal" in blocker_modules
+    assert "pcc.backend.metal" in blocker_modules
 
     runtime_codes = {blocker.code for blocker in preflight.runtime_blockers}
     build_codes = {blocker.code for blocker in preflight.build_blockers}

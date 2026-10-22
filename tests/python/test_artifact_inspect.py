@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.artifact_inspect import ArtifactInspectionError, inspect_artifact, main
+from pcc.diagnostics.artifact_inspect import ArtifactInspectionError, inspect_artifact, main
 
 
 def _string_command(command, name, minimum=24):
@@ -79,7 +79,7 @@ def test_rejects_malformed_artifacts(tmp_path, data):
 
 def test_python_public_api_and_host_cli(tmp_path, capsys):
     import pcc
-    from pcc.cli_core import cli_main
+    from pcc.driver.cli_core import cli_main
 
     artifact = tmp_path / "object.o"
     artifact.write_bytes(_macho(filetype=1))
@@ -125,7 +125,7 @@ def test_public_api_works_without_site_packages(tmp_path):
 
 
 def test_native_dispatch_does_not_delegate_artifact_to_host(monkeypatch):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     calls = []
     monkeypatch.setattr(
@@ -137,4 +137,4 @@ def test_native_dispatch_does_not_delegate_artifact_to_host(monkeypatch):
         cli, "_run_host_pcc_from_pcc1", lambda args: pytest.fail("host delegation")
     )
     assert cli.bootstrap_cli_main(["inspect", "app.c", "--json"]) == 7
-    assert calls == [("pcc.artifact_inspect", ["app.c", "--json"])]
+    assert calls == [("pcc.diagnostics.artifact_inspect", ["app.c", "--json"])]

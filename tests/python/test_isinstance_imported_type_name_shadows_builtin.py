@@ -14,7 +14,7 @@ descriptor class.  Compiled, that test answered False for a `NoneType()`
 descriptor, so the widening never happened and the field stayed `NoneType`.
 Run under CPython the same line is real Python and answers True.  Host pcc
 widened; pcc1 did not.  Stage2 died with `Layer 1 slice on type NoneType not
-supported` compiling `pcc/ply/lex.py`, whose `self.lexdata = None` in
+supported` compiling `pcc/frontends/c/ply/lex.py`, whose `self.lexdata = None` in
 `__init__` becomes a string in `input()` and is sliced in `token()` -- a
 bootstrap divergence produced entirely by this one lowering.
 
@@ -92,7 +92,7 @@ MAIN = textwrap.dedent(
 
 
 def _compile_and_run(tmp_path: Path) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     (tmp_path / "shadow_types.py").write_text(TYPES_MODULE, encoding="utf-8")
     src = tmp_path / "shadow_main.py"
@@ -131,8 +131,7 @@ def test_an_imported_class_named_NoneType_wins_over_the_builtin(tmp_path) -> Non
 def test_the_guard_reads_import_bindings(tmp_path) -> None:
     source = (
         Path(__file__).absolute().parents[2]
-        / "pcc"
-        / "py_frontend"
+        / "pcc" / "frontends" / "python"
         / "codegen"
         / "isinstance_lowering.py"
     ).read_text(encoding="utf-8")

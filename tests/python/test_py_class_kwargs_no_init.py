@@ -1,7 +1,7 @@
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def test_no_init_class_call_accepts_keyword_attrs_without_libpython(tmp_path):

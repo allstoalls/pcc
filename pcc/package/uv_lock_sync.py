@@ -24,7 +24,7 @@ from pcc.package.runtime_profile import (
     CapabilityArtifactError,
     read_capability_artifacts,
 )
-from pcc.package_environment import resolve_package_environment
+from pcc.package.environment import resolve_package_environment
 
 UV_LOCK_ADAPTER_SCHEMA = "pcc.uv-lock-adapter.v1"
 UV_LOCK_SUPPORTED_VERSION = 1

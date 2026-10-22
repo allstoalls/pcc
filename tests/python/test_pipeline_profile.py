@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from pcc.profile_events import ProfileRecorder
-from pcc.py_frontend import pipeline
-from pcc.py_frontend import pipeline_profile
-from pcc.py_frontend.pipeline_profile import (
+from pcc.diagnostics.profile_events import ProfileRecorder
+from pcc.frontends.python import pipeline
+from pcc.frontends.python import pipeline_profile
+from pcc.frontends.python.pipeline_profile import (
     ROADMAP_PHASES,
     run_profiled_phase,
     seed_expected_phase_counters,

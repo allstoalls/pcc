@@ -30,7 +30,7 @@ ATTEMPTS = 3
 
 @pytest.fixture(scope="module")
 def backend4_churn_binary(tmp_path_factory):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     base = tmp_path_factory.mktemp("backend4_exit_list_item_uaf")
     exe = base / "longrun_churn_backend4_exit_uaf"

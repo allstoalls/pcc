@@ -11,7 +11,7 @@ def test_passes_explain_json():
         check=True,
     )
     data = json.loads(result.stdout)
-    assert data["schema"] == "pcc.pass_explain.v1"
+    assert data["schema"] == "pcc.diagnostics.pass_explain.v1"
     assert data["status"] == "UNKNOWN"
     assert data["ran"] == []
 

@@ -46,7 +46,7 @@ main()
 
 @pytest.fixture(scope="module")
 def out(compile_and_run):
-    r = compile_and_run(PROGRAM, backend="llvm")
+    r = compile_and_run(PROGRAM, backend="self")
     assert r.returncode == 0, r.stdout + r.stderr
     return r.stdout
 

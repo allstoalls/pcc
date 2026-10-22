@@ -36,7 +36,7 @@ That leads to a layered architecture where orchestration, frontend semantics, op
                                v
                     +----------------------+
                     | Project collection   |
-                    | pcc.project          |
+                    | pcc.driver.project          |
                     +-----+-----------+----+
                           |           |
                  C input  |           |  Python input
@@ -74,10 +74,10 @@ At a high level, `pcc` has five major layers:
 | Layer | Primary paths | Responsibility |
 |---|---|---|
 | Entry surfaces | `pcc/pcc.py`, `pcc/api.py` | CLI UX and Python API |
-| Build orchestration | `pcc/project.py` | Collect files, infer source sets, prepare make-driven builds |
-| Frontends | `pcc/evaluater/`, `pcc/codegen/`, `pcc/py_frontend/` | Parse and lower C/Python into LLVM IR |
-| Optimization / analysis | `pcc/passes/`, parts of `pcc/codegen/` | AST analysis, IR shaping, LLVM pipeline selection |
-| Runtime / validation | `pcc/py_runtime/`, `tests/`, `projects/`, `bench*/` | Runtime support, correctness validation, performance measurement |
+| Build orchestration | `pcc/driver/project.py` | Collect files, infer source sets, prepare make-driven builds |
+| Frontends | `pcc/frontends/c/evaluator/`, `pcc/frontends/c/codegen/`, `pcc/frontends/python/` | Parse and lower C/Python into LLVM IR |
+| Optimization / analysis | `pcc/frontends/c/passes/`, parts of `pcc/frontends/c/codegen/` | AST analysis, IR shaping, LLVM pipeline selection |
+| Runtime / validation | `pcc/runtime/`, `tests/`, `projects/`, `bench*/` | Runtime support, correctness validation, performance measurement |
 
 ---
 
@@ -111,7 +111,7 @@ The public Python API exposes two high-level surfaces:
 
 This layer turns the compiler into an embeddable toolchain instead of a CLI-only program.
 
-### 3.3 Programmatic evaluator: `pcc/evaluater/c_evaluator.py`
+### 3.3 Programmatic evaluator: `pcc/frontends/c/evaluator/c_evaluator.py`
 
 `CEvaluator` is the central orchestration object for the C toolchain.
 
@@ -130,7 +130,7 @@ It owns:
 
 ## 4. Build orchestration and source collection
 
-### 4.1 `pcc/project.py`
+### 4.1 `pcc/driver/project.py`
 
 This module decides **what to compile** before the compiler decides **how to compile it**.
 
@@ -171,7 +171,7 @@ C source / project input
   -> preprocessing
   -> parsing to C AST
   -> HighTier analysis into PassContext
-  -> semantic lowering in LLVMCodeGenerator
+  -> semantic lowering in CCodeGenerator
   -> IR post-processing / metadata
   -> LLVM optimization
   -> MCJIT execution or object emission / system link
@@ -179,14 +179,14 @@ C source / project input
 
 ### 5.2 Preprocessing
 
-Primary logic lives in `pcc/evaluater/c_evaluator.py`.
+Primary logic lives in `pcc/frontends/c/evaluator/c_evaluator.py`.
 
 `pcc` can use the host C preprocessor (`cc -E`) while steering it toward a pycparser-friendly environment via:
 
 - shipped fake libc headers in `utils/fake_libc_include/`
 - user include directories
 - explicit `--cpp-arg` flags
-- make-derived CPP flag collection from `pcc/project.py`
+- make-derived CPP flag collection from `pcc/driver/project.py`
 
 This hybrid approach is one of the reasons `pcc` can handle larger real-world projects than a purely toy frontend.
 
@@ -194,16 +194,16 @@ This hybrid approach is one of the reasons `pcc` can handle larger real-world pr
 
 Core parser-related code lives under:
 
-- `pcc/parse/`
-- `pcc/lex/`
-- `pcc/ast/`
-- vendored `pcc/ply/`
+- `pcc/frontends/c/parse/`
+- `pcc/frontends/c/lex/`
+- `pcc/frontends/c/ast/`
+- vendored `pcc/frontends/c/ply/`
 
 The parser produces the C AST that later semantic/codegen stages consume.
 
-### 5.4 Semantic lowering: `pcc/codegen/c_codegen.py`
+### 5.4 Semantic lowering: `pcc/frontends/c/codegen/c_codegen.py`
 
-`LLVMCodeGenerator` is the main semantic engine for C.
+`CCodeGenerator` is the main semantic engine for C.
 
 This module owns the hard parts of C lowering, including:
 
@@ -220,7 +220,7 @@ A key design detail is that **LLVM integer types alone are not enough to preserv
 
 ### 5.5 Compile-time semantics
 
-`_eval_const_expr()` inside `pcc/codegen/c_codegen.py` is a semantic subsystem in its own right.
+`_eval_const_expr()` inside `pcc/frontends/c/codegen/c_codegen.py` is a semantic subsystem in its own right.
 
 This matters because correctness bugs can appear in either of two places:
 
@@ -233,7 +233,7 @@ Large-project regressions frequently depend on both being correct.
 
 ## 6. Pass framework and optimization tiers
 
-The pass framework is implemented in `pcc/passes/`.
+The pass framework is implemented in `pcc/frontends/c/passes/`.
 
 The project explicitly models optimization in four tiers:
 
@@ -269,15 +269,15 @@ This lets the project ask more precise questions such as:
 
 Relevant code lives in:
 
-- `pcc/passes/llvm_text_pipeline.py`
-- `pcc/passes/llvm_builtin_registry.py`
-- `pcc/passes/llvm_python_registry.py`
+- `pcc/frontends/c/passes/llvm_text_pipeline.py`
+- `pcc/frontends/c/passes/llvm_builtin_registry.py`
+- `pcc/frontends/c/passes/registry.py`
 
 ---
 
 ## 7. LLVM backend, execution, and emission
 
-The LLVM backend is orchestrated mostly from `pcc/evaluater/c_evaluator.py`.
+The LLVM backend is orchestrated mostly from `pcc/frontends/c/evaluator/c_evaluator.py`.
 
 ### 7.1 Execution modes
 
@@ -330,7 +330,7 @@ The goal is to skip repeated front-end work across process boundaries and repeat
 
 ## 9. Python frontend architecture
 
-The Python frontend is under `pcc/py_frontend/` and `pcc/py_runtime/`.
+The Python frontend is under `pcc/frontends/python/` and `pcc/runtime/`.
 
 It is more experimental than the C frontend, but it already has a clear architecture.
 
@@ -351,14 +351,14 @@ Python source
 
 | Path | Responsibility |
 |---|---|
-| `pcc/py_frontend/parser.py` | parse Python using stdlib `ast`, lift into frozen internal AST |
-| `pcc/py_frontend/py_ast.py` | internal Python AST model |
-| `pcc/py_frontend/type_infer.py` | assign/refine types across the AST |
-| `pcc/py_frontend/codegen/layer1.py` | lower typed Python AST to LLVM IR |
-| `pcc/py_frontend/pipeline.py` | orchestrate parse → infer → codegen → link |
-| `pcc/py_runtime/` | native runtime support archive |
+| `pcc/frontends/python/parser.py` | parse Python using stdlib `ast`, lift into frozen internal AST |
+| `pcc/frontends/python/py_ast.py` | internal Python AST model |
+| `pcc/frontends/python/type_infer.py` | assign/refine types across the AST |
+| `pcc/frontends/python/codegen/layer1.py` | lower typed Python AST to LLVM IR |
+| `pcc/frontends/python/pipeline.py` | orchestrate parse → infer → codegen → link |
+| `pcc/runtime/` | native runtime support archive |
 | `pcc/extern/` | direct extern-C bridge for pure native calls |
-| `pcc/py_stdlib/` | pcc-side stdlib shims/helpers |
+| `pcc/stdlib/` | pcc-side stdlib shims/helpers |
 
 ### 9.3 Native path vs CPython fallback
 
@@ -394,7 +394,7 @@ This layer is not just a convenience. It is part of the frontend compatibility c
 
 ### 10.2 Python runtime archive
 
-`pcc/py_runtime/` builds `libpy_runtime.a`, which provides the runtime symbols used by the Python frontend's generated programs.
+`pcc/runtime/` builds `libpy_runtime.a`, which provides the runtime symbols used by the Python frontend's generated programs.
 
 ### 10.3 System libraries
 
@@ -467,15 +467,15 @@ The following map is the fastest way to orient yourself in the repo:
 |---|---|
 | `pcc/pcc.py` | CLI entrypoint |
 | `pcc/api.py` | public Python build/module API |
-| `pcc/project.py` | source collection and build orchestration |
-| `pcc/evaluater/c_evaluator.py` | C compilation / execution coordinator |
-| `pcc/codegen/c_codegen.py` | core C semantic lowering |
-| `pcc/passes/` | pass framework and LLVM pipeline control |
-| `pcc/parse/`, `pcc/lex/`, `pcc/ast/` | C parser frontend pieces |
-| `pcc/py_frontend/` | Python frontend |
-| `pcc/py_runtime/` | Python runtime archive |
+| `pcc/driver/project.py` | source collection and build orchestration |
+| `pcc/frontends/c/evaluator/c_evaluator.py` | C compilation / execution coordinator |
+| `pcc/frontends/c/codegen/c_codegen.py` | core C semantic lowering |
+| `pcc/frontends/c/passes/` | pass framework and LLVM pipeline control |
+| `pcc/frontends/c/parse/`, `pcc/frontends/c/lex/`, `pcc/frontends/c/ast/` | C parser frontend pieces |
+| `pcc/frontends/python/` | Python frontend |
+| `pcc/runtime/` | Python runtime archive |
 | `pcc/extern/` | extern-C bridge for Python frontend |
-| `pcc/py_stdlib/` | pcc-side stdlib support |
+| `pcc/stdlib/` | pcc-side stdlib support |
 | `utils/fake_libc_include/` | fake libc headers |
 | `tests/` | regression and integration tests |
 | `projects/` | real third-party project inputs |
@@ -491,14 +491,14 @@ If you want to extend `pcc`, these are the main seams:
 
 | Goal | Where to start |
 |---|---|
-| Add a CLI workflow | `pcc/pcc.py`, `pcc/project.py` |
-| Fix C semantic lowering | `pcc/codegen/c_codegen.py` |
-| Add/adjust C parsing | `pcc/parse/`, `pcc/lex/` |
-| Add source-aware optimization | `pcc/passes/` + codegen hooks |
-| Add Python syntax support | `pcc/py_frontend/parser.py` |
-| Improve Python typing | `pcc/py_frontend/type_infer.py` |
-| Improve Python codegen | `pcc/py_frontend/codegen/layer1.py` |
-| Add native runtime helpers | `pcc/py_runtime/`, `pcc/extern/`, `pcc/py_stdlib/` |
+| Add a CLI workflow | `pcc/pcc.py`, `pcc/driver/project.py` |
+| Fix C semantic lowering | `pcc/frontends/c/codegen/c_codegen.py` |
+| Add/adjust C parsing | `pcc/frontends/c/parse/`, `pcc/frontends/c/lex/` |
+| Add source-aware optimization | `pcc/frontends/c/passes/` + codegen hooks |
+| Add Python syntax support | `pcc/frontends/python/parser.py` |
+| Improve Python typing | `pcc/frontends/python/type_infer.py` |
+| Improve Python codegen | `pcc/frontends/python/codegen/layer1.py` |
+| Add native runtime helpers | `pcc/runtime/`, `pcc/extern/`, `pcc/stdlib/` |
 | Add project integrations | `projects/` + `tests/test_<project>.py` |
 
 ---
@@ -525,20 +525,20 @@ If you are new to the project, this sequence works well:
 1. `README.md`
 2. `AGENTS.md`
 3. `pcc/pcc.py`
-4. `pcc/project.py`
-5. `pcc/evaluater/c_evaluator.py`
-6. `pcc/codegen/c_codegen.py`
-7. `pcc/passes/__init__.py`
+4. `pcc/driver/project.py`
+5. `pcc/frontends/c/evaluator/c_evaluator.py`
+6. `pcc/frontends/c/codegen/c_codegen.py`
+7. `pcc/frontends/c/passes/__init__.py`
 8. `docs/investigations/` for real debugging case studies
 
 For Python frontend work, add:
 
 1. `docs/python-tutorial.md`
 2. `docs/python-howto.md`
-3. `pcc/py_frontend/pipeline.py`
-4. `pcc/py_frontend/parser.py`
-5. `pcc/py_frontend/type_infer.py`
-6. `pcc/py_frontend/codegen/layer1.py`
+3. `pcc/frontends/python/pipeline.py`
+4. `pcc/frontends/python/parser.py`
+5. `pcc/frontends/python/type_infer.py`
+6. `pcc/frontends/python/codegen/layer1.py`
 
 ---
 

@@ -4,10 +4,10 @@ import os
 import subprocess
 import sys
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
-def test_ascii_decode_and_immediate_errors(tmp_path, pcc_py_runtime_archive):
+def test_ascii_decode_and_immediate_errors(tmp_path, pcc_runtime_archive):
     source = tmp_path / "ascii_decode.py"
     source.write_text('''
 import gc
@@ -61,7 +61,7 @@ main()
     assert expected.returncode == 0, expected.stderr
     binary = tmp_path / "ascii_decode"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)))

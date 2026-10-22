@@ -4,7 +4,7 @@ import re
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def _source() -> str:
@@ -35,7 +35,7 @@ def test_dyn_str_compare_fastpath_preserves_semantics(tmp_path):
     compile_python(
         str(src),
         str(exe),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )
@@ -52,7 +52,7 @@ def test_dyn_str_compare_fastpath_uses_type_guarded_str_eq(tmp_path):
     compile_python(
         str(src),
         str(ll),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
         emit_llvm_only=True,

@@ -1,0 +1,472 @@
+--- a/pcc/frontends/python/codegen/exception_lowering.py
++++ b/pcc/frontends/python/codegen/exception_lowering.py
+@@ -945,6 +945,11 @@
+         if isinstance(exc_expr, Call) and isinstance(exc_expr.func, Name):
+             cls_name = exc_expr.func.ident
+             tag = _builtin_exc_tag_or_missing(cls_name)
++            if tag == 14 or tag == 34:
++                # OSError and FileNotFoundError have positional metadata.
++                # The ordinary slot-call route preserves every operand and
++                # shares construction with aliases and first-class classes.
++                return self._emit_slot_call_object(exc_expr, "exc.os")
+             if tag == 58 or tag == 59:  # Decode/encode errors have five-field constructors.
+                 cls = self.builder.call(
+                     self.runtime["py_exc_builtin_class"], [ir.Constant(_I64, tag)],
+--- a/pcc/runtime/py/py_exc_objects.py
++++ b/pcc/runtime/py/py_exc_objects.py
+@@ -32,7 +32,9 @@
+     PY_TYPE_BYTEARRAY,
+     PY_TYPE_BYTES,
+     PY_TYPE_CLASS,
++    PY_TYPE_COMPLEX,
+     PY_TYPE_EXC,
++    PY_TYPE_FLOAT,
+     PY_TYPE_INT,
+     PY_TYPE_MEMORYVIEW,
+     PY_TYPE_STR,
+@@ -869,9 +871,132 @@
+ 
+ 
+ # OSError fields are independent of .args, exactly as in the Unicode record.
+-# Conversion is lazy so existing one-message exception constructors and their
+-# allocation/GC contracts remain unchanged. The record uses the already traced
++# Legacy message-only runtime helpers still convert lazily in the setter. The
++# positional constructor below builds the same record in the already traced
+ # message slot; no exception-layout or collector-specific extension is needed.
++pcc_errno_exception_kind = extern("pcc_errno_exception_kind", (c_int32,), c_int64)
++
++# Reuse the existing two-borrowed/eight-owned construction frame. These are
++# byte offsets, matching _unicode_tuple_put and _unicode_finish.
++_OS_NEW_ERROR = 0
++_OS_NEW_PAYLOAD = 8
++_OS_NEW_ARGS = 16
++_OS_NEW_ERRNO = 24
++_OS_NEW_STRERROR = 32
++_OS_NEW_FILENAME = 40
++_OS_NEW_FILENAME2 = 48
++_OS_NEW_TEMP = 56
++
++
++def _os_error_argument(borrowed, owned, index: int, destination: int) -> int:
++    prior: int = _unicode_pin_slot(borrowed)
++    store_ptr(owned, destination, py_tuple_get(load_ptr(borrowed, 0), index))
++    store_ptr(borrowed, 0, pcc_gc_take_pinned_slot(borrowed, prior))
++    return 0 if ptr_is_null(load_ptr(owned, destination)) else 1
++
++
++def _os_error_constructor_body(borrowed, owned, type_tag: int) -> int:
++    count: int = 0
++    prior: int = 0
++    if ptr_is_null(pcc_gc_load_ptr(null(), borrowed)):
++        store_ptr(owned, _OS_NEW_ARGS, py_tuple_new(0))
++        if ptr_is_null(load_ptr(owned, _OS_NEW_ARGS)):
++            return 0
++    else:
++        prior = _unicode_pin_slot(borrowed)
++        count = py_tuple_len(load_ptr(borrowed, 0))
++        store_ptr(borrowed, 0, pcc_gc_take_pinned_slot(borrowed, prior))
++        pcc_py_gc_minor_graph_lock()
++        args = pcc_gc_load_ptr(null(), borrowed)
++        py_incref(args)
++        store_ptr(owned, _OS_NEW_ARGS, args)
++        pcc_py_gc_minor_graph_unlock()
++    kind: int = type_tag
++    if count >= 2 and count <= 5:
++        if _os_error_argument(borrowed, owned, 0, _OS_NEW_ERRNO) == 0:
++            return 0
++        if _os_error_argument(borrowed, owned, 1, _OS_NEW_STRERROR) == 0:
++            return 0
++        number_slot = ptr_add(owned, _OS_NEW_ERRNO)
++        number_tag: int = _type_of(pcc_gc_load_ptr(null(), number_slot))
++        if type_tag == 14 and (number_tag == PY_TYPE_INT or number_tag == PY_TYPE_BOOL):
++            # OSError accepts arbitrary objects, including arbitrary-precision
++            # ints. Mapping must neither coerce user objects nor truncate ints.
++            overflow = stack_alloc(4)
++            store_i32(overflow, 0, 0)
++            prior = _unicode_pin_slot(number_slot)
++            number: int = py_int_to_i64(load_ptr(number_slot, 0), overflow)
++            store_ptr(number_slot, 0, pcc_gc_take_pinned_slot(number_slot, prior))
++            if py_err_occurred():
++                return 0
++            if load_i32(overflow, 0) == 0 and number >= -2147483648 and number <= 2147483647:
++                kind = pcc_errno_exception_kind(number)
++        if count >= 3:
++            if _os_error_argument(borrowed, owned, 2, _OS_NEW_FILENAME) == 0:
++                return 0
++            filename_slot = ptr_add(owned, _OS_NEW_FILENAME)
++            filename = pcc_gc_load_ptr(null(), filename_slot)
++            filename_tag: int = _type_of(filename)
++            numeric_written: int = kind == 43 and (
++                filename_tag == PY_TYPE_INT or filename_tag == PY_TYPE_BOOL
++                or filename_tag == PY_TYPE_FLOAT or filename_tag == PY_TYPE_COMPLEX)
++            if ptr_eq(filename, global_load_ptr("py_None")) or numeric_written:
++                # BlockingIOError's numeric third argument is not a filename.
++                # characters_written remains outside this metadata-only slice;
++                # keep the full args and the existing absent-filename behavior.
++                pcc_gc_store_root(filename_slot, null())
++            else:
++                if count == 5:
++                    if _os_error_argument(borrowed, owned, 4, _OS_NEW_FILENAME2) == 0:
++                        return 0
++                    second_slot = ptr_add(owned, _OS_NEW_FILENAME2)
++                    if ptr_eq(pcc_gc_load_ptr(null(), second_slot), global_load_ptr("py_None")):
++                        pcc_gc_store_root(second_slot, null())
++                store_ptr(owned, _OS_NEW_TEMP, py_tuple_new(2))
++                if ptr_is_null(load_ptr(owned, _OS_NEW_TEMP)):
++                    return 0
++                _unicode_tuple_put(owned, _OS_NEW_TEMP, 0, _OS_NEW_ERRNO)
++                _unicode_tuple_put(owned, _OS_NEW_TEMP, 1, _OS_NEW_STRERROR)
++                pcc_py_gc_minor_graph_lock()
++                pcc_gc_store_root(ptr_add(owned, _OS_NEW_ARGS),
++                    pcc_gc_load_ptr(null(), ptr_add(owned, _OS_NEW_TEMP)))
++                pcc_py_gc_minor_graph_unlock()
++                pcc_gc_store_root(ptr_add(owned, _OS_NEW_TEMP), null())
++    store_ptr(owned, _OS_NEW_PAYLOAD, py_tuple_new(5))
++    if ptr_is_null(load_ptr(owned, _OS_NEW_PAYLOAD)):
++        return 0
++    _unicode_tuple_put(owned, _OS_NEW_PAYLOAD, 0, _OS_NEW_ARGS)
++    index: int = 1
++    while index < 5:
++        field: int = _OS_NEW_ERRNO + (index - 1) * 8
++        if not ptr_is_null(pcc_gc_load_ptr(null(), ptr_add(owned, field))):
++            _unicode_tuple_put(owned, _OS_NEW_PAYLOAD, index, field)
++        index = index + 1
++    pcc_gc_publish_initialized(pcc_gc_load_ptr(null(), ptr_add(owned, _OS_NEW_PAYLOAD)))
++    store_ptr(owned, _OS_NEW_ERROR, py_exc_new(kind, null()))
++    if ptr_is_null(load_ptr(owned, _OS_NEW_ERROR)):
++        return 0
++    _exc_store_constructed_slot(owned, owned, _OS_NEW_PAYLOAD, 24)
++    pcc_py_gc_minor_graph_lock()
++    error = pcc_gc_load_ptr(null(), owned)
++    atomic_rmw_i32("or", error, 12, PY_FLAG_EXC_OS_PAYLOAD, "relaxed")
++    pcc_py_gc_minor_graph_unlock()
++    return 1
++
++
++@c_abi_export("py_os_error_new")
++def py_os_error_new(type_tag: int, args):
++    borrowed = stack_alloc(16)
++    store_ptr(borrowed, 0, args)
++    store_ptr(borrowed, 8, null())
++    pcc_gc_frame_enter(global_addr("pcc_unicode_borrowed_map"), borrowed)
++    owned = stack_alloc(64)
++    memset(owned, 0, 64)
++    pcc_gc_frame_enter(global_addr("pcc_unicode_owned_map"), owned)
++    success: int = _os_error_constructor_body(borrowed, owned, type_tag)
++    return _unicode_finish(borrowed, owned, success)
++
++
+ def _os_error_prepare_payload(borrowed, owned) -> int:
+     error = pcc_gc_load_ptr(null(), borrowed)
+     if (load_i32(error, 12) & PY_FLAG_EXC_OS_PAYLOAD) != 0:
+--- a/pcc/runtime/py/py_obj_ops_dispatch.py
++++ b/pcc/runtime/py/py_obj_ops_dispatch.py
+@@ -221,6 +221,7 @@
+ py_unicode_error_set_field = extern("py_unicode_error_set_field", (c_ptr, c_int64, c_ptr), c_int64)
+ py_os_error_get_field = extern("py_os_error_get_field", (c_ptr, c_int64), c_ptr)
+ py_os_error_set_field = extern("py_os_error_set_field", (c_ptr, c_int64, c_ptr), c_int64)
++py_os_error_new = extern("py_os_error_new", (c_int64, c_ptr), c_ptr)
+ py_exc_new_with_class = extern("py_exc_new_with_class", (c_ptr, c_ptr), c_ptr)
+ py_exc_matches = extern("py_exc_matches", (c_ptr, c_ptr), c_int64)
+ py_file_type_kind = extern("py_file_type_kind", (c_ptr,), c_int64)
+@@ -3500,14 +3501,16 @@
+ def _builtin_exception_call(cls, args, nargs: int):
+     """``category(message)`` for a builtin exception class value.
+ 
+-    Builds the same exception object as the static ``ValueError("x")``
+-    constructor (only ``args[0]`` is stored); the generic class path made a
+-    plain instance with no message and no ``args``, so ``warnings.warn``
+-    printed an empty ``UserWarning:``.
++    Structured builtin payloads use dedicated constructors. Remaining classes
++    retain the message-only path used by static ``ValueError("x")`` calls;
++    generic class allocation would lose their message and ``args``.
+     """
+-    if _builtin_exception_class_tag(cls) == 58:
++    tag: int = _builtin_exception_class_tag(cls)
++    if tag == 14 or tag == 34:
++        return py_os_error_new(tag, args)
++    if tag == 58:
+         return py_unicode_decode_error_new(args)
+-    if _builtin_exception_class_tag(cls) == 59:
++    if tag == 59:
+         return py_unicode_encode_error_new(args)
+     if nargs == 0:
+         return py_exc_new_with_class(cls, null())
+@@ -3923,6 +3926,12 @@
+             if ptr_is_null(arg) == 0:
+                 py_decref(arg)
+             return out
++        if nkwargs != 0 and _builtin_exception_class_tag(callable) == 14:
++            py_raise_owned(py_exc_new(3, cstr("OSError() takes no keyword arguments")))
++            return null()
++        if nkwargs != 0 and _builtin_exception_class_tag(callable) == 34:
++            py_raise_owned(py_exc_new(3, cstr("FileNotFoundError() takes no keyword arguments")))
++            return null()
+         if nkwargs != 0 and _builtin_exception_class_tag(callable) == 58:
+             py_raise_owned(py_exc_new(3, cstr("UnicodeDecodeError() takes no keyword arguments")))
+             return null()
+--- a/pcc/runtime/include/py_runtime.h
++++ b/pcc/runtime/include/py_runtime.h
+@@ -1989,6 +1989,10 @@
+  * borrowed; the exception stores its own reference. */
+ PyObject *py_exc_new_with_value(int64_t type_tag, PyObject *value);
+ 
++/* OSError/FileNotFoundError positional construction. Borrows args and returns
++ * a NEW exception; exact OSError may select an errno-derived builtin class. */
++PyObject *py_os_error_new(int64_t type_tag, PyObject *args);
++
+ /* Owned UnicodeEncodeError/UnicodeDecodeError with independent args/fields. */
+ PyObject *py_unicode_decode_error_new(PyObject *args);
+ PyObject *py_unicode_decode_error_normalize(PyObject *value);
+--- /dev/null
++++ b/tests/python/test_os_error_constructors.py
+@@ -0,0 +1,249 @@
++"""Bounded OSError/FileNotFoundError constructor and ownership regressions.
++
++The runtime model executes actual constructor/payload bodies, including forced
++relocation. Native execution remains a separate explicit-runtime integration
++gate. BlockingIOError.characters_written and Windows winerror are not qualified.
++"""
++from pathlib import Path
++import re
++
++import pytest
++
++from pcc.runtime.py import py_abi_constants as abi
++from tests.python.test_exception_constructor_roots import _Slots
++from tests.python.test_os_error_attribute_owner import ErrorMemory, bodies
++from tests.python.owned_regression_support import (
++    assert_owned_program,
++    assert_reference_program,
++    explicit_owned_runtime,
++)
++
++
++ROOT = Path(__file__).resolve().parents[2]
++PHASES = ("", "allocation", "frame_enter", "frame_leave", "load_root",
++          "field_store", "publish", "graph_unlock", "tuple_set", "tuple_get")
++ARGUMENTS = (
++    (), ("",), (None,), (84,), (84, "msg"), (2, "missing"),
++    (13, "denied", "/path"), (84, "msg", b"path"),
++    (2, "missing", None), (2, "missing", None, 100),
++    (2, "missing", None, None, "ignored-second"),
++    (2, "missing", "first", None, "second"),
++    (2, "missing", "first", 100, None),
++    (None, None), ("2", "text errno"), (2 ** 100, "large errno"),
++    (2, "missing", "first", None, "second", "extra"),
++)
++
++
++def constructor_memory(phase):
++    memory = ErrorMemory(phase)
++    memory.namespace["i64"] = int
++    memory.namespace["target_sys_platform"] = lambda: "linux"
++    bodies(ROOT / "pcc/runtime/py/freestanding_errno.py", memory.namespace,
++           names={"pcc_errno_exception_kind"})
++    return memory
++
++
++@pytest.mark.parametrize("phase", PHASES)
++@pytest.mark.parametrize("tag,cls", [(14, OSError), (34, FileNotFoundError)])
++@pytest.mark.parametrize("arguments", ARGUMENTS)
++def test_os_error_constructor_payload_matches_cpython(phase, tag, cls, arguments):
++    memory = constructor_memory(phase)
++    caller = _Slots(8)
++    caller.fields[0] = memory.argument_tuple(arguments)
++    memory.frames["caller"] = caller
++    error = memory.namespace["py_os_error_new"](tag, caller.fields[0])
++    assert error is not None and error.references == 1
++    memory.handled.fields[0] = error  # transfer the NEW owner before another call
++    memory.store_root(caller, None)
++    del memory.frames["caller"]
++    oracle = cls(*arguments)
++    assert error.fields[16].fields[abi.PYCLASSOBJECT_NAME_OFFSET] == type(oracle).__name__
++    for name in ("args", "errno", "strerror", "filename", "filename2"):
++        value = memory.dispatch["py_obj_getattr"](memory.handled.fields[0], name)
++        assert memory.python(value) == getattr(oracle, name), (name, arguments)
++        memory.decref(value)
++    assert memory.render() == str(oracle)
++    assert memory.render(1) == repr(oracle)
++    assert not memory.pin_metric and not memory.graph_depth
++    assert set(memory.frames) == {"class_cache", "handled", "pending"}
++    assert memory.pending.fields[0] is None
++
++
++def test_os_error_null_argument_tuple_means_no_arguments():
++    memory = constructor_memory("graph_unlock")
++    error = memory.namespace["py_os_error_new"](14, None)
++    memory.handled.fields[0] = error
++    args = memory.dispatch["py_obj_getattr"](memory.handled.fields[0], "args")
++    assert memory.python(args) == ()
++    memory.decref(args)
++    assert memory.render() == ""
++    assert not memory.pin_metric and not memory.graph_depth
++
++
++@pytest.mark.xfail(strict=True, reason="BlockingIOError.characters_written is outside this constructor slice")
++def test_blocking_numeric_third_argument_known_unqualified_field():
++    memory = constructor_memory("")
++    cls = memory.make(abi.PY_TYPE_CLASS, 65)
++    cls.fields["exception_tag"] = 43
++    cls.fields[abi.PYCLASSOBJECT_NAME_OFFSET] = "BlockingIOError"
++    mro = _Slots(16)
++    mro.fields[0] = cls
++    mro.fields[8] = memory.class_cache.fields[14 * 8]
++    cls.fields[abi.PYCLASSOBJECT_MRO_OFFSET] = mro
++    cls.fields[abi.PYCLASSOBJECT_N_MRO_OFFSET] = 2
++    memory.class_cache.fields[43 * 8] = cls
++    args = memory.argument_tuple((11, "blocked", 3))
++    error = memory.namespace["py_os_error_new"](14, args)
++    memory.handled.fields[0] = error
++    filename = memory.dispatch["py_obj_getattr"](error, "filename")
++    assert memory.python(filename) is None
++    memory.decref(filename)
++    written = memory.dispatch["py_obj_getattr"](error, "characters_written")
++    assert memory.python(written) == 3
++
++
++@pytest.mark.parametrize("failure", [1, 2])
++def test_os_error_constructor_allocation_error_does_not_leak_arguments(failure):
++    memory = constructor_memory("graph_unlock")
++    caller = _Slots(8)
++    caller.fields[0] = memory.argument_tuple((2, "missing", "path"))
++    memory.frames["caller"] = caller
++    original = memory.namespace["py_tuple_new"]
++    calls = 0
++
++    def allocate(count):
++        nonlocal calls
++        calls += 1
++        if calls == failure:
++            memory.namespace["py_raise_owned"](
++                memory.namespace["py_exc_new"](19, "constructor allocation"))
++            return None
++        return original(count)
++
++    memory.namespace["py_tuple_new"] = allocate
++    assert memory.namespace["py_os_error_new"](14, caller.fields[0]) is None
++    assert memory.pending.fields[0].fields[16].fields["exception_tag"] == 19
++    assert caller.fields[0].references == 1
++    assert not memory.pin_metric and not memory.graph_depth
++    assert set(memory.frames) == {"class_cache", "handled", "pending", "caller"}
++
++
++@pytest.mark.parametrize("expression", [
++    "OSError(84, 'msg')", "FileNotFoundError(13, 'msg', 'path')",
++    "IOError(2, 'missing')", "EnvironmentError(2, 'missing')",
++    "OSError(*(2, 'missing', 'path'))", "OSError(message='invalid')",
++])
++def test_os_error_direct_constructor_uses_authoritative_call_slots(expression):
++    from tests.python.test_shared_call_binding import _emit
++
++    text = _emit("def probe():\n    return " + expression + "\n")
++    body = re.search(r"(?ms)^define[^\n]*@user_binding_probe\([^\n]*\).*?^}", text).group(0)
++    assert "@py_obj_call_slots(" in body
++    assert "@py_obj_str(" not in body
++    assert not re.search(r"@py_exc_new\(i64 (?:14|34),", body)
++    assert "@py_cpy_" not in body
++
++
++PROGRAM = r'''
++import gc
++
++EVENTS = []
++
++def operand(name, value):
++    EVENTS.append(name)
++    gc.collect()
++    return value
++
++class Unformatted:
++    def __str__(self):
++        raise AssertionError('constructor formatted an argument')
++
++def direct():
++    return OSError(84, 'msg')
++
++def verify(error, cls, args, number, message, filename=None, filename2=None):
++    gc.collect()
++    assert type(error) is cls
++    assert isinstance(error, OSError) and isinstance(error, Exception)
++    assert error.args == args
++    assert error.errno == number and error.strerror == message
++    assert error.filename == filename and error.filename2 == filename2
++
++def main():
++    verify(direct(), OSError, (84, 'msg'), 84, 'msg')
++    verify(OSError(2, 'missing', 'path'), FileNotFoundError,
++           (2, 'missing'), 2, 'missing', 'path')
++    verify(FileNotFoundError(13, 'denied'), FileNotFoundError,
++           (13, 'denied'), 13, 'denied')
++    evaluated = OSError(operand('errno', 84), operand('message', 'msg'),
++                        operand('filename', 'path'))
++    assert EVENTS == ['errno', 'message', 'filename']
++    verify(evaluated, OSError, (84, 'msg'), 84, 'msg', 'path')
++    marker = Unformatted()
++    untouched = OSError(marker, marker)
++    assert untouched.errno is marker and untouched.strerror is marker
++    assert untouched.args[0] is marker and untouched.args[1] is marker
++    constructor = OSError
++    verify(constructor(84, 'msg'), OSError, (84, 'msg'), 84, 'msg')
++    for cls in (OSError, IOError, EnvironmentError):
++        verify(cls(*(2, 'missing', b'path')), FileNotFoundError,
++               (2, 'missing'), 2, 'missing', b'path')
++    for args in ((), ('',), (None,), (84,)):
++        verify(constructor(*args), OSError, args, None, None)
++    verify(constructor(2, 'missing', None), FileNotFoundError,
++           (2, 'missing', None), 2, 'missing')
++    verify(constructor(2, 'missing', 'first', None, 'second'), FileNotFoundError,
++           (2, 'missing'), 2, 'missing', 'first', 'second')
++    verify(constructor(2, 'missing', None, None, 'ignored'), FileNotFoundError,
++           (2, 'missing', None, None, 'ignored'), 2, 'missing')
++    verify(constructor(2 ** 100, 'large'), OSError,
++           (2 ** 100, 'large'), 2 ** 100, 'large')
++    verify(constructor('2', 'text'), OSError, ('2', 'text'), '2', 'text')
++    args = (2, 'missing', 'first', None, 'second', 'extra')
++    verify(constructor(*args), OSError, args, None, None)
++    try:
++        raise OSError(2, 'missing', 'path')
++    except PermissionError:
++        raise AssertionError('sibling handler matched')
++    except FileNotFoundError as error:
++        assert error.args == (2, 'missing') and error.filename == 'path'
++        assert str(error) == "[Errno 2] missing: 'path'"
++        assert repr(error) == "FileNotFoundError(2, 'missing')"
++    except OSError:
++        raise AssertionError('errno subclass was lost')
++    for cls in (OSError, FileNotFoundError):
++        try:
++            cls(message='invalid')
++        except TypeError:
++            pass
++        else:
++            raise AssertionError('constructor accepted keywords')
++    try:
++        OSError(84, strerror='invalid')
++    except TypeError:
++        pass
++    else:
++        raise AssertionError('direct constructor accepted keywords')
++    value = constructor(84, 'original', 'path')
++    value.args = ('changed',)
++    gc.collect()
++    assert value.errno == 84 and value.strerror == 'original'
++    assert value.filename == 'path' and value.args == ('changed',)
++    print('OS_ERROR_CONSTRUCTORS_OK')
++
++main()
++'''
++
++
++def test_os_error_constructor_reference(tmp_path):
++    assert_reference_program(PROGRAM, "OS_ERROR_CONSTRUCTORS_OK\n", tmp_path)
++
++
++@pytest.mark.integration
++@pytest.mark.parametrize("python_program_compiler", ("pcc0", "pcc1"), indirect=True)
++def test_os_error_constructor_native_five_gc(python_program_compiler, request,
++                                          explicit_owned_runtime, tmp_path, capfd):
++    mode = request.node.callspec.params["python_program_compiler"]
++    assert_owned_program(PROGRAM, "OS_ERROR_CONSTRUCTORS_OK\n", tmp_path,
++                         python_program_compiler, mode, explicit_owned_runtime,
++                         capfd, provenance_probe="2")

@@ -72,11 +72,11 @@ def test_handler_codegen_scopes_active_context_to_function_boundary():
     could miss that mutation and retain an IR value from the completed handler,
     eventually emitting it as a bare cross-function value token.
     """
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen.class_gen import ClassLowering
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
-    from pcc.py_frontend.codegen.user_function_lowering import (
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen.class_gen import ClassLowering
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.codegen.user_function_lowering import (
         UserFunctionLoweringMixin,
     )
 
@@ -91,7 +91,7 @@ def test_handler_codegen_scopes_active_context_to_function_boundary():
 
     exception_source = inspect.getsource(
         __import__(
-            "pcc.py_frontend.codegen.exception_lowering",
+            "pcc.frontends.python.codegen.exception_lowering",
             fromlist=["ExceptionLoweringMixin"],
         ).ExceptionLoweringMixin
     )
@@ -121,7 +121,7 @@ def test_handler_codegen_scopes_active_context_to_function_boundary():
 
 @pytest.mark.parametrize("runtime_cc", [None], ids=["port"])
 def test_exception_context_chaining_matches_cpython(tmp_path, monkeypatch, runtime_cc):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "exc_ctx.py"
     exe = tmp_path / "exc_ctx.out"

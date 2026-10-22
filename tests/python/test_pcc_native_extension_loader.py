@@ -44,7 +44,7 @@ def _compile_extension_source(tmp_path: Path, module_name: str, source: Path) ->
         "-I",
         str(REPO / "utils" / "fake_libc_include"),
         "-I",
-        str(REPO / "pcc" / "py_runtime" / "include"),
+        str(REPO / "pcc" / "runtime" / "include"),
         str(source),
         "-o",
         str(out),
@@ -14738,7 +14738,7 @@ def test_capi_import_sees_explicit_pcc_python_math_port_under_self_backend(
             "--ir-scaffold",
             "on",
             f"{main}=main",
-            f"{REPO / 'pcc' / 'py_stdlib' / 'math.py'}=math",
+            f"{REPO / 'pcc' / 'ir' / 'support' / 'math.py'}=math",
         ],
         text=True,
         capture_output=True,
@@ -16163,10 +16163,8 @@ def test_pcc_native_extension_tuple_dict_attr_helpers(tmp_path):
     ]
 
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Darwin host-extension errno is a named libSystem boundary",
-)
+# Darwin host-extension errno is a named libSystem boundary
+@pytest.mark.pcc_gate(probe=lambda: not (sys.platform != "darwin"))
 def test_pcc_native_extension_errno_messages_use_saved_thread_errno(tmp_path):
     site = _compile_errno_extension(tmp_path)
     main = tmp_path / "main.py"

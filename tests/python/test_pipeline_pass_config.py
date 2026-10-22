@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend import pipeline_pass_config
+from pcc.frontends.python import pipeline
+from pcc.frontends.python import pipeline_pass_config
 
 
 def test_pipeline_facade_reexports_pass_policy_helpers():
@@ -57,10 +57,10 @@ def test_bootstrap_integer_text_uses_canonical_python_semantics():
 
 def test_unsafe_codegen_modules_remain_skipped():
     assert pipeline_pass_config.python_ir_pass_should_skip_module(
-        "pcc.py_frontend.codegen.literal_lowering"
+        "pcc.frontends.python.codegen.literal_lowering"
     )
     assert pipeline_pass_config.python_ir_pass_should_skip_module(
-        "pcc.llvm_capi.ir"
+        "pcc.ir.ir"
     )
     assert not pipeline_pass_config.python_ir_pass_should_skip_module(
         "application.main"

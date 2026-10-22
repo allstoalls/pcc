@@ -6,16 +6,16 @@ the same source by construction -- which is exactly what
 `tests/c/test_api_cli_object_parity.py` exists to catch, and it also meant the
 public Python API pulled in llvmlite on its default path.
 
-`CEvaluator()`'s own default stays llvm on purpose: the C suite uses it as the
-differential oracle.  The contract here is about the *public build API*.
+The evaluator and public API both use the owned backend.
 """
 
 from __future__ import annotations
 
 import inspect
+import pytest
 
 from pcc import api
-from pcc.cli_contract import DEFAULT_PUBLIC_BACKEND
+from pcc.driver.cli_contract import DEFAULT_PUBLIC_BACKEND
 
 
 def test_public_build_api_defaults_to_the_cli_backend():
@@ -23,8 +23,9 @@ def test_public_build_api_defaults_to_the_cli_backend():
     assert resolved == DEFAULT_PUBLIC_BACKEND
 
 
-def test_explicit_backend_is_still_honoured():
-    assert api._resolve_public_backend("llvm") == "llvm"
+def test_explicit_owned_backend_is_honoured_and_llvm_is_rejected():
+    with pytest.raises(ValueError, match="expected one of: self"):
+        api._resolve_public_backend("llvm")
     assert api._resolve_public_backend("self") == "self"
 
 

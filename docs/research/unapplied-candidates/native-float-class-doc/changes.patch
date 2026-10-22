@@ -1,0 +1,542 @@
+--- a/pcc/frontends/python/codegen/call_expression_lowering.py
++++ b/pcc/frontends/python/codegen/call_expression_lowering.py
+@@ -1620,6 +1620,29 @@
+                 folded = _maybe_fold_str_to_float(arg.value)
+                 if folded is not None:
+                     return ir.Constant(_DOUBLE, folded)
++            if (isinstance(ty, (StrType, DynType, ClassType))
++                    and not getattr(self, "_runtime_port_module", False)
++                    and not getattr(self, "_freestanding_module", False)
++                    and not self._expr_looks_cpython(arg)
++                    and not self._expr_returns_unsafe_raw_pointer(arg)):
++                # Conversion may invoke user code. The receiver must own a
++                # root and an address lease until protocol dispatch returns.
++                previous = self._current_try_err_block()
++                target = previous if previous is not None else self._ensure_fn_err_exit()
++                saved_cpy = self._cpy_operand_cleanup_block
++                argument = self._emit_slot_call_operand(arg, "float.argument")
++                cleanup = self._slot_call_cleanup_block((argument,), target)
++                self._try_err_block = cleanup
++                self._cpy_operand_cleanup_block = cleanup
++                try:
++                    result = self._slot_call_runtime_call(
++                        "py_float_value_of", (argument,), span=expr.span,
++                    )
++                    self._release_slot_call_roots((argument,))
++                    return result
++                finally:
++                    self._try_err_block = previous
++                    self._cpy_operand_cleanup_block = saved_cpy
+             # ``float(<str>)`` (non-literal): parse the string at runtime via the
+             # str-aware py_float_value_of (raises ValueError on a bad string).
+             # Without this, a str routed through py_float_to_f64 wrongly yielded
+--- a/pcc/frontends/python/codegen/class_gen.py
++++ b/pcc/frontends/python/codegen/class_gen.py
+@@ -3154,7 +3154,11 @@
+         protocol_like = self._is_protocol_like_class(cd)
+         next_enum_value = 1
+         abstract_methods: list[str] = []
+-        for stmt in cd.body:
++        for statement_index, stmt in enumerate(cd.body):
++            if (statement_index == 0 and _is_ast_node(stmt, ExprStmt)
++                    and _is_ast_node(stmt.expr, StrLit)):
++                self._declare_class_attr(info, "__doc__", stmt.expr)
++                continue
+             if _is_ast_node(stmt, Pass):
+                 continue
+             if _is_ast_node(stmt, Assign):
+@@ -3292,8 +3296,7 @@
+                 continue
+             # Ignore anything else (nested classes etc.) until a later
+             # phase picks them up.
+-            # Docstrings at the top of the body are expression statements
+-            # with a StrLit — fine to drop silently.
++            # Only the leading string expression is class documentation.
+ 
+         if abstract_methods:
+             elem_ty = StrType(name="str")
+@@ -6982,7 +6985,18 @@
+ 
+     def _emit_prepared_namespace_statements(self, cd, info, ns_obj, ns_info, precomputed, method_objects):
+         factory_captures = []
+-        for stmt in cd.body:
++        for statement_index, stmt in enumerate(cd.body):
++            if (statement_index == 0 and _is_ast_node(stmt, ExprStmt)
++                    and _is_ast_node(stmt.expr, StrLit)):
++                value_obj = self._emit_namespace_expr_object(stmt.expr)
++                self._emit_namespace_setitem(ns_obj, ns_info, "__doc__", value_obj)
++                precomputed["__doc__"] = value_obj
++                if "__doc__" in info.class_attrs:
++                    global_var = info.class_attrs["__doc__"][0]
++                    self.parent.builder.store(value_obj, global_var)
++                    self.parent.env["__doc__"] = (global_var, _PTR, stmt.expr.ty)
++                    self.parent._class_namespace_context[2]["__doc__"] = (global_var, "__doc__")
++                continue
+             capture = _classgen_factory_capture_statement(stmt)
+             if capture is not None:
+                 factory_captures.append(self._emit_dataclass_factory_capture(capture))
+--- a/pcc/runtime/py/py_class.py
++++ b/pcc/runtime/py/py_class.py
+@@ -4099,6 +4099,13 @@
+     if str_payload != 0 or tuple_payload != 0:
+         # One extra traced owner; __dict__ stays at the existing offset.
+         store_i32(c, PYCLASSOBJECT_INSTANCE_SIZE_OFFSET, inst_size + C_POINTER_SIZE)
++    # Every class owns its default documentation entry. Otherwise ordinary
++    # MRO lookup incorrectly inherits a base's docstring (or reports absence).
++    # The completed C3 scratch owner is no longer needed; reuse its rooted slot.
++    doc_slot = ptr_add(roots, 4 * C_POINTER_SIZE)
++    pcc_gc_store_root(doc_slot, global_load_ptr("py_None"))
++    if py_class_write_namespace_slots(roots, cstr("__doc__"), doc_slot, 0) != 0:
++        return _class_construct_finish(roots, borrowed, 0)
+     return _class_construct_finish(roots, borrowed, 1)
+ 
+ 
+--- a/pcc/runtime/py/py_format_runtime.py
++++ b/pcc/runtime/py/py_format_runtime.py
+@@ -82,6 +82,10 @@
+ py_obj_ascii = extern("py_obj_ascii", (c_ptr,), c_ptr)
+ py_obj_call = extern("py_obj_call", (c_ptr, c_ptr, c_ptr), c_ptr)
+ py_float_to_f64 = extern("py_float_to_f64", (c_ptr,), c_double)
++py_user_special_dispatch = extern(
++    "py_user_special_dispatch",
++    (c_ptr, c_ptr, c_ptr, c_ptr, c_int64, c_int64, c_ptr, c_ptr), c_ptr,
++)
+ py_float_from_f64 = extern("py_float_from_f64", (c_double,), c_ptr)
+ py_bigint_to_double = extern("py_bigint_to_double", (c_ptr,), c_double)
+ py_int_value_i64 = extern("py_int_value_i64", (c_ptr,), c_int64)
+@@ -323,7 +327,22 @@
+                 py_raise_owned(py_exc_new(2, cstr("could not convert string to float")))
+                 return 0.0
+             return parsed
+-    return py_float_to_f64(value)
++    tag: int = _type_of(value)
++    if tag == PY_TYPE_INT or tag == PY_TYPE_BOOL or tag == PY_TYPE_FLOAT:
++        return py_float_to_f64(value)
++    scalar = stack_alloc(8)
++    handled = stack_alloc(8)
++    store_i64(scalar, 0, 0)
++    store_i64(handled, 0, 0)
++    py_user_special_dispatch(
++        value, cstr("__float__"), null(), null(), 0, 8, scalar, handled,
++    )
++    if py_err_occurred() != 0:
++        return 0.0
++    if load_i64(handled, 0) == 0:
++        py_raise_owned(py_exc_new(3, cstr("float() argument must be a string or a real number")))
++        return 0.0
++    return load_f64(scalar, 0)
+ 
+ 
+ @c_abi_export("pcc_float_round_fixed_f64")
+--- a/pcc/runtime/py/py_protocol_runtime.py
++++ b/pcc/runtime/py/py_protocol_runtime.py
+@@ -61,6 +61,7 @@
+     ptr_is_null,
+     ptr_to_int,
+     stack_alloc,
++    store_f64,
+     store_i8,
+     store_i32,
+     store_i64,
+@@ -2112,6 +2113,23 @@
+         if ptr_is_null(py_str_payload(load_ptr(result_slot, 0))) != 0:
+             py_raise_owned(py_exc_new(3, cstr("string special method returned non-string")))
+             return -1
++    elif conversion == 8 or conversion == 9:
++        if conversion == 8 and tag != PY_TYPE_FLOAT:
++            py_raise_owned(py_exc_new(3, cstr("__float__ returned non-float")))
++            return -1
++        if conversion == 9 and tag != PY_TYPE_INT:
++            if tag == PY_TYPE_BOOL:
++                py_raise_owned(py_exc_new(11, cstr("pcc float: non-exact __index__ results require owned warning emission")))
++            else:
++                py_raise_owned(py_exc_new(3, cstr("__index__ returned non-int")))
++            return -1
++        # Convert while the callback result still owns its counted lease.
++        number: float = py_float_to_f64(load_ptr(result_slot, 0))
++        if py_err_occurred() != 0:
++            return -1
++        if ptr_is_null(scalar) == 0:
++            store_f64(scalar, 0, number)
++        return 0
+     if ptr_is_null(scalar) == 0:
+         store_i64(scalar, 0, value)
+     if py_err_occurred() != 0:
+@@ -2156,6 +2174,12 @@
+                     return -1
+                 index = index + 1
+         status = py_obj_special_call_slots(receiver_slot, name, args_slot, null(), result_slot, handled)
++        if status == 0 and conversion == 8 and load_i64(handled, 0) == 0:
++            # float falls back only on absence, never on a selected method's
++            # error or invalid result. Keep the same receiver owner across
++            # both lookups; instance attributes are deliberately bypassed.
++            status = py_obj_special_call_slots(receiver_slot, cstr("__index__"), null(), null(), result_slot, handled)
++            conversion = 9
+     if status != 0:
+         return -1
+     if load_i64(handled, 0) == 0:
+@@ -2226,6 +2250,7 @@
+ 
+     Scalar conversions: 1 length, 2 truth, 3 bool, 4 hash, 5 discard.
+     Conversion 6 validates a string; 7 treats NotImplemented as absence.
++    Conversion 8 validates __float__, with __index__ fallback, into an f64.
+     An absent method is handled=0; selected
+     None, descriptor errors and callback failures all remain handled=1.
+     """
+--- a/tests/python/test_class_constructor_roots.py
++++ b/tests/python/test_class_constructor_roots.py
+@@ -19,6 +19,7 @@
+     def __init__(self, force=False, fail=None, publish_move=False):
+         self.raw, self.spans, self.handles = [], [], {}
+         self.reads, self.force, self.fail_kind = 0, force, fail
++        self.doc_writes = []
+         self.publish_move=publish_move
+         super().__init__("unused")
+         self.maps.update({"pcc_class_construct_owned_frame_map":5,
+@@ -45,6 +46,7 @@
+             # identity; the actual runtime helpers perform the MRO lookup.
+             "pcc_gc_pointer_is_managed":lambda value:isinstance(value, _Object) and value.alive,
+             "global_load_ptr":lambda name:self.builtin_classes.get(name, self.none),
++            "py_class_write_namespace_slots":self.write_namespace,
+         })
+         parsed=ast.parse(PORT.read_text(),filename=str(PORT))
+         functions=[node for node in parsed.body if isinstance(node,ast.FunctionDef)
+@@ -99,6 +101,17 @@
+         self.handles[handle]=slot
+         return handle
+     def unregister(self,handle):del self.handles[handle]
++    def write_namespace(self, class_slot, name, value_slot, remove):
++        # Model only the existing owning-slot writer boundary. The native
++        # docstring regression checks the real namespace implementation.
++        assert remove == 0 and name == "__doc__"
++        for slot in (class_slot, value_slot):
++            base, _ = self.pointer(slot)
++            assert id(base) in self.frames
++        target, offset = self.pointer(value_slot)
++        assert self.read(target, offset) is self.none
++        self.doc_writes.append(name)
++        return -1 if self.fail_kind == "doc" else 0
+     def frame_enter(self,frame_map,slots):
+         assert frame_map in(5,-2)
+         self.frames[id(slots)]=slots
+@@ -240,6 +253,16 @@
+     result=memory.construct([])
+     assert list(result.fields[48].fields.values())==[result,memory.root]
+     assert not memory.frames and not memory.handles and memory.pin_metric==0
++    assert memory.doc_writes == ["__doc__"]
++
++
++def test_class_constructor_doc_write_failure_retires_unpublished_class():
++    memory = _C3Memory(fail="doc")
++    existing = {id(obj) for obj in memory.objects}
++    assert memory.construct([]) is None
++    assert memory.doc_writes == ["__doc__"]
++    assert not memory.frames and not memory.handles and memory.pin_metric == 0
++    assert all(not obj.alive for obj in memory.objects if id(obj) not in existing)
+ 
+ 
+ def test_class_constructor_temporary_snapshots_balance_nonimmortal_base_references():
+--- /dev/null
++++ b/tests/python/test_native_class_docstrings.py
+@@ -0,0 +1,97 @@
++"""Class documentation belongs to each actual namespace, including no-doc None."""
++from __future__ import annotations
++
++import pytest
++
++from tests.python.owned_regression_support import (
++    assert_owned_program,
++    assert_reference_program,
++    explicit_owned_runtime,
++)
++
++
++PROGRAM = '''import gc
++events = []
++class Documented:
++    """source documentation"""
++    captured = __doc__
++class Plain:
++    pass
++class Child(Documented):
++    pass
++class OwnDoc(Documented):
++    """child documentation"""
++class Empty:
++    """"""
++class Late:
++    value = 1
++    """not a class docstring"""
++class Explicit:
++    __doc__ = 23
++class Replaced:
++    """initial documentation"""
++    __doc__ = "replacement"
++class Meta(type):
++    @classmethod
++    def __prepare__(mcls, name, bases):
++        return {}
++    def __new__(mcls, name, bases, namespace):
++        events.append((name, "__doc__" in namespace, namespace.get("__doc__")))
++        return type.__new__(mcls, name, bases, namespace)
++class Prepared(metaclass=Meta):
++    """prepared documentation"""
++    captured = __doc__
++class PreparedChild(Prepared):
++    pass
++def local_class():
++    class Local:
++        """local documentation"""
++    return Local
++def main():
++    assert Documented.__doc__ == "source documentation"
++    assert Documented.captured == Documented.__doc__
++    assert Documented().__doc__ == "source documentation"
++    assert Plain.__doc__ is None
++    assert Plain.__dict__["__doc__"] is None
++    assert Child.__doc__ is None
++    assert Child().__doc__ is None
++    assert Child.__dict__["__doc__"] is None
++    assert OwnDoc.__doc__ == "child documentation"
++    assert Empty.__doc__ == ""
++    assert Late.__doc__ is None
++    assert Explicit.__doc__ == 23
++    assert Replaced.__doc__ == "replacement"
++    assert local_class().__doc__ == "local documentation"
++    assert Prepared.__doc__ == "prepared documentation"
++    assert Prepared.captured == "prepared documentation"
++    assert PreparedChild.__doc__ is None
++    assert events == [("Prepared", True, "prepared documentation"), ("PreparedChild", False, None)]
++    dynamic = type("Dynamic", (Documented,), {})
++    assert dynamic.__doc__ is None
++    assert dynamic.__dict__["__doc__"] is None
++    dynamic_doc = type("DynamicDoc", (), {"__doc__": "dynamic documentation"})
++    assert dynamic_doc.__doc__ == "dynamic documentation"
++    Documented.__doc__ = "updated documentation"
++    gc.collect()
++    assert Documented.__doc__ == "updated documentation"
++    assert Documented().__doc__ == "updated documentation"
++    assert Child.__doc__ is None
++    print("CLASS_DOCSTRINGS_OK")
++main()
++'''
++
++
++def test_class_docstrings_reference(tmp_path):
++    assert_reference_program(PROGRAM, "CLASS_DOCSTRINGS_OK\n", tmp_path)
++
++
++@pytest.mark.integration
++@pytest.mark.parametrize("python_program_compiler", ("pcc0", "pcc1"), indirect=True)
++def test_class_docstrings_native_five_gc(
++    python_program_compiler, request, explicit_owned_runtime, tmp_path, capfd,
++):
++    mode = request.node.callspec.params["python_program_compiler"]
++    assert_owned_program(
++        PROGRAM, "CLASS_DOCSTRINGS_OK\n", tmp_path, python_program_compiler,
++        mode, explicit_owned_runtime, capfd,
++    )
+--- /dev/null
++++ b/tests/python/test_native_float_protocol.py
+@@ -0,0 +1,201 @@
++"""Execute float's type-level conversion protocol with a source-matched runtime."""
++from __future__ import annotations
++
++import pytest
++
++from tests.python.owned_regression_support import (
++    assert_owned_program,
++    assert_reference_program,
++    explicit_owned_runtime,
++)
++from tests.python.test_tuple_protocol_consumers import ConsumerModel
++
++
++PROGRAM = '''import gc
++events = []
++marker = ValueError("selected float failure")
++class Number:
++    def __float__(self):
++        gc.collect()
++        events.append("float")
++        return 3.5
++class Inherited(Number):
++    pass
++class Both(Number):
++    def __index__(self):
++        raise AssertionError("must not use index")
++class IndexOnly:
++    def __index__(self):
++        gc.collect()
++        return 1180591620717411303424
++class BadFloat:
++    def __float__(self):
++        return 7
++    def __index__(self):
++        raise AssertionError("invalid float must not fall back")
++class BoolFloat:
++    def __float__(self):
++        return True
++class TextFloat:
++    def __float__(self):
++        return "7.5"
++class DisabledFloat:
++    __float__ = None
++    def __index__(self):
++        raise AssertionError("disabled float must not fall back")
++class Raising:
++    def __float__(self):
++        gc.collect()
++        raise marker
++    def __index__(self):
++        raise AssertionError("float exception must not fall back")
++class MissingAttribute:
++    def __float__(self):
++        raise AttributeError("inside float")
++    def __index__(self):
++        raise AssertionError("AttributeError is not absence")
++class BadIndex:
++    def __index__(self):
++        return 1.25
++class OverflowIndex:
++    def __index__(self):
++        return 10 ** 400
++def descriptor_value():
++    return -2.25
++class FloatDescriptor:
++    def __get__(self, instance, owner):
++        gc.collect()
++        return descriptor_value
++class Described:
++    __float__ = FloatDescriptor()
++class TextNumber(str):
++    def __float__(self):
++        return 6.25
++class BypassLookup(Number):
++    def __getattribute__(self, name):
++        if name == "__float__":
++            raise AssertionError("ordinary lookup must be bypassed")
++        return object.__getattribute__(self, name)
++class Plain:
++    pass
++def fake_float():
++    return 99.0
++def convert(value):
++    return float(value)
++def apply(function, value):
++    return function(value)
++def main():
++    value = Number()
++    value.__float__ = fake_float
++    assert float(value) == 3.5
++    assert convert(Inherited()) == 3.5
++    assert float(Both()) == 3.5
++    assert float(BypassLookup()) == 3.5
++    assert float(IndexOnly()) == 1180591620717411303424.0
++    assert float(Described()) == -2.25
++    assert float(TextNumber("not a number")) == 6.25
++    alias = float
++    assert alias(value) == 3.5
++    assert apply(float, value) == 3.5
++    assert events == ["float", "float", "float", "float", "float", "float"]
++    ignored = Plain()
++    ignored.__float__ = fake_float
++    for item in (BadFloat(), BoolFloat(), TextFloat(), DisabledFloat(), BadIndex(), ignored, None, [], {}):
++        caught = False
++        try:
++            convert(item)
++        except TypeError:
++            caught = True
++        assert caught
++    caught = False
++    try:
++        alias(Raising())
++    except ValueError as error:
++        caught = error is marker
++    assert caught
++    caught = False
++    try:
++        convert(MissingAttribute())
++    except AttributeError as error:
++        caught = str(error) == "inside float"
++    assert caught
++    caught = False
++    try:
++        convert(OverflowIndex())
++    except OverflowError:
++        caught = True
++    assert caught
++    assert convert(" 2.5 ") == 2.5
++    assert convert(True) == 1.0
++    assert convert(7) == 7.0
++    print("FLOAT_PROTOCOL_OK")
++main()
++'''
++
++
++def test_float_protocol_reference(tmp_path):
++    assert_reference_program(PROGRAM, "FLOAT_PROTOCOL_OK\n", tmp_path)
++
++
++@pytest.mark.integration
++@pytest.mark.parametrize("python_program_compiler", ("pcc0", "pcc1"), indirect=True)
++def test_float_protocol_native_five_gc(
++    python_program_compiler, request, explicit_owned_runtime, tmp_path, capfd,
++):
++    mode = request.node.callspec.params["python_program_compiler"]
++    assert_owned_program(
++        PROGRAM, "FLOAT_PROTOCOL_OK\n", tmp_path, python_program_compiler,
++        mode, explicit_owned_runtime, capfd,
++    )
++
++
++@pytest.mark.parametrize("relocate", (False, True))
++@pytest.mark.parametrize("kind", ("float", "index", "absent", "bad", "error", "none"))
++def test_float_protocol_result_ownership(relocate, kind):
++    # This executes the changed production dispatch bodies in the existing
++    # moving-owner model. It is additional evidence, not native qualification.
++    memory = ConsumerModel(relocate)
++    receiver = memory.new("receiver")
++    namespace = memory.env()
++    float_tag = 13  # The model has its own synthetic, non-runtime type tags.
++    namespace["PY_TYPE_FLOAT"] = float_tag
++    namespace["store_f64"] = memory.store
++
++    def to_float(value):
++        assert memory.obj(value)["leases"]
++        memory.park("float-conversion")
++        return float(memory.obj(value)["value"])
++
++    namespace["py_float_to_f64"] = to_float
++    if kind in ("float", "bad"):
++        tag = float_tag if kind == "float" else 1
++        memory.methods["__float__"] = lambda *_: memory.new("result", tag, 3.5)
++        memory.methods["__index__"] = lambda *_: pytest.fail("selected float fell back")
++    elif kind == "index":
++        memory.methods["__index__"] = lambda *_: memory.new("result", 1, 2 ** 70)
++    elif kind == "error":
++        def fail(*_):
++            memory.pending = memory.new("callback-error", 80, (6, "inside float"))
++            return None
++        memory.methods["__float__"] = fail
++        memory.methods["__index__"] = lambda *_: pytest.fail("exception fell back")
++    elif kind == "none":
++        memory.methods["__float__"] = None
++        memory.methods["__index__"] = lambda *_: pytest.fail("None fell back")
++    scalar, handled = memory.alloc(8), memory.alloc(8)
++    result = namespace["py_user_special_dispatch"](
++        receiver, "__float__", None, None, 0, 8, scalar, handled,
++    )
++    assert result is None
++    assert memory.load(handled) == (kind != "absent")
++    if kind in ("float", "index"):
++        assert memory.load(scalar) == (3.5 if kind == "float" else float(2 ** 70))
++        assert memory.pending is None
++        assert "result" in memory.disposed
++    elif kind == "absent":
++        assert memory.pending is None
++    else:
++        assert memory.pending is not None
++        assert memory.obj(memory.pending)["value"][0] == (6 if kind == "error" else 3)
++    assert memory.obj(memory.current["receiver"])["refs"] == 1
++    memory.assert_clean()

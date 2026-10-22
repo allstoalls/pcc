@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 PY_RUNTIME_DIR = RUNTIME_DIR / "py"
 
 # These are freestanding storage/synchronization helpers, not collector policy.
@@ -66,9 +66,9 @@ def _python_source_for_member(member: str) -> Path:
 
 
 def test_all_production_collector_symbols_are_pcc_python_owned(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    definitions = _defined_symbols(pcc_py_runtime_archive)
+    definitions = _defined_symbols(pcc_runtime_archive)
     collector_symbols = [
         (member, symbol)
         for member, symbol in definitions
@@ -87,9 +87,9 @@ def test_all_production_collector_symbols_are_pcc_python_owned(
 
 
 def test_gc_substrate_storage_and_synchronization_are_pcc_python_owned(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
-    definitions = _defined_symbols(pcc_py_runtime_archive)
+    definitions = _defined_symbols(pcc_runtime_archive)
     substrate_symbols = {
         symbol
         for member, symbol in definitions
@@ -118,10 +118,10 @@ def test_gc_substrate_storage_and_synchronization_are_pcc_python_owned(
 
 
 def test_retained_c_gc_oracles_are_absent_from_production_archive_plan(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     members_result = subprocess.run(
-        ["ar", "-t", str(pcc_py_runtime_archive)],
+        ["ar", "-t", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -136,7 +136,7 @@ def test_retained_c_gc_oracles_are_absent_from_production_archive_plan(
     assert "py_gc_index_table.o" not in members
     assert "pcc_gc_external_resource.o" not in members
 
-    definitions = _defined_symbols(pcc_py_runtime_archive)
+    definitions = _defined_symbols(pcc_runtime_archive)
     capi_gc = {
         (member, symbol)
         for member, symbol in definitions

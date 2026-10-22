@@ -1,0 +1,85 @@
+{
+  "application_status": "UNAPPLIED",
+  "counts": {
+    "collected": 29,
+    "deselected": 0,
+    "errors": 0,
+    "failed": 1,
+    "passed": 10,
+    "selected_unrun": 18,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  },
+  "date_utc": "2026-10-09",
+  "failure": {
+    "classification": "The selected IR text-order assertion failed. This execution alone does not establish a CFG execution-order defect or native failure; source-only classification is pending.",
+    "exception_type": "AssertionError",
+    "expression": "top.index(\"@\" + first + \"(\") < top.index(\"@user_outline_probe_between_native_adapter\") < top.index(\"@\" + second + \"(\")",
+    "node": "tests/python/test_class_init_outlining.py::test_imports_assignments_and_function_bindings_keep_source_order",
+    "observed_comparison": "23927 < 7440 is false",
+    "phase": "IR text-order structural assertion after frontend generation",
+    "source_file": "tests/python/test_class_init_outlining.py",
+    "source_line": 256
+  },
+  "guards": {
+    "cleanup": "CLEAN; root reaped; ECHILD; shared lock released",
+    "continuous_free_reserve_bytes": 4294967296,
+    "denied_audit_events": 0,
+    "exit_code": 1,
+    "external_full_source_and_base_seals": "PASS",
+    "guard_elapsed_seconds": 9.23975771700134,
+    "guard_status": "COMPLETE",
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "max_net_disk_growth_bytes": 536870912,
+    "peak_sampled_process_rss_bytes": 129064960,
+    "sampled_rss_is_not_a_hard_rss_cap": true,
+    "source_and_import_boundary_checks": "PASS",
+    "timeout_seconds": 300
+  },
+  "packet": {
+    "manifest_sha256": "3c827f03243726a63726fc0c59450b34c5101e3aa8ffe879ab447a4051257994",
+    "published_commit": "299704c73a37c359b39a9360a6754e92a1ee08f6",
+    "review_at_admission": "Source-clear; no V5 execution pass was claimed before this gate",
+    "successor_patch_sha256": "468ccd9adf98a167d20305dcacb65e0f500899825bb564cb232c05d90313e2c9"
+  },
+  "predecessor_failure": {
+    "qualification_sha256": "8c2ed55e5e8ddd42d398531c3bbee9ca5adb25d4cceaaa09e526c871c75824d7",
+    "receipt_commit": "79011c00553de17cfdb0f7e8169842a7b2e73ae8",
+    "version": "V4"
+  },
+  "receipts": {
+    "bootstrap_sha256": "d9bffaf282d364d64ba696366c29af75d17b59ed53bfad790b3c01dd43928c53",
+    "collection_sha256": "f44ddf587ae7e4745e883adcd6e13f2de9ec2666ed3bfef6b3df9b0d0140713c",
+    "guard_sha256": "24f9c1e533cd1aa533867b8f07beeffa92b345cfa65a5cf8637eddb5ce101ed2",
+    "junit_sha256": "ae1b56471fc00f800d8c79175c2a591a393272e047da5711a032d38858371855",
+    "payload_result_sha256": "236edadb94fd0f8379410bad37e8c122a5ff1a570fbab211938c7c59e68ab7a1",
+    "qualification_sha256": "3a1d9955fedf62016696cb7e21edf6836390a9be8327a47c5afca1a281997c1f"
+  },
+  "schema": "pcc.class-init-outline-host-public-qualification.v5",
+  "scope": [
+    "Only the exact 29-node host structural file was selected, with -x, -n0 and explicit empty addopts.",
+    "Six shape/default-owned-or-explicit-inline cases, both new real FunctionAttributes rejection cases, and both constructor/root-operation oracle cases passed.",
+    "The next source-order test failed on IR text position comparison after generation; no CFG semantic conclusion is inferred from that assertion alone.",
+    "The immutable V5 failed candidate and original V4 failure receipt remain retained; no test was retried.",
+    "No object emission, runtime build, native/FFI execution, heavy-module mechanism gate, performance measurement, pcc1 or full Stage1 was run.",
+    "The new helper ABI and closed-world native compiler remain unqualified."
+  ],
+  "selected_unrun_reason": "The admitted -x batch stopped at the first failing node; 18 collected nodes never ran.",
+  "source_identity": {
+    "base_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+    "base_pcc_git_tree": "d234174fbac80575ea822f6100f65fe914dd4498",
+    "candidate_inventory_sha256": "dd2e95b13393d45797165bf0c1aea029f6d767c7889b68ecd06a8eb1f10bfe1a",
+    "candidate_pcc_git_tree": "dc63c2a946f533f7b31ce63db2f759a044fdc37f",
+    "codegen_checksum": "68581b5d714a4d11835199b80fd6cbcb6e3178245c79dcef6843d73469b1a5e5",
+    "postimages": {
+      "pcc/frontends/python/codegen/class_gen.py": "cbd36884dbb5d118e0da4148ed50b26223ddbfe7f75a6ad3604d2a697f9be8af",
+      "pcc/frontends/python/codegen/generation_lowering.py": "30d38936b4f4dbc1259de9993557c7ccfeca491f3f0546820382185858d56c5b",
+      "tests/python/test_class_init_outlining.py": "e442fbdd4a6d93e8817ff65efb1c60c48019f1c8ddb760ec4cfb8150ac9a5afa"
+    },
+    "production_base_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+    "whole_source_caveat": "Retained cold-slot compiler snapshot; complete pcc tree matches published02b9. Full source is not a02b9 checkout: older unrelated native test f391 and docs/bootstrap remain."
+  },
+  "status": "FAIL"
+}

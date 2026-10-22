@@ -1,6 +1,6 @@
 # 第 15 章 自举:pcc1→pcc2→pcc3 不动点
 
-前面十四章描述的每一个子系统——解析、类型推断、低层化(lowering)、对象模型、所有权、五 GC、self 后端、no-libpython 运行时——各自都有自己的测试。但"各部分分别正确"与"整个系统相干"之间隔着一条鸿沟:测试是对行为的采样,采样永远证明不了全称命题。pcc 用一个古老而苛刻的装置跨越这条鸿沟:让编译器编译自己,再让产物编译自己,直到输出收敛成不动点(fixed point)。本章讲这个装置的全部:四个阶段的语义、[scripts/bootstrap.sh](../../scripts/bootstrap.sh) 与 [pcc/cli_bootstrap.py](../../pcc/cli_bootstrap.py) 的机制、字节同一性背后的验证阶梯、三项相互独立的证明、pcc1/pcc2 差异的分类学、把不动点钉死成回归闸门(gate)的基线体系,以及它与 Thompson《Reflections on Trusting Trust》之间必须诚实划清的边界。
+前面十四章描述的每一个子系统——解析、类型推断、低层化(lowering)、对象模型、所有权、五 GC、self 后端、no-libpython 运行时——各自都有自己的测试。但"各部分分别正确"与"整个系统相干"之间隔着一条鸿沟:测试是对行为的采样,采样永远证明不了全称命题。pcc 用一个古老而苛刻的装置跨越这条鸿沟:让编译器编译自己,再让产物编译自己,直到输出收敛成不动点(fixed point)。本章讲这个装置的全部:四个阶段的语义、[scripts/bootstrap.sh](../../scripts/bootstrap.sh) 与 [pcc/driver/cli_bootstrap.py](../../pcc/driver/cli_bootstrap.py) 的机制、字节同一性背后的验证阶梯、三项相互独立的证明、pcc1/pcc2 差异的分类学、把不动点钉死成回归闸门(gate)的基线体系,以及它与 Thompson《Reflections on Trusting Trust》之间必须诚实划清的边界。
 
 ## 本章导读:三代编译器证明三件事
 
@@ -47,7 +47,7 @@ pcc2 -> pcc3   行为自稳定:自产编译器编译同一输入收敛
   + cmp        (= 不动点;这一步才允许说 self-hosted)
 ```
 
-三条边的输入是同一个文件:[pcc/__main__.py](../../pcc/__main__.py)。它只有五行——从 `pcc.cli_bootstrap` 导入 `bootstrap_cli_sys_argv_exit` 并调用。于是 stage1 的命令呈现一种意味深长的对称:`python -m pcc ... pcc/__main__.py -o pcc1`——**命令与输入是同一个模块,只是宿主不同**。pcc0 用 CPython 运行它,pcc1 用 pcc 自己的运行时运行它。
+三条边的输入是同一个文件:[pcc/__main__.py](../../pcc/__main__.py)。它只有五行——从 `pcc.driver.cli_bootstrap` 导入 `bootstrap_cli_sys_argv_exit` 并调用。于是 stage1 的命令呈现一种意味深长的对称:`python -m pcc ... pcc/__main__.py -o pcc1`——**命令与输入是同一个模块,只是宿主不同**。pcc0 用 CPython 运行它,pcc1 用 pcc 自己的运行时运行它。
 
 在 [scripts/bootstrap.sh](../../scripts/bootstrap.sh) 中,自举三阶段流程写得很直接:
 
@@ -69,10 +69,10 @@ codesign --remove-signature pcc2 pcc3
 cmp -s pcc2 pcc3
 ```
 
-而在 [pcc/cli_bootstrap.py](../../pcc/cli_bootstrap.py) 内部,入口函数响应自编译二进制的核心控制逻辑:
+而在 [pcc/driver/cli_bootstrap.py](../../pcc/driver/cli_bootstrap.py) 内部,入口函数响应自编译二进制的核心控制逻辑:
 
 ```python
-# pcc/cli_bootstrap.py
+# pcc/driver/cli_bootstrap.py
 def bootstrap_cli_main(argv: list[str]) -> int:
     """Entry point for the self-hosted pcc1/pcc2/pcc3 binary."""
     if "--pytest" in argv:
@@ -121,7 +121,7 @@ size + md5 结构比较                → 尺寸不等 = FAIL exit 1
 
 ## 15.4 机制(二):cli_bootstrap.py——pcc1 究竟是什么
 
-[pcc/cli_bootstrap.py](../../pcc/cli_bootstrap.py) 约七千行,是阶段二进制的全部用户面。读它要带着一个意识:**这个文件本身必须能被 pcc 编译**,它是 stage1 闭包的成员。这解释了它的方言。
+[pcc/driver/cli_bootstrap.py](../../pcc/driver/cli_bootstrap.py) 约七千行,是阶段二进制的全部用户面。读它要带着一个意识:**这个文件本身必须能被 pcc 编译**,它是 stage1 闭包的成员。这解释了它的方言。
 
 入口链是 [pcc/__main__.py](../../pcc/__main__.py) → `bootstrap_cli_sys_argv_exit()` → `bootstrap_cli_main()`。后者按请求类型路由:
 
@@ -147,7 +147,7 @@ C 输入(.c / --sources-from-make /
 
 README 状态表的 bootstrap 行(Issue 1 于 2026-05-01 关闭)给出的证据是三元组:pcc2/pcc3 发射的 IR 中 **0 个 `py_cpy_*` 调用**;`otool -L` 中**无 libpython 条目**;签名归一化后 pcc2/pcc3 **字节同一**(IR 文本也逐字节相同)。三者各锁一个层面,互不蕴含,合在一起才构成"严格 no-libpython 自举"这个复合声明。
 
-**0 个 `py_cpy_*` 调用锁的是生成代码层。** `py_cpy_*` 是运行时头文件 [pcc/py_runtime/include/py_runtime.h](../../pcc/py_runtime/include/py_runtime.h) 里 "Phase 4: CPython C-API fallback" 一节声明的桥接面:`py_cpy_import()`、`py_cpy_getattr()`、`py_cpy_call1()` 等,操作与 pcc 自有对象不同的**不透明 CPython 指针**,实现在 [pcc/py_runtime/src/py_libpython.c](../../pcc/py_runtime/src/py_libpython.c)。前端遇到推不出原生低层化的表达式时,历史上的退路就是发射这些调用(见第 14 章)。合并 IR 里数出 0,意味着编译器闭包的每一条路径都走了原生低层化——闭世界不是宣称,是 grep 可验的计数。
+**0 个 `py_cpy_*` 调用锁的是生成代码层。** `py_cpy_*` 是运行时头文件 [pcc/runtime/include/py_runtime.h](../../pcc/runtime/include/py_runtime.h) 里 "Phase 4: CPython C-API fallback" 一节声明的桥接面:`py_cpy_import()`、`py_cpy_getattr()`、`py_cpy_call1()` 等,操作与 pcc 自有对象不同的**不透明 CPython 指针**,实现在 [pcc/runtime/src/py_libpython.c](../../pcc/runtime/src/py_libpython.c)。前端遇到推不出原生低层化的表达式时,历史上的退路就是发射这些调用(见第 14 章)。合并 IR 里数出 0,意味着编译器闭包的每一条路径都走了原生低层化——闭世界不是宣称,是 grep 可验的计数。
 
 **无 libpython 链接锁的是产物层。** `_ensure_runtime()` 按需选择运行时归档:不需要回退时链 `_PY_RUNTIME_ARCHIVE_PCC_PY`,需要时换成带 `py_libpython` 兼容桥的版本。[tests/python/test_bootstrap_gate_baseline.py](../../tests/python/test_bootstrap_gate_baseline.py) 的 `_links_libpython()` 直接对二进制跑 `otool -L`(Linux 用 `ldd`)找 `libpython` / `Python.framework` 字串。这一层防的回归与上一层不同:即使 IR 干净,构建系统也可能因配置错误把桥接归档静默链回来。
 
@@ -199,11 +199,11 @@ pcc 的结构里有两个**缓解信任问题但不解决它**的事实,措辞�
 
 (来源:[docs/investigations/bootstrap-user-function-low-ir-fallback-2026-06-01.md](../../docs/investigations/bootstrap-user-function-low-ir-fallback-2026-06-01.md);其所有权机制面已在第 9 章讲过,本节讲审计方法面。)
 
-长期全部通过的单后端全自举闸门突然失败。报告形态不是"某个功能坏了",而是 stage1 在构建 pcc2 时硬错误:`PCC-PY-COMPILE-001 ... Python pipeline requires libpython fallback for multi-file compile (modules: pcc.py_frontend.codegen.user_function_lowering)`。审计的第一步是把这句话读成模式标注的边界指认:失败在 **pcc0→pcc1 的严格 no-libpython 编译期**,不是运行时,错误自己点名了模块。
+长期全部通过的单后端全自举闸门突然失败。报告形态不是"某个功能坏了",而是 stage1 在构建 pcc2 时硬错误:`PCC-PY-COMPILE-001 ... Python pipeline requires libpython fallback for multi-file compile (modules: pcc.frontends.python.codegen.user_function_lowering)`。审计的第一步是把这句话读成模式标注的边界指认:失败在 **pcc0→pcc1 的严格 no-libpython 编译期**,不是运行时,错误自己点名了模块。
 
 第二步是嫌疑排序而非代码阅读:失败模块属于最近的 LowIR/layer1 拆分提交范围(相对 v0.1.2 的 `fe1de470` 范围)——"近期改动是头号嫌疑"由 git 范围证据确认,而非感觉。根因是递归 LowIR 助手(`_low_ir_expr_to_value()` 等)缺少返回类型标注,类型推断给出 DynType,于是 `operand.ty == _LOW_F64` 这类比较从原生整数字段读取退化为动态属性操作,发射出 `py_cpy_getattr`、`py_cpy_call1` 等调用——**严格模式正确地拒绝了这份 IR,闸门按设计工作**。证据是量化的:上下文回退计数从 80 降到 0,而不是"表观上好了"。
 
-第三步是纪律里最反直觉的一条:修掉第一道边界后闸门仍然红——pcc0 产出的 pcc1 在编译 [pcc/cli_bootstrap.py](../../pcc/cli_bootstrap.py) 时双重释放崩溃。调查没有把两件事捏成一个故事,而是开了第二条证据链(LLDB 回溯、生成 IR 比对),定位到与第一道边界完全无关的通用返回所有权 bug(机制见第 9 章)。两道边界、两个根因、两个修复、两组回归测试。
+第三步是纪律里最反直觉的一条:修掉第一道边界后闸门仍然红——pcc0 产出的 pcc1 在编译 [pcc/driver/cli_bootstrap.py](../../pcc/driver/cli_bootstrap.py) 时双重释放崩溃。调查没有把两件事捏成一个故事,而是开了第二条证据链(LLDB 回溯、生成 IR 比对),定位到与第一道边界完全无关的通用返回所有权 bug(机制见第 9 章)。两道边界、两个根因、两个修复、两组回归测试。
 
 被否决的提案与被采纳的同样重要,调查里逐条留档:禁用元组自动 GC 追踪——**用户明确否决**,那是用弱化运行时语义换绿灯(纪律第 4 条);把调用结果改为借用——否决,等于改掉全局所有权契约;单文件裸编译探针报出的 `Function._fresh` 错误——标记为误导性踪迹,裸探针给了 mixin 错误的宿主上下文,只能当定位器。收尾是制度化:为 `user_function_lowering` 加上专属的 ON 模式回退金丝雀测试,并把整个审计方法写回 [AGENTS.md](../../AGENTS.md)——今天读到的"自举回归纪律七步",相当一部分就是这次调查的蒸馏物。
 
@@ -211,9 +211,9 @@ pcc 的结构里有两个**缓解信任问题但不解决它**的事实,措辞�
 
 (来源:[docs/investigations/bootstrap-types-rsplit-libpython-fallback.md](../../docs/investigations/bootstrap-types-rsplit-libpython-fallback.md))
 
-这个案例研究小而锋利,展示的是 15.5 里"第二道网"的工作方式。一次改动后,stage1 闭包**编译成功**——但回退棘轮测试失败:合并 IR 里出现 9 个 `py_cpy_*` 调用,基线是 0(报错原文:`fallback total grew past ratchet: 9 vs baseline 0`)。全部 9 个调用聚在生成函数 `user_pcc_py_frontend_types__class_type_from_dotted` 里,源头是一行 `name.rsplit(".", 1)`:`rsplit` 当时没有原生低层化,静默走了 libpython 桥。
+这个案例研究小而锋利,展示的是 15.5 里"第二道网"的工作方式。一次改动后,stage1 闭包**编译成功**——但回退棘轮测试失败:合并 IR 里出现 9 个 `py_cpy_*` 调用,基线是 0(报错原文:`fallback total grew past ratchet: 9 vs baseline 0`)。全部 9 个调用聚在生成函数 `user_pcc_frontends_python_types__class_type_from_dotted` 里,源头是一行 `name.rsplit(".", 1)`:`rsplit` 当时没有原生低层化,静默走了 libpython 桥。
 
-修复选了最小的源码级形状:[pcc/py_frontend/types.py](../../pcc/py_frontend/types.py) 的 `_class_type_from_dotted` 改为单遍扫描记录最后一个 `.` 再显式切片——因为闭包已经原生支持字符串索引、切片、长度与相等,不支持的只是 `rsplit` 这一个方法。回归测试把不变式钉进 IR 层:以 `ir_scaffold_mode="on"`、`libpython_mode="off"` 多文件编译 `py_ast` 加 `types`,断言该生成函数体内不含任何 `py_cpy_*` 调用。
+修复选了最小的源码级形状:[pcc/frontends/python/types.py](../../pcc/frontends/python/types.py) 的 `_class_type_from_dotted` 改为单遍扫描记录最后一个 `.` 再显式切片——因为闭包已经原生支持字符串索引、切片、长度与相等,不支持的只是 `rsplit` 这一个方法。回归测试把不变式钉进 IR 层:以 `ir_scaffold_mode="on"`、`libpython_mode="off"` 多文件编译 `py_ast` 加 `types`,断言该生成函数体内不含任何 `py_cpy_*` 调用。
 
 教训浓缩成一句:**"编译成功"不是声明,闭包扫描才是。** 9 个调用没有触发案例研究一那样的编译期硬错误,但棘轮基线为 0 意味着任何重新引入都是硬失败。两个案例研究合起来证明回退检测必须是多层的——硬错误拦截结构性的回退需求,IR 计数棘轮拦截无声渗漏;只有任何一层,另一类回归就会溜进不动点。
 
@@ -227,7 +227,7 @@ pcc 的结构里有两个**缓解信任问题但不解决它**的事实,措辞�
 
 2. **读源码验证**:[tests/python/test_bootstrap_gate_baseline.py](../../tests/python/test_bootstrap_gate_baseline.py) 的 `_byte_identical_after_normalize()` 在临时目录里对**副本**做 `codesign --remove-signature` 再比较。结合 15.3 的发布屏障,解释为什么绝不能对 `build/bootstrap-*/pcc{2,3}` 原件做签名剥离。
 
-3. **追踪闭包**:[pcc/cli_bootstrap.py](../../pcc/cli_bootstrap.py) 的 `-m MODULE` 默认路径 `_run_compiled_python_module_from_pcc1()` 把通用模块用 `backend=self`、`libpython=off` 编译成原生二进制再运行,而不委托宿主 Python。结合第 14 章的回退路由,说明这条默认路径为什么天然闭包安全;再说明 `--python-libpython=auto/on` 下的兼容子进程 `_run_python_module_from_pcc1_with_mode()` 靠 `PCC1_COMPAT_RUNNER_MANIFEST` 守住了哪条声明边界——为什么它必须显式声明模式,而不能默默借道 CPython。
+3. **追踪闭包**:[pcc/driver/cli_bootstrap.py](../../pcc/driver/cli_bootstrap.py) 的 `-m MODULE` 默认路径 `_run_compiled_python_module_from_pcc1()` 把通用模块用 `backend=self`、`libpython=off` 编译成原生二进制再运行,而不委托宿主 Python。结合第 14 章的回退路由,说明这条默认路径为什么天然闭包安全;再说明 `--python-libpython=auto/on` 下的兼容子进程 `_run_python_module_from_pcc1_with_mode()` 靠 `PCC1_COMPAT_RUNNER_MANIFEST` 守住了哪条声明边界——为什么它必须显式声明模式,而不能默默借道 CPython。
 
 4. **设计权衡论证**:15.1 论证了 pcc1 ≠ pcc2 是被允许的。假设要把闸门加强为"pcc1 == pcc2(签名归一化后)",列出至少三类必须先消除的 pcc0/pcc1 执行环境差异,并论证这笔投入对相干性证据的边际收益为什么低于(或高于)把同样投入花在五 GC 矩阵上。
 

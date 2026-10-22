@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend import pipeline_targets
+from pcc.frontends.python import pipeline
+from pcc.frontends.python import pipeline_targets
 
 
 @pytest.mark.parametrize("system,machine,expected", [

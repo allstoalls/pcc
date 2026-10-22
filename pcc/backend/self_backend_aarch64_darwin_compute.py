@@ -367,17 +367,17 @@ def _emit_vector_lane_value(
     if is_aggregate_literal_value(value):
         stride = _vector_lane_stride(vector_type)[1]
         try:
-            literal_bytes = aggregate_literal_to_bytes(vector_type, value)
+            literal_bytes = aggregate_literal_to_bytes(vector_type, value, type_context=module_symbols.type_context)
             lane_bytes = literal_bytes[
                 lane_index * stride : lane_index * stride + lane_type.slot_size
             ]
             lane_value = int.from_bytes(lane_bytes, "little")
             return emit_const_to_reg(lane_type, lane_reg, lane_value)
         except BackendUnavailable:
-            lane_value = _aggregate_literal_lane_value(vector_type, value, lane_index)
+            lane_value = _aggregate_literal_lane_value(vector_type, value, lane_index, type_context=module_symbols.type_context)
             return materialize_value(
                 func,
-                decode_value_token(lane_value),
+                decode_value_token(lane_value, type_context=module_symbols.type_context),
                 lane_type,
                 dest_reg_index,
                 module_symbols,
@@ -387,7 +387,7 @@ def _emit_vector_lane_value(
     )
 
 
-def _aggregate_literal_lane_value(vector_type, value: str, lane_index: int) -> str:
+def _aggregate_literal_lane_value(vector_type, value: str, lane_index: int, *, type_context=None) -> str:
     text = value.strip()
     if text.startswith("<") and text.endswith(">"):
         text = "[" + text[1:-1].strip() + "]"
@@ -400,7 +400,7 @@ def _aggregate_literal_lane_value(vector_type, value: str, lane_index: int) -> s
         raise BackendUnavailable(
             f"self backend vector literal lane {lane_index} out of range for {vector_type.describe()}: {value!r}"
         )
-    return strip_typed_initializer(items[lane_index])
+    return strip_typed_initializer(items[lane_index], type_context=type_context)
 
 
 def _emit_insertelement(
@@ -551,7 +551,7 @@ def _emit_shufflevector(
             )
         mask_indices = []
         for item in split_top_level(mask_text):
-            index = const_int_from_value(strip_typed_initializer(item))
+            index = const_int_from_value(strip_typed_initializer(item, type_context=func.type_context))
             if index is None:
                 raise BackendUnavailable(
                     f"self backend shufflevector mask lane is not constant in {func.name!r}: {mask_value}"
@@ -989,7 +989,7 @@ def _emit_insertvalue(
 def emit_compute_instruction_by_id(
     func: ParsedFunction,
     kind_id: int,
-    data: tuple,
+    data: int | tuple,
     module_symbols: PreparedModuleSymbols,
     *,
     indexed_kernel: IndexedFunctionKernel | None = None,
@@ -1014,6 +1014,48 @@ def emit_compute_instruction_by_id(
         and indexed_dest_id >= 0
         and indexed_kernel.value_slot_id(indexed_dest_id) >= 0
     )
+    # Calls need no arithmetic dispatch, but keep destination checks above.
+    if kind_id == PARSED_INSTRUCTION_KIND_CALL:
+        if indexed_kernel is not None:
+            call_header: CompilerInt4 = indexed_kernel.call_header(data)
+            indexed_callee = indexed_kernel.call_texts[call_header.second]
+            if (call_header.third & 1) or not indexed_callee.startswith(
+                "llvm."
+            ):
+                return emit_call_instruction_indexed(
+                    func,
+                    indexed_kernel,
+                    data,
+                    module_symbols,
+                )
+            data = indexed_kernel.diagnostic_call_data(data)
+        (
+            dest,
+            ret_type,
+            callee,
+            is_indirect,
+            args,
+            fixed_arg_count,
+            is_vararg_call,
+            arg_alignments,
+        ) = data
+        return emit_call_instruction(
+            func,
+            dest,
+            ret_type,
+            callee,
+            is_indirect,
+            args,
+            fixed_arg_count,
+            is_vararg_call,
+            arg_alignments,
+            module_symbols,
+            dest_value_id=indexed_dest_id,
+            indexed_use_count=indexed_use_count,
+            indexed_use0=indexed_use0,
+            indexed_use_tail=indexed_use_tail,
+        )
+
     if kind_id == PARSED_INSTRUCTION_KIND_BINOP:
         if indexed_kernel is not None:
             binop_record: CompilerInt4 = indexed_kernel.instruction_record(data)
@@ -1767,7 +1809,7 @@ def emit_compute_instruction_by_id(
         if not (indexed_dest_has_slot if indexed_kernel is not None else parsed_function_has_value_slot(func, dest)):
             return []
         if is_aggregate_literal_value(value):
-            literal_bytes = aggregate_literal_to_bytes(aggregate_type, value)
+            literal_bytes = aggregate_literal_to_bytes(aggregate_type, value, type_context=module_symbols.type_context)
             field_bytes = literal_bytes[offset : offset + result_type.slot_size]
             field_value = str(int.from_bytes(field_bytes, "little"))
             lines = materialize_value(
@@ -1877,47 +1919,6 @@ def emit_compute_instruction_by_id(
             )
         )
         return lines
-
-    if kind_id == PARSED_INSTRUCTION_KIND_CALL:
-        if indexed_kernel is not None:
-            call_header: CompilerInt4 = indexed_kernel.call_header(data)
-            indexed_callee = indexed_kernel.call_texts[call_header.second]
-            if (call_header.third & 1) or not indexed_callee.startswith(
-                "llvm."
-            ):
-                return emit_call_instruction_indexed(
-                    func,
-                    indexed_kernel,
-                    data,
-                    module_symbols,
-                )
-            data = indexed_kernel.diagnostic_call_data(data)
-        (
-            dest,
-            ret_type,
-            callee,
-            is_indirect,
-            args,
-            fixed_arg_count,
-            is_vararg_call,
-            arg_alignments,
-        ) = data
-        return emit_call_instruction(
-            func,
-            dest,
-            ret_type,
-            callee,
-            is_indirect,
-            args,
-            fixed_arg_count,
-            is_vararg_call,
-            arg_alignments,
-            module_symbols,
-            dest_value_id=indexed_dest_id,
-            indexed_use_count=indexed_use_count,
-            indexed_use0=indexed_use0,
-            indexed_use_tail=indexed_use_tail,
-        )
 
     return None
 

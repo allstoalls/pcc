@@ -1,16 +1,30 @@
 """Per-root preload deltas computed in worker processes build the serial index."""
 
 import ast
+import hashlib
 import inspect
 import json
+import os
+from pathlib import Path
+import shlex
 import subprocess
 import sys
 import textwrap
 
 import pytest
 
-from pcc.py_frontend import pipeline, preload_delta_worker, type_infer
-from pcc.py_frontend.pipeline_exports import _write_native_exports_wire
+from pcc.frontends.python import (
+    pipeline,
+    pipeline_frontend_workers as workers,
+    preload_delta_worker,
+    type_infer,
+    worker_process_pool as pool,
+    worker_resource_plan as resources,
+)
+from pcc.frontends.python.pipeline_exports import (
+    _native_export_to_wire,
+    _write_native_exports_wire,
+)
 
 
 def _cls(name, owner, fields):
@@ -161,3 +175,192 @@ def test_worker_path_avoids_modules_pcc1_compiles_as_cpython():
             node.id for node in ast.walk(tree) if isinstance(node, ast.Name)
         }
         assert not names & {"tempfile", "shutil"}, function.__name__
+
+
+def _preload_command(tmp_path, roots=("dup_b", "m03")):
+    exports_path = tmp_path / "exports.json"
+    roots_path = tmp_path / "roots.txt"
+    out_path = tmp_path / "deltas.json"
+    _write_native_exports_wire(str(exports_path), _exports(), {})
+    roots_path.write_text("\n".join(roots) + "\n", encoding="utf-8")
+    command = shlex.join([
+        sys.executable, "-B", "-m", "pcc", preload_delta_worker.WORKER_ARG,
+        str(exports_path), str(roots_path), str(out_path),
+    ])
+    return command, exports_path, roots_path, out_path
+
+
+def test_preload_resource_tasks_bind_complete_graph_roots_and_owner(tmp_path):
+    command, exports_path, roots_path, out_path = _preload_command(tmp_path)
+    task = workers.resource_tasks_for_commands([command])[0]
+    identities = [hashlib.sha256(path.read_bytes()).hexdigest()
+                  for path in (exports_path, roots_path)]
+    assert task["inputs"] == [exports_path.stat().st_size, roots_path.stat().st_size, 2]
+    assert task["estimate_bytes"] == 0
+    assert task["report_path"] == str(out_path) + ".rss"
+    assert task["restartable"] is True
+    assert task["source_identity"] == "|".join(identities)
+    assert "|preload-delta|full-graph|" in task["class"]
+    assert sys.executable in task["class"] and identities[0] in task["class"]
+
+    roots_path.write_text("dup_b\nm04\n", encoding="utf-8")
+    changed = workers.resource_tasks_for_commands([command])[0]
+    assert changed["inputs"] == task["inputs"]
+    assert changed["source_identity"] != task["source_identity"]
+    assert changed["class"] == task["class"]
+
+    _write_native_exports_wire(str(exports_path), _exports(21), {})
+    changed_graph = workers.resource_tasks_for_commands([command])[0]
+    assert changed_graph["class"] != task["class"]
+
+
+def test_known_mixed_worker_tasks_and_unknown_commands_are_distinct(tmp_path):
+    command, exports_path, _roots_path, _out_path = _preload_command(tmp_path)
+    source = tmp_path / "module.py"
+    source.write_text("value = 1\n", encoding="utf-8")
+    manifest = tmp_path / "manifest.txt"
+    workers.write_worker_manifest(
+        str(manifest), str(tmp_path / "result.json"), str(tmp_path),
+        str(exports_path), "", [str(source)], ["module"], [0],
+        entry_module="module", sibling_inits=[], libpython_mode="off",
+        ir_scaffold_mode="on", verbose=False, job_kind="export",
+    )
+    codegen = shlex.join([
+        sys.executable, "-B", "-m", "pcc",
+        "--pcc-python-multi-codegen-worker", str(manifest),
+    ])
+    tasks = workers.resource_tasks_for_commands([command, codegen])
+    assert len(tasks) == 2 and tasks[0]["class"] != tasks[1]["class"]
+    assert tasks[0]["report_path"].endswith("deltas.json.rss")
+    assert tasks[1]["report_path"] == str(manifest) + ".rss"
+    unknown = "custom-worker --custom-worker-mode work"
+    assert workers.resource_tasks_for_commands([unknown]) is None
+    assert workers.resource_tasks_for_commands([command, unknown]) is None
+    assert workers.resource_tasks_for_commands([unknown, command]) is None
+
+
+@pytest.mark.parametrize("tail", [
+    [], ["exports", "roots"], ["exports", "roots", "out", "extra"],
+    ["exports", "roots", "out", "--pcc-preload-delta-worker"],
+    ["--pcc-python-multi-codegen-worker", "manifest"],
+])
+def test_invalid_preload_command_never_falls_through_to_old_pool(monkeypatch, tail):
+    monkeypatch.setenv(workers.WORKER_TREE_BUDGET_ENV, str(1024**3))
+    def forbidden(*args, **kwargs):
+        raise AssertionError("invalid known command reached the old worker pool")
+    monkeypatch.setattr(pool, "run_worker_processes", forbidden)
+    command = shlex.join([sys.executable, preload_delta_worker.WORKER_ARG] + tail)
+    with pytest.raises(workers.FrontendWorkerContractError):
+        workers.run_worker_commands([command], max_parallel=2)
+
+
+def test_preload_resource_task_missing_input_is_not_unknown(tmp_path):
+    command, _exports_path, roots_path, _out_path = _preload_command(tmp_path)
+    roots_path.unlink()
+    with pytest.raises(FileNotFoundError):
+        workers.resource_tasks_for_commands([command])
+
+
+def test_preload_worker_publishes_graph_root_and_final_rss(tmp_path, monkeypatch):
+    _command, exports_path, roots_path, out_path = _preload_command(tmp_path)
+    report = tmp_path / "worker.rss"
+    monkeypatch.setenv(resources.RESOURCE_REPORT_ENV, str(report))
+    monkeypatch.setenv(resources.RESOURCE_TOKEN_ENV, "preload-attempt")
+    phases = []
+    original = resources.publish_worker_resource
+    def observe(phase):
+        original(phase)
+        phases.append(resources.read_worker_resource(str(report), os.getpid(), "preload-attempt"))
+    monkeypatch.setattr(resources, "publish_worker_resource", observe)
+    assert preload_delta_worker.run(str(exports_path), str(roots_path), str(out_path)) == 0
+    assert [row[0] for row in phases] == ["exports", "preload", "root:dup_b", "root:m03", "complete"]
+    assert all(0 < row[1] <= row[2] for row in phases)
+    assert phases[-1][2] >= phases[0][2]
+    assert not Path(str(report) + ".tmp").exists()
+    assert not Path(str(out_path) + ".partial").exists()
+
+
+def test_budgeted_preload_cli_has_stable_shards_serial_bytes_and_measured_reports(
+    monkeypatch, host_workers, tmp_path,
+):
+    exports = _exports(38)
+    serial = type_infer.build_unique_external_class_preload_index(exports)
+    global_by_key = type_infer.preload_global_by_key(
+        type_infer.build_unique_external_class_preload(exports)
+    )
+    monkeypatch.setenv(workers.WORKER_TREE_BUDGET_ENV, str(1024**3))
+    # The enclosing test guard still enforces its tree cap; this explicit
+    # one-GiB scheduler budget measures the test owner and its CLI children.
+    monkeypatch.delenv(resources.TREE_STATE_ENV, raising=False)
+    def forbidden(*args, **kwargs):
+        raise AssertionError("budgeted preload reached the old fixed-width pool")
+    monkeypatch.setattr(pool, "run_worker_processes", forbidden)
+    original = pool.run_resource_worker_processes
+    records = []
+    def observe(commands, tasks, width, budget, **kwargs):
+        shards = []
+        for command in commands:
+            argv = shlex.split(command)
+            position = argv.index(preload_delta_worker.WORKER_ARG)
+            shards.append(Path(argv[position + 2]).read_text().splitlines())
+        original(commands, tasks, width, budget, **kwargs)
+        trace = Path(kwargs["trace_path"]).read_text().splitlines()
+        reports = [Path(task["report_path"]).read_text().splitlines() for task in tasks]
+        for command, roots in zip(commands, shards):
+            out_path = Path(shlex.split(command)[-1])
+            expected_rows = tuple((root, *type_infer.preload_root_delta(exports, root, global_by_key))
+                                  for root in roots)
+            assert out_path.read_bytes() == json.dumps(_native_export_to_wire(expected_rows)).encode()
+        records.append((shards, trace, reports, width))
+    monkeypatch.setattr(pool, "run_resource_worker_processes", observe)
+
+    for jobs in (2, 6):
+        work = tmp_path / str(jobs)
+        work.mkdir()
+        monkeypatch.setenv("PCC_PRELOAD_DELTA_JOBS", str(jobs))
+        monkeypatch.setattr(pool, "_RESOURCE_OBSERVATIONS", [])
+        result = pipeline._build_unique_external_class_preload_index(exports, str(work))
+        assert json.dumps(result).encode() == json.dumps(serial).encode()
+        assert list(result["roots"]) == list(serial["roots"])
+        assert list(work.iterdir()) == []
+
+    assert len(host_workers) == len(records) == 2
+    assert records[0][0] == records[1][0]
+    assert [len(chunk) for chunk in records[0][0]] == [8] * 5
+    for shards, trace, reports, width in records:
+        events = [row.split("\t") for row in trace]
+        assert sum(row[0] == "calibrate" for row in events) == 1
+        assert sum(row[0] == "start" for row in events) == 4
+        assert sum(row[0] == "retire" for row in events) == len(shards)
+        retired_pids = {int(row[2]) for row in events if row[0] == "retire"}
+        assert {int(row[1]) for row in reports} == retired_pids
+        assert all(row[0] == resources.RESOURCE_REPORT_SCHEMA and row[2] == "complete"
+                   and 0 < int(row[3]) <= int(row[4]) and len(row[5]) == 64
+                   for row in reports)
+        assert len({row[5] for row in reports}) == len(reports)
+        active = set()
+        for row in events:
+            if row[0] in ("start", "calibrate"):
+                active.add(int(row[2]))
+                assert len(active) <= width
+            elif row[0] == "retire":
+                active.remove(int(row[2]))
+        assert not active
+    # Keep the observed reports outside the production state directory so
+    # the process test can prove both measurements and complete cleanup.
+    (tmp_path / "observed-runs.json").write_text(json.dumps(records, indent=2) + "\n")
+
+
+def test_budgeted_preload_failure_cleans_reports_and_state(monkeypatch, tmp_path):
+    monkeypatch.setenv(workers.WORKER_TREE_BUDGET_ENV, str(1024**3))
+    monkeypatch.delenv(resources.TREE_STATE_ENV, raising=False)
+    def forbidden(*args, **kwargs):
+        raise AssertionError("failed budgeted preload reached the old worker pool")
+    monkeypatch.setattr(pool, "run_worker_processes", forbidden)
+    with pytest.raises(subprocess.CalledProcessError):
+        pipeline._preload_deltas_in_workers(
+            _exports(), ["not_exported"] * 16,
+            [sys.executable, "-B", "-m", "pcc"], 2, str(tmp_path),
+        )
+    assert list(tmp_path.iterdir()) == []
+    assert pool._HOST_WORKERS == {}

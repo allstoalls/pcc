@@ -1,6 +1,6 @@
 # Chapter 5: The Typed-Python Frontend
 
-pcc's Python path begins with a text file and ends with an AST in which every expression carries a type annotation — lowering that tree to LLVM IR is Chapter 6's business. This chapter covers the four stages of the frontend chain: a hand-written lexer and recursive-descent parser ([pcc/parse/py_lex.py](../../pcc/parse/py_lex.py), `py_parse.py`), lifting into a frozen AST ([pcc/parse/py_lift.py](../../pcc/parse/py_lift.py) → [pcc/py_frontend/py_ast.py](../../pcc/py_frontend/py_ast.py)), pipeline assembly and mode adjudication ([pcc/py_frontend/pipeline.py](../../pcc/py_frontend/pipeline.py)), and annotation-driven type inference ([pcc/py_frontend/type_infer.py](../../pcc/py_frontend/type_infer.py)). But mechanism is only half the story; the other half is three design rulings that have to be settled first: why pcc is a typed-subset compiler rather than a full-Python JIT; why unsupported idioms fail loudly by default instead of falling back silently; and what the three-state `--ir-scaffold` flag is actually adjudicating. The answers to these three questions lock together, and between them they determine the shape of every layer of the frontend.
+pcc's Python path begins with a text file and ends with an AST in which every expression carries a type annotation — lowering that tree to LLVM IR is Chapter 6's business. This chapter covers the four stages of the frontend chain: a hand-written lexer and recursive-descent parser ([pcc/frontends/python/py_lex.py](../../pcc/frontends/python/py_lex.py), `py_parse.py`), lifting into a frozen AST ([pcc/frontends/python/py_lift.py](../../pcc/frontends/python/py_lift.py) → [pcc/frontends/python/py_ast.py](../../pcc/frontends/python/py_ast.py)), pipeline assembly and mode adjudication ([pcc/frontends/python/pipeline.py](../../pcc/frontends/python/pipeline.py)), and annotation-driven type inference ([pcc/frontends/python/type_infer.py](../../pcc/frontends/python/type_infer.py)). But mechanism is only half the story; the other half is three design rulings that have to be settled first: why pcc is a typed-subset compiler rather than a full-Python JIT; why unsupported idioms fail loudly by default instead of falling back silently; and what the three-state `--ir-scaffold` flag is actually adjudicating. The answers to these three questions lock together, and between them they determine the shape of every layer of the frontend.
 
 ## Chapter Overview: Start with the Controlled Python Subset
 
@@ -30,11 +30,11 @@ When a subset compiler meets code outside its subset, it has two choices: silent
 
 At first glance this default looks user-hostile — `auto` mode could have compiled the program just fine. The reason for insisting on it is that **silent fallback poisons every claim downstream.** If a binary that "compiled successfully" quietly linked libpython, the no-libpython deployment claim is false; if a benchmark's hot path actually ran on the CPython bridge, the performance number measured the bridge, not pcc; if a bootstrap stage silently imported a host module, the fixed-point evidence is false. The first of pcc's seven obligations requires every compatibility claim to be mode-labeled (libpython ≠ no-libpython), and mode labeling is only enforceable when "fallback is a countable, discrete event" — which is exactly the precondition of the fallback ratchet [tests/fallback_baseline.json](../../tests/fallback_baseline.json) (see Chapter 14): you can ratchet events that are explicitly recorded; you cannot ratchet default behavior diffused through the code.
 
-Mechanically, the philosophy lands in `_finalize_libpython_mode()` in [pcc/py_frontend/pipeline.py](../../pcc/py_frontend/pipeline.py): when the mode is `off` and a fallback need is detected, it raises `PyPipelineError` with a message that names the file, lists the reasons, and tells the user explicitly that the unlock is to write `--python-libpython=auto/on`. The failure is loud and the exit is explicit — fallback ceases to be a default behavior and becomes a documented user decision. The full semantics of the three modes are in 5.4.3.
+Mechanically, the philosophy lands in `_finalize_libpython_mode()` in [pcc/frontends/python/pipeline.py](../../pcc/frontends/python/pipeline.py): when the mode is `off` and a fallback need is detected, it raises `PyPipelineError` with a message that names the file, lists the reasons, and tells the user explicitly that the unlock is to write `--python-libpython=auto/on`. The failure is loud and the exit is explicit — fallback ceases to be a default behavior and becomes a documented user decision. The full semantics of the three modes are in 5.4.3.
 
 ### 5.1.3 One pipeline, two generations of parsers
 
-The frontend directory hides a lineage. [pcc/py_frontend/parser.py](../../pcc/py_frontend/parser.py) is the first-generation parser: it used CPython's standard-library `ast` module as the backbone and lifted `ast.AST` nodes into pcc's AST. It was fast to write and complete in coverage, but it had one fatal property: it itself depends on libpython. When pcc began compiling its own pipeline, that `import ast` edge dragged libpython back into the stage1 closure. The comment in `compile_python` in `pipeline.py` records the ruling: `pcc.parse.py_parse` + `pcc.parse.py_lift` is the bootstrap-safe parsing path; "the earlier CPython-ast escape hatch kept a libpython import edge alive in the compiled pipeline, so the self-hosting path no longer emits it." `parser.py`'s own comment pronounces its future: once the native parser becomes the hard default, this file can be deleted wholesale. Its residual value today is as a host-side tool for a handful of source-shape analysis tests.
+The frontend directory hides a lineage. [pcc/frontends/python/parser.py](../../pcc/frontends/python/parser.py) is the first-generation parser: it used CPython's standard-library `ast` module as the backbone and lifted `ast.AST` nodes into pcc's AST. It was fast to write and complete in coverage, but it had one fatal property: it itself depends on libpython. When pcc began compiling its own pipeline, that `import ast` edge dragged libpython back into the stage1 closure. The comment in `compile_python` in `pipeline.py` records the ruling: `pcc.frontends.python.py_parse` + `pcc.frontends.python.py_lift` is the bootstrap-safe parsing path; "the earlier CPython-ast escape hatch kept a libpython import edge alive in the compiled pipeline, so the self-hosting path no longer emits it." `parser.py`'s own comment pronounces its future: once the native parser becomes the hard default, this file can be deleted wholesale. Its residual value today is as a host-side tool for a handful of source-shape analysis tests.
 
 This lineage sets the tone for the chapter: every file discussed below — lexer, parser, lifter — is at once pcc's frontend and an **input** that pcc1 must be able to compile, and that must run correctly once compiled. Many source shapes that look overly defensive are fossils left by this double identity.
 
@@ -44,22 +44,22 @@ The full frontend chain looks like this, orchestrated end to end by `compile_pyt
 
 ```text
 source.py
-   │  pcc/parse/py_lex.py     hand-written lexer: INDENT/DEDENT, NAME,
+   │  pcc/frontends/python/py_lex.py     hand-written lexer: INDENT/DEDENT, NAME,
    │                          NUMBER, STRING, OP, KEYWORD (longest match)
    ▼
 token stream
-   │  pcc/parse/py_parse.py   hand-written recursive descent:
+   │  pcc/frontends/python/py_parse.py   hand-written recursive descent:
    │                          Parser._parse_stmt keyword dispatch +
    │                          expression precedence ladder → narrow AST
    │                          (_Module, _FuncDef, _Call, ... _* dataclasses)
    ▼
 narrow AST
-   │  pcc/parse/py_lift.py    _Lifter: narrow AST → frozen py_ast; every
+   │  pcc/frontends/python/py_lift.py    _Lifter: narrow AST → frozen py_ast; every
    │                          expression starts as ty=DynType; sentinel
    │                          encodings (_yield/_list_comp/...)
    ▼
 py_ast.Module
-   │  pcc/py_frontend/type_infer.py   infer_module: builds new nodes, fills ty
+   │  pcc/frontends/python/type_infer.py   infer_module: builds new nodes, fills ty
    ▼
 typed Module  ──→  L1CodeGen.generate() (Chapter 6) ──→ LLVM IR text
 ```
@@ -84,7 +84,7 @@ Two design points deserve a pause.
 
 ### 5.3.1 The frozen contract
 
-[pcc/py_frontend/py_ast.py](../../pcc/py_frontend/py_ast.py) is the hub of the entire frontend, and its design can be summarized in three phrases: frozen, span-carrying, types on the nodes.
+[pcc/frontends/python/py_ast.py](../../pcc/frontends/python/py_ast.py) is the hub of the entire frontend, and its design can be summarized in three phrases: frozen, span-carrying, types on the nodes.
 
 Every node is a `frozen=True` dataclass — immutable after construction; any "modification" must build a new node via `dataclasses.replace`. The direct beneficiary of this discipline is type inference: `infer_module` is a purely functional pass — tree in, new tree out — and the old tree stays valid forever. The file's docstring points to the authoritative contract, [docs/plans/python-frontend-interfaces.md](../../docs/plans/python-frontend-interfaces.md) section 2, a document frozen at v0.1 precisely so that multiple agents working in parallel could not change the interface unilaterally.
 
@@ -137,7 +137,7 @@ Import classification is the semantic core of this layer. `_classify_python_impo
 compile_time_only        erased at compile time (typing, etc.)
 native_user_module       user module natively compiled in the same closure
 builtin_native_dispatch  built-in native dispatch lowering
-native_stdlib            resolved to a native pcc/py_stdlib stand-in
+native_stdlib            resolved to a native pcc/stdlib stand-in
 cpython_fallback         no native provider; hard failure unless explicitly allowed
 ```
 
@@ -153,7 +153,7 @@ Every ruling lands in structured logs via `_record_import_classification()`: wit
 
 `--ir-scaffold` is resolved by `_resolve_ir_scaffold_mode()`, and its semantics run deeper than its name. The question it adjudicates is: **when the source that pcc is compiling itself constructs LLVM IR** — that is, call sites like `self.builder.call(...)` and `ir.IntType(64)` inside pcc's own codegen modules — how do those call sites lower? This is a problem unique to self-hosting: ordinary user programs have no such call sites, but for pcc1 to run free of libpython, its own IR-construction layer must be compiled closed-world. The three states:
 
-- `on` (default; source comments call it Path A): `IRBuilder` and `ir.*` call sites are lowered directly by the `ir_scaffold_lowering.py` mixin into native calls to external IR-builder symbols; the scaffold import set `pcc.extern`, `pcc.unsafe`, `pcc.llvm_capi`, `pcc.llvm_capi.compat` (`_SCAFFOLD_IMPORT_MODULES`) is treated as compile-time construction and does not count toward fallback; and `_filter_ir_scaffold_closure()` simultaneously rewrites the link closure — dropping `compat.py` and the LLVM-C binding `binding.py` (keeping them would drag libpython back into the self-backend path) and swapping in the real symbol provider, `pcc.llvm_capi.ir`. Builder methods not yet migrated raise `ScaffoldUnsupportedError`, which names the missing method.
+- `on` (default; source comments call it Path A): `IRBuilder` and `ir.*` call sites are lowered directly by the `ir_scaffold_lowering.py` mixin into native calls to external IR-builder symbols; the scaffold import set `pcc.extern`, `pcc.unsafe`, `pcc.ir`, `pcc.ir.compat` (`_SCAFFOLD_IMPORT_MODULES`) is treated as compile-time construction and does not count toward fallback; and `_filter_ir_scaffold_closure()` simultaneously rewrites the link closure — dropping `compat.py` and the LLVM-C binding `binding.py` (keeping them would drag libpython back into the self-backend path) and swapping in the real symbol provider, `pcc.ir.ir`. Builder methods not yet migrated raise `ScaffoldUnsupportedError`, which names the missing method.
 - `off`: the explicit compatibility escape hatch — the old lowering path, where builder call sites still go through dynamic dispatch (and therefore usually require libpython to be allowed); `ScaffoldUnsupportedError` is never raised. The docstring of `ScaffoldUnsupportedError` draws the contrast plainly: OFF mode falls back silently to `py_cpy_*` dispatch; the error surface exists only in ON mode, **so that file-by-file migration can see exactly which symbols are still missing**.
 - `auto`: a legacy hybrid mode. Today `_resolve_ir_scaffold_mode` normalizes both the empty value and `auto` to `on` — the closed world is already the default reality, and `auto` survives only as a CLI-compatible spelling.
 
@@ -185,13 +185,13 @@ Class types are the bulk cargo on this supply chain. `_prepopulate_module_scope(
 
 Gathering the failure surfaces scattered through the preceding sections, the frontend's error stratification is a four-tier structure, each tier with its own type, its own stage, and its own audience:
 
-**Tier one: user type errors → `PyFrontendError`.** Defined in [pcc/py_frontend/types.py](../../pcc/py_frontend/types.py), a dataclass carrying `span`, `message`, and an optional `hint`; `format()` renders `file:line:col: error: ...` plus a hint line. Section 8 of the interface contract makes it a mandatory convention: every user-visible compile failure must be a `PyFrontendError` (or subclass); a bare `RuntimeError` must never surface from user input. It says: "your program is wrong."
+**Tier one: user type errors → `PyFrontendError`.** Defined in [pcc/frontends/python/types.py](../../pcc/frontends/python/types.py), a dataclass carrying `span`, `message`, and an optional `hint`; `format()` renders `file:line:col: error: ...` plus a hint line. Section 8 of the interface contract makes it a mandatory convention: every user-visible compile failure must be a `PyFrontendError` (or subclass); a bare `RuntimeError` must never surface from user input. It says: "your program is wrong."
 
 **Tier two: outside the subset but semantically known → `DynType` demotion, not an error.** Inference does not raise on shapes it does not recognize; it tags them `DynType` and hands them to lowering, which emits runtime dispatch for `DynType`. This is not silent fallback — whether it is permitted is decided by the mode: under `--python-libpython=off`, if the demotion ultimately needs `py_cpy_*`, it converts at `_finalize_libpython_mode()` into **tier three: a mode hard failure → `PyPipelineError`**, with the mechanized reason list of 5.4.1. Note the elegance of the layering: when `_binop_result` returns `TYPE_DYN`, it neither knows nor needs to know the final mode; the ruling is deferred to the place that has all the information — the generated IR and the user's mode choice.
 
 **Tier three's self-hosting variant: `ScaffoldUnsupportedError`.** Under scaffold ON, an unmigrated IRBuilder method fails with its name attached (5.4.3); the audience is not the ordinary user but the developer doing file-by-file migration.
 
-**Tier four: route recording and explanation.** [pcc/fallback_routes.py](../../pcc/fallback_routes.py) turns the five classification strings of 5.4.2 into user-visible events: `FallbackRoute(module, classification, reason, native)`, with `route_from_classification()` assigning each classification one stable reason sentence ("no native provider found; libpython required unless disabled," etc.), and `explain_routes()` rendering text or JSON in the `pcc.fallback_routes.v1` schema. [pcc/fallback_explainer.py](../../pcc/fallback_explainer.py) is the more general collector: `FallbackReason(feature, phase, reason, suggestion, source)`, with `explain_import()` generating a suggestion-bearing explanation for `cpython_fallback` ("add pcc/py_stdlib port or enable --python-libpython=auto"). Recording the present honestly: these two modules today are a stable vocabulary and renderer with unit tests ([tests/python/test_fallback_routes.py](../../tests/python/test_fallback_routes.py), `test_fallback_explainer.py`); the pipeline's live emission channels are `_pcc_emit_import_log` (`PCC_LOG=import`) and `--explain-fallback` attaching to diagnostics via `ObservabilityOptions` in [pcc/compile_observability.py](../../pcc/compile_observability.py). Both sides share the same set of classification strings — those strings are the real contract.
+**Tier four: route recording and explanation.** [pcc/diagnostics/fallback_routes.py](../../pcc/diagnostics/fallback_routes.py) turns the five classification strings of 5.4.2 into user-visible events: `FallbackRoute(module, classification, reason, native)`, with `route_from_classification()` assigning each classification one stable reason sentence ("no native provider found; libpython required unless disabled," etc.), and `explain_routes()` rendering text or JSON in the `pcc.diagnostics.fallback_routes.v1` schema. [pcc/diagnostics/fallback_explainer.py](../../pcc/diagnostics/fallback_explainer.py) is the more general collector: `FallbackReason(feature, phase, reason, suggestion, source)`, with `explain_import()` generating a suggestion-bearing explanation for `cpython_fallback` ("add pcc/stdlib port or enable --python-libpython=auto"). Recording the present honestly: these two modules today are a stable vocabulary and renderer with unit tests ([tests/python/test_fallback_routes.py](../../tests/python/test_fallback_routes.py), `test_fallback_explainer.py`); the pipeline's live emission channels are `_pcc_emit_import_log` (`PCC_LOG=import`) and `--explain-fallback` attaching to diagnostics via `ObservabilityOptions` in [pcc/diagnostics/compile_observability.py](../../pcc/diagnostics/compile_observability.py). Both sides share the same set of classification strings — those strings are the real contract.
 
 The net effect of the stratification: **every failure lands at the tier that knows why it failed, and the failure itself is structured data.** Chapter 14's fallback ratchet and Chapter 18's claim-hygiene table are both built on this property.
 
@@ -213,7 +213,7 @@ All three stories are taken from the live records in [docs/investigations/](../.
 
 ### 5.7.2 `@property` return types failing to propagate: a break in the type supply chain
 
-**Symptom.** A multi-file closed-world compile of [pcc/py_stdlib/pathlib.py](../../pcc/py_stdlib/pathlib.py) tripped the no-libpython hard failure. The minimized shape (investigation: `pcc-py-type-infer-property-return-type.md`):
+**Symptom.** A multi-file closed-world compile of [pcc/stdlib/pathlib.py](../../pcc/stdlib/pathlib.py) tripped the no-libpython hard failure. The minimized shape (investigation: `pcc-py-type-infer-property-return-type.md`):
 
 ```python
 @property
@@ -244,8 +244,8 @@ The typed-Python frontend is a supply line chained through four files: hand-writ
 
 ## Exercises
 
-1. **Read the source and verify.** When `pcc hello.py` is run with no flags, what are the actual values of the two key modes? Starting from `_resolve_libpython_mode()` and `_resolve_ir_scaffold_mode()` in [pcc/py_frontend/pipeline.py](../../pcc/py_frontend/pipeline.py), explain the code paths by which the empty values normalize to `off` and `on` respectively, and check against the [README.md](../../README.md) status table that documentation and code agree.
-2. **Read the source and verify.** List every sentinel name the `_Lifter` in [pcc/parse/py_lift.py](../../pcc/parse/py_lift.py) can construct (start from `_e_Comp`, `_e_Yield`, `_e_Await`, `_e_Starred`, `_e_Assign`, `_e_Set`). Pick one, find the lowering code under [pcc/py_frontend/codegen/](../../pcc/py_frontend/codegen) that recognizes and rewrites it, and write out the concrete form that the anti-leakage invariant of 5.3.2 takes in that case.
+1. **Read the source and verify.** When `pcc hello.py` is run with no flags, what are the actual values of the two key modes? Starting from `_resolve_libpython_mode()` and `_resolve_ir_scaffold_mode()` in [pcc/frontends/python/pipeline.py](../../pcc/frontends/python/pipeline.py), explain the code paths by which the empty values normalize to `off` and `on` respectively, and check against the [README.md](../../README.md) status table that documentation and code agree.
+2. **Read the source and verify.** List every sentinel name the `_Lifter` in [pcc/frontends/python/py_lift.py](../../pcc/frontends/python/py_lift.py) can construct (start from `_e_Comp`, `_e_Yield`, `_e_Await`, `_e_Starred`, `_e_Assign`, `_e_Set`). Pick one, find the lowering code under [pcc/frontends/python/codegen/](../../pcc/frontends/python/codegen) that recognizes and rewrites it, and write out the concrete form that the anti-leakage invariant of 5.3.2 takes in that case.
 3. **Argue the layering.** `_binop_result()` returns `TYPE_DYN` for operand combinations it does not recognize instead of raising — does this contradict "fail loudly by default"? Describe one complete path by which a `TYPE_DYN` escalates into a `PyPipelineError` hard failure (hint: the two fallback detections of 5.4.1), and argue why `_finalize_libpython_mode` — not `_binop_result` — is the correct layer for the ruling.
 4. **Design tradeoff.** `_type_from_isinstance_arg()` deliberately does not narrow the tuple form `isinstance(x, (A, B))` because the frontend has no union type. Design a minimal union-type extension for `py_ast`: what nodes must the frozen contract add? What must `_narrow_scope_for_isinstance`, `_is_assignable`, and Chapter 6's lowering each take on? Finally, argue whether pcc's own bootstrap closure actually needs it — support your conclusion by using `rg` over [pcc/](../../pcc) to count the real density of tuple-form `isinstance` occurrences.
 5. **Predict, then verify.** Without looking at the code, predict where each of these four imports falls in the five-way classification of 5.4.2: `import typing`, `from . import sibling`, `import pcc.unsafe`, `import numpy`. Then read `_classify_python_import()`, `_SCAFFOLD_IMPORT_MODULES`, and `_COMPILE_TIME_ONLY_IMPORT_MODULES` to verify, and compile a small file with `PCC_LOG=import` to check the JSON log (`pcc.import_log.v1`) against your predictions.

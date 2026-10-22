@@ -30,10 +30,10 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
-from pcc.parse.c_parser import CParser  # PLY-based  # noqa: E402
-from pcc.parse.c_parse_driver import CParseDriver  # native  # noqa: E402
-from pcc.parse.ast_normalize import normalize, diff  # noqa: E402
-from pcc.preprocessor import preprocess  # noqa: E402
+from pcc.frontends.c.parse.c_parser import CParser  # PLY-based  # noqa: E402
+from pcc.frontends.c.parse.c_parse_driver import CParseDriver  # native  # noqa: E402
+from pcc.frontends.c.parse.ast_normalize import normalize, diff  # noqa: E402
+from pcc.frontends.c.preprocessor import preprocess  # noqa: E402
 
 
 _CSMITH_INCLUDE_CANDIDATES = (

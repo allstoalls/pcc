@@ -16,14 +16,14 @@ def darwin_archive_policy(monkeypatch):
     Linux/Windows configuration-aware selection is covered separately by
     test_owned_runtime_selection; these cases specify the Darwin route.
     """
-    from pcc.py_frontend import pipeline_runtime_archive
+    from pcc.frontends.python import pipeline_runtime_archive
 
     monkeypatch.setattr(pipeline_runtime_archive, "sys", SimpleNamespace(platform="darwin"))
 
 
 def test_runtime_archive_provenance_stamp_target_cli(tmp_path):
     from pcc.tools.runtime_archive_provenance import main
-    from pcc.py_frontend.pipeline_runtime_archive import target_id
+    from pcc.frontends.python.pipeline_runtime_archive import target_id
 
     archive = tmp_path / "libpy_runtime_pcc_py.a"
     archive.write_bytes(b"archive")
@@ -101,7 +101,7 @@ def test_runtime_archive_environment_override_is_fail_closed(
     monkeypatch,
     darwin_archive_policy,
 ):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     archive = tmp_path / "libpy_runtime_pcc_py_libpython.a"
     _write_completed_capi_bundle(archive)
@@ -119,7 +119,7 @@ def test_explicit_libpython_runtime_archive_rejects_empty_member_inventory(
     monkeypatch,
     darwin_archive_policy,
 ):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     archive = tmp_path / "libpy_runtime_pcc_py_libpython.a"
     # This is the observed corrupt publication shape: a regular archive whose
@@ -141,7 +141,7 @@ def test_explicit_libpython_runtime_archive_rejects_inventory_from_another_archi
     monkeypatch,
     darwin_archive_policy,
 ):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     archive = _write_completed_capi_bundle(
         tmp_path / "libpy_runtime_pcc_py_libpython.a"
@@ -160,7 +160,7 @@ def test_explicit_libpython_runtime_archive_rejects_inventory_from_another_archi
 
 
 def test_runtime_make_never_captures_away_build_diagnostics(monkeypatch):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     calls: list[dict] = []
 
@@ -176,7 +176,7 @@ def test_runtime_make_never_captures_away_build_diagnostics(monkeypatch):
 
 
 def test_runtime_make_reclaims_dead_owner_lock(tmp_path: Path):
-    from pcc.py_frontend.pipeline_runtime_archive import run_runtime_make
+    from pcc.frontends.python.pipeline_runtime_archive import run_runtime_make
 
     lock = tmp_path / ".pcc-runtime-build.lock"
     lock.mkdir()
@@ -192,7 +192,7 @@ def test_runtime_make_reclaims_dead_owner_lock(tmp_path: Path):
 
 
 def test_runtime_make_does_not_require_PATH_tools(tmp_path, monkeypatch, capfd):
-    from pcc.py_frontend.pipeline_runtime_archive import run_runtime_make
+    from pcc.frontends.python.pipeline_runtime_archive import run_runtime_make
 
     monkeypatch.setenv("PATH", "/nonexistent")
     run_runtime_make(
@@ -208,7 +208,7 @@ def test_runtime_build_failure_is_reported_before_link(
     monkeypatch,
     darwin_archive_policy,
 ):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     runtime_root = tmp_path / "py_runtime"
     runtime_root.mkdir()
@@ -231,7 +231,7 @@ def test_runtime_build_rejects_empty_archive_publication(
     monkeypatch,
     darwin_archive_policy,
 ):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     runtime_root = tmp_path / "py_runtime"
     runtime_root.mkdir()
@@ -255,7 +255,7 @@ def test_runtime_build_rejects_empty_archive_publication(
 
 def test_libpython_runtime_make_publication_requires_nonempty_inventory() -> None:
     makefile = (
-        Path(__file__).resolve().parents[2] / "pcc" / "py_runtime" / "Makefile"
+        Path(__file__).resolve().parents[2] / "pcc" / "runtime" / "Makefile"
     ).read_text(encoding="utf-8")
 
     rule = makefile[makefile.index("$(LIB_PCC_PY_LIBPYTHON): $(LIB_PCC_PY)") :]
@@ -272,7 +272,7 @@ def test_production_runtime_archive_environment_override_rejects_invalid_provena
     monkeypatch,
     darwin_archive_policy,
 ):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     archive = tmp_path / "libpy_runtime_pcc_py.a"
     archive.write_bytes(b"not a production archive")
@@ -293,7 +293,7 @@ def test_invalid_production_runtime_shortcut_rebuilds_before_acceptance(
     shortcut: str,
     darwin_archive_policy,
 ):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     runtime_root = tmp_path / "py_runtime"
     runtime_root.mkdir()
@@ -347,7 +347,7 @@ def test_production_runtime_is_verified_after_make_before_acceptance(
     monkeypatch,
     darwin_archive_policy,
 ):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     runtime_root = tmp_path / "py_runtime"
     runtime_root.mkdir()
@@ -376,7 +376,7 @@ def test_invalid_production_runtime_without_makefile_fails_closed(
     monkeypatch,
     darwin_archive_policy,
 ):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     runtime_root = tmp_path / "py_runtime"
     runtime_root.mkdir()
@@ -402,7 +402,7 @@ def test_auto_package_compile_propagates_explicit_runtime_archive(
     tmp_path: Path,
     monkeypatch,
 ):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     package = tmp_path / "pkg"
     package.mkdir()

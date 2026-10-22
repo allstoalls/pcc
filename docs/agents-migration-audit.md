@@ -9,7 +9,7 @@ its rules remain in AGENTS.md's compiler-performance section.
 Run from the repository root:
 
 ```bash
-env -u LC_ALL uv run python scripts/check_agent_guide_migration.py
+uv run python scripts/check_agent_guide_migration.py
 git diff d87f85940fe8fc6301f428f74e9b89bdfbac061a -- AGENTS.md docs/
 ```
 
@@ -29,7 +29,7 @@ Every level-two section in the baseline must appear exactly once here.
 | `Dependency ownership contract (maintainer directive, 2026-09-07)` | Verbatim move | [Dependency contract](compiler-contract.md#dependency-ownership-contract-maintainer-directive-2026-09-07). |
 | `CPython library contract (maintainer directive, 2026-09-08)` | Verbatim move | [Library contract](compiler-contract.md#cpython-library-contract-maintainer-directive-2026-09-08). |
 | `Public CLI parity contract (maintainer directive, 2026-09-08)` | Verbatim move | [CLI contract](compiler-contract.md#public-cli-parity-contract-maintainer-directive-2026-09-08). |
-| `Working agreement` | Merged | [Task intake](../AGENTS.md#start-with-current-code), [shared work](../AGENTS.md#shared-work-and-changes) and [investigation workflow](investigation-workflow.md): issue tracking, dated handoff, honest closure; retired-board narrative removed. |
+| `Working agreement` | Merged | [Task intake](../AGENTS.md#start-with-current-code), [shared work](../AGENTS.md#shared-work-and-changes) and [investigation workflow](investigation-workflow.md): issue tracking, [one current status page](status.md), externally archived receipts and honest closure; retired-board narrative removed. |
 | `Project Intent (north star — read before changing direction)` | Verbatim move | [Project Intent](project-intent.md): complete 161-line body, with a separate note distinguishing historical implementation observations from standing goals. |
 | `Project Summary` | Merged / stale descriptions removed | [Project contracts](../AGENTS.md#project-contracts), [source routing](../AGENTS.md#source-and-documentation-routing) and [focused diagnosis](validation-workflow.md#focused-diagnosis); remove maturity/coverage assertions from startup. |
 | `Environment Rules` | Merged | [Validation](../AGENTS.md#validation), [shared work](../AGENTS.md#shared-work-and-changes), [heavy runs](validation-workflow.md#heavy-builds-timing-and-bootstrap): uv/locale, fail-fast, logs, watchdog, source stability, no destructive edits. |

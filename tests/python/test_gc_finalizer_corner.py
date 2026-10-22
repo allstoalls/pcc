@@ -18,7 +18,7 @@ import subprocess
 import textwrap
 
 def _compile_and_run(tmp_path, source: str) -> subprocess.CompletedProcess[str]:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -87,9 +87,13 @@ def test_del_raises_attribute_error_in_loop(tmp_path):
 
 
 def test_del_raises_system_exit_propagates(tmp_path):
-    """Adapted from CPython test_global_del_SystemExit. `SystemExit`
-    raised in `__del__` must NOT be swallowed — it terminates the
-    interpreter."""
+    """`SystemExit` raised in `__del__` is unraisable, as in CPython.
+
+    `_` stays bound until main returns, so the print runs first; the
+    finalizer then raises inside a deallocation, where CPython reports
+    "Exception ignored" on stderr and exits 0 (3.13 and 3.15 alike). The
+    earlier expectation of exit 7 was not CPython's behavior. pcc does not
+    print the unraisable report yet, so stderr is not compared."""
     result = _compile_and_run(tmp_path, """
         import sys
 
@@ -99,16 +103,13 @@ def test_del_raises_system_exit_propagates(tmp_path):
 
         def main() -> None:
             _ = Exit()
-            # _ falls out of scope here; __del__ runs sys.exit(7)
-            # which should make this process exit with code 7.
-            print("never_reached")
+            print("reached")
 
         if __name__ == "__main__":
             main()
         """)
-    assert result.returncode == 7, (
-        f"expected exit 7 from SystemExit in __del__, got {result.returncode}"
-    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "reached\n"
 
 
 # ---------------------------------------------------------------------------

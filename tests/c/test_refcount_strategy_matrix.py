@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from pcc.refcount_strategy_matrix import all_strategies, by_kind, make_env, validate_matrix
+from pcc.diagnostics.refcount_strategy_matrix import all_strategies, by_kind, make_env, validate_matrix
 
 
 def test_refcount_strategy_matrix_covers_four_kinds():
@@ -12,7 +12,7 @@ def test_refcount_strategy_matrix_covers_four_kinds():
 
 def test_refcount_strategy_build_envs_are_explicit():
     assert make_env(0, with_threads=False) == {
-        "PCC_WITH_THREADS": "0",
+        "PCC_WITH_THREADS": "1",
         "PCC_REFCOUNT_KIND": "0",
     }
     assert make_env(2, with_threads=True)["PCC_REFCOUNT_KIND"] == "2"

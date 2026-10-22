@@ -1,7 +1,7 @@
 """Execute real kernel threads and per-thread TLS through the owned ports.
 
 PCC_PLATFORM_THREADED_RUNTIME must name a WITH_THREADS=1 archive built from
-the same source with pcc.py_frontend.owned_runtime_build. No pthread library
+the same source with pcc.frontends.python.owned_runtime_build. No pthread library
 or C compiler is permitted by this test.
 """
 

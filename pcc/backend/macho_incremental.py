@@ -27,7 +27,9 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
 
-from .macho_exec import link_prepared_executable, prepare_executable_object
+from .macho_exec import (
+    link_prepared_executable, prepare_executable_object, validate_executable_imports,
+)
 from .macho_link import LinkInput
 from .native_object import (
     NativeObject,
@@ -38,6 +40,7 @@ from .native_object import (
     decode_packed_native_object,
     encode_native_object,
 )
+from .precise_stackmap import PreciseStackMapError, precise_stackmap_runtime_format
 from .self_backend_cache_identity import macho_linker_source_identity
 
 
@@ -116,6 +119,7 @@ def _hash_native_shape(digest, native: NativeObject) -> None:
             b"symbol-private-external",
             b"1" if symbol.private_external else b"0",
         )
+        _feed(digest, b"symbol-weak-reference", b"1" if symbol.weak_reference else b"0")
     for section in native.sections:
         _feed_text(digest, b"segment-name", section.segname)
         _feed_text(digest, b"section-name", section.sectname)
@@ -179,6 +183,7 @@ def _hash_packed_native_shape(
             b"symbol-private-external",
             b"1" if symbol.private_external else b"0",
         )
+        _feed(digest, b"symbol-weak-reference", b"1" if symbol.weak_reference else b"0")
     for section_index, section in enumerate(native.sections):
         _feed_text(digest, b"segment-name", section.segname)
         _feed_text(digest, b"section-name", section.sectname)
@@ -226,8 +231,13 @@ def _hash_packed_native_shape(
 def _native_shape_is_patchable(native: NativeObject) -> bool:
     # ``link_relocatable_native`` rewrites a section-target field while
     # normalizing it.  Blindly copying the source bytes over that normalized
-    # field would not reproduce a cold merge, so this shape stays cold.
+    # field would not reproduce a cold merge, so this shape stays cold.  A
+    # stack-map table is rebuilt from every input's records (and may be
+    # transcoded), never concatenated, so it stays cold too.
     return all(
+        section.sectname != "__pcc_stackmaps"
+        for section in native.sections
+    ) and all(
         relocation.target_section_index is None
         for section in native.sections
         for relocation in section.relocations
@@ -236,6 +246,9 @@ def _native_shape_is_patchable(native: NativeObject) -> bool:
 
 def _packed_native_shape_is_patchable(native: PackedNativeObject) -> bool:
     return all(
+        section.sectname != "__pcc_stackmaps"
+        for section in native.sections
+    ) and all(
         relocation[6] is None
         for section_index, _section in enumerate(native.sections)
         for relocation in native.decoded_relocations(section_index)
@@ -269,9 +282,16 @@ def _link_image_key(
 ) -> str | None:
     if not _valid_link_options(entry, minos, identifier):
         return None
+    # The final link writes the selected stack-map table format; an invalid
+    # selection is left uncached for the link itself to reject.
+    try:
+        stack_map_format = precise_stackmap_runtime_format()
+    except PreciseStackMapError:
+        return None
     digest = hashlib.sha256()
     digest.update(_CACHE_SCHEMA)
     digest.update(_IMAGE_KEY_SCHEMA)
+    _feed_integer(digest, b"stack-map-format", stack_map_format)
     _feed_text(digest, b"source-identity", source_identity)
     _feed_integer(digest, b"object-count", len(objects))
     for value in objects:
@@ -666,6 +686,7 @@ class IncrementalMachOLinker:
             cached_image = _checked_cache_read(image_path)
             if cached_image is not None:
                 try:
+                    validate_executable_imports(cached_image)
                     if validate is not None:
                         validate(cached_image)
                 except MemoryError:

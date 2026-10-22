@@ -135,22 +135,22 @@ def _compile_and_run_all_collectors(tmp_path, name, program, compiler, archive):
 
 
 def test_raw_addresses_survive_untyped_helpers_and_joins(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     _source, outputs = _compile_and_run_all_collectors(
         tmp_path, "raw_address_flow", RAW_PROGRAM, python_program_compiler,
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
     )
     for backend, out in enumerate(outputs):
         assert out == RAW_EXPECTED, f"GC{backend}: {out!r}"
 
 
 def test_zlib_bz2_lzma_match_cpython_without_libpython(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     source, outputs = _compile_and_run_all_collectors(
         tmp_path, "codec_roundtrip", CODEC_PROGRAM, python_program_compiler,
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
     )
     reference = subprocess.run(
         [sys.executable, str(source)], capture_output=True, text=True, timeout=120,

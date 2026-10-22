@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import os
 import subprocess
 import sys
@@ -7,10 +8,11 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from pcc.runtime.py.py_abi_constants import PY_TYPE_FUNC, PY_TYPE_INT, PY_TYPE_NONE, PY_TYPE_TUPLE
 
 
 REPO = Path(__file__).resolve().parents[2]
-RUNTIME = REPO / "pcc" / "py_runtime"
+RUNTIME = REPO / "pcc" / "runtime"
 
 
 def _compile_and_run(tmp_path: Path, archive: Path) -> subprocess.CompletedProcess[str]:
@@ -173,7 +175,7 @@ def _compile_and_run(tmp_path: Path, archive: Path) -> subprocess.CompletedProce
                 if (out != NULL) return 23;
                 if (!py_err_occurred()) return 24;
                 if (!message_is(
-                    "native function argument binding returned NULL without exception"
+                    "native function signature names tuple is NULL"
                 )) return 25;
 
                 py_clear_exception();
@@ -229,7 +231,7 @@ def _compile_and_run(tmp_path: Path, archive: Path) -> subprocess.CompletedProce
 
 @pytest.mark.parametrize(
     "archive_fixture",
-    ["pcc_py_runtime_archive", "pcc_py_runtime_archive"],
+    ["pcc_runtime_archive", "pcc_runtime_archive"],
 )
 def test_py_func_null_result_sets_or_preserves_exception(
     archive_fixture,
@@ -261,7 +263,7 @@ def test_py_func_call_kwargs_fail_closed_contract_is_mirrored():
     py_binding_guard = py_source.index(
         '"native function argument binding returned NULL without exception"'
     )
-    py_binding_cleanup = py_source.index("py_decref(sig)", py_binding_guard)
+    py_binding_cleanup = py_source.index("_func_clear_call_root(slots, pins, 32)", py_binding_guard)
     assert py_binding_guard < py_binding_cleanup
 
     py_entry_call = py_source.index("result = call_ptr2(")
@@ -271,3 +273,217 @@ def test_py_func_call_kwargs_fail_closed_contract_is_mirrored():
     )
     py_entry_cleanup = py_source.index("if owns_call_args != 0:", py_entry_call)
     assert py_entry_call < py_entry_guard < py_entry_cleanup
+
+
+class _Tuple:
+    def __init__(self, items):
+        self.items = list(items)
+        self.tag = PY_TYPE_TUPLE
+        self.references = 1
+
+
+class _Function:
+    tag = PY_TYPE_FUNC
+
+    def __init__(self, name):
+        self.name = name
+
+
+class _BindingOracle:
+    """Run the actual fast binder; replace raw tuple/exception primitives."""
+
+    def __init__(self):
+        self.pending = None
+        self.diagnostics = []
+        self.allocated = []
+        self.namespace = {
+            "PY_TYPE_FUNC": PY_TYPE_FUNC, "PY_TYPE_INT": PY_TYPE_INT,
+            "PY_TYPE_NONE": PY_TYPE_NONE, "PY_TYPE_TUPLE": PY_TYPE_TUPLE,
+            "null": lambda: None, "ptr_is_null": lambda value: value is None,
+            "is_tagged_int": lambda value: isinstance(value, int),
+            "load_i32": lambda value, _offset: value.tag,
+            "load_i64": lambda value, offset: len(value.items) if offset == 16 else None,
+            "load_i8": lambda value, _offset: ord(value[0]) if value else 0,
+            "load_ptr": lambda value, offset: value.name if offset == 72 else None,
+            "ptr_add": lambda value, offset: (value, offset),
+            "pcc_gc_load_ptr": lambda _owner, slot: slot[0].items[(slot[1] - 24) // 8],
+            "cstr": lambda value: value,
+            "py_tuple_new": self.tuple_new,
+            "py_tuple_set_item": self.tuple_set,
+            "py_dict_new": dict,
+            "py_int_value_i64": int,
+            "py_obj_truthy": bool,
+            "py_incref": self.incref, "py_decref": self.decref,
+            "py_err_occurred": lambda: self.pending is not None,
+            "py_runtime_error_if_unset": self.runtime_error,
+            "py_exc_new": lambda tag, message: (tag, message, None),
+            "py_raise": lambda value: setattr(self, "pending", value),
+        }
+        path = RUNTIME / "py/py_func.py"
+        names = {"_bind_signature_no_kwargs", "_tuple_borrow_known", "_copy_varargs_known",
+                 "_signature_default_kind", "_is_none_or_null", "_is_tuple",
+                 "_func_type_error", "_func_runtime_error_if_unset",
+                 "_signature_runtime_error_if_unset"}
+        parsed = ast.parse(path.read_text(), filename=str(path))
+        functions = [node for node in parsed.body
+                     if isinstance(node, ast.FunctionDef) and node.name in names]
+        exec(compile(ast.Module(body=functions, type_ignores=[]), str(path), "exec"),
+             self.namespace)
+
+    def tuple_new(self, size):
+        value = _Tuple([None] * size)
+        self.allocated.append(value)
+        return value
+
+    def tuple_set(self, value, index, item):
+        value.items[index] = item
+        self.incref(item)
+
+    def incref(self, value):
+        if isinstance(value, _Tuple):
+            value.references += 1
+
+    def decref(self, value):
+        if isinstance(value, _Tuple):
+            value.references -= 1
+
+    def runtime_error(self, context, message):
+        assert self.pending is None
+        self.pending = (7, message, context)
+        self.diagnostics.append(self.pending)
+        return None
+
+    def bind(self, signature, args, name="binding_target"):
+        return self.namespace["_bind_signature_no_kwargs"](signature, args, _Function(name))
+
+
+def _signature(kinds=(0,), flags=(True,), defaults=None):
+    if defaults is None:
+        defaults = (object(),) * len(kinds)
+    return _Tuple(["__pcc_func_signature_v1__", _Tuple(["value"] * len(kinds)),
+                   _Tuple(kinds), _Tuple(flags), _Tuple(defaults)])
+
+
+@pytest.mark.parametrize("slot,word", [
+    (1, "names"), (2, "kinds"), (3, "default flags"), (4, "defaults"),
+])
+def test_fast_binding_missing_signature_tuple_reports_runtime_error_with_name(slot, word):
+    memory = _BindingOracle()
+    signature = _signature()
+    signature.items[slot] = None
+    assert memory.bind(signature, _Tuple([])) is None
+    assert memory.pending == (7, f"native function signature {word} tuple is NULL", "binding_target")
+
+
+@pytest.mark.parametrize("slot,word", [
+    (2, "kind"), (3, "default flag"), (4, "default"),
+])
+def test_fast_binding_missing_signature_entry_reports_specific_failure(slot, word):
+    memory = _BindingOracle()
+    signature = _signature()
+    signature.items[slot].items[0] = None
+    assert memory.bind(signature, _Tuple([])) is None
+    assert memory.pending == (7, f"native function signature {word} entry is NULL", "binding_target")
+    assert all(value.references == 0 for value in memory.allocated)
+
+
+@pytest.mark.parametrize("name", [None, ""])
+def test_fast_binding_unnamed_context_and_existing_exception_are_preserved(name):
+    memory = _BindingOracle()
+    signature = _signature()
+    signature.items[1] = None
+    assert memory.bind(signature, _Tuple([]), name) is None
+    assert memory.pending[2] == "py_func_bind_signature"
+    original = (2, "original ValueError", "original_context")
+    memory.pending = original
+    assert memory.bind(signature, _Tuple([]), name) is None
+    assert memory.pending is original
+    assert len(memory.diagnostics) == 1
+
+
+def test_fast_binding_missing_positional_entry_and_exact_arity_kind_are_specific():
+    memory = _BindingOracle()
+    signature = _signature((0, 0), (False, True))
+    assert memory.bind(signature, _Tuple([None])) is None
+    assert memory.pending == (7, "native function positional argument entry is NULL", "binding_target")
+    memory.pending = None
+    signature = _signature((None,))
+    assert memory.bind(signature, _Tuple([object()])) is None
+    assert memory.pending == (7, "native function signature kind entry is NULL", "binding_target")
+
+
+def test_fast_binding_explicit_type_error_and_successful_tuple_default_are_unchanged():
+    memory = _BindingOracle()
+    signature = _signature()
+    signature.items[2] = _Tuple([])
+    assert memory.bind(signature, _Tuple([])) is None
+    assert memory.pending == (3, "invalid native function signature", None)
+    assert not memory.diagnostics
+    memory.pending = None
+    default = _Tuple([5, 7])
+    signature = _signature(defaults=(default,))
+    result = memory.bind(signature, _Tuple([]))
+    assert result.items == [default] and result.items[0] is default
+    assert result.references == 1 and default.references == 2
+    assert memory.pending is None and not memory.diagnostics
+
+
+def test_fast_binding_varargs_null_argument_has_function_context():
+    memory = _BindingOracle()
+    signature = _signature((3,), (False,))
+    assert memory.bind(signature, _Tuple([None, object()])) is None
+    assert memory.pending == (7, "native function varargs argument entry is NULL", "binding_target")
+    assert all(value.references == 0 for value in memory.allocated)
+
+
+@pytest.mark.parametrize("failure,message", [
+    ("bound", "native function bound argument tuple allocation returned NULL"),
+    ("varargs", "native function varargs tuple allocation returned NULL"),
+    ("kwargs", "native function empty kwargs dict allocation returned NULL"),
+    ("factory", "native function default factory binding returned NULL"),
+])
+def test_fast_binding_silent_internal_failure_sets_specific_runtime_error(failure, message):
+    memory = _BindingOracle()
+    args = _Tuple([])
+    signature = _signature()
+    if failure == "bound":
+        memory.namespace["py_tuple_new"] = lambda _size: None
+    elif failure == "varargs":
+        signature = _signature((3,), (False,))
+        args = _Tuple([object(), object()])
+        original_new = memory.tuple_new
+        memory.namespace["py_tuple_new"] = lambda size: None if size == 2 else original_new(size)
+    elif failure == "kwargs":
+        signature = _signature((4,), (False,))
+        memory.namespace["py_dict_new"] = lambda: None
+    else:
+        signature = _signature((0,), (2,))
+        memory.namespace["_bind_dataclass_factory"] = lambda *_args: None
+    assert memory.bind(signature, args) is None
+    assert memory.pending == (7, message, "binding_target")
+    assert all(value.references == 0 for value in memory.allocated)
+
+
+@pytest.mark.parametrize("triple", [
+    "arm64-apple-darwin", "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc",
+])
+def test_fast_binding_diagnostic_reaches_owned_emitter(tmp_path, monkeypatch, triple):
+    from pcc.backend.owned_object_emit import emit_owned_object
+    from pcc.frontends.python.owned_runtime_build import runtime_ir_passes
+    from pcc.frontends.python.pipeline import compile_python
+
+    source = tmp_path / "py_runtime_func" / "py" / "py_func.py"
+    source.parent.mkdir(parents=True)
+    source.write_text((RUNTIME / "py/py_func.py").read_text())
+    output = tmp_path / "py_func.ll"
+    monkeypatch.setenv("PCC_WITH_THREADS", "1")
+    monkeypatch.setenv("PCC_PYTHON_IR_PASSES", runtime_ir_passes(str(RUNTIME)))
+    compile_python(str(source), str(output), emit_llvm_only=True, python_library=True,
+                   backend="self", libpython_mode="off", ir_scaffold_mode="on",
+                   target_triple=triple)
+    ir_text = output.read_text()
+    assert "@user_py_func__signature_runtime_error_if_unset(" in ir_text
+    payload = emit_owned_object(ir_text, triple)
+    assert len(payload) > 64
+    (tmp_path / "py_func.o").write_bytes(payload)

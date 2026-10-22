@@ -1,9 +1,9 @@
-from pcc.py_frontend import pipeline, pipeline_frontend_workers as workers
+from pcc.frontends.python import pipeline, pipeline_frontend_workers as workers
 import pytest
 
 
 def test_direct_phi_still_rejects_an_unrelated_live_nonpredecessor(monkeypatch):
-    from pcc.llvm_capi import ir
+    from pcc.ir import ir
     from pcc.backend import BackendUnavailable
     from pcc.backend.self_backend_verify import verify_parsed_module
 
@@ -30,7 +30,7 @@ def test_direct_phi_still_rejects_an_unrelated_live_nonpredecessor(monkeypatch):
 @pytest.mark.parametrize("fuse", [False, True])
 def test_folded_conditional_edge_is_removed_from_a_live_join_phi(tmp_path, monkeypatch, condition, fuse):
     import subprocess
-    from pcc.llvm_capi import ir
+    from pcc.ir import ir
     from pcc.backend.self_backend_aarch64_darwin import emit_aarch64_darwin_indexed_module
     from pcc.backend.arm64_asm_driver import assemble_file
     from pcc.backend.native_object import NativeObject
@@ -63,13 +63,9 @@ def test_folded_conditional_edge_is_removed_from_a_live_join_phi(tmp_path, monke
 
 
 def test_direct_short_circuit_phi_after_a_fallible_call(tmp_path, monkeypatch):
-    from pcc.llvm_capi import ir
-    from pcc.py_frontend.codegen import exception_lowering
-
-    monkeypatch.setattr(ir, "_DIRECT_INLINE_ERROR_EDGE_CAPTURE_ENABLED", True)
-    monkeypatch.setattr(exception_lowering, "_DIRECT_INLINE_ERROR_EDGE_ENABLED", True)
     for name in ("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "PCC_DIRECT_INDEXED_KERNEL_EMIT",
-                 "PCC_DIRECT_INDEXED_KERNEL_REQUIRE_ZERO_FALLBACK", "PCC_DIRECT_INDEXED_KERNEL_FUSE_USES"):
+                 "PCC_DIRECT_INDEXED_KERNEL_REQUIRE_ZERO_FALLBACK", "PCC_DIRECT_INDEXED_KERNEL_FUSE_USES",
+                 "PCC_DIRECT_INLINE_ERROR_EDGE_CAPTURE"):
         monkeypatch.setenv(name, "1")
     source = tmp_path / "condition.py"
     source.write_text('''

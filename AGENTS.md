@@ -26,9 +26,11 @@ over any procedure in this file, including its gates and checks.
    sibling repositories track work; dated handoffs and retired goal documents
    are not task queues. Preserve unfinished scope when handling a short subtask.
    Resume parent work after the subtask unless the user stops or replaces it.
-   Record new actionable work in the relevant issue. Before a long pause,
-   leave a dated handoff with source identity, unfinished state and repro steps
-   at `docs/knowledge/YYYY-MM-DD-<topic>-handoff.md`, not in a temp directory.
+   Record new actionable work in the relevant issue. Keep [current status](docs/status.md)
+   up to date with source identity, unfinished goals, blockers and repro commands.
+   Preserve detailed run receipts and historical handoffs in a durable recovery
+   archive outside the working repository; link its location from current status.
+   Do not create another dated in-repository handoff.
 
 ## Project contracts
 
@@ -65,13 +67,27 @@ These are required outcomes, not assertions that migration is complete. See
 
 ## Shared work and changes
 
+- User-clarified Git collaboration (2026-10-22): commit our validated local
+  changes first, pull the latest `shenming/master` with rebase, resolve conflicts
+  by integrating both sides, continue the rebase, then push normally with
+  `[skip ci]`. Stage only this task's identified changes; preserve other local
+  work as well as peers' commits. Do not reset the working tree or select an
+  entire `ours`/`theirs` version to discard the other side. Preserve published
+  history and never force-push. If the remote advances before push, repeat the
+  pull/rebase/integration. Trust conflict-free peers' committed validation;
+  check our changes and actual conflict resolutions without repeating their
+  suites merely because upstream changed.
 - Preserve other work. Re-read targets before narrow edits; no destructive
   restore/reset/revert/stash/clean or discarding branch switches without explicit
   user direction. Do not commit/push unless authorized in the current session.
 - When the user names a single action, do exactly that action. Additional steps
-  the user did not ask for are proposed, never taken silently.
+  the user did not ask for are proposed, never taken silently. Report a user
+  decision only in the user's own words; label a recommendation as one.
 - Do not investigate other sessions through author/timestamp/process heuristics.
   Check relevant input identities for measurement stability, not attribution.
+- Keep imports readable with parenthesized multiline lists; do not mechanically
+  flatten them into long lines. Name each scratch-frame layout and reuse its
+  slot names rather than scattering numeric indices and byte offsets.
 - Fix the generic implementation. Enumerate repeated shapes and check enclosing
   owners/counts before replacement. Run `git diff --check` and focused checks
   after each semantic change; do not stack speculative shared-codegen edits.
@@ -84,6 +100,10 @@ These are required outcomes, not assertions that migration is complete. See
   keeping experiment provenance searchable. Avoid new running-log documents.
 - Prefer existing tools; search [development-tools.md](docs/development-tools.md)
   and `scripts/` before writing a reusable profiler, harness or inventory.
+- Clean `build/` periodically. Once a task's evidence is recorded, run
+  `scripts/clean_build_artifacts.py` (list first, then `--apply`) and delete your
+  own finished run directories by literal path. Keep active runs and anything
+  `docs/status.md` cites; put new one-off outputs outside the repository.
 - Keep partial work and skipped gates explicit. Before claiming completion,
   inspect remaining fallbacks and open boundaries against the requested scope.
   Read back every artifact cited as produced. No silent idle periods: report
@@ -109,6 +129,14 @@ These are required outcomes, not assertions that migration is complete. See
   Against a >=1.5x gap, three candidates each below 5% measured gain or below
   10% Amdahl ceiling require reassessing the owner;
   close known pipeline gaps before attributing the remainder to architecture.
+- Locate a regression directly: profile the slow binary (and an existing good
+  one), attribute time by caller, then read the hot mechanism's source and
+  `git log -S` history. Do not bisect. Name a cause commit only after reading
+  that commit's source.
+- Speed comes from generic compiled-code costs (call paths, ownership/GC
+  protocol, allocation). Do not add per-module or per-feature fast paths, for
+  speed or for semantics; a module's general implementation carries CPython's
+  semantics.
 - Execute emitted programs and preserve the five-GC/ownership contracts.
   Instruction counts, byte equality and QPS support different claims.
   The [memory-pass audit](docs/knowledge/2026-09-08-optimizer-pipeline-audit.md)
@@ -116,14 +144,11 @@ These are required outcomes, not assertions that migration is complete. See
 
 ## Validation
 
-- At each user-approved quota checkpoint, record weekly quota remaining. Check
-  it during work and before heavy runs. After a drop of 10 percentage points
-  (or an earlier user-specified threshold), stop work, clean up owned processes,
-  save evidence and a handoff, and wait for the user's review before continuing.
-  Status questions and interruptions do not reset this checkpoint. Use observed
-  quota data; never claim to monitor a reading that is unavailable.
-- Use `env -u LC_ALL uv run ...`; the checked-in `.python-version` is the host
-  Python selection (currently 3.15.0rc1). Use timeouts for tests/builds/probes.
+- Use `uv run ...`; the checked-in `.python-version` is the host
+  Python selection (currently 3.15.0). Use timeouts for tests/builds/probes.
+  Do not clear `LC_ALL` by default; use
+  [locale troubleshooting](docs/developer-reference.md#locale-troubleshooting)
+  only for a diagnosed locale or encoding error.
 - Every pytest invocation needs `-x`. Use `-n0 -vv --tb=short` for diagnosis.
   Long runs need durable live node/failure logs and a process-group watchdog;
   stop/clean up only your own children after timeout. Never report dots as green.
@@ -154,18 +179,18 @@ These are required outcomes, not assertions that migration is complete. See
   must explicitly select integration tests, for example:
 
 ```bash
-gtimeout 1800s env -u LC_ALL uv run pytest -x -vv -m integration tests/python/gc/test_pcc_bootstrap_full_gc*.py
+gtimeout 1800s uv run pytest -x -vv -m integration tests/python/gc/test_pcc_bootstrap_full_gc*.py
 ```
 
 ## Source and documentation routing
 
 | Task | First-hand source / tests; additional procedure when needed |
 |---|---|
-| CLI/defaults/public API | `pcc/__main__.py`, `pcc/cli_bootstrap.py`, `pcc/cli_core.py`, `pcc/__init__.py`; inspect current dispatch |
-| Python lowering/ownership | `pcc/py_frontend/codegen/`, `pcc/py_runtime/`; [debugging playbook](docs/debugging-playbook.md) |
-| Passes/self codegen | `pcc/py_frontend/pipeline_pass_driver.py`, `pcc/native_ir/`, `pcc/backend/`; performance rules above |
-| C semantics | `pcc/codegen/c_codegen.py`, `pcc/parse/`, `tests/c/`; check signedness and constant evaluation separately |
-| GC/ABI | `pcc/py_runtime/py/`, `src/`, `include/`, `tests/python/gc/`; verify layouts/barriers in code, consult relevant upstream reference |
+| CLI/defaults/public API | `pcc/__main__.py`, `pcc/driver/cli_bootstrap.py`, `pcc/driver/cli_core.py`, `pcc/__init__.py`; inspect current dispatch |
+| Python lowering/ownership | `pcc/frontends/python/codegen/`, `pcc/runtime/`; [debugging playbook](docs/debugging-playbook.md) |
+| Passes/self codegen | `pcc/frontends/python/pipeline_pass_driver.py`, `pcc/ir/optimization/`, `pcc/backend/`; performance rules above |
+| C semantics | `pcc/frontends/c/codegen/c_codegen.py`, `pcc/frontends/c/parse/`, `tests/c/`; check signedness and constant evaluation separately |
+| GC/ABI | `pcc/runtime/py/`, `src/`, `include/`, `tests/python/gc/`; verify layouts/barriers in code, consult relevant upstream reference |
 | Bootstrap/performance | `scripts/run_pcc_*`, current receipts and tests; [tool index](docs/development-tools.md) |
 | Investigation history | Search [INDEX](docs/investigations/INDEX.md); use [investigation workflow](docs/investigation-workflow.md) when recording an experiment |
 | Domain vocabulary | [CONTEXT.md](CONTEXT.md) is a glossary only; requirements stay in [Project Intent](docs/project-intent.md) and [compiler-contract.md](docs/compiler-contract.md) |
@@ -175,8 +200,8 @@ When editing an investigation, keep commands, source/artifact identities,
 observations, corrections and current open questions together. Regenerate:
 
 ```bash
-env -u LC_ALL uv run python scripts/regen_investigations_index.py
-env -u LC_ALL uv run python scripts/distill_investigations.py
+uv run python scripts/regen_investigations_index.py
+uv run python scripts/distill_investigations.py
 ```
 
 Keep AGENTS.md short: stable contracts and routing only. Implementation facts

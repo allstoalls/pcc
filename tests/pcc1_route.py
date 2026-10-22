@@ -2,7 +2,7 @@
 
 ``PCC_TEST_COMPILER=/path/to/pcc1`` makes every in-process
 ``pipeline.compile_python`` call in the session compile with that binary
-instead of host CPython pcc, and ``pcc.cli_launcher`` (``uv run pcc``,
+instead of host CPython pcc, and ``pcc.driver.cli_launcher`` (``uv run pcc``,
 ``.venv/bin/pcc``) exec it.  The whole suite then checks the native compiler
 the same way it checks the host one.
 
@@ -98,7 +98,7 @@ def install() -> None:
             tempfile.gettempdir(), f"pcc-test-compiler-{os.getpid()}.jsonl"
         )
 
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     host_compile = pipeline.compile_python
     host_multi = pipeline.compile_python_multi

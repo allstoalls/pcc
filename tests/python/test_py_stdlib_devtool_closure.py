@@ -9,16 +9,19 @@ import subprocess
 import sys
 import zipapp as host_zipapp
 import zipfile
+from profiling import tracing as host_tracing
 
 import pytest
 
-from pcc.py_stdlib import cProfile as port_cprofile
-from pcc.py_stdlib import compileall as port_compileall
-from pcc.py_stdlib import zipapp as port_zipapp
+from pcc.stdlib import cProfile as port_cprofile
+from pcc.stdlib import compileall as port_compileall
+from pcc.stdlib import zipapp as port_zipapp
+from pcc.stdlib.profiling import tracing as port_tracing
 
 
 def test_devtool_public_exports_match_cpython():
     assert port_cprofile.__all__ == host_cprofile.__all__
+    assert port_tracing.__all__ == host_tracing.__all__
     assert port_compileall.__all__ == host_compileall.__all__
     assert port_zipapp.__all__ == host_zipapp.__all__
 
@@ -168,9 +171,13 @@ def test_compileall_reports_no_cpython_bytecode_honestly(tmp_path):
 
 
 def test_cprofile_import_state_and_sampling_boundary():
+    # CPython 3.15's cProfile re-exports profiling.tracing's run, runctx and
+    # Profile; label stays in profiling.tracing.
+    assert port_cprofile.Profile is port_tracing.Profile
     assert port_cprofile.Profile().getstats() == host_cprofile.Profile().getstats()
     assert port_cprofile.Profile().clear() is None
-    assert port_cprofile.label("native") == host_cprofile.label("native")
+    assert hasattr(port_cprofile, "label") == hasattr(host_cprofile, "label")
+    assert port_tracing.label("native") == host_tracing.label("native")
     with pytest.raises(NotImplementedError, match="profiling events"):
         port_cprofile.Profile().enable()
     with pytest.raises(NotImplementedError, match="profiling events"):
@@ -179,11 +186,11 @@ def test_cprofile_import_state_and_sampling_boundary():
 
 @pytest.mark.parametrize("module_name", ["cProfile", "compileall", "zipapp"])
 def test_devtool_ports_are_selected_by_recursive_stdlib_registry(module_name):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     source = pipeline._locate_native_stdlib_module_source(module_name)
     assert source is not None
-    assert source.endswith("/pcc/py_stdlib/" + module_name + ".py")
+    assert source.endswith("/pcc/stdlib/" + module_name + ".py")
     assert module_name not in pipeline._NATIVE_BUILTIN_IMPORTS
 
 
@@ -206,11 +213,12 @@ def test_devtool_imports_and_zipapp_match_cpython_no_libpython(tmp_path):
     source = '''\
 import cProfile
 import compileall
+import profiling.tracing
 import zipapp
 import zipfile
 
 print("cprofile-empty", cProfile.Profile().getstats())
-print("cprofile-label", cProfile.label("native"))
+print("cprofile-label", profiling.tracing.label("native"))
 print("compileall-missing", compileall.compile_file(%(missing)r, quiet=2))
 print("compileall-empty", compileall.compile_dir(%(empty_dir)r, quiet=2))
 print("compileall-source", compileall.compile_file(%(compile_source)r, quiet=2))

@@ -20,7 +20,7 @@ from pathlib import Path
 from tests.runtime_build_cache import cached_pcc_python_runtime
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_OBJECT_SLOTS = RUNTIME_DIR / "py" / "freestanding_gc_object_slots.py"
 STRICT_BACKEND0_SLOTS = (
     RUNTIME_DIR / "py" / "freestanding_gc_backend0_slots.py"
@@ -140,7 +140,7 @@ def test_pyclass_layout_matches_pcc_python_mirror(tmp_path):
     # was deliberately removed, and the test kept requiring it.  Reading the
     # generated constants checks the same invariant (port offsets equal C
     # offsets) against the artifact that is actually authoritative.
-    from pcc.py_runtime.py import py_abi_constants as abi
+    from pcc.runtime.py import py_abi_constants as abi
 
     mirror_layout = {
         "class.size": abi.PYCLASSOBJECT_SIZE,
@@ -325,6 +325,7 @@ int64_t pcc_gc_visit_object_slots(
     void (*visit)(PyObject **slot, int64_t role, void *ctx),
     void *ctx
 );
+void py_class_set_metaclass(PyClassObject *cls, PyClassObject *metaclass);
 
 /* Slot roles: 1 owned (traced and updated), 2 borrowed (traced, not
  * owned), 3 update-only metadata (rewritten on relocation, never a mark
@@ -404,8 +405,9 @@ int main(void) {
     PyObject *field_got = py_instance_get_field(inst, 0);
     printf("%d\\n", field_got == g_sentinel);
 
-    /* class: borrowed bases/mro/metaclass + update-only method and
-     * __del__ metadata + owned attrs */
+    /* class: borrowed bases/mro + update-only method and __del__
+     * metadata + owned attrs and metaclass (a retaining relation since
+     * f3a043008, stored through its public setter) */
     PyClassObject *base_cls = py_class_new("Base", NULL, 0, NULL, 0);
     PyClassObject *meta_cls = py_class_new("Meta", NULL, 0, NULL, 0);
     PyClassObject *klass = (PyClassObject *)pcc_gc_alloc(
@@ -428,9 +430,9 @@ int main(void) {
     klass->methods[0].func = py_str_new("method", 6);
     klass->del_method = py_str_new("del", 3);
     klass->attrs = py_dict_new();
-    klass->metaclass = meta_cls;
+    py_class_set_metaclass(klass, meta_cls);
     g_rewrite_target = klass->attrs;
-    printf("%d\\n", visit_expect((PyObject *)klass, 1, 3, 2));
+    printf("%d\\n", visit_expect((PyObject *)klass, 2, 2, 2));
     printf("%d\\n", klass->attrs == g_sentinel);
     return 0;
 }
@@ -812,7 +814,7 @@ def test_capi_extension_dynamic_tags_do_not_use_instance_layout_source():
     py_sweep_body = tracing_collector_py[
         tracing_collector_py.index(
             "def pcc_gc_tracing_sweep_unreachable("
-        ) : tracing_collector_py.index(
+        ) : tracing_collector_py.rindex(
             "    pcc_gc_tracing_recheck_reachability_after_finalizers()"
         )
     ]
@@ -855,7 +857,7 @@ def test_capi_extension_dynamic_tags_do_not_use_instance_layout_source():
     # The header offset moved from a literal 12 to PYOBJECTHEADER_FLAGS_OFFSET;
     # slice on the assignment target, which survives both spellings, and pin the
     # constant's value separately so the offset itself is still checked.
-    from pcc.py_runtime.py.py_abi_constants import PYOBJECTHEADER_FLAGS_OFFSET
+    from pcc.runtime.py.py_abi_constants import PYOBJECTHEADER_FLAGS_OFFSET
 
     assert PYOBJECTHEADER_FLAGS_OFFSET == 12
     py_del_body = dunder_py[
@@ -1047,6 +1049,11 @@ def test_current_runtime_type_tags_have_a_finite_slot_classification_source():
 
     pointerless = {
         "PY_TYPE_NONE",
+        # The immortal Ellipsis singleton is a bare header
+        # (py_substrate.define_global_header("py_ellipsis_storage", ...)).
+        "PY_TYPE_ELLIPSIS",
+        # So is NotImplemented ("py_notimplemented_storage"), tagged since 1bf8df737.
+        "PY_TYPE_NOTIMPLEMENTED",
         "PY_TYPE_BOOL",
         "PY_TYPE_INT",
         "PY_TYPE_FLOAT",
@@ -1127,7 +1134,7 @@ def test_unreachable_file_uses_file_deallocator_in_c_and_python_mirror():
     # The dispatch moved from literal tags to abi_constant("object.type.*").
     # Slice on the named form and pin the tag's numeric value separately, so a
     # renamed-but-correct spelling passes while a wrong tag still fails.
-    from pcc.py_runtime.py.py_abi_constants import PY_TYPE_FILE
+    from pcc.runtime.py.py_abi_constants import PY_TYPE_FILE
 
     assert PY_TYPE_FILE == 13
     file_case = py_body.split(

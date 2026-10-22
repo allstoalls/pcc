@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from pcc.gc_log import parse_log_lines, summarize
+from pcc.diagnostics.gc_log import parse_log_lines, summarize
 
 
 def test_gc_log_summary_understands_current_pcc_runtime_json_schema():
     events = parse_log_lines([
-        '{"schema":"pcc.runtime_log.v1","category":"alloc","event":"alloc_object","value0":40,"value1":5}',
-        '{"schema":"pcc.runtime_log.v1","category":"alloc","event":"alloc_object","value0":56,"value1":6}',
-        '{"schema":"pcc.runtime_log.v1","category":"gc","event":"collect_stop","value0":3,"value1":0}',
-        '{"schema":"pcc.runtime_log.v1","category":"weakref","event":"callback","value0":0,"value1":0}',
-        '{"schema":"pcc.runtime_log.v1","category":"finalizer","event":"call","value0":0,"value1":0}',
+        '{"schema":"pcc.diagnostics.runtime_log.v1","category":"alloc","event":"alloc_object","value0":40,"value1":5}',
+        '{"schema":"pcc.diagnostics.runtime_log.v1","category":"alloc","event":"alloc_object","value0":56,"value1":6}',
+        '{"schema":"pcc.diagnostics.runtime_log.v1","category":"gc","event":"collect_stop","value0":3,"value1":0}',
+        '{"schema":"pcc.diagnostics.runtime_log.v1","category":"weakref","event":"callback","value0":0,"value1":0}',
+        '{"schema":"pcc.diagnostics.runtime_log.v1","category":"finalizer","event":"call","value0":0,"value1":0}',
     ])
 
     summary = summarize(events).as_dict()

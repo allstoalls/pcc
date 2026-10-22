@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_tooling_manifest_is_mode_labelled_and_fail_closed():
-    from pcc.cli_bootstrap import python_tooling_capabilities_json
+    from pcc.driver.cli_bootstrap import python_tooling_capabilities_json
 
     manifest = json.loads(python_tooling_capabilities_json())
     assert manifest["schema"] == "pcc.python-tooling.v1"
@@ -31,7 +31,7 @@ def test_tooling_manifest_is_mode_labelled_and_fail_closed():
 
 
 def test_tooling_manifest_cli_is_native_and_machine_readable(capsys):
-    from pcc.cli_bootstrap import bootstrap_cli_main
+    from pcc.driver.cli_bootstrap import bootstrap_cli_main
 
     assert bootstrap_cli_main(["--tooling-capabilities"]) == 0
     payload = json.loads(capsys.readouterr().out)
@@ -39,7 +39,7 @@ def test_tooling_manifest_cli_is_native_and_machine_readable(capsys):
 
 
 def test_traceback_runtime_mirrors_keep_source_line_and_function_frames():
-    py_source = (ROOT / "pcc/py_runtime/py/py_exc_traceback.py").read_text(
+    py_source = (ROOT / "pcc/runtime/py/py_exc_traceback.py").read_text(
         encoding="utf-8"
     )
     for source in (py_source,):
@@ -50,11 +50,11 @@ def test_traceback_runtime_mirrors_keep_source_line_and_function_frames():
 
 
 def test_inspect_and_warning_boundaries_are_honest():
-    inspect_source = (ROOT / "pcc/py_stdlib/inspect.py").read_text(encoding="utf-8")
+    inspect_source = (ROOT / "pcc/stdlib/inspect.py").read_text(encoding="utf-8")
     inspect_lowering = (
-        ROOT / "pcc/py_frontend/codegen/native_modules.py"
+        ROOT / "pcc/frontends/python/codegen/native_modules.py"
     ).read_text(encoding="utf-8")
-    warnings_source = (ROOT / "pcc/py_stdlib/warnings.py").read_text(
+    warnings_source = (ROOT / "pcc/stdlib/warnings.py").read_text(
         encoding="utf-8"
     )
     for name in ("signature", "isfunction", "ismethod", "isclass"):
@@ -76,7 +76,7 @@ def test_inspect_and_warning_boundaries_are_honest():
 
 
 def test_native_warnings_filters_record_restore_and_raise():
-    from pcc.py_stdlib import warnings as native_warnings
+    from pcc.stdlib import warnings as native_warnings
 
     native_warnings.resetwarnings()
     with native_warnings.catch_warnings(record=True) as caught:
@@ -106,7 +106,7 @@ def test_native_warnings_filters_record_restore_and_raise():
 
 
 def test_compiler_profile_schema_names_mode_and_phase(tmp_path, monkeypatch):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     source = tmp_path / "profile.py"
     output = tmp_path / "profile.out"

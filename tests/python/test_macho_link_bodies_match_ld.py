@@ -76,11 +76,11 @@ def _bodies(data: bytes) -> dict[str, bytes]:
 
 
 def test_every_function_body_matches_ld_r(tmp_path):
-    archive = REPO / "pcc" / "py_runtime" / "libpy_runtime_pcc_py.a"
+    archive = REPO / "pcc" / "runtime" / "libpy_runtime_pcc_py.a"
     if not archive.exists():
         raise AssertionError(
             f"{archive} missing; build it with "
-            "`make -C pcc/py_runtime libpy_runtime_pcc_py.a`"
+            "`make -C pcc/runtime libpy_runtime_pcc_py.a`"
         )
     members = read_archive(archive.read_bytes())
     defines = set().union(*(m.defines for m in members))

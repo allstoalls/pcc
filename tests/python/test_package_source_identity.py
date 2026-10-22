@@ -1,9 +1,11 @@
 """Local project names and archive versions must not collide at the first dash."""
 
-from pcc import cli_bootstrap
+from pathlib import Path
+
+from pcc.driver import cli_bootstrap
 import pytest
 
-from pcc.package_schema import literal_project_metadata_fields
+from pcc.package.schema import literal_project_metadata_fields
 from pcc.package.metadata import inspect_artifact
 from pcc.package import acquire, install, metadata
 
@@ -113,14 +115,19 @@ def test_unrelated_settings_do_not_replace_literal_project_identity(settings):
     assert literal_project_metadata_fields(config) == ["example-tools", "1.2.3"]
 
 
-@pytest.mark.parametrize("relative", ["pyproject.toml", "projects/numpy-2.4.4/pyproject.toml"])
+_SOURCE_ROOT = Path(__file__).resolve().parents[2]
+
+
+# An optional source project that is not checked out deselects its case.
+@pytest.mark.parametrize("relative", [
+    pytest.param(relative, marks=pytest.mark.pcc_gate(
+        probe=lambda relative=relative: (_SOURCE_ROOT / relative).is_file()))
+    for relative in ("pyproject.toml", "projects/numpy-2.4.4/pyproject.toml")
+])
 def test_existing_source_project_identity_matches_tomllib(relative):
     import tomllib
-    from pathlib import Path
 
-    path = Path(__file__).resolve().parents[2] / relative
-    if not path.is_file():
-        pytest.skip("optional source project is not available")
+    path = _SOURCE_ROOT / relative
     text = path.read_text(encoding="utf-8")
     project = tomllib.loads(text)["project"]
     assert literal_project_metadata_fields(text) == [project["name"], project["version"]]

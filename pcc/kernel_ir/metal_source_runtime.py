@@ -615,10 +615,10 @@ def build_metal_source_runtime_bridge_artifacts(
         )
 
     if compiler is None:
-        from pcc.gpu_metal import compile_metal_runtime_bridge
+        from pcc.backend.metal import compile_metal_runtime_bridge
 
         compiler = compile_metal_runtime_bridge
-    from pcc.gpu_metal import MetalCompileError, MetalToolchainUnavailable
+    from pcc.backend.metal import MetalCompileError, MetalToolchainUnavailable
 
     try:
         compiled_path = compiler(
@@ -659,7 +659,7 @@ def build_metal_source_runtime_bridge_artifacts(
         )
 
     if linker is None:
-        from pcc.gpu_metal import link_metal_runtime_bridge_dylib
+        from pcc.backend.metal import link_metal_runtime_bridge_dylib
 
         linker = link_metal_runtime_bridge_dylib
     try:
@@ -703,7 +703,7 @@ def build_metal_source_runtime_bridge_artifacts(
         )
 
     if loader is None:
-        from pcc.gpu_metal import validate_dynamic_library_symbol
+        from pcc.backend.metal import validate_dynamic_library_symbol
 
         def loader(path: Path, *, symbol: str) -> str:
             return validate_dynamic_library_symbol(path, symbol)

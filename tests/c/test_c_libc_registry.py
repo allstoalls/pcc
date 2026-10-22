@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from pcc.c_libc_registry import (
+from pcc.frontends.c.c_libc_registry import (
     LibcSignature,
     iter_signatures,
     lookup_signature,

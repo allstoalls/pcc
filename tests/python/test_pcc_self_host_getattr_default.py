@@ -18,7 +18,7 @@ calling ``py_obj_getattr``.
 
 This test runs an end-to-end probe that fails only when the codegen bug
 is present. It needs ``pcc1`` in repo root (built by
-``scripts/bootstrap.sh`` or by ``uv run pcc --backend self
+``scripts/bootstrap.py`` or by ``uv run pcc --backend self
 --python-libpython=off --ir-scaffold=on pcc/__main__.py -o pcc1``).
 """
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """``print`` must consume an argument that produced a fresh reference.
 
-``py_print`` borrows: ``pcc/py_runtime/src/py_print_fmt.c`` defines it as
+``py_print`` borrows: ``pcc/runtime/src/py_print_fmt.c`` defines it as
 ``py_format(stdout, o); fputc('\\n', stdout);`` with no refcount traffic.  The
 generic print tail never released its argument, so ``print(a[0])`` leaked one
 reference per call -- the subscript's root is balanced, but the new reference
@@ -114,6 +114,9 @@ def test_release_is_added_for_direct_and_not_duplicated_for_bound(tmp_path):
     )
     assert direct.count("@pcc_gc_release(") == 1, direct
 
-    # Control: the bound form already owned and released the value; it must not
-    # have gained an extra release.
-    assert body("bound").count("@pcc_gc_release(") == 2, body("bound")
+    # Control: the bound form already owns the value in its rooted local and
+    # releases it by clearing that slot (behind its owned flag) on the normal
+    # and the error exit; it must not gain a release of the printed value.
+    bound = body("bound")
+    assert "@pcc_gc_release(" not in bound, bound
+    assert len(re.findall(r"@pcc_gc_store_root\(ptr %x\.addr\.\d+, ptr null\)", bound)) == 2, bound

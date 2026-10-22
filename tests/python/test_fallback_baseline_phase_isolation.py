@@ -18,9 +18,9 @@ def phase_harness(monkeypatch):
     baseline = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(baseline)
 
-    from pcc.parse import py_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen import layer1
+    from pcc.frontends.python import py_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen import layer1
 
     events = []
     controls = {"multi_error": None, "multi_ok": True}

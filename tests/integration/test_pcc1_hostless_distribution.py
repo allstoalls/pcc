@@ -194,7 +194,7 @@ def installed_distribution(tmp_path_factory: pytest.TempPathFactory):
 
     pcc1 = venv / "bin" / "pcc1"
     assert pcc1.is_file() and os.access(pcc1, os.X_OK)
-    runtime_roots = list(venv.glob("lib/python*/site-packages/pcc/py_runtime"))
+    runtime_roots = list(venv.glob("lib/python*/site-packages/pcc/runtime"))
     assert len(runtime_roots) == 1
     runtime_root = runtime_roots[0]
     runtime_archive = runtime_root / "libpy_runtime_pcc_py.a"

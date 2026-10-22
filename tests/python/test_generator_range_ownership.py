@@ -8,7 +8,7 @@ import pytest
 
 @pytest.mark.parametrize("exit_mode", ["exhaust", "close", "error"])
 def test_generator_range_releases_materialized_iterable(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, monkeypatch, exit_mode,
+    tmp_path, pcc_runtime_archive, python_program_compiler, monkeypatch, exit_mode,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = tmp_path / "range_owner.py"
@@ -51,7 +51,7 @@ main()
     binary = tmp_path / "range_owner"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         run = subprocess.run(

@@ -1,7 +1,7 @@
 """Facade and behavior contract for textual pipeline import discovery."""
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend import pipeline_import_scan
+from pcc.frontends.python import pipeline
+from pcc.frontends.python import pipeline_import_scan
 
 
 def test_pipeline_reexports_import_scanners_by_identity():
@@ -110,3 +110,46 @@ def test_discovery_masks_strings_comments_and_type_checking_suites():
     runtime_source = pipeline_import_scan._without_type_checking_imports(source)
     assert "import annotations_only" not in runtime_source
     assert "import runtime_module" in runtime_source
+
+
+def test_literal_calls_ignore_inline_strings_and_comments_without_losing_calls():
+    source = (
+        'text = "importlib.import_module(\'phantom\')"; '
+        "importlib.import_module('actual')\n"
+        'text2 = "importlib.resources.files(\'phantom_resource\')"; '
+        "importlib.resources.files('actual_resource')\n"
+        "# importlib.import_module('comment')\n"
+        "importlib.import_module(\"importlib.resources.files('nested_phantom')\")\n"
+        "def deferred():\n"
+        "    importlib.import_module('lazy')\n"
+    )
+    assert pipeline_import_scan._iter_source_importlib_literal_specs(
+        source, top_level_only=True,
+    ) == ["actual", "importlib.resources.files('nested_phantom')"]
+    assert pipeline_import_scan._iter_source_importlib_resource_literal_specs(
+        source, top_level_only=True,
+    ) == ["actual_resource"]
+    assert pipeline_import_scan._iter_source_importlib_literal_specs(
+        source, top_level_only=False,
+    ) == ["actual", "importlib.resources.files('nested_phantom')", "lazy"]
+
+
+def test_literal_discovery_keeps_fstring_expression_calls_only():
+    source = (
+        'value = f"importlib.import_module(\'phantom\') '
+        '{importlib.import_module(\'actual\').VALUE}"\n'
+        'resource = f"{importlib.resources.files(\'actual_resource\')}"\n'
+        'escaped = f"{{importlib.import_module(\'escaped_phantom\')}}"\n'
+        'formatted = f"{42:importlib.import_module(\'format_phantom\')}"\n'
+        'def deferred():\n'
+        '    return f"{importlib.import_module(\'lazy\').VALUE}"\n'
+    )
+    assert pipeline_import_scan._iter_source_importlib_literal_specs(
+        source, top_level_only=True,
+    ) == ["actual"]
+    assert pipeline_import_scan._iter_source_importlib_resource_literal_specs(
+        source, top_level_only=True,
+    ) == ["actual_resource"]
+    assert pipeline_import_scan._iter_source_importlib_literal_specs(
+        source, top_level_only=False,
+    ) == ["actual", "lazy"]

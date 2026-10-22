@@ -98,7 +98,7 @@ Historical green results and host-pcc runs do not satisfy a current-pcc1
 product gate.
 
 The strict bundle format is `pcc.cpython-replacement.evidence.v1`, validated by
-`pcc/cpython_replacement/evidence.py`.  A bundle is valid only when it covers
+`scripts/qualification/cpython_replacement/evidence.py`.  A bundle is valid only when it covers
 the exact cumulative workload × target × GC Cartesian product for its claimed
 level, binds every run to its workload artifact, records pcc0 through pcc3,
 and proves the normalized pcc2/pcc3 fixed point.  Host-built package artifacts,

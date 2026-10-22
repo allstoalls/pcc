@@ -34,19 +34,14 @@ CAPI_INVENTORY_SUFFIX = ".capi_syms"
 
 _PCC_PYTHON_SOURCE_KIND = "pcc-python"
 _PCC_PYTHON_PRODUCER = "pcc-python-library-ir-to-obj"
-_LLVM_OBJECT_EMITTER = "llvmlite-target-machine"
-# pcc's own assembler + Mach-O object writer.  The runtime archive's members
-# are what pcc1 links, so emitting them through llvmlite made an
-# llvmlite-free pcc1 depend on llvmlite to exist at all.
+# The runtime archive uses pcc's assembler and standard object writers.
 _PCC_OBJECT_EMITTER = "pcc-self-backend-object-writer"
-# Receipts name which one ran; both are legitimate, and `PCC_IR_TO_OBJ_EMITTER`
-# selects the llvmlite oracle for differential runs.
-_OBJECT_EMITTERS = frozenset({_LLVM_OBJECT_EMITTER, _PCC_OBJECT_EMITTER})
+# Only the owned emitter can authorize a production runtime receipt.
+_OBJECT_EMITTERS = frozenset({_PCC_OBJECT_EMITTER})
 _EMITTER_BY_IR_TO_OBJ_NAME = {
     "pcc": _PCC_OBJECT_EMITTER,
-    "llvmlite": _LLVM_OBJECT_EMITTER,
 }
-_LOGICAL_RUNTIME_ROOT = "pcc/py_runtime"
+_LOGICAL_RUNTIME_ROOT = "pcc/runtime"
 _REGULAR_AR_MAGIC = b"!<arch>\n"
 _RECEIPT_REQUIRED_FIELDS = frozenset(
     {
@@ -331,7 +326,41 @@ def write_pcc_python_receipt(
 _CODEGEN_CHECKSUM_CACHE: dict = {}
 
 
-def _runtime_emitter_source_identity() -> str:
+def _codegen_root_path(value: str) -> Path:
+    # Match package discovery's lexical path normalization before resolving.
+    # In particular, do not expand a literal '~' only for identity hashing.
+    # The native POSIX Path.resolve() does not follow symlinks; os.path uses
+    # the owned realpath provider so aliases compare as one selected tree.
+    root = Path(os.path.realpath(os.path.abspath(value)))
+    if ((root / "__init__.py").is_file()
+            and (root / "backend/self_backend_dispatch.py").is_file()):
+        root = root.parent
+    return root
+
+
+def _codegen_source_root() -> Path:
+    """Select one source tree even when native ``__file__`` names its builder."""
+    source = str(os.environ.get("PCC_SOURCE_ROOT", "") or "").strip()
+    repository = str(os.environ.get("PCC_REPO_ROOT", "") or "").strip()
+    if source or repository:
+        root = _codegen_root_path(source or repository)
+    else:
+        root = Path(__file__).resolve().parents[2]
+    # The native Path provider has no value-equality operator.
+    if repository and str(_codegen_root_path(repository)) != str(root):
+        raise ProvenanceError("conflicting compiler source roots")
+    for relative in (
+        "pcc/__init__.py", "pcc/frontends/python/pipeline.py",
+        "pcc/backend/self_backend_dispatch.py",
+        "pcc/driver/bootstrap_cache_identity.py",
+        "pcc/tools/ir_to_obj.py", "pcc/backend/owned_object_emit.py",
+    ):
+        if not (root / relative).is_file():
+            raise ProvenanceError("compiler identity source is missing: " + str(root / relative))
+    return root
+
+
+def _runtime_emitter_source_identity(source_root: str | Path | None = None) -> str:
     # A freshness check is not an object-emission request. In particular,
     # checking a prebuilt runtime must not import llvmlite or load LLVM.
     #
@@ -343,12 +372,13 @@ def _runtime_emitter_source_identity() -> str:
         macho_linker_source_identity,
     )
 
+    root = _codegen_source_root() if source_root is None else Path(source_root)
     digest = hashlib.sha256()
-    digest.update(Path(__file__).with_name("ir_to_obj.py").read_bytes())
+    digest.update((root / "pcc/tools/ir_to_obj.py").read_bytes())
     digest.update(
-        (Path(__file__).resolve().parents[1] / "backend" / "owned_object_emit.py").read_bytes()
+        (root / "pcc/backend/owned_object_emit.py").read_bytes()
     )
-    digest.update(macho_linker_source_identity().encode("ascii"))
+    digest.update(macho_linker_source_identity(root).encode("ascii"))
     return digest.hexdigest()
 
 
@@ -367,23 +397,27 @@ def codegen_checksum() -> str:
     backend-relevant source set, so there is one definition of "the compiler
     changed" rather than two that can drift.
     """
-    cached = _CODEGEN_CHECKSUM_CACHE.get("value")
-    if cached is not None:
-        return cached
     try:
-        from pcc.bootstrap_cache_identity import bootstrap_source_sha256
+        root = _codegen_source_root()
+        cached = _CODEGEN_CHECKSUM_CACHE.get("value")
+        if cached is not None and _CODEGEN_CHECKSUM_CACHE.get("root") == str(root):
+            return cached
+        from pcc.driver.bootstrap_cache_identity import bootstrap_source_sha256
 
         # Frontend identity excludes pcc/tools; bind emitter source without
         # importing its LLVM implementation into the self compilation path.
         value = _sha256_bytes(
-            (bootstrap_source_sha256() + ":" + _runtime_emitter_source_identity()).encode("ascii")
+            (bootstrap_source_sha256(root) + ":" + _runtime_emitter_source_identity(root)).encode("ascii")
         )
     except Exception:
         # Never fail an object build over provenance metadata; an unknown
         # identity is recorded verbatim so a reader can tell it apart from a
         # real mismatch.
         value = "unknown"
-    _CODEGEN_CHECKSUM_CACHE["value"] = value
+    _CODEGEN_CHECKSUM_CACHE.clear()
+    if value != "unknown":
+        _CODEGEN_CHECKSUM_CACHE["root"] = str(root)
+        _CODEGEN_CHECKSUM_CACHE["value"] = value
     return value
 
 
@@ -414,29 +448,36 @@ def receipt_is_stale_for_current_codegen(
     return recorded != current
 
 
-def manifest_is_stale_for_current_codegen(manifest: object) -> bool:
-    """Return whether any member lacks the current compiler identity.
+def manifest_codegen_staleness_reason(manifest: object) -> str:
+    """Explain a stale identity, or return an empty string for a fresh one.
 
     The caller is responsible for archive/manifest integrity validation.  This
     aggregate deliberately computes the current identity once so a manifest is
-    judged against one frozen value.
+    judged against one frozen value. Diagnostics expose only validated digests,
+    never source paths or arbitrary receipt values.
     """
 
     if not isinstance(manifest, dict):
-        return True
+        return "codegen manifest is not an object"
     members = manifest.get("members")
     if not isinstance(members, list) or not members:
-        return True
+        return "codegen member inventory is missing or invalid"
     current = codegen_checksum()
     if not _is_sha256(current):
-        return True
+        return "current codegen checksum is unavailable"
     for record in members:
-        if receipt_is_stale_for_current_codegen(
-            record,
-            current_checksum=current,
-        ):
-            return True
-    return False
+        if not isinstance(record, dict) or not _is_sha256(record.get("codegen_checksum")):
+            return "recorded codegen checksum is missing or invalid"
+        recorded = record["codegen_checksum"]
+        if recorded != current:
+            return "codegen checksum differs: recorded=" + recorded + "; current=" + current
+    return ""
+
+
+def manifest_is_stale_for_current_codegen(manifest: object) -> bool:
+    """Return whether any member lacks the current compiler identity."""
+
+    return bool(manifest_codegen_staleness_reason(manifest))
 
 
 def _require_regular_archive(archive_path: Path) -> None:
@@ -783,11 +824,8 @@ def main(argv: list[str] | None = None) -> int:
             archive = Path(args.archive)
             if not archive.is_file():
                 raise ProvenanceError("runtime archive is missing: " + str(archive))
-            from pcc.py_frontend.pipeline_runtime_archive import (
-                target_id,
-                write_target_stamp,
-            )
-            from pcc.py_frontend.pipeline_targets import host_target_triple
+            from pcc.frontends.python.pipeline_runtime_archive import target_id, write_target_stamp
+            from pcc.frontends.python.pipeline_targets import host_target_triple
 
             write_target_stamp(
                 str(archive),

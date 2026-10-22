@@ -14,7 +14,7 @@ import textwrap
 
 
 def test_round_int_ndigits_matches_cpython(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "rnd.py"
     exe = tmp_path / "rnd.out"

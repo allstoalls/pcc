@@ -94,7 +94,7 @@ def test_equal_keys_retain_the_original_heap_order():
 
 
 def test_ordered_fast_path_and_heap_fallback_execute_under_all_collectors(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive,
 ):
     import inspect
     import os
@@ -151,7 +151,7 @@ main()
     source.write_text(text)
     binary = tmp_path / "stackmap_sort"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PATH="/nonexistent", PCC_GC_BACKEND=str(backend)))

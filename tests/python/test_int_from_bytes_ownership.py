@@ -20,7 +20,7 @@ def _execute(source, tmp_path, compiler, runtime):
 
 
 def test_from_bytes_releases_slice_and_byteorder_temporaries(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, monkeypatch,
+    tmp_path, pcc_runtime_archive, python_program_compiler, monkeypatch,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = '''import gc
@@ -47,14 +47,14 @@ def main():
     assert large == 2 ** 128 - 1
 main()
 '''
-    for backend, output in _execute(source, tmp_path, python_program_compiler, pcc_py_runtime_archive):
+    for backend, output in _execute(source, tmp_path, python_program_compiler, pcc_runtime_archive):
         growth = list(map(int, output.split()))
         if backend == 0:
             assert all(value < 16384 for value in growth), growth
 
 
 def test_from_bytes_argument_errors_and_borrowed_rebinding(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, monkeypatch,
+    tmp_path, pcc_runtime_archive, python_program_compiler, monkeypatch,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = '''import gc
@@ -91,5 +91,5 @@ def main():
     print(caught, destroyed)
 main()
 '''
-    for backend, output in _execute(source, tmp_path, python_program_compiler, pcc_py_runtime_archive):
+    for backend, output in _execute(source, tmp_path, python_program_compiler, pcc_runtime_archive):
         assert output == "96 64\n", (backend, output)

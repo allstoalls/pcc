@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import os
 import subprocess
 import textwrap
 from pathlib import Path
 
+from tests.owned_c_execution import compile_owned_c_with_runtime
 
-def test_py_type_builtin_native_runtime(tmp_path, pcc_py_runtime_archive):
+
+def test_py_type_builtin_native_runtime(tmp_path, pcc_runtime_archive):
     src = tmp_path / "type_builtin_probe.c"
     exe = tmp_path / "type_builtin_probe"
     src.write_text(
@@ -40,27 +41,15 @@ def test_py_type_builtin_native_runtime(tmp_path, pcc_py_runtime_archive):
         ),
         encoding="utf-8",
     )
-    subprocess.run(
-        [
-            os.environ.get("CC", "cc"),
-            "-I",
-            str(pcc_py_runtime_archive.parent / "include"),
-            str(src),
-            str(pcc_py_runtime_archive),
-            "-lm",
-            "-o",
-            str(exe),
-        ],
-        check=True,
-    )
+    compile_owned_c_with_runtime(src, exe, runtime_archive=pcc_runtime_archive)
     proc = subprocess.run([str(exe)], check=True, text=True, capture_output=True)
     assert proc.stdout.splitlines() == ["int", "list", "bytes"]
 
 
 def test_py_type_builtin_wired_in_c_and_pcc_py_sources():
-    py_src = Path("pcc/py_runtime/py/py_obj_ops_dispatch.py").read_text(encoding="utf-8")
-    header = Path("pcc/py_runtime/include/py_runtime.h").read_text(encoding="utf-8")
-    abi = Path("pcc/py_frontend/codegen/runtime_abi.py").read_text(encoding="utf-8")
+    py_src = Path("pcc/runtime/py/py_obj_ops_dispatch.py").read_text(encoding="utf-8")
+    header = Path("pcc/runtime/include/py_runtime.h").read_text(encoding="utf-8")
+    abi = Path("pcc/frontends/python/codegen/runtime_abi.py").read_text(encoding="utf-8")
 
     assert '@c_abi_export("py_type_builtin")' in py_src
     assert "PyObject *py_type_builtin(PyObject *o);" in header

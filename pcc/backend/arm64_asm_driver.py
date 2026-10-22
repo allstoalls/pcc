@@ -57,6 +57,9 @@ _SECTION_FLAGS = {
     ("__PCC", "__tls_refs", ""): DATA_SECTION_FLAGS,
     ("__LD", "__compact_unwind", "regular,debug"):
         COMPACT_UNWIND_SECTION_FLAGS,
+    ("__DWARF", "__debug_abbrev", "regular,debug"): spec.S_ATTR_DEBUG,
+    ("__DWARF", "__debug_info", "regular,debug"): spec.S_ATTR_DEBUG,
+    ("__DWARF", "__debug_line", "regular,debug"): spec.S_ATTR_DEBUG,
     ("__TEXT", "__eh_frame",
      "coalesced,no_toc+strip_static_syms+live_support"):
         EH_FRAME_SECTION_FLAGS,
@@ -167,6 +170,7 @@ class AArch64ModuleBuilder:
         self.private_extern: set[str] = set()
         self.current: _SectionBuffer | None = None
         self.structured_symbol_names = structured_symbol_names
+        self.text_layout_finalized: bool = False
         self.closed: bool = False
 
     def close(self) -> None:
@@ -236,6 +240,17 @@ class AArch64ModuleBuilder:
             private_external=(name in self.private_extern),
         ))
 
+    def finalize_text_layout(self) -> None:
+        """Freeze every text section before serializing offset-based metadata."""
+        if self.closed:
+            raise EncodeError("module builder is closed")
+        for buffer in self.buffers.values():
+            if buffer.text_error is not None:
+                raise buffer.text_error
+            if buffer.text_builder is not None:
+                buffer.text_builder.finalize_layout()
+        self.text_layout_finalized = True
+
     def text_label_offsets(self) -> dict[str, int]:
         buffer = self.buffers.get(("__TEXT", "__text"))
         if buffer is None or buffer.text_builder is None:
@@ -282,6 +297,8 @@ class AArch64ModuleBuilder:
                 self.buffers[key] = _SectionBuffer(seg, sect, flags)
                 self.order.append(key)
             self.current = self.buffers[key]
+            if self.current.is_text and self.text_layout_finalized:
+                raise EncodeError("text layout is finalized")
             if self.current.is_text and self.current.text_builder is None:
                 self.current.text_builder = PackedAArch64TextBuilder(
                     structured_symbol_names=self.structured_symbol_names,
@@ -375,7 +392,9 @@ class AArch64ModuleBuilder:
                             offset = -offset
                         break
                 symbol = symbol.strip()
-                if self.current.size % 8 != 0:
+                # DWARF address operands are packed and need not align.
+                # The object writer already validates these data relocations.
+                if self.current.size % 8 != 0 and not self.current.flags & spec.S_ATTR_DEBUG:
                     raise EncodeError(
                         f".quad {symbol} at unaligned offset {self.current.size}"
                     )
@@ -521,7 +540,7 @@ class AArch64ModuleBuilder:
                 f"private-extern symbols were not defined: {sorted(missing_private)!r}"
             )
 
-        # as(1) represents compact-unwind function pointers to functions defined
+        # as(1) represents compact-unwind and DWARF pointers to functions defined
         # by this object as section-target relocations, independent of the
         # function symbol's visibility.  Undefined personality/LSDA references
         # remain symbol relocations.  Encoding a defined function's section and
@@ -535,9 +554,8 @@ class AArch64ModuleBuilder:
                 )
         normalized_sections: list[Section] = []
         for section in sections:
-            if (section.segname, section.sectname) != (
-                "__LD", "__compact_unwind"
-            ):
+            if ((section.segname, section.sectname) != ("__LD", "__compact_unwind")
+                    and not (section.segname == "__DWARF" and section.flags & spec.S_ATTR_DEBUG)):
                 normalized_sections.append(section)
                 continue
             payload = bytearray(section.data)
@@ -561,7 +579,7 @@ class AArch64ModuleBuilder:
                 target_offset = symbol_offset + embedded
                 if not 0 <= target_offset < target_size:
                     raise EncodeError(
-                        "compact-unwind local function relocation resolves "
+                        "debug/unwind local function relocation resolves "
                         f"outside {target_section[0]},{target_section[1]}"
                     )
                 clear_index = 0
@@ -594,13 +612,11 @@ class AArch64ModuleBuilder:
 
 
 
-def assemble_lines(
+def _append_assembly_lines(
+    builder: AArch64ModuleBuilder,
     asm_lines: list[str],
-    structured_sections=(),
     encoded_line_records: CompilerIntArena | None = None,
-    structured_symbol_names: list[str] | tuple[str, ...] = (),
-) -> tuple[list[Section], list[str]]:
-    """Line adapter over the module builder; the caller owns the encoded arena."""
+) -> None:
     if encoded_line_records is not None and len(encoded_line_records) % 4:
         raise EncodeError(
             "structured instruction records need line/word/relocation/symbol"
@@ -620,25 +636,55 @@ def assemble_lines(
             raise EncodeError("structured instruction index exceeds assembly input")
         next_chunk_index = encoded_index + 1
         record_index += 1
+    record_index = 0
+    chunk_index = 0
+    while chunk_index < len(asm_lines):
+        if record_index < record_count:
+            assert encoded_line_records is not None
+            offset = record_index * 4
+            if encoded_line_records.get_unchecked(offset) == chunk_index:
+                builder.append_encoded(
+                    encoded_line_records.get_unchecked(offset + 1),
+                    encoded_line_records.get_unchecked(offset + 2),
+                    encoded_line_records.get_unchecked(offset + 3),
+                )
+                record_index += 1
+                chunk_index += 1
+                continue
+        builder.append_chunk(asm_lines[chunk_index])
+        chunk_index += 1
+
+
+def measure_text_layout(
+    asm_lines: list[str],
+    encoded_line_records: CompilerIntArena | None = None,
+    structured_symbol_names: list[str] | tuple[str, ...] = (),
+) -> tuple[dict[str, int], int]:
+    """Use the canonical final layout for metadata in the line adapter lane.
+
+    No code-changing pass may run between this measurement and assembly.
+    Structured word records and inline data use the same parser and relaxation
+    as final section emission; instruction-count arithmetic is not sufficient.
+    """
     builder = AArch64ModuleBuilder(structured_symbol_names)
     try:
-        record_index = 0
-        chunk_index = 0
-        while chunk_index < len(asm_lines):
-            if record_index < record_count:
-                assert encoded_line_records is not None
-                offset = record_index * 4
-                if encoded_line_records.get_unchecked(offset) == chunk_index:
-                    builder.append_encoded(
-                        encoded_line_records.get_unchecked(offset + 1),
-                        encoded_line_records.get_unchecked(offset + 2),
-                        encoded_line_records.get_unchecked(offset + 3),
-                    )
-                    record_index += 1
-                    chunk_index += 1
-                    continue
-            builder.append_chunk(asm_lines[chunk_index])
-            chunk_index += 1
+        _append_assembly_lines(builder, asm_lines, encoded_line_records)
+        builder.finalize_text_layout()
+        return dict(builder.text_label_offsets()), builder.text_size()
+    finally:
+        builder.close()
+
+
+def assemble_lines(
+    asm_lines: list[str],
+    structured_sections=(),
+    encoded_line_records: CompilerIntArena | None = None,
+    structured_symbol_names: list[str] | tuple[str, ...] = (),
+) -> tuple[list[Section], list[str]]:
+    """Line adapter over the module builder; the caller owns the encoded arena."""
+    builder = AArch64ModuleBuilder(structured_symbol_names)
+    try:
+        _append_assembly_lines(builder, asm_lines, encoded_line_records)
         return builder.finish(structured_sections)
     finally:
         builder.close()

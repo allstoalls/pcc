@@ -1,0 +1,393 @@
+diff --git a/pcc/backend/x86_64_asm_driver.py b/pcc/backend/x86_64_asm_driver.py
+--- a/pcc/backend/x86_64_asm_driver.py
++++ b/pcc/backend/x86_64_asm_driver.py
+@@ -241,6 +241,10 @@
+ _INSTRUCTION_SPAN_CHUNK_BYTES = 8192
+ _INSTRUCTION_SPAN_MIN_RUN = 5
+ 
++# Fixed scratch-payload bound, matching the existing plan-chunk scale.
++# This is not an environment-tuned cache or a cap on object/section size.
++_NUMERIC_DATA_BATCH_BYTES = 8192
++
+ 
+ def _append_instruction_span(entries: list[object], span: int) -> None:
+     # Keep short runs in their original representation. On the supported host
+@@ -311,6 +315,16 @@
+     symbols: dict[str, _SymbolMeta] = {}
+     current: _SectionPlan | None = None
+     saw_syntax = False
++    pending_data = bytearray()
++    data_batch_bytes = _NUMERIC_DATA_BATCH_BYTES
++
++    def flush_data() -> None:
++        if pending_data:
++            assert current is not None
++            # Only immutable _Data enters the plan. Raw bytearray entries
++            # already belong to the compact instruction-span transport.
++            current.entries.append(_Data(bytes(pending_data)))
++            pending_data.clear()
+ 
+     def switch(name: str) -> None:
+         nonlocal current
+@@ -338,6 +352,12 @@
+         line = raw_line.strip()
+         if not line:
+             continue
++        # Keep every nonempty nonnumeric source-line boundary, including section,
++        # label, alignment, zero-fill, metadata and instruction boundaries.
++        if pending_data and not line.startswith((
++            ".byte ", ".short ", ".long ", ".quad ", ".float ", ".double ",
++        )):
++            flush_data()
+         if line == ".intel_syntax noprefix":
+             if saw_syntax or current is not None or symbols:
+                 raise X86EncodeError(
+@@ -423,6 +443,7 @@
+                 except ValueError:
+                     difference = re.fullmatch(r"([.$A-Za-z_][.$\w]*)\s*-\s*([.$A-Za-z_][.$\w]*)", item)
+                     if difference:
++                        flush_data()
+                         current.entries.append(_SymbolDifference(difference.group(1), difference.group(2), width))
+                         continue
+                     if width != 8:
+@@ -430,13 +451,17 @@
+                             f"symbol-valued {directive} is not proven: {line!r}"
+                         )
+                     symbol, addend = _symbol_plus_addend(item)
++                    flush_data()
+                     current.entries.append(_SymbolData(symbol, addend))
+                 else:
+-                    current.entries.append(_Data(_integer_payload(
+-                        value,
+-                        width,
+-                        owner=directive,
+-                    )))
++                    payload = _integer_payload(value, width, owner=directive)
++                    if data_batch_bytes > 0 and len(payload) <= data_batch_bytes:
++                        if len(pending_data) + len(payload) > data_batch_bytes:
++                            flush_data()
++                        pending_data.extend(payload)
++                    else:
++                        flush_data()
++                        current.entries.append(_Data(payload))
+             continue
+         if line.startswith((".float ", ".double ")):
+             if current is None:
+@@ -448,7 +473,13 @@
+                     payload = struct.pack(fmt, float(item))
+                 except (ValueError, OverflowError) as exc:
+                     raise X86EncodeError(f"bad {directive} value {item!r}") from exc
+-                current.entries.append(_Data(payload))
++                if data_batch_bytes > 0 and len(payload) <= data_batch_bytes:
++                    if len(pending_data) + len(payload) > data_batch_bytes:
++                        flush_data()
++                    pending_data.extend(payload)
++                else:
++                    flush_data()
++                    current.entries.append(_Data(payload))
+             continue
+         if line.startswith((".zero ", ".space ")):
+             if current is None:
+@@ -487,6 +518,7 @@
+         raise X86EncodeError(
+             "owned x86 assembly must begin with .intel_syntax noprefix"
+         )
++    flush_data()
+     return plans, order, symbols
+ 
+ 
+diff --git a/tests/python/test_x86_64_numeric_data_batching.py b/tests/python/test_x86_64_numeric_data_batching.py
+new file mode 100644
+--- /dev/null
++++ b/tests/python/test_x86_64_numeric_data_batching.py
+@@ -0,0 +1,290 @@
++"""Bounded numeric payloads preserve the ordinary owned assembler contract."""
++
++from dataclasses import FrozenInstanceError
++import struct
++
++import pytest
++
++from pcc.backend import coff_x86_64 as coff
++from pcc.backend import elf_x86_64 as elf
++from pcc.backend import x86_64_asm_driver as assembler
++from pcc.backend.precise_stackmap import (
++    ARCH_X86_64,
++    SAFEPOINT_ENTRY,
++    FunctionStackMap,
++    PreciseStackMap,
++    SafepointRecord,
++    encode_stack_map,
++    function_id,
++    render_stack_map_assembly,
++    safepoint_id,
++)
++from pcc.backend.x86_64_encode import X86EncodeError
++
++
++PREFIX = ".intel_syntax noprefix\n"
++
++
++def _per_item_object(monkeypatch, text, *, windows=False):
++    # Nonpositive private bounds retain the parser's pre-batching one-record
++    # path. Scalar grammar, conversions and final assembly remain real.
++    with monkeypatch.context() as context:
++        context.setattr(assembler, "_NUMERIC_DATA_BATCH_BYTES", 0)
++        if windows:
++            return coff.assemble_object(text)
++        return elf.emit_relocatable(assembler.assemble_file(text))
++
++
++def _outcome(monkeypatch, text, limit):
++    with monkeypatch.context() as context:
++        context.setattr(assembler, "_NUMERIC_DATA_BATCH_BYTES", limit)
++        try:
++            return ("ok", elf.emit_relocatable(assembler.assemble_file(text)))
++        except Exception as exc:
++            return (type(exc), str(exc))
++
++
++@pytest.mark.parametrize("compact", [False, True])
++def test_real_parser_reduces_records_with_fixed_bound_and_same_scalar_calls(
++    monkeypatch, compact,
++):
++    assert assembler._NUMERIC_DATA_BATCH_BYTES == 8192
++    count = 4097
++    text = PREFIX + ".data\n" + ".long 16909060\n" * count
++    scalar_calls = []
++    original = assembler._integer_payload
++
++    def observed(value, width, *, owner):
++        scalar_calls.append((value, width, owner))
++        return original(value, width, owner=owner)
++
++    monkeypatch.setattr(assembler, "_integer_payload", observed)
++    batched, _, _ = assembler._parse_file(text, compact_instructions=compact)
++    assert scalar_calls == [(16909060, 4, ".long")] * count
++    entries = batched[".data"].entries
++    assert len(entries) == 3
++    assert all(type(entry) is assembler._Data and type(entry.payload) is bytes
++               for entry in entries)
++    assert [len(entry.payload) for entry in entries] == [8192, 8192, 4]
++    assert b"".join(entry.payload for entry in entries) == b"\x04\x03\x02\x01" * count
++    scalar_calls.clear()
++    with monkeypatch.context() as context:
++        context.setattr(assembler, "_NUMERIC_DATA_BATCH_BYTES", 0)
++        original_plan, _, _ = assembler._parse_file(text, compact_instructions=compact)
++    assert len(original_plan[".data"].entries) == count
++    assert scalar_calls == [(16909060, 4, ".long")] * count
++
++
++@pytest.mark.parametrize("limit", [0, -1, 1, 3, 8, 16, 8192])
++def test_small_or_disabled_bounds_preserve_mixed_width_complete_object(monkeypatch, limit):
++    text = PREFIX + """.data
++.globl data
++.type data, @object
++data:
++ .byte -128, 0, 255
++ .short -32768, 65535
++ .long -2147483648, 4294967295
++ .quad -9223372036854775808, 18446744073709551615
++ .float -0.0, 1.5
++ .double -2.25, 0.0
++.size data, .-data
++.text
++probe:
++ ret
++"""
++    expected = _per_item_object(monkeypatch, text)
++    monkeypatch.setattr(assembler, "_NUMERIC_DATA_BATCH_BYTES", limit)
++    actual = elf.emit_relocatable(assembler.assemble_file(text))
++    assert actual == expected
++    plans, _, _ = assembler._parse_file(text)
++    data = b"".join(entry.payload for entry in plans[".data"].entries
++                    if type(entry) is assembler._Data)
++    assert data == (
++        b"\x80\x00\xff" + struct.pack("<HHIIQQ", 32768, 65535, 2147483648,
++                                      4294967295, 9223372036854775808,
++                                      18446744073709551615)
++        + struct.pack("<ffdd", -0.0, 1.5, -2.25, 0.0)
++    )
++    for entry in plans[".data"].entries:
++        if type(entry) is assembler._Data:
++            assert type(entry.payload) is bytes
++            assert len(entry.payload) <= max(8, limit)
++
++
++@pytest.mark.parametrize("compact", [False, True])
++def test_empty_lines_and_separators_preserve_same_parsed_records(compact):
++    lines = [".intel_syntax noprefix", ".data", ".byte 1, 2", ".short 3",
++             ".long 4", ".quad 5", ".float 1.5", ".double 2.5"]
++    ordinary = "\n".join(lines) + "\n"
++    mixed = "\r\n\r\n".join(lines) + "\r\n\r\n"
++    left, order, symbols = assembler._parse_file(ordinary, compact_instructions=compact)
++    right, other_order, other_symbols = assembler._parse_file(mixed, compact_instructions=compact)
++    # Compact plans intentionally retain their own original source text.
++    assert order == other_order and symbols == other_symbols
++    assert left[".data"].entries == right[".data"].entries
++
++
++def test_float_special_values_keep_original_packing(monkeypatch):
++    text = PREFIX + ".data\n.float inf, -inf, nan\n.double inf, -inf, nan\n"
++    expected = _per_item_object(monkeypatch, text)
++    assert elf.emit_relocatable(assembler.assemble_file(text)) == expected
++    plans, _, _ = assembler._parse_file(text)
++    assert b"".join(entry.payload for entry in plans[".data"].entries) == (
++        struct.pack("<fffddd", float("inf"), -float("inf"), float("nan"),
++                    float("inf"), -float("inf"), float("nan"))
++    )
++
++
++def test_symbol_label_alignment_zero_size_and_section_barriers(monkeypatch):
++    text = PREFIX + """.data
++.globl data
++.type data, @object
++data:
++ .byte 1
++ .short 770
++pivot:
++ .long 117835012
++ .p2align 3, 170
++ .quad external+8
++ .byte 8
++ .long pivot-data
++ .byte 9
++ .zero 2
++ .byte 10
++ .size data, .-data
++.section .rodata,"a",@progbits
++other:
++ .byte 11, 12
++.data
++ .byte 13
++.text
++probe:
++ ret
++"""
++    expected = _per_item_object(monkeypatch, text)
++    assert elf.emit_relocatable(assembler.assemble_file(text)) == expected
++    plans, order, _ = assembler._parse_file(text)
++    assert order == [".data", ".rodata", ".text"]
++    entries = plans[".data"].entries
++    assert [type(entry) for entry in entries] == [
++        assembler._Label, assembler._Data, assembler._Label, assembler._Data,
++        assembler._Align, assembler._SymbolData, assembler._Data,
++        assembler._SymbolDifference, assembler._Data, assembler._Zero,
++        assembler._Data, assembler._SizeHere, assembler._Data,
++    ]
++    assert entries[1].payload == b"\x01\x02\x03"
++    assert entries[3].payload == b"\x04\x05\x06\x07"
++    assert entries[5] == assembler._SymbolData("external", 8)
++    assert entries[7] == assembler._SymbolDifference("pivot", "data", 4)
++    obj = elf.parse_relocatable(expected)
++    data = next(section for section in obj.sections if section.name == ".data")
++    assert len(data.relocations) == 1 and data.relocations[0].addend == 8
++
++
++@pytest.mark.parametrize("body", [
++    ".data\n.byte 256,\n",
++    ".data\n.byte 256, 1\n",
++    ".data\n.byte -129\n",
++    ".data\n.short 65536\n",
++    ".data\n.long 4294967296\n",
++    ".data\n.quad 18446744073709551616\n",
++    ".data\n.float 1e39\n.bad\n",
++    ".data\n.float not_a_float\n",
++    ".data\n.double 1.0,\n",
++    ".data\n.byte 1\n.long external\n",
++    ".data\n.quad 1, bad symbol\n",
++    ".data\n.long missing-other\n",
++    '.section .tbss,"awT",@nobits\n.byte 0\n',
++    '.section .tbss,"awT",@nobits\n.byte 0\n.bad\n',
++    '.section .tbss,"awT",@nobits\n.quad external\n',
++    ".data\n.byte 1\n.p2align 17\n",
++    ".data\nsame:\n.byte 1\nsame:\n.byte 2\n",
++    ".data\n.byte 1\n.size absent, .-absent\n",
++    ".data\n.byte 1\n.section .unknown\n",
++    ".data\n.byte 1\n.space -1\n",
++])
++def test_first_error_type_and_message_match_per_item_records(monkeypatch, body):
++    text = PREFIX + body
++    expected = _outcome(monkeypatch, text, 0)
++    assert expected[0] != "ok"
++    assert _outcome(monkeypatch, text, 8192) == expected
++
++
++def test_whole_list_empty_item_check_still_precedes_scalar_range(monkeypatch):
++    text = PREFIX + ".data\n.byte 256,\n"
++    expected = (X86EncodeError, "empty data item list '256,'")
++    assert _outcome(monkeypatch, text, 0) == expected
++    assert _outcome(monkeypatch, text, 8192) == expected
++
++
++def test_nobits_validation_stays_after_later_parse_errors(monkeypatch):
++    text = PREFIX + '.section .tbss,"awT",@nobits\n.byte 0\n.bad\n'
++    expected = (X86EncodeError, "directive not proven: '.bad'")
++    assert _outcome(monkeypatch, text, 0) == expected
++    assert _outcome(monkeypatch, text, 8192) == expected
++    valid_parse = PREFIX + '.section .tbss,"awT",@nobits\n.byte 0\n'
++    assert _outcome(monkeypatch, valid_parse, 8192) == (
++        X86EncodeError, "NOBITS section '.tbss' has file data",
++    )
++
++
++def test_buffers_are_invocation_local_and_return_only_immutable_payloads():
++    first, _, _ = assembler._parse_file(PREFIX + ".data\n.byte 1, 2\n.short 3\n")
++    record = first[".data"].entries[0]
++    before = record.payload
++    with pytest.raises(FrozenInstanceError):
++        record.payload = b"changed"
++    with pytest.raises(X86EncodeError):
++        assembler._parse_file(PREFIX + ".data\n.byte 7\n.long invalid\n")
++    second, _, _ = assembler._parse_file(PREFIX + ".data\n.byte 8, 9\n")
++    assert first[".data"].entries[0] is record and record.payload is before
++    assert before == b"\x01\x02\x03\x00"
++    assert second[".data"].entries[0].payload == b"\x08\x09"
++    assert type(record.payload) is bytes
++
++
++def test_full_coff_bytes_keep_symbol_relocation_stackmap_and_unwind_sections(monkeypatch):
++    text = PREFIX + """.text
++.globl probe
++.type probe, @function
++.seh_proc probe
++probe:
++ push rbp
++.seh_pushreg rbp
++ mov rbp, rsp
++.seh_setframe rbp, 0
++.seh_endprologue
++ mov rax, QWORD PTR data[rip]
++ pop rbp
++ ret
++.seh_endproc
++.size probe, .-probe
++.data
++data:
++ .long 1, 2, 3
++ .quad external+8
++ .byte 4, 5
++"""
++    # A valid precise-map payload exercises the real owned object's schema
++    # checks and symbolic function address, together with ordinary SEH output.
++    # This is an object-format test; it does not execute a native safepoint.
++    stack_map = PreciseStackMap(ARCH_X86_64, (FunctionStackMap(
++        function_id("probe"), 0, 13, 0,
++        (SafepointRecord(safepoint_id("probe", 0, SAFEPOINT_ENTRY),
++                         0, SAFEPOINT_ENTRY, ()),),
++    ),))
++    text += render_stack_map_assembly(
++        stack_map, ("probe",), target="x86_64-linux",
++    ) + "\n"
++    expected = _per_item_object(monkeypatch, text, windows=True)
++    actual = coff.assemble_object(text)
++    assert actual == expected
++    obj = coff.parse_object(actual)
++    assert {".text", ".data", ".pcc_stackmaps", ".pdata", ".xdata"} <= {
++        section.name for section in obj.sections
++    }
++    assert all(section.data for section in obj.sections)
++    maps = next(section for section in obj.sections if section.name == ".pcc_stackmaps")
++    assert maps.data == encode_stack_map(stack_map)
++    assert len(maps.relocations) == 1
++    assert obj.symbols[maps.relocations[0].symbol].name == "probe"

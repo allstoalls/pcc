@@ -8,7 +8,7 @@ import pytest
 
 @pytest.mark.parametrize("method", ["read()", "read(32768)", "readline()", "readline(32768)"])
 def test_file_read_temporaries_release_after_calls_and_errors(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, monkeypatch, method,
+    tmp_path, pcc_runtime_archive, python_program_compiler, monkeypatch, method,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     payload = tmp_path / "payload.bin"
@@ -61,7 +61,7 @@ main()
 '''.replace("PATH", repr(str(payload))).replace("METHOD", method))
     binary = tmp_path / "read_owner"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)))

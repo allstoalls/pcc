@@ -3,9 +3,11 @@ from __future__ import annotations
 import re
 import subprocess
 
+import pytest
+
 
 def test_export_field_order_matches_nested_method_control_flow(tmp_path):
-    from pcc.py_frontend.pipeline_context import build_closed_world_context
+    from pcc.frontends.python.pipeline_context import build_closed_world_context
 
     provider = tmp_path / "nested_fields.py"
     provider.write_text("""
@@ -50,7 +52,7 @@ class Example:
 def test_imported_subclass_field_index_includes_imported_base_fields(
     tmp_path,
 ) -> None:
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     records = tmp_path / "records.py"
     base = tmp_path / "base.py"
@@ -155,7 +157,7 @@ def read_base(seed: Seed) -> int:
         encoding="utf-8",
     )
 
-    from pcc.py_frontend.pipeline_context import build_closed_world_context
+    from pcc.frontends.python.pipeline_context import build_closed_world_context
 
     _parsed, exports, _derived = build_closed_world_context(
         [str(consumer), str(provider), str(base), str(records)],
@@ -201,10 +203,11 @@ def read_base(seed: Seed) -> int:
     ), base_body
 
 
+@pytest.mark.integration
 def test_cross_module_base_annotation_preserves_subclass_override(
     tmp_path,
 ) -> None:
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     owner = tmp_path / "owner.py"
     consumer = tmp_path / "consumer.py"
@@ -258,8 +261,8 @@ print(dispatch(Child()))
 
 
 def test_pep604_optional_class_annotation_keeps_object_projection() -> None:
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.py_ast import ClassType, DynType, FuncDef
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.py_ast import ClassType, DynType, FuncDef
 
     module = parse_and_lift(
         """
@@ -293,7 +296,7 @@ def arbitrary_union(value: Arena | Other) -> None:
 
 
 def test_pep604_optional_exact_receiver_uses_direct_method_abi(tmp_path) -> None:
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     owner = tmp_path / "owner.py"
     consumer = tmp_path / "consumer.py"
@@ -362,7 +365,7 @@ def touch_nested(arena: Arena | None) -> int:
 
 
 def test_transitive_inherited_raw_arena_control(tmp_path) -> None:
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     base = tmp_path / "base.py"
     records = tmp_path / "records.py"

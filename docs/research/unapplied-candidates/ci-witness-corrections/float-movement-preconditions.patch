@@ -1,0 +1,81 @@
+--- a/tests/python/test_native_float_callback_movement.py
++++ b/tests/python/test_native_float_callback_movement.py
+@@ -17,19 +17,44 @@
+ metric = extern("pcc_gc_telemetry", (c_int64,), c_int64)
+ select_moving = extern("pcc_gc_select_relocation_set", (c_int64,), c_int64)
+ step = extern("pcc_gc_step", (c_int64,), c_int64)
+-ballast = []
+ evidence = []
+ events = []
+ converter = float
+ 
+ def move_live_objects(phase):
++    # Keep this phase's small, initialized lists alive without an address
++    # lease. Reusing an old ballast container enqueues fresh young children
++    # and can leave the collector at its remembered-root gate, before copy.
++    ballast = []
+     for index in range(96):
+-        ballast.append([phase + str(index), index])
++        ballast.append([index, index + 1000])
++    pending_before = metric(42)
++    assert 0 <= pending_before <= 4096
++    pending = pending_before
++    drain_steps = 0
++    # GC4 drains at most eight remembered entries per step. Spend only that
++    # batch's budget here, so preparation does not request evacuation. A
++    # non-converging queue is a failed precondition, never a retry for moves.
++    for index in range((pending_before + 7) // 8):
++        if pending == 0:
++            break
++        budget = min(pending, 8)
++        step(budget)
++        remaining = metric(42)
++        assert 0 <= remaining < pending
++        pending = remaining
++        drain_steps += 1
++    assert pending == 0
+     before = metric(15)
+     selected = select_moving(4096)
+     processed = step(4096)
+     moved = metric(15) - before
+-    evidence.append((phase, selected, processed, moved))
++    # The roots and payload must survive the measured relocation window.
++    assert len(ballast) == 96
++    for index in range(96):
++        assert ballast[index] == [index, index + 1000]
++    evidence.append((phase, selected, processed, moved,
++                     pending_before, pending, drain_steps))
+ 
+ class Nested:
+     def __float__(self):
+@@ -72,7 +97,7 @@
+     assert caught
+     gc.collect()
+     for row in evidence:
+-        print(row[0], row[1], row[2], row[3])
++        print(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
+     assert events == ["callback-enter", "nested", "callback-exit", "cleanup-enter", "nested", "cleanup-exit", "receiver-finalized"]
+     assert len(evidence) == 2
+     for row in evidence:
+@@ -81,6 +106,7 @@
+         # independently in both the successful callback and error cleanup.
+         assert row[1] > 0
+         assert row[3] > 0
++        assert row[5] == 0
+     gc.enable()
+     print("FLOAT_CALLBACK_MOVEMENT_OK")
+ main()
+@@ -142,9 +168,11 @@
+     if success:
+         for phase, line in zip(("callback", "cleanup"), lines[:2]):
+             fields = line.split()
+-            success = (len(fields) == 4 and fields[0] == phase
++            success = (len(fields) == 7 and fields[0] == phase
+                        and all(field.lstrip("-").isdigit() for field in fields[1:])
+-                       and int(fields[1]) > 0 and int(fields[3]) > 0)
++                       and int(fields[1]) > 0 and int(fields[3]) > 0
++                       and 0 <= int(fields[4]) <= 4096 and int(fields[5]) == 0
++                       and 0 <= int(fields[6]) <= (int(fields[4]) + 7) // 8)
+             if not success:
+                 break
+     receipt["status"] = "PASS" if success else "NATIVE_EXECUTION_FAILED"

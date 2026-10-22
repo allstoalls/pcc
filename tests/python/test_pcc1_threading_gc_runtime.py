@@ -18,7 +18,7 @@ import pytest
 
 
 REPO = Path(__file__).absolute().parents[2]
-RUNTIME = REPO / "pcc" / "py_runtime"
+RUNTIME = REPO / "pcc" / "runtime"
 _PCC1_CANDIDATES = (
     REPO / "build" / "bootstrap-pytest-self" / "pcc1",
     REPO / "build" / "bootstrap" / "pcc1",
@@ -154,7 +154,7 @@ _PURE_COMPUTE_THREADED_GC_SOURCE = textwrap.dedent(
 
 def test_pcc1_c_runtime_threads_lock_backend0(
     tmp_path: Path,
-    threaded_pcc_py_runtime_archive: Path,
+    threaded_pcc_runtime_archive: Path,
 ) -> None:
     """pcc1 must compile a real-pthread Thread/Lock program under the C
     runtime archive.
@@ -163,7 +163,7 @@ def test_pcc1_c_runtime_threads_lock_backend0(
     still has a synchronous Thread shim. Re-running the produced binary catches
     common thread handoff and lock races in pcc1-compiled code.
     """
-    _verify_isolated_runtime_archive(threaded_pcc_py_runtime_archive)
+    _verify_isolated_runtime_archive(threaded_pcc_runtime_archive)
     src = tmp_path / "thread_gc.py"
     exe = tmp_path / "thread_gc.out"
     src.write_text(
@@ -211,7 +211,7 @@ def test_pcc1_c_runtime_threads_lock_backend0(
             "PCC_RUNTIME_HIGH": "c",
             "PCC_WITH_THREADS": "1",
             "PCC_GC_BACKEND": "0",
-            "PCC_RUNTIME_ARCHIVE": str(threaded_pcc_py_runtime_archive),
+            "PCC_RUNTIME_ARCHIVE": str(threaded_pcc_runtime_archive),
         }
     )
     compile_cmd = [
@@ -259,14 +259,14 @@ def test_pcc1_c_runtime_threads_lock_backend0(
             )
             assert run_proc.stdout.strip() == "4000"
     finally:
-        _verify_isolated_runtime_archive(threaded_pcc_py_runtime_archive)
+        _verify_isolated_runtime_archive(threaded_pcc_runtime_archive)
 
 
 @pytest.mark.parametrize("gc_backend", ("0", "1", "2", "3", "4"))
 def test_pcc1_c_runtime_threads_and_explicit_gc_collect_all_backends(
     tmp_path: Path,
     gc_backend: str,
-    threaded_pcc_py_runtime_archive: Path,
+    threaded_pcc_runtime_archive: Path,
 ) -> None:
     """pcc1-built real-pthread programs must survive explicit collection
     from both worker threads and the main thread under every GC backend.
@@ -278,7 +278,7 @@ def test_pcc1_c_runtime_threads_and_explicit_gc_collect_all_backends(
     unpinned container literal temporary while another thread was explicitly
     collecting.
     """
-    _verify_isolated_runtime_archive(threaded_pcc_py_runtime_archive)
+    _verify_isolated_runtime_archive(threaded_pcc_runtime_archive)
     src = tmp_path / "thread_explicit_gc.py"
     exe = tmp_path / "thread_explicit_gc.out"
     src.write_text(_EXPLICIT_THREADED_GC_SOURCE, encoding="utf-8")
@@ -290,7 +290,7 @@ def test_pcc1_c_runtime_threads_and_explicit_gc_collect_all_backends(
             "PCC_RUNTIME_HIGH": "c",
             "PCC_WITH_THREADS": "1",
             "PCC_GC_BACKEND": gc_backend,
-            "PCC_RUNTIME_ARCHIVE": str(threaded_pcc_py_runtime_archive),
+            "PCC_RUNTIME_ARCHIVE": str(threaded_pcc_runtime_archive),
         }
     )
     compile_cmd = [
@@ -340,13 +340,13 @@ def test_pcc1_c_runtime_threads_and_explicit_gc_collect_all_backends(
             )
             assert run_proc.stdout.strip() == "800"
     finally:
-        _verify_isolated_runtime_archive(threaded_pcc_py_runtime_archive)
+        _verify_isolated_runtime_archive(threaded_pcc_runtime_archive)
 
 
 @pytest.mark.pcc_gate(env="PCC_PCC1_THREADED_GC_STRESS_RUNS")
 def test_pcc1_c_runtime_threaded_explicit_gc_repeated_runs_stress(
     tmp_path: Path,
-    threaded_pcc_py_runtime_archive: Path,
+    threaded_pcc_runtime_archive: Path,
 ) -> None:
     """Opt-in pcc1 real-pthread explicit-GC flake detector.
 
@@ -380,7 +380,7 @@ def test_pcc1_c_runtime_threaded_explicit_gc_repeated_runs_stress(
 
     failures: list[str] = []
     for gc_backend in backends:
-        _verify_isolated_runtime_archive(threaded_pcc_py_runtime_archive)
+        _verify_isolated_runtime_archive(threaded_pcc_runtime_archive)
         src = tmp_path / f"thread_explicit_gc_stress_{gc_backend}.py"
         exe = tmp_path / f"thread_explicit_gc_stress_{gc_backend}.out"
         src.write_text(_EXPLICIT_THREADED_GC_SOURCE, encoding="utf-8")
@@ -392,7 +392,7 @@ def test_pcc1_c_runtime_threaded_explicit_gc_repeated_runs_stress(
                 "PCC_RUNTIME_HIGH": "c",
                 "PCC_WITH_THREADS": "1",
                 "PCC_GC_BACKEND": gc_backend,
-                "PCC_RUNTIME_ARCHIVE": str(threaded_pcc_py_runtime_archive),
+                "PCC_RUNTIME_ARCHIVE": str(threaded_pcc_runtime_archive),
             }
         )
         compile_cmd = [
@@ -449,7 +449,7 @@ def test_pcc1_c_runtime_threaded_explicit_gc_repeated_runs_stress(
                     break
                 run_idx += 1
         finally:
-            _verify_isolated_runtime_archive(threaded_pcc_py_runtime_archive)
+            _verify_isolated_runtime_archive(threaded_pcc_runtime_archive)
 
     assert not failures, "pcc1 threaded explicit-GC stress failures:\n" + "\n".join(failures)
 
@@ -458,7 +458,7 @@ def test_pcc1_c_runtime_threaded_explicit_gc_repeated_runs_stress(
 def test_pcc1_c_runtime_pure_compute_loop_safepoints_under_threaded_gc(
     tmp_path: Path,
     gc_backend: str,
-    threaded_pcc_py_runtime_archive: Path,
+    threaded_pcc_runtime_archive: Path,
 ) -> None:
     """pcc1-generated pure compute loops must be cooperative safepoints.
 
@@ -468,7 +468,7 @@ def test_pcc1_c_runtime_pure_compute_loop_safepoints_under_threaded_gc(
     generated loop-backedge safepoints this shape can block STW until the pure
     compute loop exits.
     """
-    _verify_isolated_runtime_archive(threaded_pcc_py_runtime_archive)
+    _verify_isolated_runtime_archive(threaded_pcc_runtime_archive)
     src = tmp_path / "thread_pure_compute_safepoint.py"
     exe = tmp_path / "thread_pure_compute_safepoint.out"
     src.write_text(_PURE_COMPUTE_THREADED_GC_SOURCE, encoding="utf-8")
@@ -480,7 +480,7 @@ def test_pcc1_c_runtime_pure_compute_loop_safepoints_under_threaded_gc(
             "PCC_RUNTIME_HIGH": "c",
             "PCC_WITH_THREADS": "1",
             "PCC_GC_BACKEND": gc_backend,
-            "PCC_RUNTIME_ARCHIVE": str(threaded_pcc_py_runtime_archive),
+            "PCC_RUNTIME_ARCHIVE": str(threaded_pcc_runtime_archive),
         }
     )
     compile_cmd = [
@@ -528,12 +528,12 @@ def test_pcc1_c_runtime_pure_compute_loop_safepoints_under_threaded_gc(
         )
         assert run_proc.stdout.strip() == "True"
     finally:
-        _verify_isolated_runtime_archive(threaded_pcc_py_runtime_archive)
+        _verify_isolated_runtime_archive(threaded_pcc_runtime_archive)
 
 
 def test_pcc1_c_runtime_threaded_backend4_exercises_zpage_allocator(
     tmp_path: Path,
-    threaded_pcc_py_runtime_archive: Path,
+    threaded_pcc_runtime_archive: Path,
 ) -> None:
     """pcc1-built real-pthread code under backend #4 must exercise ZPage
     allocation, not merely run generic Thread/GC paths.
@@ -541,7 +541,7 @@ def test_pcc1_c_runtime_threaded_backend4_exercises_zpage_allocator(
     This keeps the pcc1 threaded gate tied to the backend4 page allocator
     introduced for GenZGC-style relocation work.
     """
-    _verify_isolated_runtime_archive(threaded_pcc_py_runtime_archive)
+    _verify_isolated_runtime_archive(threaded_pcc_runtime_archive)
     src = tmp_path / "thread_backend4_zpage.py"
     exe = tmp_path / "thread_backend4_zpage.out"
     src.write_text(_EXPLICIT_THREADED_GC_SOURCE, encoding="utf-8")
@@ -553,7 +553,7 @@ def test_pcc1_c_runtime_threaded_backend4_exercises_zpage_allocator(
             "PCC_RUNTIME_HIGH": "c",
             "PCC_WITH_THREADS": "1",
             "PCC_GC_BACKEND": "4",
-            "PCC_RUNTIME_ARCHIVE": str(threaded_pcc_py_runtime_archive),
+            "PCC_RUNTIME_ARCHIVE": str(threaded_pcc_runtime_archive),
         }
     )
     compile_cmd = [
@@ -712,4 +712,4 @@ def test_pcc1_c_runtime_threaded_backend4_exercises_zpage_allocator(
             "True",
         ]
     finally:
-        _verify_isolated_runtime_archive(threaded_pcc_py_runtime_archive)
+        _verify_isolated_runtime_archive(threaded_pcc_runtime_archive)

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+import pytest
+from scripts import run_self_backend_bootstrap_gate as gate
 
 from scripts.run_self_backend_bootstrap_gate import (
     IMPORT_RUNTIME_BENCHMARKS,
@@ -11,7 +13,6 @@ from scripts.run_self_backend_bootstrap_gate import (
     _best_runtime_seconds,
     _child_env,
     _check_pcc1_compile_threshold,
-    _check_performance_thresholds,
     _check_stage_elapsed_threshold,
     _check_user_runtime_threshold,
     _host_slug,
@@ -92,58 +93,18 @@ def _result(
     )
 
 
-def test_self_backend_bootstrap_gate_accepts_ratios_within_threshold():
-    results = [
-        _result(
-            "llvm",
-            elapsed=10.0,
-            help_elapsed=1.0,
-            smoke_compile=2.0,
-            smoke_run=1.0,
-        ),
-        _result(
-            "self",
-            elapsed=19.0,
-            help_elapsed=1.9,
-            smoke_compile=3.9,
-            smoke_run=1.9,
-        ),
-    ]
+@pytest.mark.parametrize("flag", [
+    "--max-bootstrap-ratio", "--max-help-ratio",
+    "--max-smoke-compile-ratio", "--max-smoke-run-ratio",
+])
+def test_self_backend_bootstrap_gate_rejects_retired_llvm_ratios(flag, monkeypatch):
+    def unexpected_bootstrap(**kwargs):
+        raise AssertionError("retired flags must fail before launching bootstrap")
 
-    assert _check_performance_thresholds(
-        results,
-        bootstrap_threshold=2.0,
-        help_threshold=2.0,
-        smoke_compile_threshold=2.0,
-        smoke_run_threshold=2.0,
-    )
-
-
-def test_self_backend_bootstrap_gate_rejects_ratio_above_threshold():
-    results = [
-        _result(
-            "llvm",
-            elapsed=10.0,
-            help_elapsed=1.0,
-            smoke_compile=2.0,
-            smoke_run=1.0,
-        ),
-        _result(
-            "self",
-            elapsed=21.0,
-            help_elapsed=1.0,
-            smoke_compile=2.0,
-            smoke_run=1.0,
-        ),
-    ]
-
-    assert not _check_performance_thresholds(
-        results,
-        bootstrap_threshold=2.0,
-        help_threshold=2.0,
-        smoke_compile_threshold=2.0,
-        smoke_run_threshold=2.0,
-    )
+    monkeypatch.setattr(gate, "_run_bootstrap", unexpected_bootstrap)
+    with pytest.raises(SystemExit) as failure:
+        gate.main([flag, "2.0"])
+    assert failure.value.code == 2
 
 
 def test_bootstrap_gate_supports_linux_x86_64(monkeypatch):
@@ -649,8 +610,8 @@ def test_runtime_text_symbol_cases_reports_per_case_top_symbols() -> None:
 
 def test_source_attribution_for_top_symbols_uses_runtime_archive_sources() -> None:
     sources = {
-        "_pcc_gc_telemetry": "py_gc_backend.o(pcc/py_runtime/py/py_gc_backend.py)",
-        "_py_str_mod": "py_format.o(pcc/py_runtime/src/py_format.c)",
+        "_pcc_gc_telemetry": "py_gc_backend.o(pcc/runtime/py/py_gc_backend.py)",
+        "_py_str_mod": "py_format.o(pcc/runtime/src/py_format.c)",
     }
 
     text = _source_attribution_for_top_symbols(
@@ -658,8 +619,8 @@ def test_source_attribution_for_top_symbols_uses_runtime_archive_sources() -> No
         sources,
     )
 
-    assert "_pcc_gc_telemetry=>py_gc_backend.o(pcc/py_runtime/py/py_gc_backend.py)" in text
-    assert "_py_str_mod=>py_format.o(pcc/py_runtime/src/py_format.c)" in text
+    assert "_pcc_gc_telemetry=>py_gc_backend.o(pcc/runtime/py/py_gc_backend.py)" in text
+    assert "_py_str_mod=>py_format.o(pcc/runtime/src/py_format.c)" in text
     assert "_missing=>unknown" in text
 
 
@@ -667,7 +628,7 @@ def test_runtime_archive_symbol_sources_parses_nm_archive_output(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    runtime = tmp_path / "pcc/py_runtime"
+    runtime = tmp_path / "pcc/runtime"
     runtime.mkdir(parents=True)
     archive = runtime / "libpy_runtime_pcc_py.a"
     archive.write_text("", encoding="utf-8")
@@ -696,6 +657,6 @@ def test_runtime_archive_symbol_sources_parses_nm_archive_output(
 
     sources = _runtime_archive_symbol_sources(str(archive))
 
-    assert sources["_pcc_gc_telemetry"] == "py_gc_backend.o(pcc/py_runtime/py/py_gc_backend.py)"
-    assert sources["_py_str_mod"] == "py_format.o(pcc/py_runtime/src/py_format.c)"
+    assert sources["_pcc_gc_telemetry"] == "py_gc_backend.o(pcc/runtime/py/py_gc_backend.py)"
+    assert sources["_py_str_mod"] == "py_format.o(pcc/runtime/src/py_format.c)"
     assert "_missing" not in sources

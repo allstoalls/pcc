@@ -11,7 +11,7 @@ from pathlib import Path
 
 from pcc.package.build_exec import execute_build_actions
 from pcc.package.metadata import current_platform_tag
-from pcc.package_schema import pcc_native_extension_suffix
+from pcc.package.schema import pcc_native_extension_suffix
 from scripts.numpy_first_blocker import evaluate_result
 from scripts.numpy_head_gate import (
     _dynamic_dependencies,

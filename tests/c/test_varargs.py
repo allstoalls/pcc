@@ -1,6 +1,5 @@
 import os
 import sys
-import subprocess
 import tempfile
 
 this_dir = os.path.dirname(os.path.abspath(__file__))
@@ -9,10 +8,10 @@ this_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(os.path.dirname(this_dir))
 sys.path.insert(0, parent_dir)
 
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.parse.c_parser import CParser
-from pcc.codegen.c_codegen import LLVMCodeGenerator, postprocess_ir_text
-from pcc.project import TranslationUnit
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.driver.project import TranslationUnit
+
+from tests.owned_c_execution import compile_and_run_owned_c
 
 
 def test_stdarg_pointer_int_double_roundtrip():
@@ -39,37 +38,8 @@ def test_stdarg_pointer_int_double_roundtrip():
         }
     """
 
-    processed = CEvaluator._system_cpp(source, base_dir=parent_dir)
-    ast = CParser().parse(processed)
-    cg = LLVMCodeGenerator()
-    cg.generate_code(ast)
-
-    with tempfile.TemporaryDirectory(prefix="pcc_vararg_") as tmpdir:
-        ir_path = os.path.join(tmpdir, "vararg.ll")
-        obj_path = os.path.join(tmpdir, "vararg.o")
-        bin_path = os.path.join(tmpdir, "vararg_bin")
-
-        with open(ir_path, "w") as f:
-            f.write(postprocess_ir_text(str(cg.module)))
-
-        r = subprocess.run(
-            ["cc", "-c", "-w", ir_path, "-o", obj_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        assert r.returncode == 0, r.stderr
-
-        r = subprocess.run(
-            ["cc", obj_path, "-o", bin_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        assert r.returncode == 0, r.stderr
-
-        r = subprocess.run([bin_path], capture_output=True, text=True, timeout=30)
-        assert r.returncode == 0, r.stderr
+    r = compile_and_run_owned_c(source)
+    assert r.returncode == 0, r.stderr
 
 
 def test_stdarg_helper_accepts_va_list_parameter():
@@ -102,37 +72,61 @@ def test_stdarg_helper_accepts_va_list_parameter():
         }
     """
 
-    processed = CEvaluator._system_cpp(source, base_dir=parent_dir)
-    ast = CParser().parse(processed)
-    cg = LLVMCodeGenerator()
-    cg.generate_code(ast)
+    r = compile_and_run_owned_c(source)
+    assert r.returncode == 0, r.stderr
 
-    with tempfile.TemporaryDirectory(prefix="pcc_vararg_") as tmpdir:
-        ir_path = os.path.join(tmpdir, "vararg.ll")
-        obj_path = os.path.join(tmpdir, "vararg.o")
-        bin_path = os.path.join(tmpdir, "vararg_bin")
 
-        with open(ir_path, "w") as f:
-            f.write(postprocess_ir_text(str(cg.module)))
+def test_stdarg_copy_from_parameter_preserves_original_cursor():
+    source = r"""
+        #include <stdarg.h>
 
-        r = subprocess.run(
-            ["cc", "-c", "-w", ir_path, "-o", obj_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        assert r.returncode == 0, r.stderr
+        int copy_sum(va_list incoming) {
+            va_list copy;
+            va_copy(copy, incoming);
+            int first = va_arg(copy, int);
+            int second = va_arg(copy, int);
+            va_end(copy);
+            return first + second;
+        }
 
-        r = subprocess.run(
-            ["cc", obj_path, "-o", bin_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        assert r.returncode == 0, r.stderr
+        int check(int tag, ...) {
+            va_list ap;
+            va_start(ap, tag);
+            int sum = copy_sum(ap);
+            int original_first = va_arg(ap, int);
+            va_end(ap);
+            return sum == 12 && original_first == 5 ? 0 : 1;
+        }
 
-        r = subprocess.run([bin_path], capture_output=True, text=True, timeout=30)
-        assert r.returncode == 0, r.stderr
+        int main(void) { return check(0, 5, 7); }
+    """
+    result = compile_and_run_owned_c(source)
+    assert result.returncode == 0, result.stderr
+
+
+def test_stdarg_address_expression_is_evaluated_once():
+    source = r"""
+        #include <stdarg.h>
+
+        static int calls;
+        va_list *next_list(va_list *ap) {
+            calls++;
+            return ap;
+        }
+
+        int check(int tag, ...) {
+            va_list ap;
+            va_start(ap, tag);
+            int first = va_arg(*next_list(&ap), int);
+            int second = va_arg(*next_list(&ap), int);
+            va_end(ap);
+            return calls == 2 && first == 5 && second == 7 ? 0 : 1;
+        }
+
+        int main(void) { return check(0, 5, 7); }
+    """
+    result = compile_and_run_owned_c(source)
+    assert result.returncode == 0, result.stderr
 
 
 def test_variadic_string_literal_argument_decays_to_pointer():
@@ -158,37 +152,8 @@ def test_variadic_string_literal_argument_decays_to_pointer():
         }
     """
 
-    processed = CEvaluator._system_cpp(source, base_dir=parent_dir)
-    ast = CParser().parse(processed)
-    cg = LLVMCodeGenerator()
-    cg.generate_code(ast)
-
-    with tempfile.TemporaryDirectory(prefix="pcc_vararg_") as tmpdir:
-        ir_path = os.path.join(tmpdir, "vararg.ll")
-        obj_path = os.path.join(tmpdir, "vararg.o")
-        bin_path = os.path.join(tmpdir, "vararg_bin")
-
-        with open(ir_path, "w") as f:
-            f.write(postprocess_ir_text(str(cg.module)))
-
-        r = subprocess.run(
-            ["cc", "-c", "-w", ir_path, "-o", obj_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        assert r.returncode == 0, r.stderr
-
-        r = subprocess.run(
-            ["cc", obj_path, "-o", bin_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        assert r.returncode == 0, r.stderr
-
-        r = subprocess.run([bin_path], capture_output=True, text=True, timeout=30)
-        assert r.returncode == 0, r.stderr
+    r = compile_and_run_owned_c(source)
+    assert r.returncode == 0, r.stderr
 
 
 def test_direct_builtin_va_start_and_va_copy_work_with_system_style_va_list():

@@ -1,7 +1,10 @@
 from types import SimpleNamespace
 
-from pcc.py_frontend.codegen.class_model_lowering import ClassModelLoweringMixin
-from pcc.py_frontend.py_ast import ClassType
+import pytest
+
+from pcc.frontends.python.codegen.class_alias_lowering import ClassAliasLoweringMixin
+from pcc.frontends.python.codegen.class_model_lowering import ClassModelLoweringMixin
+from pcc.frontends.python.py_ast import ClassType, Name
 
 
 class _ReceiverProbe(ClassModelLoweringMixin):
@@ -79,6 +82,52 @@ class _ClassExportProbe(ClassModelLoweringMixin):
         }
 
 
+class _ClassHintProbe(_ClassExportProbe, ClassAliasLoweringMixin):
+    def __init__(self):
+        super().__init__()
+        self.current_class = None
+        self.env = {}
+        self.env_class_hint = {}
+        self._class_aliases = {}
+        self.ast_module = SimpleNamespace(name="pcc.frontends.python.py_lift")
+
+
+@pytest.mark.parametrize("name,fields", [
+    ("_Call", ("func", "args", "line")),
+    ("_ClassDef", ("name", "bases", "body", "decorators", "line")),
+])
+@pytest.mark.parametrize("owner", ["pcc.frontends.python.py_parse", "other.parser"])
+def test_underscore_class_hint_keeps_its_declared_module(name, fields, owner):
+    probe = _ClassHintProbe()
+    probe.class_lowering.classes[name[1:]] = SimpleNamespace(
+        name=name[1:], owning_module="pcc.frontends.python.py_ast",
+    )
+    probe._native_module_exports[owner] = {
+        name: {"kind": "class", "owning_module": owner,
+               "class_name": name, "field_names": fields,
+               "methods": (), "base_names": ()},
+    }
+    expr = Name(span=None, ty=ClassType(name, owner, (), ()), ident="node")
+
+    hint = probe._class_hint_for_expr(expr)
+
+    assert hint == name
+    info = probe.class_lowering.classes[hint]
+    assert info.owning_module == owner
+    assert tuple(info.field_names) == fields
+
+
+def test_class_hint_keeps_a_real_bound_alias():
+    probe = _ClassHintProbe()
+    probe._class_aliases["AstAlias"] = "AstCall"
+    probe.class_lowering.classes["AstCall"] = SimpleNamespace(
+        name="AstCall", owning_module="pcc.frontends.python.py_ast",
+    )
+    expr = Name(span=None, ty=ClassType("AstAlias", "", (), ()), ident="node")
+
+    assert probe._class_hint_for_expr(expr) == "AstCall"
+
+
 def test_self_receiver_class_name_prefers_inferred_receiver_over_lexical_class():
     probe = _ReceiverProbe()
     probe.current_class = SimpleNamespace(name="ClassModelLoweringMixin")
@@ -87,7 +136,7 @@ def test_self_receiver_class_name_prefers_inferred_receiver_over_lexical_class()
         object(),
         ClassType(
             name="L1CodeGen",
-            module="pcc.py_frontend.codegen.layer1",
+            module="pcc.frontends.python.codegen.layer1",
             fields=(),
             bases=(),
         ),
@@ -95,7 +144,7 @@ def test_self_receiver_class_name_prefers_inferred_receiver_over_lexical_class()
 
     assert probe._self_receiver_class_name() == "L1CodeGen"
     assert probe.registered_types == [
-        ("pcc.py_frontend.codegen.layer1", "L1CodeGen")
+        ("pcc.frontends.python.codegen.layer1", "L1CodeGen")
     ]
 
 

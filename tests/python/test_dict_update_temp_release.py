@@ -48,7 +48,7 @@ _PROGRAM = textwrap.dedent(
 
 @pytest.fixture(scope="module")
 def dict_update_binary(tmp_path_factory):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     base = tmp_path_factory.mktemp("dict_update_release")
     source = base / "dict_update_release.py"

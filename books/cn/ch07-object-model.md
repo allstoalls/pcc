@@ -1,6 +1,6 @@
 # 第 7 章 对象模型
 
-运行时的一切都从"一个 Python 值在内存里长什么样"开始。pcc 的对象模型回答三件事:每个堆对象共享什么样的对象头(object header);类与实例如何布局、属性如何查找;以及最特殊的一条——生产运行时里的 pcc-Python 实现为什么仍须与 C ABI 布局和差分 oracle 逐字节一致。本章只讲对象的静态结构与属性协议:引用计数与所有权契约见第 9 章,异常协议见第 8 章,五个 GC 后端如何遍历和移动这些对象见第 10、11 章。读完本章,应当能对照 [pcc/py_runtime/src/py_internal.h](../../pcc/py_runtime/src/py_internal.h) 画出 `PyClassObject` 的 120 字节,并解释为什么"对象明明有这个属性却报 AttributeError"的排查顺序是布局、屏障、错误检查——而不是先怀疑前端。
+运行时的一切都从"一个 Python 值在内存里长什么样"开始。pcc 的对象模型回答三件事:每个堆对象共享什么样的对象头(object header);类与实例如何布局、属性如何查找;以及最特殊的一条——生产运行时里的 pcc-Python 实现为什么仍须与 C ABI 布局和差分 oracle 逐字节一致。本章只讲对象的静态结构与属性协议:引用计数与所有权契约见第 9 章,异常协议见第 8 章,五个 GC 后端如何遍历和移动这些对象见第 10、11 章。读完本章,应当能对照 [pcc/runtime/src/py_internal.h](../../pcc/runtime/src/py_internal.h) 画出 `PyClassObject` 的 120 字节,并解释为什么"对象明明有这个属性却报 AttributeError"的排查顺序是布局、屏障、错误检查——而不是先怀疑前端。
 
 ## 本章导读:从对象头开始
 
@@ -14,7 +14,7 @@
 
 一个 Python 运行时的对象模型要同时服务四个客户:解释/编译出来的代码(读写字段、调方法)、内存管理器(找到对象里的指针)、诊断系统(从一个裸地址判断"这是什么"),以及——pcc 特有的——自举链条(pcc-Python 必须能重述同一布局)。CPython 的答案是众所周知的 `ob_refcnt` + `ob_type` 指针:每个对象头部带一个指向 `PyTypeObject` 的指针,类型的全部行为(方法表、分配器、buffer 协议)挂在那个类型对象上。
 
-pcc 没有照搬这个模型。[pcc/py_runtime/include/py_runtime.h](../../pcc/py_runtime/include/py_runtime.h) 中的对象头是:
+pcc 没有照搬这个模型。[pcc/runtime/include/py_runtime.h](../../pcc/runtime/include/py_runtime.h) 中的对象头是:
 
 ```c
 typedef struct {
@@ -26,7 +26,7 @@ typedef struct {
 
 类型信息是一个 32 位整数标签(type tag),不是指针。这个选择的理由值得逐条说清,因为它约束了后面所有章节:
 
-1. **标签可以在不解引用第二个对象的前提下被消费。** 运行时大量的分派(dealloc、比较、格式化、`py_obj_getattr`)是对 `type_tag` 的 `switch`。崩溃现场拿到一个可疑指针,读 `obj + 8` 处的 4 字节就能判断它像不像一个对象——[pcc/py_runtime/src/py_obj.c](../../pcc/py_runtime/src/py_obj.c) 中的 `py_type_tag_is_valid()` 与 `py_pointer_can_have_header()` 正是这样做防御性验证的。若类型是指针,验证一个对象先要验证另一个对象,诊断的地基就软了。
+1. **标签可以在不解引用第二个对象的前提下被消费。** 运行时大量的分派(dealloc、比较、格式化、`py_obj_getattr`)是对 `type_tag` 的 `switch`。崩溃现场拿到一个可疑指针,读 `obj + 8` 处的 4 字节就能判断它像不像一个对象——[pcc/runtime/src/py_obj.c](../../pcc/runtime/src/py_obj.c) 中的 `py_type_tag_is_valid()` 与 `py_pointer_can_have_header()` 正是这样做防御性验证的。若类型是指针,验证一个对象先要验证另一个对象,诊断的地基就软了。
 2. **五个 GC 后端共用一个头。** `flags` 的低位留给对象语义(immortal / gc-tracked / finalized),其余位留给五个 GC 后端的颜色、代龄、重定位状态(见第 10 章)。一个 16 字节的头是五后端"生产平等规则"的物理公分母。
 3. **镜像义务。** pcc-Python 端口要用 `load_i32(o, 8)` 这样的原始访存重述同一布局(7.5 节)。整数标签是平的,镜像起来是一行;类型指针图意味着端口要镜像第二张对象图。
 4. **self 后端可发射性。** 标签比较是一条整数指令,不需要 LLVM 帮忙做任何聪明事。
@@ -35,7 +35,7 @@ typedef struct {
 
 第二个大的设计决定是**标记小整数通道(tagged small-int lane)**。`PyObject *` 的 bit 0 被征用:为 1 表示这不是指针,而是一个左移一位的 63 位有符号整数;为 0 表示真堆指针——`py_internal.h` 的注释给出了依据:malloc 在所有目标平台上至少 8 字节对齐,真指针的 bit 0 恒为 0。这是第 16 章值模型的物理面:`int` 的语义类型是任意精度,值投影是标记通道,对象投影是 `PyIntObject` 大数;溢出标记范围就装箱,决不回绕。本章只需要记住它对对象模型的两条影响:任何接受 `PyObject *` 的运行时函数都必须先问 `PY_IS_TAGGED_INT`,而 `py_incref`/`py_decref` 对标记值直接返回——标记整数没有对象头,没有引用计数,没有身份。
 
-第三个决定:**类的元数据用裸 C 数组,实例字段用静态槽位**。`PyClassObject` 里方法表是线性数组而非哈希表,[pcc/py_runtime/src/py_class.c](../../pcc/py_runtime/src/py_class.c) 的注释直接给了理由:"Classes have small method tables so this is faster than a dict in the common case. A future phase can swap to a hashmap."(类的方法表很小,常见情形下线性扫描比字典快;以后可以换。)实例字段则在编译期由代码生成确定槽索引,`self.field` 低层化(lowering)为 `py_instance_get_field(self, idx)` 而不是字典查找——[pcc/py_frontend/codegen/class_gen.py](../../pcc/py_frontend/codegen/class_gen.py) 的模块头明确写着这条契约。动态性没有被取消,而是被排到后面:声明字段走槽,未声明的属性走每实例一个的隐藏字典槽(7.4 节)。这正是"性能是已证语义的后果"在对象模型上的体现:静态化只发生在语义可证明的地方,所有其余路径保留完整的 Python 行为。
+第三个决定:**类的元数据用裸 C 数组,实例字段用静态槽位**。`PyClassObject` 里方法表是线性数组而非哈希表,[pcc/runtime/src/py_class.c](../../pcc/runtime/src/py_class.c) 的注释直接给了理由:"Classes have small method tables so this is faster than a dict in the common case. A future phase can swap to a hashmap."(类的方法表很小,常见情形下线性扫描比字典快;以后可以换。)实例字段则在编译期由代码生成确定槽索引,`self.field` 低层化(lowering)为 `py_instance_get_field(self, idx)` 而不是字典查找——[pcc/frontends/python/codegen/class_gen.py](../../pcc/frontends/python/codegen/class_gen.py) 的模块头明确写着这条契约。动态性没有被取消,而是被排到后面:声明字段走槽,未声明的属性走每实例一个的隐藏字典槽(7.4 节)。这正是"性能是已证语义的后果"在对象模型上的体现:静态化只发生在语义可证明的地方,所有其余路径保留完整的 Python 行为。
 
 ## 7.2 对象头、标记整数与类型标签空间
 
@@ -52,7 +52,7 @@ typedef struct {
 
 `refcount` 在偏移 0,`type_tag` 在偏移 8(int32),`flags` 在偏移 12(int32)。这三个数字是仓库里的硬契约——[AGENTS.md](../../AGENTS.md) 把它们写进了启动必读,pcc-Python 端口用字面量直接读写它们。
 
-`flags` 的对象语义位定义在 [pcc/py_runtime/src/py_internal.h](../../pcc/py_runtime/src/py_internal.h):
+`flags` 的对象语义位定义在 [pcc/runtime/src/py_internal.h](../../pcc/runtime/src/py_internal.h):
 
 ```c
 #define PY_FLAG_IMMORTAL    0x1
@@ -62,7 +62,7 @@ typedef struct {
 
 - `PY_FLAG_IMMORTAL`:`py_incref`/`py_decref` 对带此位的对象直接返回。`py_None`、`py_True`、`py_False` 以及惰性构造的根类 `object`(`py_class.c` 中的 `object_root()`)都是 immortal 的。
 - `PY_FLAG_GC_TRACKED`:对象已被登记进循环收集器的侧表(`py_obj_gc.c` 中的 `py_gc_track()` 设置)。哪些类型在何时登记属于第 10 章;本章只需要知道实例在 `py_instance_new()` 末尾登记,而**类对象从不登记**——这个事实在 7.3 节会变成一个有意思的位重用。
-- `PY_FLAG_FINALIZED`:终结器(finalizer)`__del__` 已经派发过。[pcc/py_runtime/src/py_dunder.c](../../pcc/py_runtime/src/py_dunder.c) 中的 `py_user_del_dispatch()` 在调用 `__del__` 之前置位;此后即使对象在终结器里复活(resurrection)、引用计数再次归零,第二次 dealloc 也会跳过终结器。这是对象模型为"终结器至多跑一次"付出的一个 bit。
+- `PY_FLAG_FINALIZED`:终结器(finalizer)`__del__` 已经派发过。[pcc/runtime/src/py_dunder.c](../../pcc/runtime/src/py_dunder.c) 中的 `py_user_del_dispatch()` 在调用 `__del__` 之前置位;此后即使对象在终结器里复活(resurrection)、引用计数再次归零,第二次 dealloc 也会跳过终结器。这是对象模型为"终结器至多跑一次"付出的一个 bit。
 
 从 `0x8` 开始的位(`PY_FLAG_GC_WHITE/GRAY/BLACK/PINNED/GC_YOUNG/GC_OLD/...` 直到 `0x10000`)全部属于 GC 后端,留给第 10、11 章。
 
@@ -128,7 +128,7 @@ offset size 字段              语义
 112      8  metaclass         元类(借用)
 ```
 
-四个 `int32` 字段每个后面跟 4 字节填充(下一个 8 字节字段要对齐),而 `instance_size`/`type_tag_alloc` 两个 `int32` 恰好挤进一个 8 字节,使 `del_method` 落在 96——这就是 [AGENTS.md](../../AGENTS.md) 反复强调的三个数:`del_method@96`、`attrs@104`、`metaclass@112`,总 120 字节。pcc-Python 端口 [pcc/py_runtime/py/py_class.py](../../pcc/py_runtime/py/py_class.py) 的模块文档头逐行写着同一张表;那段 docstring 就是这个结构体事实上的跨语言规范(7.5 节)。
+四个 `int32` 字段每个后面跟 4 字节填充(下一个 8 字节字段要对齐),而 `instance_size`/`type_tag_alloc` 两个 `int32` 恰好挤进一个 8 字节,使 `del_method` 落在 96——这就是 [AGENTS.md](../../AGENTS.md) 反复强调的三个数:`del_method@96`、`attrs@104`、`metaclass@112`,总 120 字节。pcc-Python 端口 [pcc/runtime/py/py_class.py](../../pcc/runtime/py/py_class.py) 的模块文档头逐行写着同一张表;那段 docstring 就是这个结构体事实上的跨语言规范(7.5 节)。
 
 逐字段的设计要点:
 
@@ -138,7 +138,7 @@ offset size 字段              语义
 
 **`del_method`。** 终结器查找在 dealloc 热路径上,所以缓存到固定偏移。历史 C oracle 的 `py_class_new()` 在结尾预填 `py_class_lookup(c, "__del__")`(继承的也能拿到),`py_class_add_method()` 看到 `"__del__"` 时同步更新,而 `py_dunder.c` 的 `py_user_del_dispatch()` 发现槽为空时懒补一次。当前 pcc-Python 生产所有者的 `py_class_new` 不做预填(memset 留 NULL),而是依赖懒补得到同一可观察行为。这是"布局必须逐字节相同,oracle 与生产实现的行为允许不同步调、但必须收敛"的一个干净例子(练习 3)。
 
-**`attrs`:类级变量字典。** 这是布局里最年轻的槽,它的来历是一段三幕剧(7.7 节)。今天的形态:`attrs` 是类**拥有**的字典,存放 `class C: x = 1` 这类类变量以及 `type()` 三参形式的命名空间;[pcc/py_runtime/src/py_class_attrs.c](../../pcc/py_runtime/src/py_class_attrs.c) 顶部注释言明,旧的指针键侧表(`PccClassAttrsNode` 链)已退化为索引,不再拥有字典——把边放进对象本体,移动型收集器才能直接追踪与改写它。类属性读取 `py_class_getattr()` 的顺序是:`__dict__` 特判 → 元类的数据描述符 → 沿 MRO 查每个类的 `attrs` 字典(命中 classmethod 则绑定、命中描述符则调 `__get__`)→ 退到 `py_class_lookup()` 方法表。写入 `py_class_setattr()` 先问元类数据描述符的 `__set__`,否则进本类 `attrs`。
+**`attrs`:类级变量字典。** 这是布局里最年轻的槽,它的来历是一段三幕剧(7.7 节)。今天的形态:`attrs` 是类**拥有**的字典,存放 `class C: x = 1` 这类类变量以及 `type()` 三参形式的命名空间;[pcc/runtime/src/py_class_attrs.c](../../pcc/runtime/src/py_class_attrs.c) 顶部注释言明,旧的指针键侧表(`PccClassAttrsNode` 链)已退化为索引,不再拥有字典——把边放进对象本体,移动型收集器才能直接追踪与改写它。类属性读取 `py_class_getattr()` 的顺序是:`__dict__` 特判 → 元类的数据描述符 → 沿 MRO 查每个类的 `attrs` 字典(命中 classmethod 则绑定、命中描述符则调 `__get__`)→ 退到 `py_class_lookup()` 方法表。写入 `py_class_setattr()` 先问元类数据描述符的 `__set__`,否则进本类 `attrs`。
 
 **`metaclass`。** 借用指针,`py_class_set_metaclass()` 设置。pcc 的元类支持是窄的:元类参与类属性的 get/set/delete 协议(上一段的查找顺序),不参与类创建协议——这是一个如实的"实现到哪了"的边界,不要把它读成完整的 CPython 元类语义。
 
@@ -164,7 +164,7 @@ offset 24   fields[0]          ┐ 声明字段槽:拥有引用,
 
 ### 属性查找的七层
 
-[pcc/py_runtime/src/py_obj_ops_dispatch.c](../../pcc/py_runtime/src/py_obj_ops_dispatch.c) 的 `py_obj_getattr()` 是统一入口:按标签分派,实例标签进 `py_instance_getattr()`,类标签进 `py_class_getattr()`,函数/弱引用/复数/异常各有小特判;全部失败且 TLS 无挂起异常时,`py_obj_missing_attr()` 构造 `AttributeError`——**这就是"object has no attribute X"消息的出生地**。实例路径展开后:
+[pcc/runtime/src/py_obj_ops_dispatch.c](../../pcc/runtime/src/py_obj_ops_dispatch.c) 的 `py_obj_getattr()` 是统一入口:按标签分派,实例标签进 `py_instance_getattr()`,类标签进 `py_class_getattr()`,函数/弱引用/复数/异常各有小特判;全部失败且 TLS 无挂起异常时,`py_obj_missing_attr()` 构造 `AttributeError`——**这就是"object has no attribute X"消息的出生地**。实例路径展开后:
 
 ```text
 py_instance_getattr(inst, name)                    py_class.c
@@ -193,7 +193,7 @@ py_instance_getattr(inst, name)                    py_class.c
 
 ## 7.5 一套布局,一个生产所有者:pcc-Python 与 C oracle 的镜像纪律
 
-pcc 的运行时分层(第 1、14 章)已经把这段生产所有权迁进 pcc-Python:[pcc/py_runtime/py/py_class.py](../../pcc/py_runtime/py/py_class.py) 以 `@c_abi_export("py_class_lookup")` 等修饰导出**同名同 ABI** 的符号,当前生产归档链接 pcc-Python 对象,不把 [pcc/py_runtime/src/py_class.c](../../pcc/py_runtime/src/py_class.c) 当作第二份生产实现。C 结构声明和历史实现仍有两项职责:定义外部 ABI 布局,以及充当迁移期差分 oracle。于是 `PyClassObject` 仍是双方的**公共契约**,但生产所有者只有 pcc-Python。
+pcc 的运行时分层(第 1、14 章)已经把这段生产所有权迁进 pcc-Python:[pcc/runtime/py/py_class.py](../../pcc/runtime/py/py_class.py) 以 `@c_abi_export("py_class_lookup")` 等修饰导出**同名同 ABI** 的符号,当前生产归档链接 pcc-Python 对象,不把 [pcc/runtime/src/py_class.c](../../pcc/runtime/src/py_class.c) 当作第二份生产实现。C 结构声明和历史实现仍有两项职责:定义外部 ABI 布局,以及充当迁移期差分 oracle。于是 `PyClassObject` 仍是双方的**公共契约**,但生产所有者只有 pcc-Python。
 
 端口没有结构体可用,它用原始访存重述布局:
 
@@ -205,7 +205,7 @@ store_ptr(cls, 96, func)          # del_method
 store_ptr(cls, 112, metaclass)    # metaclass
 ```
 
-每个数字字面量都是对 C 结构体的一次盲信。这就是 [AGENTS.md](../../AGENTS.md) 写成铁律的原因:"The pcc-Python mirror in [pcc/py_runtime/py/py_class.py](../../pcc/py_runtime/py/py_class.py) must match the C `PyClassObject` in [pcc/py_runtime/src/py_internal.h](../../pcc/py_runtime/src/py_internal.h) exactly. Layout drift between them is a recurring class of bug."(两者必须精确一致;布局漂移是反复出现的 bug 类。)改 C 结构体而不改端口,不会有编译错误、不会有链接错误——只有运行期某个偏移读出来的"字段"变成了邻居的字节。
+每个数字字面量都是对 C 结构体的一次盲信。这就是 [AGENTS.md](../../AGENTS.md) 写成铁律的原因:"The pcc-Python mirror in [pcc/runtime/py/py_class.py](../../pcc/runtime/py/py_class.py) must match the C `PyClassObject` in [pcc/runtime/src/py_internal.h](../../pcc/runtime/src/py_internal.h) exactly. Layout drift between them is a recurring class of bug."(两者必须精确一致;布局漂移是反复出现的 bug 类。)改 C 结构体而不改端口,不会有编译错误、不会有链接错误——只有运行期某个偏移读出来的"字段"变成了邻居的字节。
 
 读端口还能看到镜像不是转写,而是**同一谓词在另一坐标系里的重述**。C 的 `pointer_can_have_header()` 检查 `bits < 0x1000`、`bits & 0x7`、`bits >> 48`;端口的 `_ptr_can_have_header()` 拿到的是 `untag_int(o)`(指针算术右移一位),于是同样的检查变成 `bits < 2048`、`bits & 3`、`bits >= 2**47`——每个常数都除以二,因为坐标系移了一位。抄错任何一个,谓词就静默放过(或拒绝)一类指针。同样,端口把 `PY_TYPE_CLASS = 10`、120、偏移等常量**内联在使用点**而不是读模块级常量,并在 docstring 里记下 i32/i64 的 ABI 细节:C ABI 的 `int32` 参数在 pcc-Python 里靠 `: int` 注解强制为 i32,函数体内则按 pcc 默认 i64 运算——为避免调用边界的宽度错配,端口宁可内联逻辑也不调带 int 参数的辅助函数。这些都是自举链(第 15 章)真实踩出来的纹理。
 
@@ -271,7 +271,7 @@ pcc 的对象模型由四个相互咬合的决定构成。16 字节对象头(`re
 
 ## 练习
 
-1. **(读源码)** 对照 [pcc/py_runtime/src/py_internal.h](../../pcc/py_runtime/src/py_internal.h) 手算 `PyClassObject` 全部 15 个字段的偏移,标出四处 4 字节填充的位置,验证 120 字节与 `del_method@96/attrs@104/metaclass@112`;再对照 [pcc/py_runtime/py/py_class.py](../../pcc/py_runtime/py/py_class.py) 的 docstring 与代码中的字面量,找出端口读写每个槽的所有位置。
+1. **(读源码)** 对照 [pcc/runtime/src/py_internal.h](../../pcc/runtime/src/py_internal.h) 手算 `PyClassObject` 全部 15 个字段的偏移,标出四处 4 字节填充的位置,验证 120 字节与 `del_method@96/attrs@104/metaclass@112`;再对照 [pcc/runtime/py/py_class.py](../../pcc/runtime/py/py_class.py) 的 docstring 与代码中的字面量,找出端口读写每个槽的所有位置。
 2. **(审计)** `PY_TYPE_VALUEBOX = 200` 落在用户类标签空间内,而 `py_class.c` 的 `g_next_user_tag` 从 104 起单调递增且无避让。第 97 个领到标签的用户类会与之相撞。读 `py_obj_ops_compare.c`、`py_weakref.c`、`py_format.c` 中所有消费 `PY_TYPE_VALUEBOX` 的判断,描述相撞后的可观察症状;给出两种修复(分配器跳号 / 迁移 VALUEBOX 标签)并论证各自对镜像与已发射代码的代价。
 3. **(行为收敛证明)** C oracle 的 `py_class_new()` 预填 `del_method`,pcc-Python 生产实现不预填。借助 `py_user_del_dispatch()` 的懒补逻辑,论证两者对任何用户程序不可区分;再构造一个(只能用运行时内部探针观察到的)差异点,说明为什么"可观察 ABI 等价"是比"逐语句等价"更合理的差分标准。
 4. **(设计权衡)** `PY_CLASS_FLAG_SLOTS_ONLY` 复用了 `PY_FLAG_GC_TRACKED` 的 bit 0x2,安全前提是类对象从不进入 `py_gc_track()`。假设未来要让类对象参与循环收集(例如支持运行期类的卸载),列出这个 bit 复用会以什么症状暴露,并提出迁移方案(提示:`py_internal.h` 的 flags 空间还剩哪些位?端口里有多少处 `flags & 2` 需要同步?)。

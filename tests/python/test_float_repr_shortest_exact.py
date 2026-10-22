@@ -4,7 +4,7 @@ pcc1 printed `4503599627370496.0` (exactly 2**52) as `4503599627370499.9`, and
 `float(str(v))` then gave a third value. The stored double was fine — `int(v)`
 and `v == 2**52` both agreed — so only the decimal *formatting* was wrong.
 
-That single literal is the one `pcc/stdlib/_float_bits.py` scales by to extract
+That single literal is the one `pcc/ir/support/_float_bits.py` scales by to extract
 a mantissa, so a pcc-built compiler inherited the error: `1000.0` came out as
 `0x408F400000000004` instead of `0x408F400000000000`, which needs one extra
 `movk` to materialise. Across 13 numeric/time-formatting functions that is +100
@@ -21,7 +21,7 @@ import textwrap
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 # Values chosen for the ways float formatting breaks, not for coverage volume.
 CASES = [

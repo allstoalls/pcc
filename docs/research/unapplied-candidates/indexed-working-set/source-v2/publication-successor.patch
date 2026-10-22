@@ -1,0 +1,177 @@
+--- a/pcc/frontends/python/pipeline_indexed_handoff.py
++++ b/pcc/frontends/python/pipeline_indexed_handoff.py
+@@ -9,8 +9,6 @@
+ import hashlib
+ import json
+ import os
+-import stat
+-import tempfile
+ 
+ 
+ ENV_REQUEST = "PCC_INDEXED_HANDOFF_REQUEST"
+@@ -81,15 +79,17 @@
+              "noncanonical " + label)
+     # macOS commonly exposes private temporary roots through /var aliases.
+     # Parent aliases are valid; artifact files themselves must not be links.
+-    if os.path.lexists(value):
+-        _require(not stat.S_ISLNK(os.lstat(value).st_mode), "symlink " + label)
++    _require(not os.path.islink(value), "symlink " + label)
+     return value
+ 
+ 
++def _exists(path):
++    return os.path.exists(path) or os.path.islink(path)
++
++
+ def _regular(path):
+-    info = os.lstat(path)
+-    _require(stat.S_ISREG(info.st_mode), "not a regular file: " + path)
+-    return info
++    _require(not os.path.islink(path) and os.path.isfile(path),
++             "not a regular file: " + path)
+ 
+ 
+ def _read_bytes(path, limit):
+@@ -136,19 +136,32 @@
+     raw = (json.dumps(value, sort_keys=True, separators=(",", ":"),
+                       allow_nan=False) + "\n").encode("utf-8")
+     _require(len(raw) <= _MAX_JSON_BYTES, "JSON exceeds size limit")
+-    fd, temporary = tempfile.mkstemp(prefix=os.path.basename(path) + ".tmp.",
+-                                     dir=os.path.dirname(path))
++    temporary = path + ".tmp"
++    _path(temporary, "JSON temporary path")
++    if exclusive and _exists(path):
++        raise FileExistsError(path)
++    if not exclusive and _exists(temporary):
++        # A retried phase is the sole writer after its predecessor has retired.
++        _regular(temporary)
++        os.unlink(temporary)
++    created = False
++    published = False
+     try:
+-        with os.fdopen(fd, "wb") as stream:
+-            stream.write(raw)
++        # The fixed exclusive temporary serializes request publishers. A
++        # stale temporary fails closed; a new request needs a fresh IR root.
++        with open(temporary, "xb") as stream:
++            created = True
++            written = stream.write(raw)
++            _require(written == len(raw), "short JSON write")
+             stream.flush()
+-        if exclusive:
+-            # An existing request is never silently repurposed, even if stale.
+-            os.link(temporary, path)
+-        else:
+-            os.replace(temporary, path)
++        if exclusive and _exists(path):
++            raise FileExistsError(path)
++        os.replace(temporary, path)
++        published = True
+     finally:
+-        if os.path.exists(temporary):
++        # After replacement another caller may own the temporary name. Never
++        # remove it once this caller has completed its atomic publication.
++        if created and not published and _exists(temporary):
+             os.unlink(temporary)
+ 
+ 
+@@ -326,7 +339,7 @@
+     # filename on retry so pressure cancellation cannot accumulate PIDX files.
+     temporary = sidecar + ".tmp"
+     _path(temporary, "producer temporary path")
+-    if os.path.lexists(temporary):
++    if _exists(temporary):
+         _regular(temporary)
+         os.unlink(temporary)
+     try:
+@@ -452,7 +465,7 @@
+     request, _seal, _request_digest, _seal_digest, _result = _task_bound(task)
+     for path in (request["output_path"], request["output_path"] + ".tmp", request["receipt_path"]):
+         _path(path, "output reset path")
+-        if os.path.lexists(path):
++        if _exists(path):
+             _regular(path)
+             os.unlink(path)
+ 
+--- a/tests/python/test_pipeline_indexed_handoff.py
++++ b/tests/python/test_pipeline_indexed_handoff.py
+@@ -290,6 +290,79 @@
+             handoff.write_request(str(self.request), self.fields)
+         self.assertEqual(self.request.read_bytes(), original)
+ 
++    def test_exclusive_json_temporary_collision_fails_closed(self):
++        destination = self.ir / "atomic-request.json"
++        temporary = Path(str(destination) + ".tmp")
++        temporary.write_bytes(b"another or interrupted publisher")
++        with self.assertRaises(FileExistsError):
++            handoff._atomic_json(str(destination), {"fixture": True}, exclusive=True)
++        self.assertEqual(temporary.read_bytes(), b"another or interrupted publisher")
++        self.assertFalse(destination.exists())
++
++    def test_exclusive_json_rechecks_destination_before_replace(self):
++        destination = self.ir / "atomic-request.json"
++        temporary = Path(str(destination) + ".tmp")
++
++        class WritingProxy:
++            def __init__(self, stream):
++                self.stream = stream
++
++            def __enter__(self):
++                return self
++
++            def __exit__(self, *args):
++                self.stream.close()
++
++            def write(self, data):
++                count = self.stream.write(data)
++                destination.write_bytes(b"existing request must survive")
++                return count
++
++            def flush(self):
++                self.stream.flush()
++
++        def opening(path, mode):
++            self.assertEqual(path, str(temporary))
++            self.assertEqual(mode, "xb")
++            return WritingProxy(open(path, mode))
++
++        with patch.object(handoff, "open", side_effect=opening, create=True):
++            with self.assertRaises(FileExistsError):
++                handoff._atomic_json(str(destination), {"fixture": True}, exclusive=True)
++        self.assertEqual(destination.read_bytes(), b"existing request must survive")
++        self.assertFalse(temporary.exists())
++
++    def test_failed_atomic_json_replace_leaves_no_partial_destination(self):
++        destination = self.ir / "atomic-request.json"
++        temporary = Path(str(destination) + ".tmp")
++        with patch.object(handoff.os, "replace", side_effect=OSError("injected replace failure")):
++            with self.assertRaises(OSError):
++                handoff._atomic_json(str(destination), {"fixture": True}, exclusive=True)
++        self.assertFalse(destination.exists())
++        self.assertFalse(temporary.exists())
++
++    def test_nonexclusive_receipt_retry_reuses_regular_temp_and_rejects_symlink(self):
++        self.prepare()
++        self.output.write_bytes(b"fake packed object")
++        temporary = Path(str(self.receipt) + ".tmp")
++        temporary.write_bytes(b"interrupted receipt from retired backend")
++        handoff.publish_handoff_result(str(self.request))
++        self.assertFalse(temporary.exists())
++        original = self.receipt.read_bytes()
++        receipt = json.loads(original)
++        self.assertEqual(receipt["backend_token"], _BACKEND_TOKEN)
++        self.assertEqual(receipt["output_sha256"], hashlib.sha256(self.output.read_bytes()).hexdigest())
++        outside = self.root / "preserved-receipt-target.bin"
++        outside.write_bytes(b"preserve outside receipt target")
++        self.symlink(temporary, outside)
++        with self.assertRaisesRegex(ValueError, "symlink"):
++            handoff.publish_handoff_result(str(self.request))
++        self.assertEqual(outside.read_bytes(), b"preserve outside receipt target")
++        self.assertTrue(temporary.is_symlink())
++        self.assertEqual(self.receipt.read_bytes(), original)
++        self.assertTrue(self.sidecar.exists())
++        self.assertTrue(self.seal.exists())
++
+     def test_duplicate_and_oversized_json_rejected(self):
+         self.request.write_text('{"schema":"x","schema":"y"}')
+         with self.assertRaises(ValueError):

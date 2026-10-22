@@ -11,7 +11,7 @@ no-libpython 只排除 CPython 运行时；zero-libc 进一步排除 C 标准库
 | 声明 | 精确含义 | 不能推出 |
 |---|---|---|
 | no-libpython | 工件不链接、不加载 CPython 运行时，严格模式没有 `py_cpy_*` 逃逸 | 不代表没有 libc 或手写 C |
-| pcc-Python-owned runtime | 生产归档成员来自 `pcc/py_runtime/py/*.py` 经 pcc 编译的对象 | 不代表最终可执行文件没有平台动态依赖 |
+| pcc-Python-owned runtime | 生产归档成员来自 `pcc/runtime/py/*.py` 经 pcc 编译的对象 | 不代表最终可执行文件没有平台动态依赖 |
 | Linux zero-libc tracer | 指定 Linux x86_64 tracer 静态链接，无解释器、动态依赖和未定义符号 | 不代表完整 Python 运行时已经 zero-libc |
 | Linux production zero-libc | 受支持的完整静态闭包没有生产 C/libc 对象、`PT_INTERP`、`DT_NEEDED` 或未定义符号 | 不代表 Darwin 也有同一边界 |
 
@@ -61,10 +61,10 @@ C and vendored-libc sources: differential oracle only; not production input
 
 “freestanding”不是“用 Python 语法重写 C”这么简单。这里的模块本身正在实现堆、错误、线程或 GC，因而不能反过来依赖普通 Python 对象、装箱、异常分配或收集器。`__pcc_freestanding__ = True` 让构建和验证器识别这个闭包；`pcc.unsafe` 提供原始指针、固定宽度加载/存储、原子和系统调用；`pcc.extern` 的导出装饰器给产物稳定的 C ABI 名称。
 
-`pcc/py_runtime/py/freestanding_mem_str.py` 中的 `memcpy` 展示了这个子集的形状。它没有创建 `bytes`，也不调用 host `memcpy`：
+`pcc/runtime/py/freestanding_mem_str.py` 中的 `memcpy` 展示了这个子集的形状。它没有创建 `bytes`，也不调用 host `memcpy`：
 
 ```python
-# pcc/py_runtime/py/freestanding_mem_str.py
+# pcc/runtime/py/freestanding_mem_str.py
 @c_abi_export("memcpy")
 def pcc_memcpy(dst, src, size: int) -> c_ptr:
     i: int = 0
@@ -81,7 +81,7 @@ def pcc_memcpy(dst, src, size: int) -> c_ptr:
 生产目标 `libpy_runtime_pcc_py.a` 的输入是两组由 Python 源生成的对象：语义 `PY_MODULES` 和严格 `FREESTANDING_PY_MODULES`。当前 Makefile 的组装规则只归档 `PCC_PY_OBJECTS`，并为每个成员保留 provenance receipt；C 规则仍存在，是为了 host-C oracle、差分测试或其他明确模式，不是这份生产归档的成员来源。
 
 ```makefile
-# pcc/py_runtime/Makefile
+# pcc/runtime/Makefile
 $(LIB_PCC_PY): $(PCC_PY_OBJECTS) $(PCC_PY_RECEIPTS)
 	@set -eu; \
 	rm -f "$@.tmp"; \
@@ -92,12 +92,12 @@ $(LIB_PCC_PY): $(PCC_PY_OBJECTS) $(PCC_PY_RECEIPTS)
 	$(RANLIB) "$@.tmp"; \
 ```
 
-这段配方比“有同名 `.py` 文件”更强。源码所有权、对象成员和 provenance 必须闭合；把 `py_capi_shim.o` 改名成 `py_capi_compat.o` 不能使 C 对象变成 Python 产物。归档来源测试按每个成员是否能映射到 `pcc/py_runtime/py/<stem>.py` 判断，而不是维护一张容易被重命名绕过的黑名单。
+这段配方比“有同名 `.py` 文件”更强。源码所有权、对象成员和 provenance 必须闭合；把 `py_capi_shim.o` 改名成 `py_capi_compat.o` 不能使 C 对象变成 Python 产物。归档来源测试按每个成员是否能映射到 `pcc/runtime/py/<stem>.py` 判断，而不是维护一张容易被重命名绕过的黑名单。
 
 五 GC 是这个迁移最重要的检验。当前生产收集器策略已经分拆为 `freestanding_gc_*` 模块：根注册、帧注册、对象槽访问、标记环、增量/并发调度、分代晋升、转发表和 ZPage 生命周期各有明确所有者。即使哈希索引这种过去被认为应永久留在 C kernel 的设施，也已迁到 `freestanding_gc_index_table.py`；其文件头明确把 `src/py_gc_index_table.c` 定位为差分 oracle。
 
 ```python
-# pcc/py_runtime/py/freestanding_gc_index_table.py
+# pcc/runtime/py/freestanding_gc_index_table.py
 @c_abi_export("pcc_gc_index_py_next_pow2")
 def pcc_gc_index_py_next_pow2(value: int) -> int:
     if value < 8:
@@ -117,7 +117,7 @@ zero-libc 必须带目标平台。Linux x86_64 self 后端可以把受支持的�
 `freestanding_platform_io.py` 让同一 pcc-Python API 在两个目标上保持一致：
 
 ```python
-# pcc/py_runtime/py/freestanding_platform_io.py
+# pcc/runtime/py/freestanding_platform_io.py
 @c_abi_export("pcc_platform_read")
 def pcc_platform_read(fd: int, buffer, size: int) -> int:
     return read(fd, buffer, size)
@@ -133,7 +133,7 @@ def pcc_platform_write(fd: int, buffer, size: int) -> int:
 Linux tracer 把这条路线贯通到进程入口。`freestanding_linux_start.py` 解码内核给 `_start` 的初始栈，写出固定消息并调用 `exit_group`；没有 C/汇编启动对象：
 
 ```python
-# pcc/py_runtime/py/freestanding_linux_start.py
+# pcc/runtime/py/freestanding_linux_start.py
 @c_abi_export("_start")
 def pcc_linux_start(initial_stack: c_ptr) -> None:
     argc: int = load_i64(initial_stack, 0)
@@ -197,7 +197,7 @@ runtime closure:   runtime archive -> pcc-Python owners -> OS boundary
 
 最终 no-C ratchet 曾只断言归档里没有名为 `py_capi_shim.o` 的成员。对象改名为 `py_capi_compat.o` 后，断言变绿，但生产仍含手写 C；更糟的是允许符号表从原记录漂到 19 个全局符号。若把新增符号加入 allowlist，任务会在不改变实现所有权的情况下“完成”。
 
-调查拒绝了这条路，把判断改成来源所有权：每个生产成员必须对应 `pcc/py_runtime/py/<stem>.py`。随后 C-API 家族被拆入 `py_capi_*_runtime.py`，当前生产归档配方不再加入 compat 对象。留下的不变式是：**终点测试应验证所需性质，而不是某个历史文件名。** 对 zero-libc 而言，同理不能只查字符串 `libc.so`；还要审计解释器段、动态依赖、未定义符号和完整 link map。
+调查拒绝了这条路，把判断改成来源所有权：每个生产成员必须对应 `pcc/runtime/py/<stem>.py`。随后 C-API 家族被拆入 `py_capi_*_runtime.py`，当前生产归档配方不再加入 compat 对象。留下的不变式是：**终点测试应验证所需性质，而不是某个历史文件名。** 对 zero-libc 而言，同理不能只查字符串 `libc.so`；还要审计解释器段、动态依赖、未定义符号和完整 link map。
 
 ## 14.8 小结
 
@@ -205,8 +205,8 @@ pcc 的运行时方向已经从“永久保留一个最小 C kernel”变成“�
 
 ## 练习
 
-1. 阅读 [pcc/py_runtime/Makefile](../../pcc/py_runtime/Makefile)，沿 `PCC_PY_OBJECTS`、`PY_MODULES`、`FREESTANDING_PY_MODULES` 和 `LIB_PCC_PY` 画出归档成员来源图。说明为什么保留的 `src/*.c` 规则不等于这些对象进入生产归档。
-2. 阅读 [freestanding_linux_start.py](../../pcc/py_runtime/py/freestanding_linux_start.py) 与 [Linux tracer 证据](../../docs/goal/evidence/2026-08-03-linux-zero-libc-python-start.md)，为“完整运行时 zero-libc”补出 tracer 尚未覆盖的检查清单。
-3. 比较 [freestanding_allocator.py](../../pcc/py_runtime/py/freestanding_allocator.py) 与 `pcc.unsafe.page_alloc/page_free` 的职责。证明 size-class 政策应属于 freestanding 运行时，而页映射应属于机器内建。
+1. 阅读 [pcc/runtime/Makefile](../../pcc/runtime/Makefile)，沿 `PCC_PY_OBJECTS`、`PY_MODULES`、`FREESTANDING_PY_MODULES` 和 `LIB_PCC_PY` 画出归档成员来源图。说明为什么保留的 `src/*.c` 规则不等于这些对象进入生产归档。
+2. 阅读 [freestanding_linux_start.py](../../pcc/runtime/py/freestanding_linux_start.py) 与 [Linux tracer 证据](../../docs/goal/evidence/2026-08-03-linux-zero-libc-python-start.md)，为“完整运行时 zero-libc”补出 tracer 尚未覆盖的检查清单。
+3. 比较 [freestanding_allocator.py](../../pcc/runtime/py/freestanding_allocator.py) 与 `pcc.unsafe.page_alloc/page_free` 的职责。证明 size-class 政策应属于 freestanding 运行时，而页映射应属于机器内建。
 4. 设计一个无法被对象改名绕过的 archive provenance ratchet；要求同时检查来源、成员顺序、C-API inventory 和发布原子性。
 5. 为 Darwin 写一条模式标注的发布声明，枚举它允许的 libSystem 边界，并解释为什么把它称作 zero-libc 会损害后续 Linux 验收。

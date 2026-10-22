@@ -1,6 +1,6 @@
-from pcc.parse.c_parser import CParser
-from pcc.passes import PassContext
-from pcc.passes.ssa_sccp import SSASCCPPass
+from pcc.frontends.c.parse.c_parser import CParser
+from pcc.frontends.c.passes import PassContext
+from pcc.frontends.c.passes.ssa_sccp import SSASCCPPass
 
 
 _PARSER = CParser(lex_optimize=True, yacc_debug=False, yacc_optimize=True)

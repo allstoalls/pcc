@@ -1,0 +1,162 @@
+{
+  "archived_candidate_patch_sha256": "4dd5955455944d3b905fd7f5998ac874fd0b815c22d45af13092f9c582259136",
+  "base_source_commit": "fe054fd02931c1e616a9c287b6d32362290b5e1d",
+  "base_source_tree": "e47b615bf1c0cdc7e56c0925f4cea811aaae4b34",
+  "candidate_leaf_count": 30024,
+  "candidate_packet_manifest_sha256": "21bfafd3b3c6000ab5aa8f96a73d8b0b113a846cf756790cb6460e0bc560832d",
+  "candidate_source_manifest_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "changed_files": [
+    {
+      "bytes": 70692,
+      "path": "pcc/frontends/python/codegen/_l1_codegen_static_methods.py",
+      "sha256": "49d41a9aef23e7c3df10d10d97ef1d2e3d8267fe6a6def75f230a0520942c451"
+    },
+    {
+      "bytes": 102288,
+      "path": "pcc/frontends/python/codegen/call_object_lowering.py",
+      "sha256": "162c0a78aae28546fd4326f870e68295bb7b4c8555fa27ce648e5e17fbcd1bde"
+    },
+    {
+      "bytes": 28255,
+      "path": "pcc/frontends/python/codegen/host_contract.py",
+      "sha256": "23c09a811bf9e82a5804d6296a8662b3250f2464268f65ea2445b394b2d18dae"
+    },
+    {
+      "bytes": 21939,
+      "path": "tests/python/test_slot_call_status_reporting.py",
+      "sha256": "cd8bec179c52c61e6f4e08505298f12b34c3bd79971e8a2bb0cc38ecbf686d5b"
+    },
+    {
+      "bytes": 19407,
+      "path": "tests/python/test_slot_call_status_reporting_native.py",
+      "sha256": "f3915510ed44ed2c5e5f8a73f88b22c004ec11a439bd1c5705b3f6ece420fe65"
+    }
+  ],
+  "date_utc": "2026-10-09",
+  "focused_host_suite": {
+    "errors": 0,
+    "explicit_pytest_options": [
+      "-x",
+      "-n0",
+      "-vv",
+      "--tb=short",
+      "-o",
+      "addopts="
+    ],
+    "failures": 0,
+    "native_artifact_executed": false,
+    "pytest_reported_seconds": 6.22,
+    "scope": [
+      "host export and generated-table consistency",
+      "controlled exception/cleanup IR models",
+      "owned noinline and structural reduction checks",
+      "x86-64/AArch64 caller precise-stackmap checks",
+      "four-target owned in-memory object equality"
+    ],
+    "skipped": 0,
+    "status": "PASS",
+    "test_file": "tests/python/test_slot_call_status_reporting.py",
+    "tests": 64
+  },
+  "host": {
+    "PCC_DISABLE_ROADMAP_DEEPWIRE": "1",
+    "address_space_limit_bytes": 4294967296,
+    "execution": "one host process with process/thread creation disabled; exclusive qualification lock",
+    "gate_wall_limit_seconds": 300,
+    "interpreter_sha256": "56045822d9c10027323c6f24ac5876901915b1c3ff8bfc6591d363c280246c82",
+    "minimum_free_disk_bytes": 4294967296,
+    "native_provisioning": "disabled",
+    "process_limit": 0,
+    "python": "CPython 3.15.0rc1"
+  },
+  "limits": [
+    "Host models do not establish GC/native behavior.",
+    "The structural input has eight real keyword object calls; results are not a full Stage1 measurement.",
+    "The focused suite encodes objects in memory but does not link or execute them."
+  ],
+  "owner_edge_successor_patch_sha256": "43e74045c8305a16caa0c88f4404476f3ce752a5cd8039250534b274212fd4ac",
+  "preservation": {
+    "complete_candidate_byte_and_mode_checks": "PASS before and after execution",
+    "complete_canonical_byte_and_mode_checks": "PASS after both gates",
+    "guard_cleanup": "root reaped, ECHILD and matching primary/fallback receipts",
+    "unexpected_audit_denials": 0
+  },
+  "production_code_base_commit": "818187ba7dfff54df589b93bc10594f87786fe22",
+  "remaining_qualification": {
+    "full_async_gateway_and_runtime_regressions": "UNRUN",
+    "heavy_module_and_stage1_performance": "UNRUN",
+    "native_owner_edge_fixture": "UNRUN",
+    "native_pcc1": "UNRUN",
+    "production_application": "UNAPPLIED",
+    "source_matched_runtime": "UNRUN"
+  },
+  "schema": "pcc.cold-slot-host-qualification.v1",
+  "status": "STRUCTURAL_IR_AND_FOCUSED_HOST_PASS",
+  "structural_probe": {
+    "arms": {
+      "baseline": {
+        "postpasses": {
+          "blocks": 1838,
+          "borrowed_raise_calls": 461,
+          "exception_alloc_calls": 461,
+          "functions": 4,
+          "instructions": 8734,
+          "object_slot_calls": 8,
+          "slot_failure_blocks": 444,
+          "text_bytes": 806260
+        },
+        "postpasses_sha256": "91239bf7cc84321c9691f84fa5bb5e85ce95cb1dd2049f2d92caa73f0897716a",
+        "raw": {
+          "blocks": 2355,
+          "borrowed_raise_calls": 461,
+          "exception_alloc_calls": 461,
+          "functions": 5,
+          "instructions": 12129,
+          "object_slot_calls": 8,
+          "slot_failure_blocks": 444,
+          "text_bytes": 1029936
+        },
+        "raw_sha256": "457820fc80714b234030d6ba34d5d9e61632a31b2bdf0b2fe0d84169625bd9fc"
+      },
+      "candidate": {
+        "postpasses": {
+          "blocks": 1398,
+          "borrowed_raise_calls": 18,
+          "exception_alloc_calls": 18,
+          "functions": 5,
+          "instructions": 6448,
+          "object_slot_calls": 8,
+          "slot_failure_blocks": 444,
+          "text_bytes": 670008
+        },
+        "postpasses_reporter_calls": 444,
+        "postpasses_sha256": "014159d5b272aa0d35e76532b6c0fffe169319578dbfcf616e5ee24d349a337e",
+        "raw": {
+          "blocks": 1471,
+          "borrowed_raise_calls": 18,
+          "exception_alloc_calls": 18,
+          "functions": 6,
+          "instructions": 9215,
+          "object_slot_calls": 8,
+          "slot_failure_blocks": 444,
+          "text_bytes": 866696
+        },
+        "raw_sha256": "09ad46d9a42bced8497f92690df0f49cf471e10d6629f784189084e48d0a1711",
+        "reporter": "pcc_slot_call_status_report.46"
+      }
+    },
+    "driver_sha256": "6999bb1dc82e0a901d49429dba84bc7ed62c7caf254d752f88af45df51ee6b9c",
+    "input_sha256": "cdf682f792d5e2d9f1704a5c07a961a4dee962db71b8553635f8deaf8bff09b5",
+    "ir_payload_sha256": "008eafcfca2b84b05fd4e8d00c6bc260f362d81a45f84741fea719aa16c19536",
+    "measurement": "IR structure counts only; elapsed run time is not a speedup benchmark.",
+    "passes": [
+      "instsimplify",
+      "simplifycfg",
+      "inline",
+      "inline-defined",
+      "dce"
+    ],
+    "reference": "Reviewed former inline status-check method within the same candidate frontend; not a separately built baseline compiler.",
+    "status": "PASS"
+  }
+}

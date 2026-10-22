@@ -5,9 +5,9 @@ import tarfile
 import zipfile
 import pytest
 
-from pcc import cli_bootstrap
+from pcc.driver import cli_bootstrap
 from pcc.package.pip_shim import pip_install_plan
-from pcc.package_schema import declarative_python_source_build
+from pcc.package.schema import declarative_python_source_build
 
 
 def project(tmp_path, *, hook=False, with_c=True):

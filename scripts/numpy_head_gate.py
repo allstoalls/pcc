@@ -40,7 +40,7 @@ from pcc.package.build_exec import (  # noqa: E402
     _redirect_pcc_native_includes,
 )
 from pcc.package.metadata import current_platform_tag  # noqa: E402
-from pcc.package_schema import pcc_native_extension_suffix  # noqa: E402
+from pcc.package.schema import pcc_native_extension_suffix  # noqa: E402
 from scripts.numpy_first_blocker import evaluate_result  # noqa: E402
 
 SCHEMA = "pcc.numpy-head-gate.v1"

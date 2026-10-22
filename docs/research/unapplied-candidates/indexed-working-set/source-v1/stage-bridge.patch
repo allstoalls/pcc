@@ -1,0 +1,1927 @@
+--- a/pcc/backend/self_backend_indexed_emit.py
++++ b/pcc/backend/self_backend_indexed_emit.py
+@@ -59,6 +59,9 @@
+     output_path: str,
+     artifact_kind: str,
+     optimize: bool = False,
++    *,
++    phase_timing=None,
++    handoff_request: str = "",
+ ) -> None:
+     """Decode one frozen pre-stackprep module and atomically publish its PCO."""
+ 
+@@ -66,34 +69,48 @@
+         raise ValueError("indexed module artifact kind must be ASM or PCO")
+     _debug_phase("decode-start")
+     module = decode_indexed_module_file(sidecar_path)
++    if handoff_request:
++        from pcc.frontends.python.pipeline_indexed_handoff import validate_handoff_module
++
++        validate_handoff_module(handoff_request, module)
+     _debug_phase("decode-complete")
+     if is_aarch64_linux_triple(module.triple) or is_x86_64_linux_triple(module.triple) or is_x86_64_windows_triple(module.triple):
+         stack_map_plans = []
+         packed_stack_maps = artifact_kind == "PCO" and is_x86_64_linux_triple(module.triple)
++        phase_started = phase_timing.start() if phase_timing is not None else 0
+         if is_aarch64_linux_triple(module.triple):
+-            assembly = emit_aarch64_darwin_indexed_module(module, optimize=optimize)
++            assembly = emit_aarch64_darwin_indexed_module(
++                module, optimize=optimize, phase_timing=phase_timing,
++            )
+         else:
+             from .self_backend_x86_64_linux import _emit_x86_64_module
+             assembly = _emit_x86_64_module(
+                 "", module=module, windows=is_x86_64_windows_triple(module.triple),
+                 stack_map_plans_out=stack_map_plans if packed_stack_maps else None,
++                phase_timing=phase_timing,
+             )
++        if phase_timing is not None:
++            phase_timing.add(2, phase_started)
+         if artifact_kind == "ASM":
+             payload = assembly.encode("utf-8")
+         elif is_x86_64_windows_triple(module.triple):
+             from .coff_x86_64 import assemble_object
+-            payload = assemble_object(assembly)
++            payload = assemble_object(assembly, phase_timing=phase_timing)
+         else:
+             from .target_objects import encode_assembly_object
+             payload = encode_assembly_object(
+                 assembly, module.triple,
+                 stack_map_plans=stack_map_plans if packed_stack_maps else None,
++                phase_timing=phase_timing,
+             )
+         temporary = output_path + ".tmp"
+         try:
++            phase_started = phase_timing.start() if phase_timing is not None else 0
+             with open(temporary, "wb") as stream:
+                 stream.write(payload)
+             os.replace(temporary, output_path)
++            if phase_timing is not None:
++                phase_timing.add(11, phase_started)
+             _debug_phase("publish-complete")
+         finally:
+             if os.path.exists(temporary):
+@@ -109,15 +126,22 @@
+     _debug_phase("target-complete")
+     temporary = output_path + ".tmp"
+     if artifact_kind == "ASM":
++        phase_started = phase_timing.start() if phase_timing is not None else 0
+         assembly = emit_aarch64_darwin_indexed_module(
+             module,
+             optimize=optimize,
++            phase_timing=phase_timing,
+         )
++        if phase_timing is not None:
++            phase_timing.add(2, phase_started)
+         _debug_phase("assembly-complete")
+         try:
++            phase_started = phase_timing.start() if phase_timing is not None else 0
+             with open(temporary, "w", encoding="utf-8") as stream:
+                 stream.write(assembly)
+             os.replace(temporary, output_path)
++            if phase_timing is not None:
++                phase_timing.add(11, phase_started)
+             _debug_phase("publish-complete")
+         except Exception:
+             try:
+@@ -126,25 +150,38 @@
+                 pass
+             raise
+         return
++    phase_started = phase_timing.start() if phase_timing is not None else 0
+     transport = emit_aarch64_darwin_indexed_transport(
+         module,
+         optimize=optimize,
+         structured_instructions=True,
++        phase_timing=phase_timing,
+     )
++    if phase_timing is not None:
++        phase_timing.add(2, phase_started)
+     _debug_phase("transport-complete")
++    phase_started = phase_timing.start() if phase_timing is not None else 0
+     sections, undefined = transport.assemble_sections()
++    if phase_timing is not None:
++        phase_timing.add(9, phase_started)
+     _debug_phase("assemble-complete")
+     if transport.encoded_line_records is not None:
+         transport.encoded_line_records.close()
++    phase_started = phase_timing.start() if phase_timing is not None else 0
+     encoded = encode_native_object_from_sections(
+         sections,
+         undefined=undefined,
+     )
++    if phase_timing is not None:
++        phase_timing.add(10, phase_started)
+     _debug_phase("encode-complete")
+     try:
++        phase_started = phase_timing.start() if phase_timing is not None else 0
+         with open(temporary, "wb") as stream:
+             stream.write(encoded)
+         os.replace(temporary, output_path)
++        if phase_timing is not None:
++            phase_timing.add(11, phase_started)
+         _debug_phase("publish-complete")
+     except Exception:
+         try:
+--- a/pcc/frontends/python/pipeline.py
++++ b/pcc/frontends/python/pipeline.py
+@@ -1172,8 +1172,51 @@
+     output_path: str,
+     artifact_kind: str,
+ ) -> int:
++    phase_timing = None
++    complete = False
+     try:
+-        _emit_indexed_module_file(sidecar_path, output_path, artifact_kind)
++        handoff_request = str(os.environ.get("PCC_INDEXED_HANDOFF_REQUEST", "") or "")
++        if handoff_request:
++            handoff_started = time.monotonic()
++            from pcc.frontends.python.pipeline_indexed_handoff import (
++                publish_handoff_result, validate_handoff_input,
++            )
++
++            request, _seal = validate_handoff_input(
++                handoff_request, sidecar_path, output_path, artifact_kind,
++            )
++            if _pipeline_frontend_workers.worker_timing_enabled(
++                os.environ.get("PCC_PY_FRONTEND_WORKER_TIMING", ""),
++            ):
++                try:
++                    from pcc.backend.indexed_phase_timing import ModulePhaseTiming
++
++                    phase_timing = ModulePhaseTiming(request["module"])
++                    phase_timing.target = request["target"]
++                    phase_timing.route = "indexed-sidecar-backend"
++                except Exception:
++                    pass
++            _emit_indexed_module_file(
++                sidecar_path, output_path, artifact_kind,
++                phase_timing=phase_timing, handoff_request=handoff_request,
++            )
++            publish_handoff_result(handoff_request)
++            from pcc.frontends.python.worker_resource_plan import publish_worker_resource
++
++            publish_worker_resource("complete")
++            if phase_timing is not None:
++                try:
++                    sys.stderr.write(
++                        "pcc indexed backend worker done index=" + str(request["index"])
++                        + " module=" + request["module"]
++                        + " elapsed_ms=" + str(int((time.monotonic() - handoff_started) * 1000))
++                        + " artifact=PCO\n"
++                    )
++                except Exception:
++                    pass
++        else:
++            _emit_indexed_module_file(sidecar_path, output_path, artifact_kind)
++        complete = True
+         return 0
+     except Exception as exc:
+         sys.stderr.write(
+@@ -1182,6 +1225,9 @@
+             + "\n"
+         )
+         return 1
++    finally:
++        if phase_timing is not None:
++            phase_timing.report(sys.stderr, complete)
+ 
+ 
+ def run_self_backend_emit_batch_worker(manifest_path: str) -> int:
+--- /dev/null
++++ b/pcc/frontends/python/pipeline_frontend_indexed_stage.py
+@@ -0,0 +1,155 @@
++"""Bounded host frontend -> indexed-object process handoffs.
++
++The feature only changes process ownership.  It uses the ordinary frontend,
++post-pass PIDX codec, target emitter, and measured resource admission rules.
++No native fitted memory coefficients or cached historical peaks are used.
++"""
++
++import os
++
++
++HOST_SPLIT_ENV = "PCC_HOST_INDEXED_PROCESS_SPLIT"
++_TRUE = ("1", "true", "yes", "on")
++_FALSE = ("0", "false", "no", "off")
++
++
++def require_host_indexed_split(env, *, checkpoint_root, action_cache_plan,
++                               libpython_mode, artifact_dir):
++    """Fail before building exports when an explicit split cannot be owned."""
++    if checkpoint_root or action_cache_plan is not None:
++        raise ValueError("host indexed process split cannot share a checkpoint or action cache")
++    if libpython_mode != "off" or not artifact_dir:
++        raise ValueError("host indexed process split requires no-libpython and an artifact root")
++    for name in ("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "PCC_DIRECT_INDEXED_KERNEL_EMIT",
++                 "PCC_DIRECT_INDEXED_KERNEL_REQUIRE_ZERO_FALLBACK"):
++        if str(env.get(name, "") or "").strip().lower() not in _TRUE:
++            raise ValueError("host indexed process split requires " + name)
++    for name in ("PCC_DIRECT_INDEXED_KERNEL_VALIDATE", "PCC_TEXT_INDEXED_KERNEL_EMIT",
++                 "PCC_DIRECT_INDEXED_SIDECAR", "PCC_PY_FRONTEND_IN_PROCESS_CODEGEN"):
++        if str(env.get(name, "") or "").strip().lower() in _TRUE:
++            raise ValueError("host indexed process split does not support " + name)
++    if str(env.get("PCC_DIRECT_INDEXED_NATIVE_OBJECT", "1") or "1").strip().lower() in _FALSE:
++        raise ValueError("host indexed process split requires native object output")
++    if str(env.get("PCC_DEFER_FRONTEND_CODEGEN_PLAN", "") or "").strip():
++        raise ValueError("host indexed process split cannot share a native deferred plan")
++    from pcc.frontends.python.pipeline_frontend_workers import worker_tree_budget_bytes
++
++    if worker_tree_budget_bytes(env.get("PCC_WORKER_TREE_BUDGET_BYTES", "")) <= 0:
++        raise ValueError("host indexed process split requires measured tree admission")
++
++
++def run_host_indexed_stage(commands, manifest_paths, result_paths, chunks,
++                           module_names, ir_dir, worker_prefix, jobs,
++                           worker_environment, shell_quote_arg):
++    """Keep at most ``jobs`` not-yet-consumed modules in width fixed chains.
++
++    FE_i -> BE_i -> FE_(i+width).  A dependency is released only after a
++    successful child is reaped, its final RSS/attempt is verified, and its
++    task-owned intermediate is removed.  Cancellation never deletes input.
++    """
++    from pcc.frontends.python.pipeline_frontend_workers import (
++        resource_tasks_for_commands, worker_tree_budget_bytes,
++    )
++    from pcc.frontends.python.pipeline_frontend_worker_execution import _direct_owned_pass_names
++    from pcc.frontends.python.pipeline_indexed_handoff import ENV_REQUEST, write_request
++    from pcc.frontends.python.pipeline_stage1_checkpoint import file_sha256
++    from pcc.frontends.python.pipeline_targets import host_target_triple
++    from pcc.frontends.python.worker_process_pool import run_resource_worker_processes
++    from pcc.frontends.python.worker_resource_plan import resource_task_order
++
++    count = len(commands)
++    if not (len(manifest_paths) == len(result_paths) == len(chunks) == count):
++        raise ValueError("host indexed process split inventory differs")
++    if not count:
++        return
++    if jobs < 1 or any(len(chunk) != 1 for chunk in chunks):
++        raise ValueError("host indexed process split requires positive width and singleton workers")
++    target = host_target_triple()
++    if target == "unknown-unknown-unknown":
++        raise ValueError("host indexed process split requires a concrete host target")
++    frontend_tasks = resource_tasks_for_commands(commands)
++    if frontend_tasks is None or len(frontend_tasks) != count:
++        raise ValueError("host indexed process split requires complete worker resource identities")
++    order, _bands = resource_task_order(frontend_tasks)
++    width = min(jobs, count)
++    all_commands = []
++    all_tasks = []
++    outputs = {}
++    for position, source_position in enumerate(order):
++        index = chunks[source_position][0]
++        if index < 0 or index >= len(module_names) or index in outputs:
++            raise ValueError("host indexed process split module assignment differs")
++        module_name = module_names[index]
++        manifest = os.path.abspath(manifest_paths[source_position])
++        sidecar = os.path.abspath(os.path.join(ir_dir, "module_" + str(index) + ".direct.pidx"))
++        output = os.path.abspath(os.path.join(ir_dir, "module_" + str(index) + ".direct.pco"))
++        request_path = sidecar + ".request.json"
++        task = dict(frontend_tasks[source_position])
++        identity = task["source_identity"]
++        request = {
++            "schema": "pcc.indexed-handoff.request.v1",
++            "manifest_path": manifest,
++            "manifest_sha256": file_sha256(manifest),
++            "source_identity": identity,
++            "index": index,
++            "module": module_name,
++            "target": target,
++            "passes": _direct_owned_pass_names(module_name),
++            "sidecar_path": sidecar,
++            "output_path": output,
++            "seal_path": sidecar + ".seal.json",
++            "receipt_path": output + ".receipt.json",
++        }
++        write_request(request_path, request)
++        task["class"] += "|host-indexed-frontend-v1"
++        task["diagnostic_phase"] = "indexed-frontend"
++        task["depends_on"] = 2 * (position - width) + 1 if position >= width else -1
++        all_commands.append(ENV_REQUEST + "=" + shell_quote_arg(request_path) + " " + commands[source_position])
++        all_tasks.append(task)
++        backend_command = worker_environment + " " + ENV_REQUEST + "=" + shell_quote_arg(request_path)
++        backend_command += " " + " ".join(shell_quote_arg(str(part)) for part in worker_prefix)
++        backend_command += " --pcc-self-backend-indexed-emit-worker "
++        backend_command += " ".join(shell_quote_arg(part) for part in (sidecar, output, "PCO"))
++        all_commands.append(backend_command)
++        all_tasks.append({
++            "class": task["class"] + "|host-indexed-backend-v1|PCO|optimize=0",
++            "inputs": [0] * 47,
++            "estimate_bytes": 0,
++            "report_path": output + ".rss",
++            "depends_on": 2 * position,
++            "restartable": True,
++            "diagnostic_phase": "indexed-backend",
++            "diagnostic_modules": [module_name],
++            "diagnostic_indices": [index],
++            "handoff_request": request_path,
++            "handoff_source_identity": identity,
++            "input_ready": False,
++        })
++        outputs[index] = (sidecar, output)
++    budget = worker_tree_budget_bytes(os.environ.get("PCC_WORKER_TREE_BUDGET_BYTES", ""))
++    run_resource_worker_processes(
++        all_commands, all_tasks, width, budget,
++        trace_path=manifest_paths[0] + ".indexed-stages.tsv",
++    )
++    # Keep the established downstream collector/link API.  No object is
++    # exposed until the complete pool has retired and verified all receipts.
++    for position, result_path in enumerate(result_paths):
++        index = chunks[position][0]
++        sidecar, output = outputs[index]
++        with open(result_path, "r", encoding="utf-8") as stream:
++            rows = stream.read().splitlines()
++        if len(rows) != 1:
++            raise ValueError("host indexed process split requires one result row")
++        fields = rows[0].split("\t")
++        if (len(fields) not in (9, 12) or fields[:3] != ["OK", str(index), module_names[index]]
++                or fields[-2:] != ["PIDX", sidecar] or not os.path.isfile(output)):
++            raise ValueError("host indexed process split result publication differs")
++        fields[-2:] = ["PCO", output]
++        temporary = result_path + ".indexed.tmp"
++        try:
++            with open(temporary, "w", encoding="utf-8") as stream:
++                stream.write("\t".join(fields) + "\n")
++            os.replace(temporary, result_path)
++        finally:
++            if os.path.exists(temporary):
++                os.unlink(temporary)
+--- a/pcc/frontends/python/pipeline_frontend_parallel.py
++++ b/pcc/frontends/python/pipeline_frontend_parallel.py
+@@ -1010,6 +1010,18 @@
+     # A numeric worker count limits concurrency; it must not turn off the
+     # native export/codegen ownership and memory-safe deferred pipeline.
+     native_owned_lanes = compiled_native_worker
++    host_indexed_split = False
++    if not native_owned_lanes and str(
++        os.environ.get("PCC_HOST_INDEXED_PROCESS_SPLIT", "") or ""
++    ).strip().lower() in ("1", "true", "yes", "on"):
++        from pcc.frontends.python.pipeline_frontend_indexed_stage import require_host_indexed_split
++
++        require_host_indexed_split(
++            os.environ, checkpoint_root=checkpoint_root,
++            action_cache_plan=action_cache_plan, libpython_mode=libpython_mode,
++            artifact_dir=artifact_dir,
++        )
++        host_indexed_split = True
+     if checkpoint_root:
+         if (
+             native_owned_lanes
+@@ -1035,6 +1047,8 @@
+     native_auto_source_lanes = auto_source_lanes and compiled_native_worker
+     chunk_count = chunk_count_for_workers(len(src_paths), jobs, worker_prefix)
+     chunks = codegen_chunks(src_paths, chunk_count)
++    if host_indexed_split and any(len(chunk) != 1 for chunk in chunks):
++        raise pipeline_error("host indexed process split requires singleton codegen chunks")
+     # Export startup is amortized over a fixed-size batch, independently of
+     # admission width. Host/native codegen below remains singleton so its
+     # decoded export graph and module-local state have one-module lifetimes.
+@@ -1097,6 +1111,8 @@
+     )
+     with tempfile.TemporaryDirectory(prefix="pcc_frontends_python_workers_") as tmp:
+         ir_dir = artifact_dir if artifact_dir else os.path.join(tmp, "ir")
++        if host_indexed_split:
++            ir_dir = os.path.abspath(ir_dir)
+         os.makedirs(ir_dir, exist_ok=True)
+         # The merged may_park fixed point is a semantic prerequisite for
+         # parallel codegen, so every export worker must publish its lifted AST.
+@@ -1364,6 +1380,8 @@
+             command_parts.append(shell_quote_arg(worker_arg))
+             command_parts.append(shell_quote_arg(manifest_path))
+             command_environment = worker_env_prefix()
++            if host_indexed_split:
++                command_environment += " PCC_DIRECT_INDEXED_SIDECAR=1"
+             if oversized_assembly_handoff and worker_index < oversized_chunk_count:
+                 # The frontend, indexed emitter and assembler have different
+                 # high-water shapes.  Keep the direct indexed emitter here,
+@@ -1466,7 +1484,15 @@
+                 "multi_frontend_codegen_in_process",
+                 1 if in_process_codegen else 0,
+             )
+-            if in_process_codegen:
++            if host_indexed_split:
++                from pcc.frontends.python.pipeline_frontend_indexed_stage import run_host_indexed_stage
++
++                run_host_indexed_stage(
++                    commands, manifest_paths, result_paths, scheduled_chunks,
++                    module_names, ir_dir, worker_prefix, safe_jobs,
++                    worker_env_prefix(), shell_quote_arg,
++                )
++            elif in_process_codegen:
+                 old_native_object = str(
+                     os.environ.get(
+                         "PCC_DIRECT_INDEXED_NATIVE_OBJECT", "1"
+@@ -1505,7 +1531,7 @@
+                     oversized_started,
+                 )
+             safe_commands = commands[oversized_chunk_count:]
+-            if safe_commands and not in_process_codegen:
++            if safe_commands and not in_process_codegen and not host_indexed_split:
+                 safe_started = profile_begin(profile)
+                 run_worker_commands(safe_commands, max_parallel=safe_jobs)
+                 profile_end(
+--- a/pcc/frontends/python/pipeline_frontend_worker_execution.py
++++ b/pcc/frontends/python/pipeline_frontend_worker_execution.py
+@@ -415,6 +415,10 @@
+         indexed_sidecar_requested = str(
+             os.environ.get("PCC_DIRECT_INDEXED_SIDECAR", "") or ""
+         ).strip().lower() in ("1", "true", "yes", "on")
++        handoff_request = str(os.environ.get("PCC_INDEXED_HANDOFF_REQUEST", "") or "")
++        if handoff_request and (native_worker_executable() or not indexed_sidecar_requested
++                                or libpython_mode != "off" or len(assigned_indices) != 1):
++            raise _worker_failure("host indexed handoff requires a host singleton no-libpython sidecar worker")
+         if indexed_sidecar_requested and len(assigned_indices) != 1:
+             raise _worker_failure(
+                 "indexed sidecar output requires a singleton worker manifest"
+@@ -772,7 +776,7 @@
+                                 + direct_libpython_edge
+                             )
+                         if (
+-                            require_zero_direct_fallback
++                            (require_zero_direct_fallback or handoff_request)
+                             and codegen.module._direct_indexed_fallback_records != 0
+                         ):
+                             raise _worker_failure(
+@@ -794,7 +798,36 @@
+                                 ir_dir,
+                                 "module_" + str(index) + ".direct.pidx",
+                             )
+-                            encode_indexed_module_file(direct_path, direct_module)
++                            if handoff_request:
++                                from pcc.frontends.python.pipeline_indexed_handoff import publish_handoff
++
++                                # The indexed module owns its immutable kernels.
++                                # The rendered canonical pass input is retained
++                                # for the ordinary IR/result protocol, but AST,
++                                # frontend owners and their cycles can die now.
++                                phase_started = phase_timing.start() if phase_timing is not None else 0
++                                _release_direct_frontend_state(codegen)
++                                parsed_modules[index] = None
++                                del ast_module
++                                del typed_module
++                                del external_for_this
++                                del codegen_exports
++                                del generated_module
++                                del codegen
++                                import gc
++
++                                gc.collect()
++                                if phase_timing is not None:
++                                    phase_timing.add(1, phase_started)
++                                direct_path = publish_handoff(
++                                    handoff_request, manifest_path, index, module_name,
++                                    direct_module, direct_passes, direct_needs_libpython,
++                                    needs_native_extension_exports, encode_indexed_module_file,
++                                )
++                                del direct_module
++                                publish_worker_resource("indexed-handoff:" + str(index))
++                            else:
++                                encode_indexed_module_file(direct_path, direct_module)
+                             direct_marker = "PIDX"
+                         if (
+                             release_direct_frontend
+@@ -902,7 +935,7 @@
+                                 _freeze_worker_survivors()
+                             if phase_timing is not None:
+                                 phase_timing.add(8, phase_started)
+-                        if worker_timing:
++                        if worker_timing and not handoff_request:
+                             sys.stderr.write(
+                                 "pcc direct indexed emit module="
+                                 + module_name
+@@ -1094,6 +1127,7 @@
+                     + str(infer_ms)
+                     + " codegen_ms="
+                     + str(codegen_ms)
++                    + (" artifact=PIDX" if handoff_request else "")
+                     + "\n"
+                 )
+             if direct_path:
+--- /dev/null
++++ b/pcc/frontends/python/pipeline_indexed_handoff.py
+@@ -0,0 +1,482 @@
++"""Host-only sealed PIDX handoff between retired frontend/backend workers.
++
++This module imports only the standard library. It neither decodes PIDX nor
++projects instructions. The existing codec owns the wire format; its fixed
++arena order is mirrored here solely for a componentwise admission envelope.
++Only the pool retires successful inputs, after the backend process exits.
++"""
++
++import hashlib
++import json
++import os
++import stat
++import tempfile
++
++
++ENV_REQUEST = "PCC_INDEXED_HANDOFF_REQUEST"
++ENV_SEAL = "PCC_INDEXED_HANDOFF_SEAL_SHA256"
++RESOURCE_TOKEN_ENV = "PCC_WORKER_RESOURCE_TOKEN"
++REQUEST_SCHEMA = "pcc.indexed-handoff.request.v1"
++SEAL_SCHEMA = "pcc.indexed-handoff.seal.v1"
++RECEIPT_SCHEMA = "pcc.indexed-handoff.receipt.v1"
++CODEC_SCHEMA = "pcc.self-backend.indexed-module.v1"
++_MAGIC = b"PCCIDXMOD1\n"
++_MAX_JSON_BYTES = 65536
++_MAX_MANIFEST_BYTES = 16 * 1024 * 1024
++_MAX_HEADER_BYTES = 512 * 1024 * 1024
++_ARENA_FIELDS = (
++    "call_scalars", "call_arg_scalars", "block_facts", "instruction_facts",
++    "instruction_kind_ids", "instruction_metadata", "instruction_record_dest_ids",
++    "instruction_record_scalars", "gep_index_scalars", "gep_scalars",
++    "instruction_overflow_use_ids", "terminator_case_scalars", "terminator_scalars",
++    "block_phi_facts", "phi_incoming_scalars", "phi_scalars", "error_edge_scalars",
++    "error_edge_spans", "error_landing_scalars", "value_scalars",
++    "definition_positions", "used_value_ids",
++)
++_REQUEST_KEYS = frozenset((
++    "schema", "manifest_path", "manifest_sha256", "source_identity", "index",
++    "module", "target", "passes", "sidecar_path", "output_path", "seal_path",
++    "receipt_path",
++))
++_SEAL_KEYS = frozenset((
++    "schema", "codec_schema", "request_sha256", "source_identity", "frontend_token",
++    "index", "module", "target", "passes", "needs_libpython", "needs_native_exports",
++    "shape", "pidx_sha256", "pidx_size",
++))
++_RECEIPT_KEYS = frozenset((
++    "schema", "request_sha256", "seal_sha256", "pidx_sha256", "pidx_size",
++    "backend_token", "output_sha256", "output_size",
++))
++
++
++class HandoffError(ValueError):
++    """A private handoff does not match its coordinator-owned request."""
++
++
++def _require(condition, message):
++    if not condition:
++        raise HandoffError("indexed handoff: " + message)
++
++
++def _text(value, label, limit=4096):
++    _require(type(value) is str and 0 < len(value) <= limit
++             and not any(char in value for char in "\x00\r\n\t"), "invalid " + label)
++    return value
++
++
++def _digest(value, label):
++    _require(type(value) is str and len(value) == 64
++             and all(char in "0123456789abcdef" for char in value), "invalid " + label)
++    return value
++
++
++def _integer(value, label):
++    _require(type(value) is int and 0 <= value <= (1 << 63) - 1, "invalid " + label)
++    return value
++
++
++def _path(value, label):
++    _text(value, label)
++    _require(os.path.isabs(value) and os.path.normpath(value) == value,
++             "noncanonical " + label)
++    # macOS commonly exposes private temporary roots through /var aliases.
++    # Parent aliases are valid; artifact files themselves must not be links.
++    if os.path.lexists(value):
++        _require(not stat.S_ISLNK(os.lstat(value).st_mode), "symlink " + label)
++    return value
++
++
++def _regular(path):
++    info = os.lstat(path)
++    _require(stat.S_ISREG(info.st_mode), "not a regular file: " + path)
++    return info
++
++
++def _read_bytes(path, limit):
++    _regular(path)
++    with open(path, "rb") as stream:
++        raw = stream.read(limit + 1)
++    _require(len(raw) <= limit, "file exceeds size limit: " + path)
++    return raw
++
++
++def _hash_file(path):
++    _regular(path)
++    digest = hashlib.sha256()
++    size = 0
++    with open(path, "rb") as stream:
++        while True:
++            chunk = stream.read(1024 * 1024)
++            if not chunk:
++                break
++            digest.update(chunk)
++            size += len(chunk)
++    return digest.hexdigest(), size
++
++
++def _unique_pairs(pairs):
++    result = {}
++    for key, value in pairs:
++        _require(key not in result, "duplicate JSON key")
++        result[key] = value
++    return result
++
++
++def _load_json(path, keys):
++    raw = _read_bytes(path, _MAX_JSON_BYTES)
++    try:
++        value = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_pairs)
++    except (UnicodeError, ValueError) as exc:
++        raise HandoffError("indexed handoff: invalid JSON") from exc
++    _require(type(value) is dict and set(value) == keys, "JSON fields mismatch")
++    return value, hashlib.sha256(raw).hexdigest()
++
++
++def _atomic_json(path, value, exclusive=False):
++    raw = (json.dumps(value, sort_keys=True, separators=(",", ":"),
++                      allow_nan=False) + "\n").encode("utf-8")
++    _require(len(raw) <= _MAX_JSON_BYTES, "JSON exceeds size limit")
++    fd, temporary = tempfile.mkstemp(prefix=os.path.basename(path) + ".tmp.",
++                                     dir=os.path.dirname(path))
++    try:
++        with os.fdopen(fd, "wb") as stream:
++            stream.write(raw)
++            stream.flush()
++        if exclusive:
++            # An existing request is never silently repurposed, even if stale.
++            os.link(temporary, path)
++        else:
++            os.replace(temporary, path)
++    finally:
++        if os.path.exists(temporary):
++            os.unlink(temporary)
++
++
++def _passes(value):
++    _require(type(value) is list and len(value) <= 128, "invalid passes")
++    for name in value:
++        _text(name, "pass name", 128)
++    return value
++
++
++def _manifest(request):
++    path = request["manifest_path"]
++    raw = _read_bytes(path, _MAX_MANIFEST_BYTES)
++    _require(hashlib.sha256(raw).hexdigest() == request["manifest_sha256"],
++             "manifest digest mismatch")
++    try:
++        lines = raw.decode("utf-8").splitlines()
++        _require(len(lines) >= 13
++                 and lines[0] == "pcc.frontends.python.codegen_worker.v4",
++                 "expected singleton v4 manifest")
++        result_path = _path(lines[1], "result path")
++        ir_dir = _path(lines[2], "IR directory")
++        _require(lines[4] == "codegen" and lines[7] == "off",
++                 "expected codegen/off manifest")
++        siblings = int(lines[10])
++        _require(siblings >= 0, "negative sibling count")
++        position = 11 + siblings
++        count = int(lines[position])
++        position += 1
++        _require(0 <= request["index"] < count and count <= len(lines),
++                 "manifest index mismatch")
++        for ordinal in range(count):
++            parts = lines[position + ordinal].split("\t")
++            _require(len(parts) == 3 and parts[0] == str(ordinal),
++                     "manifest module row mismatch")
++            if ordinal == request["index"]:
++                _require(parts[1] == request["module"], "manifest module mismatch")
++        position += count
++        _require(lines[position:] == ["1", str(request["index"])],
++                 "manifest assignment mismatch")
++    except (UnicodeError, IndexError, ValueError) as exc:
++        raise HandoffError("indexed handoff: invalid manifest") from exc
++    _require(os.path.isdir(ir_dir), "IR directory missing")
++    # Results are in the manifest's private coordinator directory. No paths
++    # supplied by a seal or receipt are ever used for filesystem mutations.
++    _require(os.path.dirname(result_path) == os.path.dirname(path),
++             "result outside manifest directory")
++    return ir_dir, result_path
++
++
++def _request(request_path, value=None):
++    _path(request_path, "request path")
++    if value is None:
++        value, digest = _load_json(request_path, _REQUEST_KEYS)
++    else:
++        _require(type(value) is dict and set(value) == _REQUEST_KEYS,
++                 "request fields mismatch")
++        digest = ""
++    _require(value["schema"] == REQUEST_SCHEMA, "request schema mismatch")
++    _digest(value["manifest_sha256"], "manifest digest")
++    _integer(value["index"], "module index")
++    _text(value["source_identity"], "source identity", 16384)
++    _text(value["module"], "module name")
++    _text(value["target"], "target", 256)
++    _require(value["target"] != "unknown-unknown-unknown", "unresolved target")
++    _passes(value["passes"])
++    for name in ("manifest_path", "sidecar_path", "output_path", "seal_path", "receipt_path"):
++        _path(value[name], name)
++    ir_dir, result_path = _manifest(value)
++    stem = os.path.join(ir_dir, "module_" + str(value["index"]) + ".direct")
++    _require(value["sidecar_path"] == stem + ".pidx"
++             and value["output_path"] == stem + ".pco"
++             and value["seal_path"] == stem + ".pidx.seal.json"
++             and value["receipt_path"] == stem + ".pco.receipt.json"
++             and request_path == stem + ".pidx.request.json", "artifact path mismatch")
++    for path in (request_path, value["sidecar_path"], value["output_path"],
++                 value["seal_path"], value["receipt_path"]):
++        _require(os.path.dirname(os.path.realpath(path)) == os.path.realpath(ir_dir),
++                 "artifact outside owned IR directory")
++    return value, digest, result_path
++
++
++def write_request(request_path, fields):
++    """Publish one immutable coordinator request in a fresh private IR root."""
++    request, _digest_value, _result = _request(request_path, fields)
++    _atomic_json(request_path, request, exclusive=True)
++
++
++def _header_size(path):
++    _regular(path)
++    with open(path, "rb") as stream:
++        _require(stream.read(len(_MAGIC)) == _MAGIC, "PIDX magic mismatch")
++        line = stream.readline(32)
++    _require(line.endswith(b"\n") and line[:-1].isdigit(), "PIDX header length invalid")
++    size = int(line[:-1])
++    _require(str(size).encode("ascii") + b"\n" == line
++             and 0 < size <= _MAX_HEADER_BYTES, "PIDX header length invalid")
++    return size, len(_MAGIC) + len(line)
++
++
++def _shape(module, header_bytes):
++    functions = module.functions
++    shape = [header_bytes, len(functions), len(module.globals_)]
++    for field in _ARENA_FIELDS:
++        total, largest = 0, 0
++        for function in functions:
++            kernel = function.indexed_kernel
++            _require(kernel is not None, "function has no published indexed kernel")
++            count = len(getattr(kernel, field))
++            total += count
++            largest = max(largest, count)
++        shape.extend((total, largest))
++    _validate_shape(shape)
++    return shape
++
++
++def _validate_shape(shape):
++    _require(type(shape) is list and len(shape) == 3 + 2 * len(_ARENA_FIELDS),
++             "shape dimension mismatch")
++    for value in shape:
++        _integer(value, "shape component")
++    _require(0 < shape[0] <= _MAX_HEADER_BYTES, "shape header invalid")
++    for position in range(3, len(shape), 2):
++        total, largest = shape[position:position + 2]
++        _require(largest <= total <= largest * shape[1], "shape arena bounds mismatch")
++
++
++def _verify_input(request, seal):
++    digest, size = _hash_file(request["sidecar_path"])
++    _require(digest == seal["pidx_sha256"] and size == seal["pidx_size"],
++             "PIDX digest/size mismatch")
++    header, prefix = _header_size(request["sidecar_path"])
++    _require(header == seal["shape"][0]
++             and prefix + header + 8 * sum(seal["shape"][3::2]) == size,
++             "PIDX shape/size mismatch")
++
++
++def _bound(request_path, verify_input=True):
++    request, request_digest, result_path = _request(request_path)
++    seal, seal_digest = _load_json(request["seal_path"], _SEAL_KEYS)
++    _require(seal["schema"] == SEAL_SCHEMA and seal["codec_schema"] == CODEC_SCHEMA,
++             "seal schema mismatch")
++    _require(seal["request_sha256"] == request_digest
++             and seal["source_identity"] == request["source_identity"],
++             "seal request/source mismatch")
++    for name in ("index", "module", "target", "passes"):
++        _require(type(seal[name]) is type(request[name])
++                 and seal[name] == request[name], "seal " + name + " mismatch")
++    _digest(seal["frontend_token"], "frontend token")
++    _digest(seal["pidx_sha256"], "PIDX digest")
++    _integer(seal["pidx_size"], "PIDX size")
++    _require(type(seal["needs_libpython"]) is bool and not seal["needs_libpython"]
++             and type(seal["needs_native_exports"]) is bool, "seal flags mismatch")
++    _validate_shape(seal["shape"])
++    if verify_input:
++        _verify_input(request, seal)
++    return request, seal, request_digest, seal_digest, result_path
++
++
++def publish_handoff(request_path, manifest_path, index, module, direct_module,
++                    passes, needs_libpython, needs_native_exports, encode_callback):
++    """Encode the retained direct module only after frontend owners are released."""
++    request, request_digest, _result = _request(request_path)
++    _require(manifest_path == request["manifest_path"]
++             and type(index) is int and index == request["index"]
++             and module == request["module"], "producer ownership mismatch")
++    _require(direct_module.triple == request["target"]
++             and type(passes) is list and passes == request["passes"],
++             "producer target/passes mismatch")
++    _require(type(needs_libpython) is bool and not needs_libpython
++             and type(needs_native_exports) is bool, "producer flags mismatch")
++    token = _digest(os.environ.get(RESOURCE_TOKEN_ENV, ""), "frontend token")
++    sidecar = request["sidecar_path"]
++    # A killed frontend may leave a partial payload. Reuse this one owned
++    # filename on retry so pressure cancellation cannot accumulate PIDX files.
++    temporary = sidecar + ".tmp"
++    _path(temporary, "producer temporary path")
++    if os.path.lexists(temporary):
++        _regular(temporary)
++        os.unlink(temporary)
++    try:
++        encode_callback(temporary, direct_module)
++        header_bytes, prefix_bytes = _header_size(temporary)
++        shape = _shape(direct_module, header_bytes)
++        pidx_digest, pidx_size = _hash_file(temporary)
++        _require(prefix_bytes + header_bytes + 8 * sum(shape[3::2]) == pidx_size,
++                 "encoded PIDX size does not match kernel shape")
++        os.replace(temporary, sidecar)
++        seal = {
++            "schema": SEAL_SCHEMA, "codec_schema": CODEC_SCHEMA,
++            "request_sha256": request_digest, "source_identity": request["source_identity"],
++            "frontend_token": token, "index": index, "module": module,
++            "target": direct_module.triple, "passes": list(passes),
++            "needs_libpython": needs_libpython, "needs_native_exports": needs_native_exports,
++            "shape": shape, "pidx_sha256": pidx_digest, "pidx_size": pidx_size,
++        }
++        _atomic_json(request["seal_path"], seal)
++    finally:
++        if os.path.exists(temporary):
++            os.unlink(temporary)
++    return sidecar
++
++
++def _validate_result(request, seal, path):
++    try:
++        rows = _read_bytes(path, _MAX_JSON_BYTES).decode("utf-8").splitlines()
++        _require(len(rows) == 1, "expected one frontend result row")
++        parts = rows[0].split("\t")
++        _require(len(parts) in (9, 12), "frontend result fields mismatch")
++        marker = 7 if len(parts) == 9 else 10
++        expected_ir = os.path.join(os.path.dirname(request["sidecar_path"]),
++                                   "module_" + str(request["index"]) + ".ll")
++        _require(parts[:5] == ["OK", str(request["index"]), request["module"], "0",
++                               "1" if seal["needs_native_exports"] else "0"]
++                 and parts[6] == expected_ir
++                 and parts[marker:] == ["PIDX", request["sidecar_path"]],
++                 "frontend result binding mismatch")
++        for value in [parts[5]] + parts[7:marker]:
++            _require(value.isascii() and value.isdigit() and int(value) >= 0,
++                     "frontend result count/timing mismatch")
++    except UnicodeError as exc:
++        raise HandoffError("indexed handoff: invalid frontend result") from exc
++
++
++def _task_bound(task):
++    _require(type(task.get("depends_on")) is int and task["depends_on"] >= 0,
++             "backend task has no frontend dependency")
++    request, seal, request_digest, seal_digest, result_path = _bound(task["handoff_request"])
++    _require(task.get("handoff_source_identity") == request["source_identity"],
++             "task source identity mismatch")
++    if task.get("input_ready", False):
++        _require(task.get("source_identity") == seal["pidx_sha256"]
++                 and task.get("handoff_seal_sha256") == seal_digest
++                 and task.get("inputs") == seal["shape"], "prepared task binding mismatch")
++    return request, seal, request_digest, seal_digest, result_path
++
++
++def prepare_handoff_task(task, expected_frontend_token):
++    """Install the actual kernel envelope after the frontend has fully retired."""
++    _digest(expected_frontend_token, "expected frontend token")
++    request, seal, _request_digest, seal_digest, result_path = _task_bound(task)
++    _require(seal["frontend_token"] == expected_frontend_token, "stale frontend token")
++    _validate_result(request, seal, result_path)
++    base = task.get("handoff_base_class", task["class"])
++    _text(base, "backend base class", 32768)
++    execution_class = base + "|indexed-handoff|" + json.dumps(
++        [SEAL_SCHEMA, CODEC_SCHEMA, request["target"], request["passes"]],
++        separators=(",", ":"),
++    )
++    _require(task["class"] in (base, execution_class), "backend class mismatch")
++    task["handoff_base_class"] = base
++    task["class"] = execution_class
++    task["inputs"] = list(seal["shape"])
++    task["source_identity"] = seal["pidx_sha256"]
++    task["handoff_seal_sha256"] = seal_digest
++    task["input_ready"] = True
++
++
++def _environment_seal(seal_digest):
++    _require(_digest(os.environ.get(ENV_SEAL, ""), "environment seal digest") == seal_digest,
++             "backend seal digest mismatch")
++
++
++def validate_handoff_input(request_path, sidecar_path, output_path, artifact_kind):
++    """Validate the pool-pinned capsule before the existing decoder runs."""
++    request, seal, _request_digest, seal_digest, _result = _bound(request_path)
++    _environment_seal(seal_digest)
++    _require(artifact_kind == "PCO" and sidecar_path == request["sidecar_path"]
++             and output_path == request["output_path"], "backend artifact binding mismatch")
++    return request, seal
++
++
++def validate_handoff_module(request_path, module):
++    """Compare the already decoded module; never decode or project it again."""
++    request, seal, _request_digest, seal_digest, _result = _bound(request_path, verify_input=False)
++    _environment_seal(seal_digest)
++    _require(module.triple == request["target"]
++             and _shape(module, seal["shape"][0]) == seal["shape"],
++             "decoded module target/shape mismatch")
++
++
++def publish_handoff_result(request_path):
++    """Write a receipt after the emitter's existing atomic PCO publication."""
++    request, seal, request_digest, seal_digest, _result = _bound(request_path)
++    _environment_seal(seal_digest)
++    token = _digest(os.environ.get(RESOURCE_TOKEN_ENV, ""), "backend token")
++    output_digest, output_size = _hash_file(request["output_path"])
++    _require(output_size > 0, "empty backend output")
++    receipt = {
++        "schema": RECEIPT_SCHEMA, "request_sha256": request_digest,
++        "seal_sha256": seal_digest, "pidx_sha256": seal["pidx_sha256"],
++        "pidx_size": seal["pidx_size"], "backend_token": token,
++        "output_sha256": output_digest, "output_size": output_size,
++    }
++    _atomic_json(request["receipt_path"], receipt)
++
++
++def reset_handoff_output(task):
++    """Reset only this attempt's exact outputs; preserve cancelled PIDX input."""
++    _require(task.get("input_ready") is True, "backend task input is not prepared")
++    request, _seal, _request_digest, _seal_digest, _result = _task_bound(task)
++    for path in (request["output_path"], request["output_path"] + ".tmp", request["receipt_path"]):
++        _path(path, "output reset path")
++        if os.path.lexists(path):
++            _regular(path)
++            os.unlink(path)
++
++
++def retire_handoff_task(task, expected_backend_token):
++    """Pool-only: validate a successful exited attempt, then retire its input."""
++    _digest(expected_backend_token, "expected backend token")
++    _require(task.get("input_ready") is True, "backend task input is not prepared")
++    request, seal, request_digest, seal_digest, _result = _task_bound(task)
++    receipt, _receipt_digest = _load_json(request["receipt_path"], _RECEIPT_KEYS)
++    _require(receipt["schema"] == RECEIPT_SCHEMA
++             and receipt["request_sha256"] == request_digest
++             and receipt["seal_sha256"] == seal_digest
++             and receipt["pidx_sha256"] == seal["pidx_sha256"]
++             and type(receipt["pidx_size"]) is int
++             and receipt["pidx_size"] == seal["pidx_size"]
++             and receipt["backend_token"] == expected_backend_token,
++             "backend receipt binding/token mismatch")
++    _digest(receipt["output_sha256"], "output digest")
++    _integer(receipt["output_size"], "output size")
++    output_digest, output_size = _hash_file(request["output_path"])
++    _require(output_size > 0 and output_digest == receipt["output_sha256"]
++             and output_size == receipt["output_size"], "backend output digest/size mismatch")
++    # Requests, receipts, and outputs remain. Only coordinator-validated fixed
++    # input names are retired, and only after every check above has passed.
++    os.unlink(request["sidecar_path"])
++    os.unlink(request["seal_path"])
+--- a/pcc/frontends/python/worker_process_pool.py
++++ b/pcc/frontends/python/worker_process_pool.py
+@@ -155,7 +155,7 @@
+             + " peak_bytes=" + str(peak)
+             + " monotonic_s=" + str(time.monotonic())
+             + " input_count=" + str(len(inputs))
+-            + " inputs=" + repr(inputs[:8])
++            + " inputs=" + repr(inputs[:47] if task.get("handoff_request", "") else inputs[:8])
+             + " class_sha256=" + class_digest
+             + " cohort=" + str(cohort) + "\n"
+         )
+@@ -204,6 +204,7 @@
+     attempt_tokens = {}
+     retries = [0 for _task in tasks]
+     completed = set()
++    completed_tokens = {}
+     unavailable_since = time.monotonic()
+     fresh_after = unavailable_since
+     preflight_done = False
+@@ -241,7 +242,12 @@
+                 _resource_event(trace_path, "retire", index, pid, reservation, 0, observed_peak)
+                 _resource_diagnostic(tasks[index], "retire", index, pid, reservation, 0, observed_peak,
+                                          bands[index] if bands else -1)
++                if tasks[index].get("handoff_request", ""):
++                    from pcc.frontends.python.pipeline_indexed_handoff import retire_handoff_task
++
++                    retire_handoff_task(tasks[index], attempt_tokens[pid])
+                 observations.append((tasks[index]["class"], tasks[index]["inputs"], observed_peak))
++                completed_tokens[index] = attempt_tokens[pid]
+                 if tasks[index].get("retry_calibration", False):
+                     tasks[index]["retry_calibration"] = False
+                 completed.add(index)
+@@ -360,6 +366,10 @@
+                     dependency = tasks[item].get("depends_on", -1)
+                     if dependency >= 0 and dependency not in completed:
+                         continue
++                    if tasks[item].get("handoff_request", "") and not tasks[item].get("input_ready", False):
++                        from pcc.frontends.python.pipeline_indexed_handoff import prepare_handoff_task
++
++                        prepare_handoff_task(tasks[item], completed_tokens[dependency])
+                     input_path = str(tasks[item].get("input_path", "") or "")
+                     if input_path and not tasks[item].get("input_ready", False):
+                         with open(input_path, "rb") as stream:
+@@ -407,6 +417,12 @@
+                 argv, vector = specs[index]
+                 vector = [entry for entry in vector if not entry.startswith(RESOURCE_TOKEN_ENV + "=")]
+                 vector.append(RESOURCE_TOKEN_ENV + "=" + token)
++                if tasks[index].get("handoff_request", ""):
++                    from pcc.frontends.python.pipeline_indexed_handoff import ENV_SEAL, reset_handoff_output
++
++                    reset_handoff_output(tasks[index])
++                    vector = [entry for entry in vector if not entry.startswith(ENV_SEAL + "=")]
++                    vector.append(ENV_SEAL + "=" + tasks[index]["handoff_seal_sha256"])
+                 specs[index] = (argv, vector)
+                 pid = _start_resource_worker(specs, index)
+                 if pid <= 0:
+--- /dev/null
++++ b/tests/python/test_host_indexed_process_split.py
+@@ -0,0 +1,426 @@
++"""Mock-only contracts for the bounded host indexed-process split.
++
++These tests do not launch children or invoke a compiler. Integration/parity
++qualification remains separate from these coordinator lifecycle contracts.
++"""
++
++from pathlib import Path
++import shlex
++import subprocess
++
++import pytest
++
++from pcc.frontends.python import pipeline_frontend_indexed_stage as stage
++from pcc.frontends.python import pipeline_frontend_worker_execution as execution
++from pcc.frontends.python import pipeline_frontend_workers as workers
++from pcc.frontends.python import pipeline_indexed_handoff as handoff
++from pcc.frontends.python import pipeline_targets as targets
++from pcc.frontends.python import worker_process_pool as pool
++from pcc.frontends.python import worker_resource_plan as policy
++
++
++MIB = 1024 * 1024
++
++
++def _enabled_environment():
++    return {
++        "PCC_DIRECT_INDEXED_KERNEL_CAPTURE": "1",
++        "PCC_DIRECT_INDEXED_KERNEL_EMIT": "1",
++        "PCC_DIRECT_INDEXED_KERNEL_REQUIRE_ZERO_FALLBACK": "1",
++        "PCC_DIRECT_INDEXED_KERNEL_RELEASE_FRONTEND": "1",
++        "PCC_WORKER_TREE_BUDGET_BYTES": str(512 * MIB),
++    }
++
++
++def _require(env, **changes):
++    options = dict(checkpoint_root="", action_cache_plan=None,
++                   libpython_mode="off", artifact_dir="/private/artifacts")
++    options.update(changes)
++    stage.require_host_indexed_split(env, **options)
++
++
++def test_host_split_requires_explicit_zero_fallback():
++    env = _enabled_environment()
++    _require(env)
++    for value in ("", "0", "off"):
++        env["PCC_DIRECT_INDEXED_KERNEL_REQUIRE_ZERO_FALLBACK"] = value
++        with pytest.raises(ValueError, match="ZERO_FALLBACK|zero.fallback"):
++            _require(env)
++
++
++@pytest.mark.parametrize("name,value", (
++    ("PCC_DIRECT_INDEXED_KERNEL_VALIDATE", "1"),
++    ("PCC_TEXT_INDEXED_KERNEL_EMIT", "1"),
++    ("PCC_DIRECT_INDEXED_SIDECAR", "1"),
++    ("PCC_PY_FRONTEND_IN_PROCESS_CODEGEN", "1"),
++    ("PCC_DIRECT_INDEXED_NATIVE_OBJECT", "0"),
++    ("PCC_DEFER_FRONTEND_CODEGEN_PLAN", "/private/plan"),
++    ("PCC_WORKER_TREE_BUDGET_BYTES", "0"),
++))
++def test_host_split_rejects_incompatible_routes(name, value):
++    env = _enabled_environment()
++    env[name] = value
++    with pytest.raises(ValueError):
++        _require(env)
++
++
++@pytest.mark.parametrize("changes", (
++    {"checkpoint_root": "/private/checkpoint"},
++    {"action_cache_plan": {}},
++    {"libpython_mode": "on"},
++    {"artifact_dir": ""},
++))
++def test_host_split_rejects_incompatible_frontend_contracts(changes):
++    with pytest.raises(ValueError):
++        _require(_enabled_environment(), **changes)
++
++
++def _stage_fixture(tmp_path, monkeypatch, count=5, order=None):
++    root = tmp_path.resolve()
++    ir_dir = root / "ir"
++    ir_dir.mkdir()
++    manifests, results, commands, names, chunks, frontend_tasks = [], [], [], [], [], []
++    for index in range(count):
++        manifest = root / ("worker_" + str(index) + ".manifest")
++        manifest.write_text("manifest " + str(index), encoding="utf-8")
++        result = root / ("worker_" + str(index) + ".tsv")
++        sidecar = ir_dir / ("module_" + str(index) + ".direct.pidx")
++        ir_path = ir_dir / ("module_" + str(index) + ".ll")
++        name = "fixture.module_" + str(index)
++        result.write_text("\t".join(("OK", str(index), name, "0", "0", "0",
++                                    str(ir_path), "PIDX", str(sidecar))) + "\n",
++                          encoding="utf-8")
++        manifests.append(str(manifest))
++        results.append(str(result))
++        commands.append("fixture-frontend " + str(index))
++        names.append(name)
++        chunks.append([index])
++        frontend_tasks.append({
++            "class": "host-source-owner", "inputs": [index + 1] * 6,
++            "estimate_bytes": 0, "source_identity": "identity-" + str(index),
++            "report_path": str(manifest) + ".rss", "restartable": True,
++            "diagnostic_phase": "codegen", "diagnostic_modules": [name],
++            "diagnostic_indices": [index],
++        })
++    planned_order = list(range(count)) if order is None else list(order)
++    requests = {}
++    monkeypatch.setattr(workers, "resource_tasks_for_commands",
++                        lambda actual: [dict(item) for item in frontend_tasks])
++    monkeypatch.setattr(policy, "resource_task_order", lambda tasks: (planned_order, []))
++    monkeypatch.setattr(execution, "_direct_owned_pass_names", lambda name: ["mem2reg"])
++    monkeypatch.setattr(targets, "host_target_triple", lambda: "arm64-apple-darwin")
++    monkeypatch.setattr(handoff, "write_request",
++                        lambda path, fields: requests.update({path: dict(fields)}))
++    monkeypatch.setenv("PCC_WORKER_TREE_BUDGET_BYTES", str(512 * MIB))
++    return dict(commands=commands, manifests=manifests, results=results,
++                chunks=chunks, names=names, ir_dir=str(ir_dir), requests=requests,
++                frontend_tasks=frontend_tasks, order=planned_order)
++
++
++def _run_stage(fixture, width):
++    stage.run_host_indexed_stage(
++        fixture["commands"], fixture["manifests"], fixture["results"],
++        fixture["chunks"], fixture["names"], fixture["ir_dir"],
++        ["host-python", "-m", "pcc"], width, "FIXTURE_MODE=host", shlex.quote,
++    )
++
++
++def test_stage_plan_preserves_module_identity_and_bounds_handoff_chains(tmp_path, monkeypatch):
++    fixture = _stage_fixture(tmp_path, monkeypatch, order=[3, 1, 4, 0, 2])
++    captured = {}
++
++    def capture(commands, tasks, width, budget, **kwargs):
++        captured.update(commands=commands, tasks=tasks, width=width, budget=budget)
++        for request in fixture["requests"].values():
++            Path(request["output_path"]).write_bytes(b"mock packed object")
++
++    monkeypatch.setattr(pool, "run_resource_worker_processes", capture)
++    _run_stage(fixture, 2)
++    assert captured["width"] == 2
++    assert captured["budget"] == 512 * MIB
++    assert len(captured["commands"]) == len(captured["tasks"]) == 10
++    tasks = captured["tasks"]
++    for position, original_index in enumerate(fixture["order"]):
++        frontend, backend = tasks[2 * position:2 * position + 2]
++        assert frontend["diagnostic_indices"] == backend["diagnostic_indices"] == [original_index]
++        assert frontend["depends_on"] == (2 * (position - 2) + 1 if position >= 2 else -1)
++        assert backend["depends_on"] == 2 * position
++        assert frontend["source_identity"] == "identity-" + str(original_index)
++        assert backend["handoff_source_identity"] == frontend["source_identity"]
++        assert backend["inputs"] == [0] * 47
++        assert backend["estimate_bytes"] == 0
++        assert "input_cost" not in backend
++        request = fixture["requests"][backend["handoff_request"]]
++        assert request["index"] == original_index
++        assert request["passes"] == ["mem2reg"]
++        assert request["target"] == "arm64-apple-darwin"
++        assert fixture["commands"][original_index] in captured["commands"][2 * position]
++        assert "--pcc-self-backend-indexed-emit-worker" in captured["commands"][2 * position + 1]
++    # Every residue class is exactly FE -> BE -> next FE, not an all-FE barrier.
++    for lane in range(2):
++        chain = [value for position in range(lane, 5, 2)
++                 for value in (2 * position, 2 * position + 1)]
++        assert tasks[chain[0]]["depends_on"] == -1
++        for previous, current in zip(chain, chain[1:]):
++            assert tasks[current]["depends_on"] == previous
++    for index, path in enumerate(fixture["results"]):
++        fields = Path(path).read_text(encoding="utf-8").strip().split("\t")
++        assert fields[:3] == ["OK", str(index), fixture["names"][index]]
++        assert fields[-2:] == ["PCO", str(Path(fixture["ir_dir"]) /
++                                            ("module_" + str(index) + ".direct.pco"))]
++
++
++def test_stage_does_not_accept_missing_backend_output(tmp_path, monkeypatch):
++    fixture = _stage_fixture(tmp_path, monkeypatch, count=1)
++    monkeypatch.setattr(pool, "run_resource_worker_processes", lambda *args, **kwargs: None)
++    with pytest.raises(ValueError, match="publication differs"):
++        _run_stage(fixture, 1)
++    assert "\tPIDX\t" in Path(fixture["results"][0]).read_text(encoding="utf-8")
++
++
++def _mock_lifecycle(tmp_path, monkeypatch, *, backend_exit=0, cleanup_error=False,
++                    backend_report="complete"):
++    events = []
++    tokens, task_by_pid = {}, {}
++    sidecar = tmp_path / "module.direct.pidx"
++    sidecar.write_bytes(b"sealed input")
++    tasks = [
++        {"class": "frontend", "inputs": [1], "estimate_bytes": 0,
++         "report_path": str(tmp_path / "fe.rss"), "restartable": True},
++        {"class": "backend", "inputs": [0] * 47, "estimate_bytes": 0,
++         "report_path": str(tmp_path / "be.rss"), "restartable": True,
++         "depends_on": 0, "handoff_request": "coordinator-request", "input_ready": False},
++        {"class": "frontend", "inputs": [1], "estimate_bytes": 0,
++         "report_path": str(tmp_path / "next.rss"), "restartable": True, "depends_on": 1},
++    ]
++    monkeypatch.delenv(policy.TREE_STATE_ENV, raising=False)
++    monkeypatch.delenv("PCC_PY_FRONTEND_WORKER_TIMING", raising=False)
++    monkeypatch.setattr(workers, "_coordinator_rss_bytes", lambda: MIB)
++    monkeypatch.setattr(policy, "resource_task_order", lambda actual: ([0, 1, 2], []))
++    monkeypatch.setattr(pool, "_command_spec", lambda command: (["mock-worker"], []))
++    monkeypatch.setattr(pool.time, "sleep", lambda seconds: None)
++
++    def start(specs, index):
++        pid = 5000 + index
++        env = dict(entry.split("=", 1) for entry in specs[index][1])
++        tokens[index] = env[policy.RESOURCE_TOKEN_ENV]
++        task_by_pid[pid] = index
++        if index == 1:
++            assert sidecar.exists()
++            assert env[handoff.ENV_SEAL] == "a" * 64
++        if index == 2:
++            assert not sidecar.exists()
++            assert ("cleanup", tokens[1]) in events
++        events.append(("start", index))
++        return pid
++
++    def poll(pid):
++        index = task_by_pid[pid]
++        events.append(("poll", index))
++        return backend_exit if index == 1 else 0
++
++    def read(path, pid, token=""):
++        index = task_by_pid[pid]
++        assert token == tokens[index]
++        events.append(("report", index))
++        return (backend_report if index == 1 else "complete", MIB, MIB)
++
++    def prepare(task, frontend_token):
++        assert frontend_token == tokens[0]
++        assert ("retire", 0) in events
++        events.append(("prepare", frontend_token))
++        task.update(input_ready=True, inputs=[1] * 47,
++                    handoff_seal_sha256="a" * 64, source_identity="b" * 64)
++
++    def reset(task):
++        assert task["input_ready"] is True
++        assert sidecar.exists()
++        events.append(("reset", 1))
++
++    def cleanup(task, backend_token):
++        assert backend_token == tokens[1]
++        assert ("retire", 1) in events
++        assert events[-1] == ("report", 1)
++        events.append(("cleanup", backend_token))
++        if cleanup_error:
++            raise OSError("mock cleanup blocked")
++        sidecar.unlink()
++
++    monkeypatch.setattr(pool, "_start_resource_worker", start)
++    monkeypatch.setattr(pool, "_poll_resource_worker", poll)
++    monkeypatch.setattr(pool, "_retire_resource_worker",
++                        lambda pid: events.append(("retire", task_by_pid[pid])))
++    monkeypatch.setattr(pool, "_stop_resource_worker",
++                        lambda pid: events.append(("stop", task_by_pid[pid])))
++    monkeypatch.setattr(policy, "read_worker_resource", read)
++    monkeypatch.setattr(handoff, "prepare_handoff_task", prepare)
++    monkeypatch.setattr(handoff, "reset_handoff_output", reset)
++    monkeypatch.setattr(handoff, "retire_handoff_task", cleanup)
++    return tasks, events, tokens, sidecar
++
++
++def _run_mock_pool(tasks, observations):
++    pool.run_resource_worker_processes(
++        ["mock"] * len(tasks), tasks, 1, 512 * MIB, observations=observations,
++    )
++
++
++def test_pool_removes_handoff_only_after_verified_backend_retirement(tmp_path, monkeypatch):
++    tasks, events, tokens, sidecar = _mock_lifecycle(tmp_path, monkeypatch)
++    observations = []
++    _run_mock_pool(tasks, observations)
++    assert events.index(("retire", 1)) < events.index(("cleanup", tokens[1]))
++    assert events.index(("cleanup", tokens[1])) < events.index(("start", 2))
++    assert not sidecar.exists()
++    assert len(observations) == 3
++    assert all(sample[2] == MIB for sample in observations)
++
++
++def test_cleanup_failure_blocks_successor_and_backend_observation(tmp_path, monkeypatch):
++    tasks, events, _tokens, sidecar = _mock_lifecycle(tmp_path, monkeypatch, cleanup_error=True)
++    observations = []
++    with pytest.raises(OSError, match="cleanup blocked"):
++        _run_mock_pool(tasks, observations)
++    assert ("start", 2) not in events
++    assert sidecar.exists()
++    assert len(observations) == 1
++
++
++def test_failed_backend_keeps_retry_input_and_blocks_successor(tmp_path, monkeypatch):
++    tasks, events, _tokens, sidecar = _mock_lifecycle(tmp_path, monkeypatch, backend_exit=7)
++    observations = []
++    with pytest.raises(subprocess.CalledProcessError) as error:
++        _run_mock_pool(tasks, observations)
++    assert error.value.returncode == 7
++    assert not any(event[0] == "cleanup" for event in events)
++    assert ("start", 2) not in events
++    assert sidecar.exists()
++    assert len(observations) == 1
++
++
++def test_unverified_backend_completion_never_consumes_handoff(tmp_path, monkeypatch):
++    tasks, events, _tokens, sidecar = _mock_lifecycle(
++        tmp_path, monkeypatch, backend_report="encode-complete",
++    )
++    observations = []
++    with pytest.raises(policy.WorkerMemoryError, match="final peak RSS"):
++        _run_mock_pool(tasks, observations)
++    assert not any(event[0] == "cleanup" for event in events)
++    assert ("start", 2) not in events
++    assert sidecar.exists()
++    assert len(observations) == 1
++
++
++def test_pressure_retry_preserves_published_handoff_until_verified_retirement(tmp_path, monkeypatch):
++    """A live 'complete' report is insufficient to consume a retry's input."""
++    sidecar = tmp_path / "module.pidx"
++    sidecar.write_bytes(b"immutable sealed input")
++    output = tmp_path / "module.pco"
++    tasks = [
++        {"class": "frontend", "inputs": [1], "estimate_bytes": MIB,
++         "report_path": str(tmp_path / "fe.rss"), "restartable": True},
++        {"class": "backend", "inputs": [0] * 47, "estimate_bytes": 0,
++         "report_path": str(tmp_path / "be.rss"), "restartable": True,
++         "depends_on": 0, "handoff_request": "request", "input_ready": False},
++        {"class": "peer", "inputs": [1], "estimate_bytes": 80 * MIB,
++         "report_path": str(tmp_path / "peer.rss"), "restartable": True},
++        {"class": "next-frontend", "inputs": [1], "estimate_bytes": MIB,
++         "report_path": str(tmp_path / "next.rss"), "restartable": True,
++         "depends_on": 1},
++    ]
++    starts, resets, cancellations, cleanups = [], [], [], []
++    attempts, pid_items, tokens = {}, {}, {}
++    monkeypatch.delenv(policy.TREE_STATE_ENV, raising=False)
++    monkeypatch.delenv("PCC_PY_FRONTEND_WORKER_TIMING", raising=False)
++    monkeypatch.setattr(workers, "_coordinator_rss_bytes", lambda: MIB)
++    monkeypatch.setattr(policy, "resource_task_order", lambda actual: ([0, 2, 1, 3], []))
++    monkeypatch.setattr(pool, "_command_spec", lambda command: (["mock-worker"], []))
++    monkeypatch.setattr(pool.time, "sleep", lambda seconds: None)
++
++    def start(specs, index):
++        attempts[index] = attempts.get(index, 0) + 1
++        attempt = attempts[index]
++        pid = 6000 + index * 10 + attempt
++        pid_items[pid] = (index, attempt)
++        env = dict(entry.split("=", 1) for entry in specs[index][1])
++        tokens[(index, attempt)] = env[policy.RESOURCE_TOKEN_ENV]
++        starts.append((index, attempt))
++        if index == 1:
++            assert sidecar.read_bytes() == b"immutable sealed input"
++            assert not output.exists()
++            output.write_bytes(b"published before retirement")
++        if index == 3:
++            assert cleanups == [(1, 2)]
++            assert not sidecar.exists()
++        return pid
++
++    def poll(pid):
++        index, attempt = pid_items[pid]
++        if index == 2 and not cancellations:
++            return pool._WORKER_RUNNING
++        if index == 1 and attempt == 1:
++            return pool._WORKER_RUNNING
++        return 0
++
++    def report(path, pid, token=""):
++        index, attempt = pid_items[pid]
++        assert token == tokens[(index, attempt)]
++        peak = 160 * MIB if (index, attempt) == (1, 1) else MIB
++        return "complete", peak, peak
++
++    def prepare(task, frontend_token):
++        assert frontend_token == tokens[(0, 1)]
++        task.update(input_ready=True, inputs=[1] * 47,
++                    handoff_seal_sha256="a" * 64, source_identity="b" * 64)
++
++    def reset(task):
++        assert sidecar.exists()
++        resets.append(attempts.get(1, 0) + 1)
++        if output.exists():
++            output.unlink()
++
++    def stop(pid):
++        item = pid_items[pid]
++        cancellations.append(item)
++        assert item == (1, 1)
++        assert sidecar.exists() and output.exists()
++
++    def cleanup(task, backend_token):
++        assert backend_token == tokens[(1, 2)]
++        assert sidecar.exists() and output.exists()
++        cleanups.append((1, 2))
++        sidecar.unlink()
++
++    monkeypatch.setattr(pool, "_start_resource_worker", start)
++    monkeypatch.setattr(pool, "_poll_resource_worker", poll)
++    monkeypatch.setattr(pool, "_retire_resource_worker", lambda pid: None)
++    monkeypatch.setattr(pool, "_stop_resource_worker", stop)
++    monkeypatch.setattr(policy, "read_worker_resource", report)
++    monkeypatch.setattr(handoff, "prepare_handoff_task", prepare)
++    monkeypatch.setattr(handoff, "reset_handoff_output", reset)
++    monkeypatch.setattr(handoff, "retire_handoff_task", cleanup)
++    observations = [("backend", [1] * 47, MIB)]
++    pool.run_resource_worker_processes(["mock"] * 4, tasks, 2, 512 * MIB,
++                                      observations=observations)
++    assert cancellations == [(1, 1)]
++    assert resets == [1, 2]
++    assert cleanups == [(1, 2)]
++    assert tokens[(1, 1)] != tokens[(1, 2)]
++    assert starts == [(0, 1), (2, 1), (1, 1), (1, 2), (3, 1)]
++    assert tasks[1]["incomplete_peak_bytes"] == 160 * MIB
++    assert sum(sample[0] == "backend" for sample in observations) == 2
++
++
++def test_actual_shape_preserves_maximum_observation_and_class_scope():
++    inputs = [1] * 47
++    task = {"class": "host|arm64|passes=off|backend", "inputs": inputs,
++            "estimate_bytes": 0}
++    observations = [(task["class"], [2] * 47, 3 * MIB),
++                    (task["class"], [3] * 47, 7 * MIB),
++                    ("native|arm64|passes=off|backend", [9] * 47, 100 * MIB),
++                    ("host|x86|passes=off|backend", [9] * 47, 200 * MIB)]
++    assert policy.estimated_task_bytes(task, observations) == policy.peak_reservation(7 * MIB)
++    uncovered = list(inputs)
++    uncovered[46] = 4
++    task["inputs"] = uncovered
++    assert policy.estimated_task_bytes(task, observations) == 0
+--- /dev/null
++++ b/tests/python/test_pipeline_indexed_handoff.py
+@@ -0,0 +1,455 @@
++"""Pure host contract tests; no compiler, native runtime, or PCC package import.
++
++Load the standalone stdlib-only helper directly. Fake kernels deliberately
++reject instruction projection, and the fake encoder emits only a synthetic
++codec-sized payload. These tests establish handoff checks, not codec/emitter
++correctness or any native/bootstrap/performance claim.
++"""
++
++import ast
++import hashlib
++import importlib.util
++import json
++import os
++from pathlib import Path
++import tempfile
++import types
++import unittest
++from unittest.mock import patch
++
++
++_SOURCE = (Path(__file__).resolve().parents[2]
++           / "pcc/frontends/python/pipeline_indexed_handoff.py")
++_SPEC = importlib.util.spec_from_file_location("indexed_handoff_host_test", _SOURCE)
++handoff = importlib.util.module_from_spec(_SPEC)
++_SPEC.loader.exec_module(handoff)
++_FRONTEND_TOKEN = "a" * 64
++_BACKEND_TOKEN = "b" * 64
++
++
++class Kernel:
++    def __init__(self, count):
++        for position, field in enumerate(handoff._ARENA_FIELDS):
++            setattr(self, field, range(count + position))
++
++    @property
++    def instructions(self):
++        raise AssertionError("instruction projection must not be used")
++
++
++class Function:
++    def __init__(self, count):
++        self.indexed_kernel = Kernel(count)
++
++    @property
++    def instructions(self):
++        raise AssertionError("instruction projection must not be used")
++
++
++def module(function_sizes=(1, 3), globals_count=2, target="x86_64-unknown-linux-gnu"):
++    return types.SimpleNamespace(
++        triple=target,
++        functions=tuple(Function(size) for size in function_sizes),
++        globals_=tuple(range(globals_count)),
++    )
++
++
++def encode(path, direct):
++    header = json.dumps({"schema": handoff.CODEC_SCHEMA, "triple": direct.triple}).encode()
++    count = sum(len(getattr(function.indexed_kernel, field))
++                for function in direct.functions for field in handoff._ARENA_FIELDS)
++    Path(path).write_bytes(handoff._MAGIC + str(len(header)).encode() + b"\n"
++                           + header + b"\0" * (8 * count))
++
++
++class HandoffContractTests(unittest.TestCase):
++    def setUp(self):
++        self.temp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.temp.cleanup)
++        self.root = Path(self.temp.name).resolve()
++        self.ir = self.root / "ir"
++        self.ir.mkdir()
++        self.manifest = self.root / "worker_0.manifest"
++        self.result = self.root / "worker_0.tsv"
++        self.sidecar = self.ir / "module_0.direct.pidx"
++        self.output = self.ir / "module_0.direct.pco"
++        self.request = Path(str(self.sidecar) + ".request.json")
++        self.seal = Path(str(self.sidecar) + ".seal.json")
++        self.receipt = Path(str(self.output) + ".receipt.json")
++        self.manifest.write_text("\n".join([
++            "pcc.frontends.python.codegen_worker.v4", str(self.result), str(self.ir),
++            str(self.root / "exports.json"), "codegen", str(self.root / "ast"),
++            "sample", "off", "direct", "0", "0", "1",
++            "0\tsample\t" + str(self.root / "sample.py"), "1", "0", "",
++        ]))
++        self.fields = {
++            "schema": handoff.REQUEST_SCHEMA,
++            "manifest_path": str(self.manifest),
++            "manifest_sha256": hashlib.sha256(self.manifest.read_bytes()).hexdigest(),
++            "source_identity": "|".join(["c" * 64, "d" * 64]),
++            "index": 0, "module": "sample", "target": "x86_64-unknown-linux-gnu",
++            "passes": ["mem2reg"], "sidecar_path": str(self.sidecar),
++            "output_path": str(self.output), "seal_path": str(self.seal),
++            "receipt_path": str(self.receipt),
++        }
++        self.direct = module()
++        self.environment = patch.dict(os.environ, {
++            handoff.RESOURCE_TOKEN_ENV: _FRONTEND_TOKEN,
++            handoff.ENV_REQUEST: str(self.request), handoff.ENV_SEAL: "",
++        })
++        self.environment.start()
++        self.addCleanup(self.environment.stop)
++        handoff.write_request(str(self.request), self.fields)
++        self.task = {
++            "handoff_request": str(self.request),
++            "handoff_source_identity": self.fields["source_identity"],
++            "class": "private|host|collector0|indexed-backend", "depends_on": 0,
++            "inputs": [], "estimate_bytes": 0, "source_identity": "",
++        }
++
++    def symlink(self, path, target, target_is_directory=False):
++        try:
++            path.symlink_to(target, target_is_directory=target_is_directory)
++        except OSError as exc:
++            if os.name == "nt" and getattr(exc, "winerror", None) == 1314:
++                self.skipTest("Windows account lacks symlink privilege")
++            raise
++
++    def publish(self, timing=False):
++        result = handoff.publish_handoff(
++            str(self.request), str(self.manifest), 0, "sample", self.direct,
++            ["mem2reg"], False, True, encode,
++        )
++        self.assertEqual(result, str(self.sidecar))
++        parts = ["OK", "0", "sample", "0", "1", "0", str(self.ir / "module_0.ll")]
++        if timing:
++            parts.extend(["1", "2", "3"])
++        parts.extend(["PIDX", str(self.sidecar)])
++        self.result.write_text("\t".join(parts) + "\n")
++        return json.loads(self.seal.read_text())
++
++    def prepare(self, timing=False):
++        self.publish(timing)
++        handoff.prepare_handoff_task(self.task, _FRONTEND_TOKEN)
++        os.environ[handoff.ENV_SEAL] = self.task["handoff_seal_sha256"]
++        os.environ[handoff.RESOURCE_TOKEN_ENV] = _BACKEND_TOKEN
++
++    def publish_result(self):
++        self.output.write_bytes(b"fake packed object")
++        handoff.publish_handoff_result(str(self.request))
++
++    def rewrite(self, path, changes):
++        value = json.loads(path.read_text())
++        value.update(changes)
++        path.write_text(json.dumps(value))
++
++    def test_actual_shape_fixed_22_arenas_without_projection(self):
++        seal = self.publish()
++        self.assertEqual(len(handoff._ARENA_FIELDS), 22)
++        self.assertEqual(seal["shape"][1:3], [2, 2])
++        self.assertEqual(len(seal["shape"]), 47)
++        for index in range(22):
++            self.assertEqual(seal["shape"][3 + 2 * index:5 + 2 * index],
++                             [4 + 2 * index, 3 + index])
++        self.assertEqual(seal["pidx_sha256"], hashlib.sha256(self.sidecar.read_bytes()).hexdigest())
++        self.assertEqual(seal["pidx_size"], self.sidecar.stat().st_size)
++
++    def test_timing_and_no_timing_result_rows_and_idempotent_prepare(self):
++        for timing in (False, True):
++            with self.subTest(timing=timing):
++                self.publish(timing)
++                handoff.prepare_handoff_task(self.task, _FRONTEND_TOKEN)
++                before = dict(self.task)
++                handoff.prepare_handoff_task(self.task, _FRONTEND_TOKEN)
++                self.assertEqual(self.task, before)
++                self.assertEqual(self.task["estimate_bytes"], 0)
++                self.assertIn("indexed-handoff", self.task["class"])
++                self.assertEqual(len(self.task["inputs"]), 47)
++
++    def test_successful_retirement_preserves_request_receipt_and_output(self):
++        self.prepare()
++        request, seal = handoff.validate_handoff_input(
++            str(self.request), str(self.sidecar), str(self.output), "PCO")
++        self.assertEqual(request, self.fields)
++        self.assertEqual(seal["frontend_token"], _FRONTEND_TOKEN)
++        handoff.validate_handoff_module(str(self.request), self.direct)
++        self.publish_result()
++        handoff.retire_handoff_task(self.task, _BACKEND_TOKEN)
++        self.assertFalse(self.sidecar.exists())
++        self.assertFalse(self.seal.exists())
++        self.assertTrue(self.request.exists())
++        self.assertTrue(self.receipt.exists())
++        self.assertTrue(self.output.exists())
++
++    def test_missing_or_invalid_seal_rejected(self):
++        with self.assertRaises((ValueError, OSError)):
++            handoff.prepare_handoff_task(self.task, _FRONTEND_TOKEN)
++        self.publish()
++        self.seal.write_text("{}")
++        with self.assertRaises(ValueError):
++            handoff.prepare_handoff_task(self.task, _FRONTEND_TOKEN)
++        self.assertTrue(self.sidecar.exists())
++        self.assertNotIn("input_ready", self.task)
++
++    def test_stale_frontend_token_rejected(self):
++        self.publish()
++        with self.assertRaisesRegex(ValueError, "stale frontend"):
++            handoff.prepare_handoff_task(self.task, "e" * 64)
++        self.assertNotIn("input_ready", self.task)
++
++    def test_stale_backend_token_retains_inputs(self):
++        self.prepare()
++        self.publish_result()
++        with self.assertRaisesRegex(ValueError, "receipt binding/token"):
++            handoff.retire_handoff_task(self.task, "e" * 64)
++        self.assertTrue(self.sidecar.exists())
++        self.assertTrue(self.seal.exists())
++
++    def test_missing_receipt_and_output_mismatch_retain_inputs(self):
++        self.prepare()
++        with self.assertRaises((ValueError, OSError)):
++            handoff.retire_handoff_task(self.task, _BACKEND_TOKEN)
++        self.publish_result()
++        self.output.write_bytes(b"changed output")
++        with self.assertRaisesRegex(ValueError, "output digest/size"):
++            handoff.retire_handoff_task(self.task, _BACKEND_TOKEN)
++        self.assertTrue(self.sidecar.exists())
++        self.assertTrue(self.seal.exists())
++
++    def test_cancelled_backend_reset_preserves_original_input(self):
++        self.prepare()
++        original = self.sidecar.read_bytes()
++        seal = self.seal.read_bytes()
++        self.publish_result()
++        Path(str(self.output) + ".tmp").write_bytes(b"partial")
++        handoff.reset_handoff_output(self.task)
++        self.assertEqual(self.sidecar.read_bytes(), original)
++        self.assertEqual(self.seal.read_bytes(), seal)
++        self.assertFalse(self.output.exists())
++        self.assertFalse(Path(str(self.output) + ".tmp").exists())
++        self.assertFalse(self.receipt.exists())
++        # A retry can consume the exact original PIDX and use a fresh token.
++        os.environ[handoff.RESOURCE_TOKEN_ENV] = "f" * 64
++        handoff.validate_handoff_input(str(self.request), str(self.sidecar), str(self.output), "PCO")
++        self.publish_result()
++        handoff.retire_handoff_task(self.task, "f" * 64)
++
++    def test_reset_revalidates_inputs_before_removing_any_output(self):
++        self.prepare()
++        self.output.write_bytes(b"failure evidence")
++        self.sidecar.write_bytes(b"changed input")
++        with self.assertRaises(ValueError):
++            handoff.reset_handoff_output(self.task)
++        self.assertEqual(self.output.read_bytes(), b"failure evidence")
++        self.assertTrue(self.seal.exists())
++
++    def test_changed_manifest_rejected(self):
++        self.publish()
++        self.manifest.write_text(self.manifest.read_text() + "garbage\n")
++        with self.assertRaisesRegex(ValueError, "manifest digest"):
++            handoff.prepare_handoff_task(self.task, _FRONTEND_TOKEN)
++
++    def test_producer_target_passes_flags_and_owner_rejected(self):
++        arguments = [str(self.request), str(self.manifest), 0, "sample",
++                     self.direct, ["mem2reg"], False, True, encode]
++        for position, value in ((1, str(self.root / "other.manifest")),
++                                (2, True), (3, "other"),
++                                (4, module(target="aarch64-apple-darwin")),
++                                (5, []), (6, True), (7, 1)):
++            with self.subTest(position=position):
++                bad = list(arguments)
++                bad[position] = value
++                with self.assertRaises(ValueError):
++                    handoff.publish_handoff(*bad)
++        self.assertFalse(self.sidecar.exists())
++
++    def test_request_schema_unknown_fields_types_and_paths_rejected(self):
++        changes = [
++            {"schema": "future"}, {"extra": 1}, {"index": True}, {"passes": "mem2reg"},
++            {"target": "unknown-unknown-unknown"}, {"manifest_sha256": "bad"},
++            {"sidecar_path": str(self.root / "outside.pidx")},
++            {"output_path": str(self.ir / "other.pco")},
++            {"seal_path": str(self.ir / "other.seal")},
++            {"receipt_path": str(self.ir / "other.receipt")},
++        ]
++        original = self.request.read_bytes()
++        for change in changes:
++            with self.subTest(change=change):
++                value = dict(self.fields)
++                value.update(change)
++                self.request.write_text(json.dumps(value))
++                with self.assertRaises(ValueError):
++                    handoff.publish_handoff(str(self.request), str(self.manifest),
++                                            0, "sample", self.direct,
++                                            ["mem2reg"], False, True, encode)
++                self.request.write_bytes(original)
++
++    def test_request_cannot_overwrite_existing_request(self):
++        original = self.request.read_bytes()
++        with self.assertRaises(FileExistsError):
++            handoff.write_request(str(self.request), self.fields)
++        self.assertEqual(self.request.read_bytes(), original)
++
++    def test_duplicate_and_oversized_json_rejected(self):
++        self.request.write_text('{"schema":"x","schema":"y"}')
++        with self.assertRaises(ValueError):
++            handoff.prepare_handoff_task(self.task, _FRONTEND_TOKEN)
++        self.request.write_bytes(b" " * (handoff._MAX_JSON_BYTES + 1))
++        with self.assertRaisesRegex(ValueError, "size limit"):
++            handoff.prepare_handoff_task(self.task, _FRONTEND_TOKEN)
++
++    def test_seal_target_pass_schema_shape_and_flags_mismatch(self):
++        self.publish()
++        original = self.seal.read_bytes()
++        for change in ({"target": "other"}, {"passes": []}, {"schema": "other"},
++                       {"codec_schema": "other"}, {"shape": [1]},
++                       {"needs_libpython": True}, {"needs_native_exports": 1},
++                       {"index": False}, {"source_identity": "different"}):
++            with self.subTest(change=change):
++                self.rewrite(self.seal, change)
++                with self.assertRaises(ValueError):
++                    handoff.prepare_handoff_task(self.task, _FRONTEND_TOKEN)
++                self.seal.write_bytes(original)
++
++    def test_result_module_index_pidX_path_flags_and_extra_rows_rejected(self):
++        self.publish()
++        original = self.result.read_text()
++        parts = original.strip().split("\t")
++        for position, value in ((0, "ERR"), (1, "1"), (2, "other"),
++                                (3, "1"), (4, "0"), (5, "-1"),
++                                (6, str(self.root / "outside.ll")),
++                                (7, "PCO"), (8, str(self.output))):
++            with self.subTest(position=position):
++                changed = list(parts)
++                changed[position] = value
++                self.result.write_text("\t".join(changed) + "\n")
++                with self.assertRaises(ValueError):
++                    handoff.prepare_handoff_task(self.task, _FRONTEND_TOKEN)
++        self.result.write_text(original + original)
++        with self.assertRaises(ValueError):
++            handoff.prepare_handoff_task(self.task, _FRONTEND_TOKEN)
++
++    def test_backend_environment_and_artifact_binding(self):
++        self.prepare()
++        for sidecar, output, kind in ((str(self.sidecar), str(self.output), "ASM"),
++                                     (str(self.output), str(self.output), "PCO"),
++                                     (str(self.sidecar), str(self.sidecar), "PCO")):
++            with self.subTest(kind=kind, sidecar=sidecar):
++                with self.assertRaises(ValueError):
++                    handoff.validate_handoff_input(str(self.request), sidecar, output, kind)
++        os.environ[handoff.ENV_SEAL] = "e" * 64
++        with self.assertRaisesRegex(ValueError, "seal digest"):
++            handoff.validate_handoff_input(str(self.request), str(self.sidecar), str(self.output), "PCO")
++
++    def test_decoded_target_and_shape_mismatch(self):
++        self.prepare()
++        for direct in (module(target="aarch64-apple-darwin"), module((1, 4)),
++                       module((1,)), module(globals_count=1)):
++            with self.subTest(direct=direct):
++                with self.assertRaisesRegex(ValueError, "target/shape"):
++                    handoff.validate_handoff_module(str(self.request), direct)
++
++    def test_same_totals_but_different_arena_maxima_rejected(self):
++        self.prepare()
++        with self.assertRaisesRegex(ValueError, "target/shape"):
++            handoff.validate_handoff_module(str(self.request), module((2, 2)))
++
++    def test_zero_function_shape(self):
++        self.direct = module((), globals_count=0)
++        seal = self.publish()
++        self.assertEqual(seal["shape"][1:], [0] * 46)
++        handoff.prepare_handoff_task(self.task, _FRONTEND_TOKEN)
++
++    def test_symlink_output_cannot_be_reset_or_retired(self):
++        self.prepare()
++        outside = self.root / "keep.bin"
++        outside.write_bytes(b"preserve")
++        self.symlink(self.output, outside)
++        with self.assertRaises(ValueError):
++            handoff.reset_handoff_output(self.task)
++        self.assertEqual(outside.read_bytes(), b"preserve")
++        self.assertTrue(self.sidecar.exists())
++
++    def test_stale_fixed_producer_temporary_is_reused_without_orphan(self):
++        temporary = Path(str(self.sidecar) + ".tmp")
++        temporary.write_bytes(b"partial payload from cancelled frontend")
++        seen = []
++
++        def checking_encode(path, direct):
++            seen.append(path)
++            self.assertEqual(path, str(temporary))
++            self.assertFalse(temporary.exists())
++            encode(path, direct)
++
++        handoff.publish_handoff(str(self.request), str(self.manifest), 0, "sample",
++                                self.direct, ["mem2reg"], False, True, checking_encode)
++        self.assertEqual(seen, [str(temporary)])
++        self.assertTrue(self.sidecar.exists())
++        self.assertTrue(self.seal.exists())
++        self.assertFalse(temporary.exists())
++        original = self.sidecar.read_bytes()
++        temporary.write_bytes(b"another cancelled partial payload")
++        handoff.publish_handoff(str(self.request), str(self.manifest), 0, "sample",
++                                self.direct, ["mem2reg"], False, True, checking_encode)
++        self.assertEqual(self.sidecar.read_bytes(), original)
++        self.assertEqual(seen, [str(temporary), str(temporary)])
++        self.assertFalse(temporary.exists())
++
++    def test_producer_temporary_symlink_refuses_without_touching_target(self):
++        temporary = Path(str(self.sidecar) + ".tmp")
++        outside = self.root / "preserved.bin"
++        outside.write_bytes(b"preserve outside target")
++        self.symlink(temporary, outside)
++        with self.assertRaisesRegex(ValueError, "symlink"):
++            handoff.publish_handoff(str(self.request), str(self.manifest), 0, "sample",
++                                    self.direct, ["mem2reg"], False, True, encode)
++        self.assertEqual(outside.read_bytes(), b"preserve outside target")
++        self.assertTrue(temporary.is_symlink())
++        self.assertFalse(self.sidecar.exists())
++        self.assertFalse(self.seal.exists())
++
++    def test_temporary_root_parent_symlink_is_supported(self):
++        # Model /var -> /private/var without accepting artifact-file links.
++        real = self.root / "real"
++        real.mkdir()
++        alias = self.root / "alias"
++        self.symlink(alias, real, target_is_directory=True)
++        old_root = str(self.root)
++        new_root = str(alias)
++        manifest_text = self.manifest.read_text().replace(old_root, new_root)
++        for name in ("ir", "manifest", "result", "sidecar", "output", "request", "seal", "receipt"):
++            setattr(self, name, Path(str(getattr(self, name)).replace(old_root, new_root)))
++        self.ir.mkdir()
++        self.manifest.write_text(manifest_text)
++        for key in ("manifest_path", "sidecar_path", "output_path", "seal_path", "receipt_path"):
++            self.fields[key] = self.fields[key].replace(old_root, new_root)
++        self.fields["manifest_sha256"] = hashlib.sha256(self.manifest.read_bytes()).hexdigest()
++        self.task["handoff_request"] = str(self.request)
++        os.environ[handoff.ENV_REQUEST] = str(self.request)
++        handoff.write_request(str(self.request), self.fields)
++        self.prepare()
++        handoff.validate_handoff_input(str(self.request), str(self.sidecar), str(self.output), "PCO")
++        self.publish_result()
++        handoff.retire_handoff_task(self.task, _BACKEND_TOKEN)
++        self.assertTrue(self.output.exists())
++        self.assertTrue(self.receipt.exists())
++        self.assertFalse(self.sidecar.exists())
++
++    def test_codec_arena_order_matches_current_source_without_import(self):
++        codec = _SOURCE.parents[2] / "backend/self_backend_indexed_codec.py"
++        if not codec.is_file():
++            self.skipTest("isolated packet has no codec; integration source check required")
++        tree = ast.parse(codec.read_text())
++        for node in tree.body:
++            if isinstance(node, ast.Assign) and any(
++                    isinstance(target, ast.Name) and target.id == "_ARENA_FIELDS"
++                    for target in node.targets):
++                fields = ast.literal_eval(node.value)
++                self.assertEqual(tuple(field[1] for field in fields), handoff._ARENA_FIELDS)
++                break
++        else:
++            self.fail("codec arena contract was not found")
++
++
++if __name__ == "__main__":
++    unittest.main()

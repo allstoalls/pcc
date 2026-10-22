@@ -21,11 +21,11 @@ from __future__ import annotations
 import os
 import subprocess
 
-from pcc.py_frontend.codegen.call_arg_lowering import CallArgLoweringMixin
-from pcc.py_frontend.codegen.call_resolution_lowering import (
+from pcc.frontends.python.codegen.call_arg_lowering import CallArgLoweringMixin
+from pcc.frontends.python.codegen.call_resolution_lowering import (
     CallResolutionLoweringMixin,
 )
-from pcc.py_frontend.py_ast import (
+from pcc.frontends.python.py_ast import (
     Arg,
     Call,
     DynType,

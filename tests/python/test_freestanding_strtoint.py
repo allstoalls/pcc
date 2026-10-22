@@ -3,11 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 import subprocess
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SOURCE = REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_strtoint.py"
+SOURCE = REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_strtoint.py"
 
 
 def test_freestanding_strtoint_matches_lp64_c_locale_edges(tmp_path: Path) -> None:
@@ -106,7 +106,7 @@ int main(void) {
 
 
 def test_production_archive_plan_includes_freestanding_strtoint() -> None:
-    runtime_dir = REPO_ROOT / "pcc" / "py_runtime"
+    runtime_dir = REPO_ROOT / "pcc" / "runtime"
     plan = subprocess.run(
         ["make", "-B", "-n", "libpy_runtime_pcc_py.a"],
         cwd=runtime_dir,

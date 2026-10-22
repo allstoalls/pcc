@@ -29,8 +29,8 @@ from pcc.backend import arm64_asm_driver, macho_obj, native_object
 from pcc.backend import macho_spec as spec
 from pcc.backend import x86_64_asm_driver
 from pcc.backend import elf_x86_64
-from pcc.evaluater import c_evaluator
-from pcc.evaluater.c_evaluator import CEvaluator, _select_self_object_emitter
+from pcc.frontends.c.evaluator import c_evaluator
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator, _select_self_object_emitter
 
 _CC = shutil.which(os.environ.get("CC", "cc"))
 _IS_ARM64_DARWIN = os.uname().sysname == "Darwin" and os.uname().machine == "arm64"

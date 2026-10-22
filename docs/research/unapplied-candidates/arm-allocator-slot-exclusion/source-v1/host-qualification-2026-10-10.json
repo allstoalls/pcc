@@ -1,0 +1,146 @@
+{
+  "candidate_patch_sha256": "2ca9b9e218146135939be5358720115ac044ef7b4f6ae582005406405278e982",
+  "candidate_status": "UNAPPLIED",
+  "evidence_sha256": {
+    "base_postseal": "c654c129c818123000763b11490f9a6d2a95baeb6d464543682c2a6e948c8222",
+    "candidate_postseal": "a69d7677fa696999583947faad44b3138bc7a3f4077b1b8ef31289cc668f22dd",
+    "collection": "8ea2eb716701e1ea9a2862c116bead1ade7a5992f8d0d2b028828904664f08a0",
+    "junit": "d78b6dfc10ba1cfbbcd79c1e42a628390cbfe197bacea24b7d061d7e92c8b247",
+    "payload_result": "68287e30475e5c7eca16d24508b0645d762de8817cdf7671436fbeaf0474c137",
+    "qualification": "f987b141e448911ffc7955ebab9cd0b43fc2e4c12ee73a72a2fb88dbf6d3d205"
+  },
+  "executed": {
+    "counts": {
+      "collected": 44,
+      "errors": 0,
+      "failed": 1,
+      "passed": 42,
+      "skipped": 0,
+      "xfailed": 0,
+      "xpassed": 0
+    },
+    "deselected": [],
+    "direct_builder_disabling_flags": {
+      "PCC_DIRECT_INDEXED_KERNEL_VALIDATE": null,
+      "PCC_TEXT_INDEXED_KERNEL_EMIT": null
+    },
+    "failure": {
+      "assertion": "assert base_id >= 0",
+      "diagnosis": "Source readback identifies a fixture lookup error: the hint base is not the final serialized SSA name. The builder appends a function serial; direct capture records Value._direct_name and _direct_value_id. The failing assertion is before both tested liveness calls. This run does not exhibit a slot-filtering counterexample.",
+      "line": 361,
+      "node": "tests/python/test_aarch64_allocator_slot_exclusion.py::test_inline_error_edges_remain_in_original_scan_and_first_error[False]",
+      "observed_base_id": -1
+    },
+    "junit_cases": 43,
+    "pytest_options": [
+      "-x",
+      "-n0",
+      "-vv",
+      "--tb=short",
+      "-o",
+      "addopts="
+    ],
+    "runs": 1,
+    "scope": "Host allocator helper/state and owned Darwin/Linux ARM object comparisons; no frontend compilation, runtime build, FFI or emitted native execution",
+    "unrun_nodes": [
+      "tests/python/test_aarch64_allocator_slot_exclusion.py::test_inline_error_edges_remain_in_original_scan_and_first_error[True]"
+    ]
+  },
+  "history": "The initial private materializer had extra Git diff headers and was corrected before execution. The public production/test packet was unchanged; the original private script remains unrun.",
+  "limits": [
+    "The full 44-case gate did not pass; one inline-error case remains unrun.",
+    "No real-module mechanism, performance, runtime build, emitted native behavior, pcc1 or full Stage1 qualification was run for this candidate.",
+    "Active MADD/tail-call eligibility remains untested: the selected object fixtures use optimize=False.",
+    "This host failure does not alter the independently published numeric-data batching production or its exact-head CI.",
+    "Sampled RSS is observational; the hard memory limit was address space."
+  ],
+  "packet_manifest_sha256": "93a626c11a624f7380a180dac64edd9978ba0f98e84808e9c167a7044123f920",
+  "preserved_candidate_commit": "c3263977301823c2198fe22c2c1c09aa14519885",
+  "qualification_date_utc": "2026-10-10",
+  "schema": "pcc.arm_allocator_slot_exclusion_host_public_qualification.v1",
+  "source": {
+    "base_full_source_relation": "Retained numeric-batching snapshot: complete pcc subtree equals published bf1bf82d; full source retains older unrelated docs/bootstrap and native-test f391 bytes. Not a full current-master checkout.",
+    "base_pcc_tree": "930263bf204e578796c72dab5d4aa31fd7ab27ae",
+    "base_production_commit": "bf1bf82d8242a60a85a06322ceee97fab5346cc0",
+    "base_source_manifest_sha256": "7430a30766c11a59e7185758b725b289388ae131498ce6a8a568bdf10ff773ba",
+    "candidate_pcc_tree": "992c49dc67063865c2b3b26a7092d3dcc6348a96",
+    "candidate_source_manifest_sha256": "9bc630966e8bd1d070b49e7fd273e2b5bcd8dab477831ae49fc96a45c139b55f",
+    "changed_files": [
+      {
+        "base_bytes": 71082,
+        "base_sha256": "2c71d952927362c219c2539478fb477b7dfae51561076d27b7675b73f623d100",
+        "mode": "100644",
+        "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+        "post_bytes": 73423,
+        "post_sha256": "49403685d7beaf24b9db20a9539118fe2c5f7b56cda90bdf4960e878fa44dddb"
+      },
+      {
+        "base_bytes": null,
+        "base_sha256": null,
+        "mode": "100644",
+        "path": "tests/python/test_aarch64_allocator_slot_exclusion.py",
+        "post_bytes": 16171,
+        "post_sha256": "4bcf78fc949aa3a2e903e4cdf82c099ede4b678965f24115a5cca6a99b30d591"
+      }
+    ],
+    "copy": "Independent ordinary source; original five internal symlinks retained.",
+    "files": 30029,
+    "logical_bytes": 390563805,
+    "retained_snapshot_codegen_checksum": "b7bdfdc62fd97e204b25c4b3f3c232164b739b765db846cb12250c239d0fc014"
+  },
+  "source_preservation": {
+    "imported_source_closure": "PASS",
+    "in_guard_complete_before_after": "PASS",
+    "independent_complete_base_and_candidate_postseals": "PASS",
+    "original_shared_lock_released": true
+  },
+  "source_readback": {
+    "future_correction": "A proposed test-only successor must be reviewed and separately admitted; no successor result is inferred here.",
+    "locations": [
+      "test_aarch64_allocator_slot_exclusion.py:360-361",
+      "pcc/ir/ir.py:2185-2205",
+      "pcc/ir/direct_indexed_kernel.py:289-303"
+    ],
+    "method": "Read-only inspection of retained exact source; no IR regeneration or rerun.",
+    "source_sha256": {
+      "pcc/ir/direct_indexed_kernel.py": "c522df0dacc0afa61f6a38aad957b8deb918bdd21a78d36b543c4c5dff33883c",
+      "pcc/ir/ir.py": "821d3c0232a8daeae7c63d927586b80f6775f6aa03c3147aa7e6b462707ed39b",
+      "tests/python/test_aarch64_allocator_slot_exclusion.py": "4bcf78fc949aa3a2e903e4cdf82c099ede4b678965f24115a5cca6a99b30d591"
+    }
+  },
+  "stages": {
+    "host": {
+      "bootstrap_sha256": "1b6a8ad2d5c4cd78009b85848015ee88f2bd1deb5303b9095409928e49e72864",
+      "bootstrap_status": "FAIL",
+      "cleanup": "CLEAN; root reaped; ECHILD; no active handles",
+      "continuous_free_reserve_bytes": 4294967296,
+      "denied_audit_events": 0,
+      "elapsed_seconds": 4.99402187600208,
+      "guard_sha256": "181f5cbd18a010dd39b4e5417549558d83ab8a40a65468b941080cc3e2489fc4",
+      "guard_status": "COMPLETE",
+      "hard_address_space_bytes": 4294967296,
+      "hard_nproc": 0,
+      "max_disk_growth_bytes": 536870912,
+      "outer_seconds": 300,
+      "returncode": 1,
+      "sampled_peak_root_rss_bytes": 91820032
+    },
+    "materialization": {
+      "bootstrap_sha256": "bd35e3b75f943c69a98f638556a2eea116d77558038ce448591d4e0f6af01659",
+      "bootstrap_status": "PASS",
+      "cleanup": "CLEAN; root reaped; ECHILD; no active handles",
+      "continuous_free_reserve_bytes": 4294967296,
+      "denied_audit_events": 0,
+      "elapsed_seconds": 9.795904040998721,
+      "guard_sha256": "52b92b8fbc1e038eb1537de7f1563c49f05853ccc0214d17a7c76081a7f327bd",
+      "guard_status": "COMPLETE",
+      "hard_address_space_bytes": 1073741824,
+      "hard_nproc": 0,
+      "max_disk_growth_bytes": 536870912,
+      "outer_seconds": 60,
+      "returncode": 0,
+      "sampled_peak_root_rss_bytes": 64761856
+    }
+  },
+  "status": "FAIL: 42 passed, 1 failed, 1 unrun after fail-fast"
+}

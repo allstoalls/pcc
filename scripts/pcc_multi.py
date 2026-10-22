@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """scripts/pcc_multi.py — multi-file Python compile entry point.
 
-Wraps :func:`pcc.py_frontend.pipeline.compile_python_multi` with a
+Wraps :func:`pcc.frontends.python.pipeline.compile_python_multi` with a
 small argparse-based CLI so the three-stage bootstrap
-(``scripts/bootstrap.sh``) and other callers can build a single
+(``scripts/bootstrap.py``) and other callers can build a single
 native executable from several ``.py`` sources without going
 through the click-based ``pcc`` entry point.
 
@@ -34,7 +34,7 @@ from pcc.extern import extern, c_int
 _USAGE = (
     "Usage:\n"
     "  pcc_multi --entry MODULE --out PATH "
-    "[--backend llvm|self] [--python-libpython off|auto|on] "
+    "[--backend self] [--python-libpython off|auto|on] "
     "[--ir-scaffold on|off|auto] [--emit-llvm] [-v|--verbose] "
     "SRC [SRC ...]\n"
     "\n"
@@ -413,7 +413,7 @@ def main(argv=None) -> int:
         else:
             module_names.append((mod or "") + "")
 
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         compile_python_multi,
         PyPipelineError,
     )

@@ -3,7 +3,7 @@
 The pcc side builds unmodified NumPy 2.4.4 and simplejson 4.1.1 sources
 offline with the current pcc1.  It then compiles one closed-world application
 and executes that artifact under GC0..GC4 with host Python and libpython
-unavailable.  CPython 3.15.0rc1 is a separate behavioral oracle; its package site
+unavailable.  CPython 3.15.0 is a separate behavioral oracle; its package site
 is never exposed to the pcc compiler or the produced executable.
 
 The required 30-minute resource envelope is a release gate.  This bounded test
@@ -253,8 +253,8 @@ def _assert_no_package_name_mechanism_branch() -> None:
     """Keep the mechanism generic without rejecting package-owned source."""
     roots = (
         ROOT / "pcc" / "package",
-        ROOT / "pcc" / "py_frontend",
-        ROOT / "pcc" / "py_runtime" / "py",
+        ROOT / "pcc" / "frontends" / "python",
+        ROOT / "pcc" / "runtime" / "py",
     )
     forbidden: list[str] = []
     for root in roots:
@@ -539,7 +539,7 @@ def _oracle_result(oracle: str, source: Path, oracle_site: str) -> dict[str, obj
         timeout=30,
     )
     assert version.returncode == 0, version.stdout + version.stderr
-    assert version.stdout.strip() == "3.15.0rc1"
+    assert version.stdout.strip() == "3.15.0"
     probe = subprocess.run(
         [
             oracle,
@@ -552,7 +552,7 @@ def _oracle_result(oracle: str, source: Path, oracle_site: str) -> dict[str, obj
         timeout=30,
     )
     assert probe.returncode == 0, (
-        "CPython 3.15.0rc1 Level-2 oracle site must contain NumPy 2.4.4 and "
+        "CPython 3.15.0 Level-2 oracle site must contain NumPy 2.4.4 and "
         "simplejson 4.1.1:\n" + probe.stdout + probe.stderr
     )
     assert probe.stdout.splitlines() == ["2.4.4", "4.1.1"]
@@ -582,7 +582,7 @@ def _write_report(path: Path, report: dict[str, object]) -> None:
 
 def test_current_pcc1_replaces_cpython_for_frozen_scientific_build_corpus(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     assert NUMPY_SOURCE.is_dir(), f"missing pinned NumPy source: {NUMPY_SOURCE}"
     assert _tree_sha256(NUMPY_SOURCE) == NUMPY_TREE_SHA256
@@ -608,7 +608,7 @@ def test_current_pcc1_replaces_cpython_for_frozen_scientific_build_corpus(
     cache = package_root / "cache"
     install_env, forbidden_log = _hostless_env(
         package_root,
-        runtime_archive=pcc_py_runtime_archive,
+        runtime_archive=pcc_runtime_archive,
     )
     numpy_manifest = _install_owned(
         pcc1,
@@ -653,7 +653,7 @@ def test_current_pcc1_replaces_cpython_for_frozen_scientific_build_corpus(
     compile_root.mkdir()
     compile_env, compile_forbidden_log = _hostless_env(
         compile_root,
-        runtime_archive=pcc_py_runtime_archive,
+        runtime_archive=pcc_runtime_archive,
         package_site=site,
     )
     executable = compile_root / "level2-app"
@@ -686,7 +686,7 @@ def test_current_pcc1_replaces_cpython_for_frozen_scientific_build_corpus(
         run_root.mkdir()
         run_env, run_forbidden_log = _hostless_env(
             run_root,
-            runtime_archive=pcc_py_runtime_archive,
+            runtime_archive=pcc_runtime_archive,
         )
         run_env["PCC_GC_BACKEND"] = str(backend)
         ran, measurement = _run_measured(
@@ -717,7 +717,7 @@ def test_current_pcc1_replaces_cpython_for_frozen_scientific_build_corpus(
 
     report = {
         "claim_mode": "pcc1/pcc-native/self/no-libpython",
-        "cpython_oracle": "3.15.0rc1",
+        "cpython_oracle": "3.15.0",
         "gc": gc_reports,
         "numpy_tree_sha256": NUMPY_TREE_SHA256,
         "numpy_version": "2.4.4",

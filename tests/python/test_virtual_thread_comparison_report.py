@@ -4,7 +4,7 @@ import json
 import subprocess
 import sys
 
-from pcc.virtual_thread_comparison import (
+from pcc.diagnostics.virtual_thread_comparison import (
     build_virtual_thread_comparison_report,
     format_virtual_thread_comparison_report,
     parse_probe_output,
@@ -65,7 +65,7 @@ def test_virtual_thread_comparison_report_normalizes_probe_rows(tmp_path):
         bootstrap_profile_dir=profile_dir,
     )
 
-    assert report["schema"] == "pcc.virtual_thread_comparison.v1"
+    assert report["schema"] == "pcc.diagnostics.virtual_thread_comparison.v1"
     assert report["iterations"] == 4
     assert report["verdict"]["comparison_gate_complete"] is True
     assert report["verdict"]["production_virtual_threads"] is True
@@ -105,7 +105,7 @@ def test_virtual_thread_comparison_script_dry_run_json():
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    assert payload["schema"] == "pcc.virtual_thread_comparison.v1"
+    assert payload["schema"] == "pcc.diagnostics.virtual_thread_comparison.v1"
     assert payload["verdict"]["comparison_gate_complete"] is True
     assert payload["verdict"]["production_virtual_threads"] is True
     assert {row["name"] for row in payload["rows"]} == {

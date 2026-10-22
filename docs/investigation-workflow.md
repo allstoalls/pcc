@@ -62,8 +62,8 @@ Documentation does not authorize commit/push or reverting shared work.
 After editing an investigation, regenerate in order:
 
 ```bash
-env -u LC_ALL uv run python scripts/regen_investigations_index.py
-env -u LC_ALL uv run python scripts/distill_investigations.py
+uv run python scripts/regen_investigations_index.py
+uv run python scripts/distill_investigations.py
 ```
 
 `tests/test_knowledge_pages_are_current.py` checks the generated pages. These

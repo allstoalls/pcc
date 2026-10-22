@@ -1,8 +1,8 @@
-from pcc.llvm_capi.compat import ir
-from pcc.py_frontend import py_ast as pa
-from pcc.py_frontend.codegen.expr_helper_lowering import ExprHelperLoweringMixin
-from pcc.py_frontend.codegen.core_helpers import CoreHelperMixin
-from pcc.py_frontend.codegen.method_call_lowering import _method_abi_type_matches
+from pcc.ir.compat import ir
+from pcc.frontends.python import py_ast as pa
+from pcc.frontends.python.codegen.expr_helper_lowering import ExprHelperLoweringMixin
+from pcc.frontends.python.codegen.core_helpers import CoreHelperMixin
+from pcc.frontends.python.codegen.method_call_lowering import _method_abi_type_matches
 
 
 class _NoSextBuilder:

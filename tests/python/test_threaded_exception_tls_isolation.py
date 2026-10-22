@@ -11,7 +11,7 @@ from tests.runtime_build_cache import (
 
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 
 
 def _harness_source(*, expect_registered_tls_roots: bool) -> str:

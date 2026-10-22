@@ -15,7 +15,7 @@ import subprocess
 import pytest
 
 from pcc.backend.self_backend_dispatch import emit_self_asm
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 pytestmark = pytest.mark.xdist_group(name="pcc_heavy_llvm")
@@ -70,7 +70,7 @@ def test_print_operand_cleanup_has_consistent_self_stackmap(tmp_path):
 
 def test_print_operand_errors_leave_lifo_roots_and_reach_handler(
     tmp_path,
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
 ):
     source = tmp_path / "print_exception_cleanup.py"
     source.write_text(SOURCE, encoding="utf-8")
@@ -78,7 +78,7 @@ def test_print_operand_errors_leave_lifo_roots_and_reach_handler(
     environment = os.environ.copy()
     environment.pop("LC_ALL", None)
     environment["PCC_RUNTIME_CC"] = "pcc"
-    environment["PCC_RUNTIME_ARCHIVE"] = str(pcc_py_runtime_archive)
+    environment["PCC_RUNTIME_ARCHIVE"] = str(pcc_runtime_archive)
 
     compiled = subprocess.run(
         [

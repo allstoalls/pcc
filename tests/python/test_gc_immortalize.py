@@ -25,9 +25,9 @@ import pytest
 
 
 @pytest.fixture
-def threaded_runtime(monkeypatch, threaded_pcc_py_runtime_archive):
+def threaded_runtime(monkeypatch, threaded_pcc_runtime_archive):
     monkeypatch.setenv("PCC_WITH_THREADS", "1")
-    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(threaded_pcc_py_runtime_archive))
+    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(threaded_pcc_runtime_archive))
 
 
 CANARY_SRC = '''
@@ -103,7 +103,7 @@ if __name__ == "__main__":
 
 
 def _compile_and_run(tmp_path, name: str, source: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / f"{name}.py"
     src.write_text(source)

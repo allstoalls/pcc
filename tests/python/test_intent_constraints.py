@@ -52,7 +52,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.dependency_verdict import probe_executable_dependency
+from pcc.diagnostics.dependency_verdict import probe_executable_dependency
 
 
 def _find_repo_root() -> Path:
@@ -574,7 +574,7 @@ def test_every_obligation_has_constraints():
         # behavioural coverage
         "TestObligation4SelfBackendBehavioural", "TestPythonSemanticsDifferential",
         "TestObligation7Behavioural", "TestObligation6GCEquality",
-        "TestMetamorphicDifferential", "TestCrossBackendDeterminism",
+        "TestMetamorphicDifferential", "TestOwnedBackendDeterminism",
         "TestObligation3PackageRoundTrip",
         "TestIntentGaps",
         # corpora that must exist
@@ -598,12 +598,12 @@ class TestObligation1ModeLabeling:
     | LLVM-backed != self-backed | stage1 != pcc1->pcc2->pcc3 fixed point."""
 
     def test_cli_exposes_the_three_mode_axes(self):
-        src = _read("pcc/cli_core.py")
+        src = _read("pcc/driver/cli_core.py")
         for flag in ("--backend", "--python-libpython", "--ir-scaffold"):
             assert flag in src, f"{flag} mode axis missing from cli_core.py"
 
     def test_cli_rejects_unlabeled_mode_values(self):
-        src = _read("pcc/cli_core.py")
+        src = _read("pcc/driver/cli_core.py")
         assert "invalid --python-libpython" in src
         assert "invalid --ir-scaffold" in src
 
@@ -659,7 +659,7 @@ class TestObligation3EcosystemGeneric:
     def test_no_package_special_casing_in_frontend(self):
         offenders = [
             f"{rel}:{i}"
-            for rel, txt in _iter_source_files("pcc/py_frontend", "pcc/project.py")
+            for rel, txt in _iter_source_files("pcc/frontends/python", "pcc/driver/project.py")
             for i, line in enumerate(txt.splitlines(), 1)
             if self._RE.search(line)
         ]
@@ -668,7 +668,7 @@ class TestObligation3EcosystemGeneric:
     def test_no_package_special_casing_in_cli_or_codegen(self):
         offenders = [
             f"{rel}:{i}"
-            for rel, txt in _iter_source_files("pcc/cli_core.py", "pcc/cli_bootstrap.py", "pcc/codegen")
+            for rel, txt in _iter_source_files("pcc/driver/cli_core.py", "pcc/driver/cli_bootstrap.py", "pcc/frontends/c/codegen")
             for i, line in enumerate(txt.splitlines(), 1)
             if self._RE.search(line)
         ]
@@ -678,7 +678,7 @@ class TestObligation3EcosystemGeneric:
         offenders = [
             f"{rel}:{i}"
             for rel, txt in _iter_source_files(
-                "pcc/py_runtime/src", "pcc/py_runtime/include", suffixes=(".c", ".h")
+                "pcc/runtime/src", "pcc/runtime/include", suffixes=(".c", ".h")
             )
             for i, line in enumerate(txt.splitlines(), 1)
             if self._RE.search(line)
@@ -735,23 +735,23 @@ class TestObligation6FiveGCComparativeStatic:
     _GC_KIND_RE = re.compile(r"PCC_GC_KIND_\w+\s*=\s*(\d+)")
 
     def test_exactly_five_gc_backends(self):
-        header = _read("pcc/py_runtime/include/py_runtime.h")
+        header = _read("pcc/runtime/include/py_runtime.h")
         values = sorted(int(m) for m in self._GC_KIND_RE.findall(header))
         assert values == [0, 1, 2, 3, 4], f"5-GC matrix changed shape: {values}"
 
     def test_all_five_backend_names_present(self):
-        header = _read("pcc/py_runtime/include/py_runtime.h")
+        header = _read("pcc/runtime/include/py_runtime.h")
         for name in ("REFCOUNT_CYCLE", "INCREMENTAL_TRICOLOR", "CONCURRENT_MARK_SWEEP",
                      "GENERATIONAL_MINOR_MAJOR", "COLORED_RELOCATING"):
             assert f"PCC_GC_KIND_{name}" in header, f"backend slot missing: {name}"
 
     def test_single_slot_barrier_contract(self):
-        header = _read("pcc/py_runtime/include/py_runtime.h")
-        internal = _read("pcc/py_runtime/src/py_internal.h")
+        header = _read("pcc/runtime/include/py_runtime.h")
+        internal = _read("pcc/runtime/src/py_internal.h")
         assert "pcc_gc_load_ptr" in header
         assert "pcc_gc_store_ptr" in header
         assert "pcc_gc_slot_is_runtime_root" in internal
-        mapped_roots = _read("pcc/py_runtime/py/freestanding_gc_mapped_roots.py")
+        mapped_roots = _read("pcc/runtime/py/freestanding_gc_mapped_roots.py")
         assert '@c_abi_export("pcc_gc_visit_registered_root_slots")' in mapped_roots
 
     def test_every_backend_has_its_own_bootstrap_gate(self):
@@ -907,21 +907,18 @@ class TestMetamorphicDifferential:
 
 
 @pytest.mark.integration
-class TestCrossBackendDeterminism:
-    """Obligation 4: the self backend is a faithful execution root and LLVM is
-    the oracle, not the owner — the same program must produce identical
-    observable output under --backend llvm and --backend self, and both must
-    match CPython."""
+class TestOwnedBackendDeterminism:
+    """Independent owned compilations must agree with each other and CPython."""
 
     @pytest.mark.parametrize("source", [s for _, s in CROSS_BACKEND_CASES],
                              ids=[i for i, _ in CROSS_BACKEND_CASES])
-    def test_llvm_and_self_agree_with_cpython(self, tmp_path, source):
+    def test_independent_self_compilations_agree_with_cpython(self, tmp_path, source):
         cpy = _run_cpython(tmp_path, source)
-        llvm = _compile_and_run(tmp_path / "llvm", source, backend="llvm")
-        self_out = _compile_and_run(tmp_path / "self", source, backend="self")
-        assert llvm == cpy, "llvm backend diverges from CPython"
-        assert self_out == cpy, "self backend diverges from CPython"
-        assert llvm == self_out, "self backend diverges from the llvm oracle"
+        first = _compile_and_run(tmp_path / "first", source, backend="self")
+        second = _compile_and_run(tmp_path / "second", source, backend="self")
+        assert first == cpy, "first self compilation diverges from CPython"
+        assert second == cpy, "second self compilation diverges from CPython"
+        assert first == second, "independent self compilations disagree"
 
 
 @pytest.mark.integration

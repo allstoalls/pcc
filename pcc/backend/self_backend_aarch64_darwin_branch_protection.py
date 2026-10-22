@@ -8,7 +8,7 @@ The LLVM execution path hardens emitted AArch64 code with pointer
 authentication (``pac-ret``) and branch-target-identification (``bti``) via the
 ``"branch-target-enforcement"`` / ``"sign-return-address"="non-leaf"`` /
 ``"sign-return-address-key"="a_key"`` function attributes, attached during IR
-construction by ``LLVMCodeGenerator``. The self
+construction by ``CCodeGenerator``. The self
 backend is a *first-class execution root* — it must not depend on LLVM for
 security. Without the instructions emitted here, a ``--backend self`` binary
 has zero return-address signing and zero forward-edge landing pads, leaving

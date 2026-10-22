@@ -2,7 +2,7 @@
 
 Every unfinished row of `docs/goal/task-board.yaml` (status other than DONE_STRONG: 85 TODO_READY, 11 TODO_NEEDS_DESIGN, 23 IN_PROGRESS, 122 DONE_WEAK) was migrated to a GitHub issue with `priority:*`, `status:*` and `task-board` labels. Rows for the GUI/harness went to `allstoalls/pcc-gui`, gateway rows to `allstoalls/pcc-gateway`, everything else to `allstoalls/pcc`. The 249 DONE_STRONG rows were not migrated; the last full board is in core commit `2574f585`.
 
-The human's decision (2026-09-06): the task board, `docs/goal/evidence` (924 files) and the goal machinery are to be retired in favour of issues plus distilled knowledge docs; that deletion has not been performed yet (see `docs/knowledge/2026-09-06-session-handoff.md`).
+The human's decision (2026-09-06): the task board, `docs/goal/evidence` (924 files) and the goal machinery are to be retired in favour of issues plus distilled knowledge docs; the recorded session had not performed that deletion. The original session handoff is preserved in the external recovery archive described in [current status](status.md#evidence-and-recovery). This historical decision does not authorize further deletion today.
 
 ## allstoalls/pcc (179 issues)
 

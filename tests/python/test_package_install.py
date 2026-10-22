@@ -605,6 +605,14 @@ def test_find_links_prefers_highest_version_and_reports_unsupported_requirements
 
 def test_pcc_package_install_cli_and_pip_install_shape(tmp_path):
     project = _write_demo_project(tmp_path / "demo_pkg-0.1")
+    (project / "meson.build").unlink()
+    (project / "pyproject.toml").write_text(
+        "[project]\nname = 'demo_pkg'\nversion = '0.1'\n", encoding="utf-8"
+    )
+    for pattern in ("*.c", "*.f90"):
+        for source in project.glob(pattern):
+            source.unlink()
+    (project / "compile_commands.json").unlink()
     site = tmp_path / "site"
     cache = tmp_path / "cache"
     env = os.environ.copy()
@@ -661,6 +669,7 @@ def test_pcc_package_install_cli_and_pip_install_shape(tmp_path):
     assert (tmp_path / "site2" / "demo_pkg" / "__init__.py").exists()
     assert (tmp_path / "site2" / "demo_pkg" / "core.py").exists()
 
+    native_project = _write_demo_project(tmp_path / "native-demo-pkg")
     proc = subprocess.run(
         [
             "uv",
@@ -669,7 +678,7 @@ def test_pcc_package_install_cli_and_pip_install_shape(tmp_path):
             "-m",
             "pip",
             "install",
-            str(project),
+            str(native_project),
             "--target",
             str(tmp_path / "site2"),
             "--cache-dir",
@@ -686,7 +695,7 @@ def test_pcc_package_install_cli_and_pip_install_shape(tmp_path):
     assert plan["ok"] is False
     assert plan["build_mode_requested"] == "owned"
     assert plan["installs"][0]["build_report"]["diagnostics"] == [
-        "PCC-PKG-OWNED-BUILD-TOOL-REQUIRED"
+        "PCC-PKG-OWNED-MESON-SOURCE-REQUIRED"
     ]
 
 
@@ -754,13 +763,14 @@ def test_pcc_pip_install_local_simple_index(tmp_path):
                 "--cache-dir",
                 str(tmp_path / "cache"),
             ],
-            check=True,
+            check=False,
             text=True,
             capture_output=True,
             timeout=60,
             env=env,
         )
 
+    assert proc.returncode == 0, proc.stdout + proc.stderr
     plan = json.loads(proc.stdout)
     assert plan["ok"] is True
     assert plan["index_urls"] == [index_url]
@@ -855,7 +865,7 @@ def test_pcc_pip_install_find_links_installs_local_dependencies(tmp_path):
 
 
 def test_native_pcc1_owned_meson_source_reenters_receipt_bound_build_path(tmp_path):
-    from pcc.cli_bootstrap import _native_build_install_source_json
+    from pcc.driver.cli_bootstrap import _native_build_install_source_json
 
     project = _write_demo_project(tmp_path / "demo_pkg-0.1")
     _write_demo_meson_build_overlay(project)

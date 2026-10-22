@@ -17,7 +17,7 @@ from pcc.backend.macho_internal_inputs import read_internal_input_manifest
 def main(argv=None, *, _direct_source_view: bool = True) -> None:
     if argv is None:
         argv = sys.argv
-    from pcc.py_frontend.pipeline_targets import host_target_triple
+    from pcc.frontends.python.pipeline_targets import host_target_triple
     target = host_target_triple()
     filtered = [argv[0]]
     scan = 1

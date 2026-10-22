@@ -1,6 +1,14 @@
 """Proven scalar tail positions restore the frame before branching."""
 
+import sys
+import platform
+import pytest
+
 from pcc.backend.self_backend_aarch64_darwin import emit_aarch64_darwin_asm
+
+
+# Checks the serialized precise stack-map table, which objects carry only on request.
+pytestmark = pytest.mark.usefixtures("precise_stackmap_tables")
 
 
 _TRIPLE = 'target triple = "arm64-apple-darwin23.6.0"\n'
@@ -31,8 +39,6 @@ def _execute(source, path, optimize):
     from pcc.backend.self_backend_aarch64_darwin import emit_aarch64_darwin_indexed_transport
     from pcc.backend.self_backend_parse import parse_self_backend_module
 
-    if sys.platform != "darwin" or platform.machine() != "arm64":
-        pytest.skip("AArch64 Darwin execution")
     transport = emit_aarch64_darwin_indexed_transport(parse_self_backend_module(source), optimize=optimize)
     sections, undefined = transport.assemble_sections()
     image = link_executable([NativeObject.from_sections(sections, undefined=undefined)])
@@ -44,6 +50,8 @@ def _execute(source, path, optimize):
     assert result.returncode == 0, result.stderr
 
 
+# AArch64 Darwin execution
+@pytest.mark.pcc_gate(probe=lambda: not (sys.platform != "darwin" or platform.machine() != "arm64"))
 def test_tail_recursion_executes_without_growing_frames(tmp_path):
     for optimize in (False, True):
         depth = 100000 if optimize else 300
@@ -71,6 +79,8 @@ entry:
         _execute(source, tmp_path / ("recursive-" + str(optimize)), optimize)
 
 
+# AArch64 Darwin execution
+@pytest.mark.pcc_gate(probe=lambda: not (sys.platform != "darwin" or platform.machine() != "arm64"))
 def test_tail_call_forwards_eight_register_arguments(tmp_path):
     source = _TRIPLE + '''
 @number = global i64 8
@@ -259,6 +269,10 @@ entry:
         transport.encoded_line_records.close()
     payload = next(section.data for section in sections if section.sectname == "__pcc_stackmaps")
     records = decode_stack_map(payload).functions[0].records
-    assert len(records) == 3
-    assert sum(record.kind == SAFEPOINT_CALL for record in records) == 2
-    assert any(record.locations for record in records)
+    # Entry plus the rooted opaque_call. The callee call after frame_leave
+    # roots nothing, and rootless call records are not written (4d35eb241):
+    # a stack walk skips a frame with no record at its return address.
+    assert len(records) == 2
+    calls = [record for record in records if record.kind == SAFEPOINT_CALL]
+    assert len(calls) == 1
+    assert calls[0].locations

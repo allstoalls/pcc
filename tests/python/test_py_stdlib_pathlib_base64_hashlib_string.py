@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from pcc.py_stdlib import base64
-from pcc.py_stdlib import hashlib
-from pcc.py_stdlib import pathlib
-from pcc.py_stdlib import string
+from pcc.stdlib import base64
+from pcc.stdlib import hashlib
+from pcc.stdlib import pathlib
+from pcc.stdlib import string
 
 
 def test_pathlib_purepath_operations(tmp_path):

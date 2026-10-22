@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from pcc.py_stdlib import dataclasses
-from pcc.py_stdlib import functools
-from pcc.py_stdlib import itertools
-from pcc.py_stdlib import collections
+from pcc.stdlib import dataclasses
+from pcc.stdlib import functools
+from pcc.stdlib import itertools
+from pcc.stdlib import collections
 
 
 def test_dataclasses_no_exec_defaults_asdict_replace_make():

@@ -1,108 +1,85 @@
 # 01 · System Overview
 
-pcc turns C **or** Python source into native code. The two frontends are separate subsystems that converge on a common backend layer.
+PCC compiles Python and C through separate frontends into its owned IR and
+self backend. Shared command semantics and execution ownership are requirements
+in [Project Intent](../project-intent.md) and
+[compiler-contract.md](../compiler-contract.md).
 
-## End-to-end data flow
-
-```mermaid
-flowchart TD
-    subgraph Entry
-      A["pcc.py / cli_core.py / api.py<br/>cli_main → execute_cli"]
-      A --> B{"path ends in .py?"}
-    end
-
-    subgraph "C frontend (mature)"
-      B -->|no| C1["project.py<br/>collect TranslationUnits"]
-      C1 --> C2["c_evaluator.py<br/>_system_cpp preprocess"]
-      C2 --> C3["c_parser.py (PLY)<br/>→ C AST"]
-      C3 --> C4["c_codegen.py<br/>LLVMCodeGenerator"]
-      C4 --> IR
-    end
-
-    subgraph "Python frontend (experimental)"
-      B -->|yes| P1["py_parse.py + py_lift.py<br/>→ pcc AST (py_ast)"]
-      P1 --> P2["type_infer.py<br/>infer_module"]
-      P2 --> P3["codegen/layer1.py<br/>L1CodeGen (≈90 mixins)"]
-      P3 --> IR
-    end
-
-    IR["LLVM IR text"] --> X{"backend / mode"}
-    X -->|llvm| L1["llvmlite or llvm_capi"]
-    X -->|self| S1["pcc/backend self-emit"]
-    L1 --> EXE
-    S1 --> EXE
-    EXE["object · executable · MCJIT"]
-    P3 -. link .-> RT["libpy_runtime*.a"]
-    EXE -. C path .-> SCC["system cc / MCJIT"]
-```
-
-## Three subsystems, one repo
+## Compilation flow
 
 ```mermaid
 flowchart LR
-    subgraph CCOMP["1 · C compiler"]
-      direction TB
-      ca["pcc/parse · pcc/lex · pcc/ast"]
-      cb["pcc/codegen/c_codegen.py"]
-      ce["pcc/evaluater/c_evaluator.py"]
-    end
-    subgraph PYCOMP["2 · Python compiler"]
-      direction TB
-      pa["pcc/parse/py_*"]
-      pb["pcc/py_frontend/*"]
-      pc["pcc/py_frontend/codegen/*"]
-    end
-    subgraph RUNT["3 · Runtime"]
-      direction TB
-      ra["pcc/py_runtime/src/*.c"]
-      rb["pcc/py_runtime/py/*.py (mirror)"]
-      rc["5 GC backends"]
-    end
-    subgraph SHB["Shared backends"]
-      direction TB
-      ba["pcc/llvm_capi (LLVM-C)"]
-      bb["pcc/backend (self)"]
-      bd["pcc/passes · pcc/ssa · pcc/ir_passes"]
-    end
-    CCOMP --> SHB
-    PYCOMP --> SHB
-    PYCOMP -.links.-> RUNT
+    Entry["pcc / python -m pcc / pcc1"] --> Driver["driver: command dispatch and builds"]
+    Driver --> C["frontends/c: preprocessing, parsing, semantic lowering"]
+    Driver --> Py["frontends/python: parsing, typing, lowering"]
+    C --> IR["ir: construction and structured capture"]
+    Py --> IR
+    IR --> Opt["ir/optimization: owned IR passes"]
+    Opt --> Backend["backend: instruction selection, objects and linking"]
+    Backend --> Native["native program"]
+    Runtime["runtime/py: semantic runtime and five GC backends"] --> Native
 ```
 
-## The five layers
+IR text uses LLVM syntax. The IR builder and indexed capture are PCC code;
+they do not require LLVM libraries. C AST/SSA transformations live with the C
+frontend; shared final-IR transformations live under `ir/optimization`.
 
-| Layer | Primary paths | Responsibility |
-|---|---|---|
-| Entry surfaces | `pcc/pcc.py`, `pcc/cli_core.py`, `pcc/cli_launcher.py`, `pcc/api.py`, `pcc/cli_bootstrap.py` | CLI UX, Python API, bootstrap-stage CLI |
-| Build orchestration | `pcc/project.py` | collect files, infer source sets, make-driven builds, TranslationUnits |
-| Frontends | `pcc/evaluater/`, `pcc/codegen/`, `pcc/py_frontend/`, `pcc/parse/` | parse + lower C / Python to LLVM IR |
-| Optimization / lowering | `pcc/passes/`, `pcc/ssa/`, `pcc/ir_passes/` | High/Mid/Low/Backend passes; SSA mid-tier |
-| Backends + runtime | `pcc/llvm_capi/`, `pcc/backend/`, `pcc/py_runtime/` | emit native code; runtime objects + GC |
+## Directory responsibilities
 
-## Entry & dispatch (where it all starts)
-
-- `pcc/cli_launcher.py:11` `main()` → `cli_main(argv)`.
-- `pcc/cli_core.py:1111` `cli_main()` parses args; `execute_cli()` decides **C vs Python** by checking whether the input path ends in `.py` (`cli_core.py:905`).
-- `pcc/cli_bootstrap.py:11` is a separate **Python-only** CLI used by the self-hosted `pcc1/pcc2/pcc3` binaries; it delegates C/project inputs back to a host `pcc` (`PCC_HOST_PCC`) and adds `-m <module>` (pip/pytest) support.
-
-## Repo map (orientation)
-
-| Path | What it is |
+| Path | Responsibility |
 |---|---|
-| `pcc/pcc.py`, `pcc/cli_core.py` | CLI entrypoints |
-| `pcc/api.py` | `build(...)` / `module(...)` Python API (C) |
-| `pcc/project.py` | source collection, TU selection, make-driven builds |
-| `pcc/evaluater/c_evaluator.py` | C preprocess / parse / IR / optimize / execute coordinator |
-| `pcc/codegen/c_codegen.py` | core C semantic lowering (most C bugs live here) |
-| `pcc/parse/`, `pcc/lex/`, `pcc/ast/`, `pcc/ply/` | C parser pieces (PLY) |
-| `pcc/parse/py_parse.py`, `pcc/parse/py_lift.py` | native Python parser + lift to pcc AST |
-| `pcc/py_frontend/` | Python frontend (type infer, pipeline, codegen) |
-| `pcc/py_frontend/codegen/` | ≈90 lowering mixins + native module lowering |
-| `pcc/py_runtime/src/*.c`, `pcc/py_runtime/py/*.py` | runtime (C + pcc-Python mirror) |
-| `pcc/llvm_capi/` | in-repo LLVM-C IR builder (llvmlite fallback) |
-| `pcc/backend/` | LLVM-free self-backend |
-| `pcc/package/`, `pcc/package_compat.py` | package install / extension-ABI gating |
-| `utils/fake_libc_include/` | fake libc + `Python.h` shim headers |
-| `tests/`, `projects/`, `benchmarks/` | regression, real-project, perf |
+| `pcc/driver/` | CLI dispatch, project/TU collection, cache identity and shared source/resource paths |
+| `pcc/frontends/c/` | C preprocessing, AST, lexing/parsing, semantic lowering, C AST/SSA passes and evaluation |
+| `pcc/frontends/python/` | Python parsing/lifting, type inference, lowering, native import/export closure and runtime build coordination |
+| `pcc/ir/` | Shared IR builder, thin imports, structured indexed capture and internal floating-point serialization helpers |
+| `pcc/ir/optimization/` | Owned mem2reg/SROA, scalar/CFG transforms, DCE and inlining |
+| `pcc/backend/` | Target ABI/instruction lowering, assemblers, object formats, relocations, linking and signing |
+| `pcc/runtime/py/` | Production runtime implementations authored in pcc-Python, including all five GC backends |
+| `pcc/runtime/src/`, `pcc/runtime/include/` | Runtime migration mirrors and ABI headers; source presence is not production-link evidence |
+| `pcc/stdlib/` | Owned standard-library providers selected by native import resolution |
+| `pcc/package/` | Package acquisition, metadata, install/build flows and generic array planning |
+| `pcc/diagnostics/` | Diagnostics, profiling, artifact inspection and contract checkers |
+| `pcc/library/` | Ordinary Python helper libraries and models; presence/tests do not establish native compiler integration |
+| `pcc/support/` | Shared compiler implementation helpers |
+| `pcc/tools/` | Maintainer-facing IR/object/provenance tools |
+| `tests/fixtures/libc/` | Attributed C reference sources consumed by live differential tests |
+| `scripts/qualification/` | Host-side release contracts, workload catalogues and evidence validation |
 
-See the per-subsystem docs for the internals of each box above.
+GPU kernel IR, distributed models and GPU GC models retain their own extension
+packages. They do not replace the self-host/five-GC qualification spine.
+
+## Top-level file review
+
+| File | Why it belongs at the package root |
+|---|---|
+| `__init__.py` | Defines package exports. Its current diagnostics wiring is an import side effect, not proof of a minimal import closure. |
+| `__main__.py` | Implements `python -m pcc` and remains the self-host source entrypoint. |
+| `api.py` | Publishes `build`, `module`, `BuildArtifact` and `Module`, exposed by the package root and README. |
+| `value_model.py` | Public value-class/array/integer-buffer markers and implementations used by compiler lowering. |
+| `gpu.py` | Public kernel markers recognized by the GPU frontend. Device qualification is separate. |
+| `virtual_thread.py` | Public compiler-recognized virtual-thread operations. |
+| `library/effects.py` | Scoped effect dispatch library with one shared continuation and thread-local handler stack. The early duplicate runtime prototypes are retired. |
+
+Array planning helpers moved to `package`; category/runtime-effect checking
+models moved to `diagnostics/contracts`; ordinary ADT, functional, persistent,
+trait and buffer models moved to `library`. Effect module paths remain stable. These moves preserve
+implementations and their tests. Similar names do not make the models
+interchangeable: the sealed-ADT and effect variants have different APIs.
+
+The duplicate Click adapter `pcc.py` was removed after its CLI tests moved to
+the shared driver. The C API publishes owned shared libraries on CPython Darwin
+arm64; other shared-library targets/publication owners fail explicitly at the
+remaining boundary. Directory organization alone establishes neither capability
+nor release qualification.
+
+## Location and validation rules
+
+Source/resource resolution is centralized in `driver/paths.py`; it preserves
+explicit source-root and installed-prefix selection for native compilers whose
+`__file__` can be synthetic. Cache/freshness inventories must include the new
+owners. Runtime archive and sidecar basenames remain stable; old provenance
+receipts retain their recorded source identity and cannot qualify new layouts.
+
+Run focused interface tests and emitted programs first, then rebuild the
+host→pcc1→pcc2→pcc3 chain and require raw byte equality. Previous-layout receipts
+remain previous-layout evidence.

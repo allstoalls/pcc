@@ -9,18 +9,18 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 
 
 # The pcc-Python runtime's tripwires are always armed: no special build.
 @pytest.fixture(scope="module")
-def armed_runtime(pcc_py_runtime_archive: Path) -> Path:
-    return pcc_py_runtime_archive
+def armed_runtime(pcc_runtime_archive: Path) -> Path:
+    return pcc_runtime_archive
 
 
 @pytest.fixture(scope="module")
-def armed_runtime_threaded(threaded_pcc_py_runtime_archive: Path) -> Path:
-    return threaded_pcc_py_runtime_archive
+def armed_runtime_threaded(threaded_pcc_runtime_archive: Path) -> Path:
+    return threaded_pcc_runtime_archive
 
 
 def _compile_probe(tmp_path: Path, archive: Path, name: str, source: str) -> Path:

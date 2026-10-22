@@ -5,7 +5,7 @@ import argparse
 import json
 import sys
 
-from pcc.bootstrap_profile_report import (
+from pcc.diagnostics.bootstrap_profile_report import (
     build_bootstrap_profile_report,
     format_bootstrap_profile_report,
 )
@@ -13,7 +13,7 @@ from pcc.bootstrap_profile_report import (
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="summarize scripts/bootstrap.sh stage profile JSON"
+        description="summarize scripts/bootstrap.py stage profile JSON"
     )
     parser.add_argument(
         "profile_dir",

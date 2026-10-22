@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from . import BackendUnavailable
 from .self_backend_target_match import is_aarch64_linux_triple
 from .self_backend_aarch64_darwin_abi import (
     aggregate_passed_indirect,
@@ -32,6 +33,7 @@ from .self_backend_aarch64_darwin_slots import (
     store_value_regs_to_value_slot,
 )
 from .self_backend_aarch64_darwin_symbols import asm_symbol
+from .self_backend_dynamic_alloca import DYNAMIC_ALLOCA_INTRINSIC
 from .self_backend_ir import (
     ParsedFunction,
     SlotInfo,
@@ -39,11 +41,25 @@ from .self_backend_ir import (
 )
 from .self_backend_module_symbols import PreparedModuleSymbols
 from .self_backend_kernel import (
+    IndexedFunctionKernel,
+    _scalar_window_is_complete,
     TYPE_KIND_FP,
     TYPE_KIND_INT,
     TYPE_KIND_PTR,
     get_indexed_function_kernel,
 )
+
+
+def function_uses_dynamic_alloca(func: ParsedFunction) -> bool:
+    kernel = get_indexed_function_kernel(func)
+    call_count = len(kernel.call_scalars) // 8
+    call_id = 0
+    while call_id < call_count:
+        header = kernel.call_header(call_id)
+        if not (header.third & 1) and kernel.call_texts[header.second] == DYNAMIC_ALLOCA_INTRINSIC:
+            return True
+        call_id += 1
+    return False
 
 
 def emit_function_prologue(
@@ -54,6 +70,12 @@ def emit_function_prologue(
     # The allocator is conservative and leaves every preassigned stack slot in
     # place, so an unsupported shape remains byte-for-byte on the spill path.
     allocate_aarch64_block_registers(func)
+    # Source-debug builds keep an actual frame chain, including leaf calls.
+    # Until full unwind programs cover every prologue/epilogue PC, omitting
+    # a leaf frame makes the debugger's frame-pointer walk skip its caller.
+    if (func.type_context is not None and func.type_context.debug_info is not None
+            and func.name in func.type_context.debug_info.functions):
+        func.aarch64_frameless = False
     symbol = asm_symbol(func.name, module_symbols)
     lines = ["", ".p2align 2"]
     if func.is_global:
@@ -67,6 +89,15 @@ def emit_function_prologue(
         lines.append("  mov x0, sp")
     if func.platform_frame_extra:
         func.aarch64_frameless = False
+    func.aarch64_dynamic_stack = function_uses_dynamic_alloca(func)
+    if func.aarch64_dynamic_stack:
+        func.aarch64_frameless = False
+        if func.platform_frame_extra:
+            # The va_list register save area is addressed from SP.
+            raise BackendUnavailable(
+                f"self backend cannot combine a dynamic alloca with the Linux "
+                f"variadic register save area in {func.name!r}"
+            )
     # AArch64 branch protection (pac-ret + BTI). ``paciasp`` signs LR (x30) with
     # SP as the modifier *before* the frame save stores it, and doubles as a BTI
     # ``c`` landing pad for ``bl``/``blr`` callers. The matching ``autiasp`` is
@@ -127,8 +158,21 @@ def emit_function_prologue(
         if func.indexed_slot_projection:
             arg_value_id = kernel.value_id(arg.name)
             arg_type_id = kernel.value_type_id(arg_value_id)
-            arg_header = kernel.type_header(arg_type_id)
-            if arg_header.first in (
+            arg_header_is_scalar = False
+            if type(kernel) is IndexedFunctionKernel:
+                arg_header_scalar_id = arg_type_id
+                arg_header_is_scalar = _scalar_window_is_complete(
+                    kernel.type_scalars, arg_header_scalar_id, 12, 0
+                )
+                if arg_header_is_scalar:
+                    arg_header_scalar = kernel.type_scalars.get_unchecked(
+                        arg_header_scalar_id * 12 + 0
+                    )
+                else:
+                    arg_header = kernel.type_header(arg_header_scalar_id)
+            else:
+                arg_header = kernel.type_header(arg_type_id)
+            if (arg_header_scalar if arg_header_is_scalar else arg_header.first) in (
                 TYPE_KIND_INT,
                 TYPE_KIND_FP,
                 TYPE_KIND_PTR,

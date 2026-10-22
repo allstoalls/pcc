@@ -14,8 +14,8 @@ def test_py_obj_next_roots_internal_iterator_state_across_call_and_equality():
     )[0]
     assert py_body.count("_iter_prepare_moving_root(") == 6
     eq_at = py_body.index("is_stop: int = py_obj_eq(")
-    assert py_body.index("_iter_reload_moving_root(result_slot", eq_at) > eq_at
-    assert py_body.index("_iter_reload_moving_root(sentinel_slot", eq_at) > eq_at
+    assert py_body.index("_iter_finish_owned_root(result_slot, result_handle, it_handle)", eq_at) > eq_at
+    assert py_body.index("_iter_release_owned_root(sentinel_slot, sentinel_handle)", eq_at) > eq_at
     done_at = py_body.index("store_i64(it_obj, 24, -2)", eq_at)
     assert py_body.rindex(
         "_iter_reload_moving_root(it_slot, it_handle)", eq_at, done_at

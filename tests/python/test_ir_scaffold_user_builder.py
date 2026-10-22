@@ -8,11 +8,11 @@ import sys
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 _SOURCE = '''
-from pcc.llvm_capi.compat import ir
+from pcc.ir.compat import ir
 
 class TextBuilder:
     def __init__(self, prefix: str):
@@ -66,15 +66,15 @@ def test_user_builder_names_emit_user_calls(tmp_path):
         str(source), str(emitted), emit_llvm_only=True, ir_scaffold_mode="on"
     )
     text = emitted.read_text(encoding="utf-8")
-    assert "user_pcc_llvm_capi_ir_IRBuilder_add" not in text
-    assert "user_pcc_llvm_capi_ir_IRBuilder_as_pointer" not in text
-    assert "user_pcc_llvm_capi_ir_scaffold_IntType" not in text
+    assert "user_pcc_ir_ir_IRBuilder_add" not in text
+    assert "user_pcc_ir_ir_IRBuilder_as_pointer" not in text
+    assert "user_pcc_ir_ir_scaffold_IntType" not in text
 
 
 def test_irbuilder_annotation_does_not_replace_runtime_receiver(tmp_path):
     source = tmp_path / "annotated.py"
     source.write_text(
-        "from pcc.llvm_capi.compat import ir\n"
+        "from pcc.ir.compat import ir\n"
         "class UserBuilder:\n"
         "    def add(self, a, b):\n"
         "        return a + b\n"
@@ -85,13 +85,13 @@ def test_irbuilder_annotation_does_not_replace_runtime_receiver(tmp_path):
     )
     emitted = tmp_path / "annotated.ll"
     compile_python(str(source), str(emitted), emit_llvm_only=True, ir_scaffold_mode="on")
-    assert "user_pcc_llvm_capi_ir_IRBuilder_add" not in emitted.read_text(encoding="utf-8"), "annotation redirected an ordinary method"
+    assert "user_pcc_ir_ir_IRBuilder_add" not in emitted.read_text(encoding="utf-8"), "annotation redirected an ordinary method"
 
 
 def test_provider_import_does_not_prove_local_or_field_builder(tmp_path):
     source = tmp_path / "dynamic.py"
     source.write_text(
-        "from pcc.llvm_capi.compat import ir\n"
+        "from pcc.ir.compat import ir\n"
         "class UserBuilder:\n"
         "    def add(self, a, b):\n"
         "        return a + b\n"
@@ -108,13 +108,13 @@ def test_provider_import_does_not_prove_local_or_field_builder(tmp_path):
     )
     emitted = tmp_path / "dynamic.ll"
     compile_python(str(source), str(emitted), emit_llvm_only=True, ir_scaffold_mode="on")
-    assert "user_pcc_llvm_capi_ir_IRBuilder_add" not in emitted.read_text(encoding="utf-8"), "provider import redirected an ordinary builder"
+    assert "user_pcc_ir_ir_IRBuilder_add" not in emitted.read_text(encoding="utf-8"), "provider import redirected an ordinary builder"
 
 
 def test_branch_join_does_not_keep_only_the_last_builder_identity(tmp_path):
     source = tmp_path / "join.py"
     source.write_text(
-        "from pcc.llvm_capi.compat import ir\n"
+        "from pcc.ir.compat import ir\n"
         "def render(flag, factory, a, b):\n"
         "    if flag:\n"
         "        builder = factory()\n"
@@ -125,7 +125,7 @@ def test_branch_join_does_not_keep_only_the_last_builder_identity(tmp_path):
     )
     emitted = tmp_path / "join.ll"
     compile_python(str(source), str(emitted), emit_llvm_only=True, ir_scaffold_mode="on")
-    assert "user_pcc_llvm_capi_ir_IRBuilder_add" not in emitted.read_text(encoding="utf-8"), "branch join promoted an uncertain builder"
+    assert "user_pcc_ir_ir_IRBuilder_add" not in emitted.read_text(encoding="utf-8"), "branch join promoted an uncertain builder"
 
 
 @pytest.mark.parametrize(
@@ -138,7 +138,7 @@ def test_branch_join_does_not_keep_only_the_last_builder_identity(tmp_path):
 def test_zero_iteration_loop_keeps_builder_identity_uncertain(tmp_path, loop):
     source = tmp_path / "loop.py"
     source.write_text(
-        "from pcc.llvm_capi.compat import ir\n"
+        "from pcc.ir.compat import ir\n"
         "def render(flag, values, factory, a, b):\n"
         "    builder = factory()\n"
         + loop
@@ -147,13 +147,13 @@ def test_zero_iteration_loop_keeps_builder_identity_uncertain(tmp_path, loop):
     )
     emitted = tmp_path / "loop.ll"
     compile_python(str(source), str(emitted), emit_llvm_only=True, ir_scaffold_mode="on")
-    assert "user_pcc_llvm_capi_ir_IRBuilder_add" not in emitted.read_text(encoding="utf-8"), "zero-iteration loop promoted an uncertain builder"
+    assert "user_pcc_ir_ir_IRBuilder_add" not in emitted.read_text(encoding="utf-8"), "zero-iteration loop promoted an uncertain builder"
 
 
 def test_exception_join_does_not_keep_last_handler_builder(tmp_path):
     source = tmp_path / "handler.py"
     source.write_text(
-        "from pcc.llvm_capi.compat import ir\n"
+        "from pcc.ir.compat import ir\n"
         "def render(flag, factory, a, b):\n"
         "    builder = factory()\n"
         "    try:\n"
@@ -166,13 +166,13 @@ def test_exception_join_does_not_keep_last_handler_builder(tmp_path):
     )
     emitted = tmp_path / "handler.ll"
     compile_python(str(source), str(emitted), emit_llvm_only=True, ir_scaffold_mode="on")
-    assert "user_pcc_llvm_capi_ir_IRBuilder_add" not in emitted.read_text(encoding="utf-8"), "handler join promoted an uncertain builder"
+    assert "user_pcc_ir_ir_IRBuilder_add" not in emitted.read_text(encoding="utf-8"), "handler join promoted an uncertain builder"
 
 
 def test_exception_join_preserves_an_unmodified_builder(tmp_path):
     source = tmp_path / "handler_preserve.py"
     source.write_text(
-        "from pcc.llvm_capi.compat import ir\n"
+        "from pcc.ir.compat import ir\n"
         "def render(a, b, maybe):\n"
         "    builder = ir.IRBuilder()\n"
         "    try:\n"
@@ -184,13 +184,13 @@ def test_exception_join_preserves_an_unmodified_builder(tmp_path):
     )
     emitted = tmp_path / "handler_preserve.ll"
     compile_python(str(source), str(emitted), emit_llvm_only=True, ir_scaffold_mode="on")
-    assert "user_pcc_llvm_capi_ir_IRBuilder_add" in emitted.read_text(encoding="utf-8"), "unmodified builder lost its exact identity"
+    assert "user_pcc_ir_ir_IRBuilder_add" in emitted.read_text(encoding="utf-8"), "unmodified builder lost its exact identity"
 
 
 def test_with_binding_replaces_prior_builder_identity(tmp_path):
     source = tmp_path / "with_binding.py"
     source.write_text(
-        "from pcc.llvm_capi.compat import ir\n"
+        "from pcc.ir.compat import ir\n"
         "class UserBuilder:\n"
         "    def add(self, a, b):\n"
         "        return a + b\n"
@@ -208,28 +208,28 @@ def test_with_binding_replaces_prior_builder_identity(tmp_path):
     )
     emitted = tmp_path / "with_binding.ll"
     compile_python(str(source), str(emitted), emit_llvm_only=True, ir_scaffold_mode="on")
-    assert "user_pcc_llvm_capi_ir_IRBuilder_add" not in emitted.read_text(encoding="utf-8"), "with binding preserved a stale IRBuilder fact"
+    assert "user_pcc_ir_ir_IRBuilder_add" not in emitted.read_text(encoding="utf-8"), "with binding preserved a stale IRBuilder fact"
 
 
 def test_import_binding_replaces_prior_builder_identity(tmp_path):
     source = tmp_path / "import_binding.py"
     source.write_text(
-        "from pcc.llvm_capi.compat import ir\n"
+        "from pcc.ir.compat import ir\n"
         "def render(a, b):\n"
         "    builder = ir.IRBuilder()\n"
-        "    from pcc.llvm_capi.compat import ir as builder\n"
+        "    from pcc.ir.compat import ir as builder\n"
         "    return builder.add(a, b)\n",
         encoding="utf-8",
     )
     emitted = tmp_path / "import_binding.ll"
     compile_python(str(source), str(emitted), emit_llvm_only=True, ir_scaffold_mode="on")
-    assert "user_pcc_llvm_capi_ir_IRBuilder_add" not in emitted.read_text(encoding="utf-8"), "import preserved a stale IRBuilder fact"
+    assert "user_pcc_ir_ir_IRBuilder_add" not in emitted.read_text(encoding="utf-8"), "import preserved a stale IRBuilder fact"
 
 
 def test_module_ir_reassignment_disables_provider_symbol_lowering(tmp_path):
     source = tmp_path / "rebound_ir.py"
     source.write_text(
-        "from pcc.llvm_capi.compat import ir\n"
+        "from pcc.ir.compat import ir\n"
         "class FakeIR:\n"
         "    def IntType(self, number):\n"
         "        return number + 1\n"
@@ -241,10 +241,10 @@ def test_module_ir_reassignment_disables_provider_symbol_lowering(tmp_path):
     )
     emitted = tmp_path / "rebound_ir.ll"
     compile_python(str(source), str(emitted), emit_llvm_only=True, ir_scaffold_mode="on")
-    assert "user_pcc_llvm_capi_ir_scaffold_IntType" not in emitted.read_text(encoding="utf-8"), "module reassignment kept an obsolete provider binding"
+    assert "user_pcc_ir_ir_scaffold_IntType" not in emitted.read_text(encoding="utf-8"), "module reassignment kept an obsolete provider binding"
 
 
-def test_user_builder_names_execute_natively(tmp_path, pcc_py_runtime_archive):
+def test_user_builder_names_execute_natively(tmp_path, pcc_runtime_archive):
     source = tmp_path / "builder.py"
     source.write_text(_SOURCE, encoding="utf-8")
     expected = subprocess.run(
@@ -258,7 +258,7 @@ def test_user_builder_names_execute_natively(tmp_path, pcc_py_runtime_archive):
         backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for gc in range(5):
         result = subprocess.run(

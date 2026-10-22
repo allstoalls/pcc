@@ -24,7 +24,7 @@ _BUILD.mkdir(parents=True, exist_ok=True)
 
 
 def _multi_compile(srcs_mods, out_path: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     srcs = [s for s, _ in srcs_mods]
     mods = [m for _, m in srcs_mods]
@@ -83,7 +83,7 @@ def test_typed_field_access_resolves_natively(tmp_path):
 
 
 def test_local_typed_class_field_access_uses_slot_load(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "typed_local_field.py"
     src.write_text(textwrap.dedent(
@@ -122,7 +122,7 @@ def test_instance_field_precedes_same_named_annotated_class_slot(tmp_path):
     corruption: annotation-only class metadata and an ``__init__`` instance
     write share a name.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "annotated_instance_precedence.py"
     exe = tmp_path / "annotated_instance_precedence"

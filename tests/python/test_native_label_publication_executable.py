@@ -71,12 +71,12 @@ run(int(sys.argv[1]))
 '''.lstrip()
 
 
+# requires explicit immutable PCC_RUNTIME_ARCHIVE
+@pytest.mark.pcc_gate(env="PCC_RUNTIME_ARCHIVE")
 def test_native_label_publication_preserves_offsets_and_errors(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     archive_name = os.environ.get("PCC_RUNTIME_ARCHIVE")
-    if not archive_name:
-        pytest.skip("requires explicit immutable PCC_RUNTIME_ARCHIVE")
     archive = Path(archive_name).resolve()
     assert archive.is_file()
     repo = Path(__file__).resolve().parents[2]

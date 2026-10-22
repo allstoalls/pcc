@@ -1,0 +1,134 @@
+{
+  "artifacts": {
+    "README.md": {
+      "bytes": 8158,
+      "mode": "100644",
+      "sha256": "2ad7b9874cd287537b881d3585e24b1486aa2095cd15ebe93ab688dbcd202128"
+    },
+    "compare_results.py": {
+      "bytes": 7902,
+      "mode": "100644",
+      "sha256": "e461045c3cfce5954c52418dd12482cd8de0df4d25311bcff69c9ec03bf434d9"
+    },
+    "real_module_gate.py": {
+      "bytes": 25257,
+      "mode": "100644",
+      "sha256": "175d696aa7b65a55ba96f9bb7af42c595302763b841e9da6051f2355ee47145d"
+    },
+    "root_contract.py": {
+      "bytes": 17106,
+      "mode": "100644",
+      "sha256": "e128ccc9dded5ff9775095755aef2ab26b883e7bf123cbec32478a254976edbc"
+    }
+  },
+  "baseline_production_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "candidate_artifact_commits": [
+    "8ee714b914a1a70cd8e6950389f7fb38fbe3c370",
+    "313582e25cbc83056022291379ba53b4cb370d3a",
+    "299704c73a37c359b39a9360a6754e92a1ee08f6",
+    "88b5abb4979ca472cb077ed13a9f59ff42238f8f"
+  ],
+  "effective_environment": {
+    "PCC_DIRECT_INDEXED_KERNEL_CAPTURE": "0",
+    "PCC_DIRECT_INDEXED_KERNEL_EMIT": "0",
+    "PCC_DIRECT_INLINE_ERROR_EDGE_CAPTURE": "0",
+    "PCC_PYTHON_IR_PASSES": "default",
+    "PCC_SELF_TARGET_PASSES": "off",
+    "PCC_SELF_TARGET_PASS_TRANSPORT": "text",
+    "PCC_WITH_THREADS": "0"
+  },
+  "equal_expanded_runtime_calls": [
+    "py_class_new",
+    "py_func_new_signature_slots",
+    "py_tuple_new",
+    "py_class_setattr_raw",
+    "py_class_add_method",
+    "py_class_abort_definition_slots",
+    "py_recursion_enter",
+    "py_recursion_leave",
+    "py_tuple_from_static_items",
+    "py_static_aggregate_build"
+  ],
+  "execution_owner": "coordinator",
+  "execution_status": "UNRUN",
+  "focused_host_precedent": {
+    "passed": 29,
+    "payload_sha256": "d04a051fa70b68a87cdf8dadddbc1fa95a4b76f3a9a88bdb3fd6046371449d2a",
+    "qualification_sha256": "98e005e61093b3d89b2df47336fc33aa2023fad07adec3ceb71b197764890db7",
+    "scope": "actual V6 host only; native and real-module structural gate unrun at packet freeze",
+    "selected": 29
+  },
+  "input": "pcc/frontends/c/ast/c_ast.py",
+  "input_module": "pcc.frontends.c.ast.c_ast",
+  "limits": {
+    "address_space_bytes": 4294967296,
+    "estimated_pair_output_budget_bytes": 1073741824,
+    "exclusive_shared_lock": true,
+    "hard_nproc": 0,
+    "maximum_growth_bytes_per_arm": 536870912,
+    "minimum_free_bytes": 4294967296,
+    "seconds_per_arm": 300
+  },
+  "mechanism_thresholds": {
+    "max_function_instruction_reduction": 0.5,
+    "total_post_default_instruction_reduction": 0.25
+  },
+  "passes": [
+    "mem2reg",
+    "sroa"
+  ],
+  "predecessor_manifest_sha256": "6ebeafbc1cfa9db0fe411029b74e3b6a38a50bd77349d8f199ef3b938136e9f5",
+  "review": "Independent source review pending; frozen successor required for substantive changes",
+  "runtime_threads": false,
+  "schema": "pcc.class-init-outline-real-module-packet.v2",
+  "shared_source_files": {
+    "pcc/backend/self_backend_aarch64_darwin_abi.py": "cfd1788ad6ae64f29b69dcc2f6ca11870fd4f00f203306d678e0d3c2e65e5d39",
+    "pcc/backend/self_backend_aarch64_darwin_symbols.py": "48c356e3c278d3015eb536bb8a89bce99adbd180cb17749c384ae8e27cbd6a77",
+    "pcc/backend/self_backend_ir.py": "0018e1fb981ac01cf5b7aa75e1c36d7b68261023efb04a49406e771980a2f268",
+    "pcc/backend/self_backend_kernel.py": "021d6add950632188eefa65195338f9ab7ec6aef0b396a71b5cc170a67fc822d",
+    "pcc/backend/self_backend_parse.py": "cd03283953bd5c8186d3f73e806129676206d809096a4a1d36f8aee5b9203a74",
+    "pcc/backend/self_backend_precise_stackmaps.py": "bfc3630f958d6c63a1c4f0677b2d55082dfb4d90960978df84cf2c83a72eaa64",
+    "pcc/backend/self_backend_prepare.py": "1b042b1297c67713513a764f8f47dea08b6afaed6b83f0f963034a90cca77837",
+    "pcc/backend/self_backend_verify.py": "91f63f7a876b6dbf41f33e3d6c4a6f1bd8f54fd8c8ebada7421cf6ed548b708a",
+    "pcc/frontends/c/ast/c_ast.py": "21eacf1370cec218ea7ff97092ee47a96752505067caad2699f20239c74f2b58",
+    "pcc/frontends/python/codegen/call_object_lowering.py": "162c0a78aae28546fd4326f870e68295bb7b4c8555fa27ce648e5e17fbcd1bde",
+    "pcc/frontends/python/codegen/exception_lowering.py": "0cda07bc052fd67b98b5e01fc09d91a2e03d9f64148873a3f3cd2f48c7d58da6",
+    "pcc/frontends/python/codegen/layer1_init.py": "b56acef3e42a77b8cb9744ab7beca864e7af49ca0764b93aa3a7b49341613d62",
+    "pcc/frontends/python/codegen/layer1_support.py": "c70aa08df5e74bc561e040f8010e7724a2b40796a45ab3649e8afe26859fba09",
+    "pcc/frontends/python/codegen/module_name_lowering.py": "0d5618534ef1d2bab51292938a0adb33ebac520c7212fbf451588b81436b9fcd",
+    "pcc/frontends/python/codegen/stmt_dispatch_lowering.py": "e3b28cf9eec3dbcb48e66006bdcc4baa41ea5c3ed6b90c0bea65b0352b45823f",
+    "pcc/frontends/python/compiled_default_passes.py": "ae821e16519001bdaef518d9c58960083c9b20973f1ba6fd8e22cd7e43496d7f",
+    "pcc/frontends/python/compiled_owned_passes.py": "b6a9b39366247ce972ebf81fc66872d068070cb64f5afd819bcc026883cfae44",
+    "pcc/frontends/python/pipeline_import_policy.py": "ad5938c11e4e3a6df52488f4ef1829ae0f8cfc9b5c248c1403a8fe50c74436ca",
+    "pcc/frontends/python/pipeline_pass_config.py": "44ec489046ed839ea56a57dd9855df1abf29813e8c5595489d2392c39967f583",
+    "pcc/frontends/python/py_lift.py": "94ebd0bd0c90e0abc0f49652419a75c9e3c538f0727e7301784e7686c805e413",
+    "pcc/frontends/python/type_infer.py": "dd7ec0ec772d574ea5712fc4af2eb54707d0d6b4492ab6349ba53ab65a2fbe22",
+    "pcc/ir/ir.py": "821d3c0232a8daeae7c63d927586b80f6775f6aa03c3147aa7e6b462707ed39b",
+    "pcc/ir/optimization/ir_mutator.py": "b0422d4956d9c4ee0050cb5686852ee126903624ba9dcc99464c0be6e5fe5562",
+    "pcc/tools/runtime_archive_provenance.py": "fccfe0bcbb34e780e825ed68e77e8aaf06298bc9d4f9813db5aaac0a2947233e"
+  },
+  "sources": {
+    "baseline": {
+      "changed_files": {
+        "pcc/frontends/python/codegen/class_gen.py": "d4ec2c4ccc6a9123ed502108fbaf32cdc1dd1a979169ba4628506cb902f4b53e",
+        "pcc/frontends/python/codegen/generation_lowering.py": "0982b9b0209b8785552b75cd552c3e18837ff39f92c289cf53df373eaa140904"
+      },
+      "codegen_checksum": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+      "inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+      "pcc_git_tree": "d234174fbac80575ea822f6100f65fe914dd4498"
+    },
+    "candidate": {
+      "changed_files": {
+        "pcc/frontends/python/codegen/class_gen.py": "cbd36884dbb5d118e0da4148ed50b26223ddbfe7f75a6ad3604d2a697f9be8af",
+        "pcc/frontends/python/codegen/generation_lowering.py": "30d38936b4f4dbc1259de9993557c7ccfeca491f3f0546820382185858d56c5b",
+        "tests/python/test_class_init_outlining.py": "2c361ba0e0893a8a6775e9449f2904e043306007de8cabeab967fd9a7d61d168"
+      },
+      "codegen_checksum": "68581b5d714a4d11835199b80fd6cbcb6e3178245c79dcef6843d73469b1a5e5",
+      "inventory_sha256": "98d5eff5e571bf80e863f665284a568b5d10b1f19b4ff02c89bf79aed5ba9136",
+      "pcc_git_tree": "dc63c2a946f533f7b31ce63db2f759a044fdc37f"
+    }
+  },
+  "status": "SOURCE_REVIEW_PENDING_EXECUTION_UNRUN",
+  "successor_scope": "Harness-only failure cleanup of all published parsed function kernels; no compiler/test/input/threshold/limit change; V1 unexecuted.",
+  "target": "arm64-apple-darwin23.6.0"
+}

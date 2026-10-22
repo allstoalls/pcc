@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import ast
-from pathlib import Path
+import subprocess
 
-from pcc.dependency_verdict import (
+from pcc.diagnostics.dependency_verdict import (
     STATUS_AVAILABLE,
     STATUS_UNAVAILABLE,
     probe_artifact_dependency,
@@ -40,26 +39,31 @@ def test_available_executable_records_path_without_claiming_the_feature():
     assert verdict.runtime_executed is False
 
 
-def test_lower_expect_family_uses_structured_opt_verdict_source_guard():
-    root = Path(__file__).resolve().parent
-    paths = [
-        root / "c" / "test_ir_passes_lower_expect_real.py",
-        root / "c" / "test_ir_passes_lower_expect_semantic_oracle.py",
-    ]
-    for path in paths:
-        source = path.read_text(encoding="utf-8")
-        tree = ast.parse(source)
-        calls = [
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "probe_executable_dependency"
-        ]
-        assert len(calls) == 1, path
-        assert ast.literal_eval(calls[0].args[0]) == "opt"
-        assert "shutil.which(\"opt\")" not in source
-        assert 'pytest.skip("requires LLVM opt")' not in source
+def test_owned_lower_expect_needs_no_external_opt_dependency(monkeypatch):
+    from pcc.frontends.c.ast import c_ast
+    from pcc.frontends.c.passes.context import PassContext
+    from pcc.frontends.c.passes.lower_expect import LowerExpectPass
+
+    def reject_external_owner(*args, **kwargs):
+        raise AssertionError("owned lower-expect requested an external process")
+
+    monkeypatch.setattr(subprocess, "run", reject_external_owner)
+    value = c_ast.ID("value")
+    call = c_ast.FuncCall(c_ast.ID("__builtin_expect"), c_ast.ExprList([
+        value, c_ast.Constant("int", "1"),
+    ]))
+    assert LowerExpectPass().run(call, PassContext()) is value
+    probability_call = c_ast.FuncCall(
+        c_ast.ID("__builtin_expect_with_probability"),
+        c_ast.ExprList([value, c_ast.Constant("int", "1"), c_ast.Constant("double", "0.9")]),
+    )
+    assert LowerExpectPass().run(probability_call, PassContext()) is value
+    side_effect = c_ast.FuncCall(c_ast.ID("effect"), None)
+    effectful_call = c_ast.FuncCall(
+        c_ast.ID("__builtin_expect"), c_ast.ExprList([value, side_effect]),
+    )
+    assert LowerExpectPass().run(effectful_call, PassContext()) is None
+    assert effectful_call.args.exprs[1] is side_effect
 
 
 def test_first_executable_alternative_set_reports_whole_set_when_missing():

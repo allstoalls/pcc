@@ -61,50 +61,118 @@ def _width(kind):
     raise CoffError("unsupported AMD64 COFF relocation: " + str(kind))
 
 
+_COFF_CHUNK_BYTES = 8192
+
+
+def _coff_section_payload(data) -> bytes:
+    if type(data) is bytes:
+        return data
+    # Match bytearray.extend's accepted buffers/sequences and snapshot timing.
+    # Production sections already own exact bytes, so they need no copy here.
+    copied = bytearray()
+    copied.extend(data)
+    return bytes(copied)
+
+
+def _append_coff_chunk(chunks: list, pending: list, pending_size: int, raw: bytes) -> int:
+    """Bound small-record owners without copying the growing object prefix.
+
+    Native bytearray.extend allocates and copies its entire previous payload.
+    Small records are copied into one bounded batch, then the final image.
+    """
+    size = len(raw)
+    if not size:
+        return pending_size
+    if size >= _COFF_CHUNK_BYTES:
+        if pending:
+            chunks.append(b"".join(pending))
+            pending.clear()
+        chunks.append(raw)
+        return 0
+    pending.append(raw)
+    pending_size += size
+    if pending_size >= _COFF_CHUNK_BYTES:
+        chunks.append(b"".join(pending))
+        pending.clear()
+        return 0
+    return pending_size
+
+
 def emit_object(obj: CoffObject) -> bytes:
     strings = bytearray(b"\0\0\0\0")
+    string_chunks = [strings]
+    string_pending = []
+    string_pending_size = 0
+    string_size = 4
     names = {}
     for name in [sec.name for sec in obj.sections] + [sym.name for sym in obj.symbols]:
         if "\0" in name:
             raise CoffError("NUL in COFF name")
         if len(name.encode("utf-8")) > 8 and name not in names:
-            names[name] = len(strings)
-            strings.extend(name.encode("utf-8") + b"\0")
-    struct.pack_into("<I", strings, 0, len(strings))
-    data = bytearray(b"\0" * (20 + len(obj.sections) * 40))
+            names[name] = string_size
+            raw_name = name.encode("utf-8") + b"\0"
+            string_pending_size = _append_coff_chunk(
+                string_chunks, string_pending, string_pending_size, raw_name,
+            )
+            string_size += len(raw_name)
+    struct.pack_into("<I", strings, 0, string_size)
+    if string_pending:
+        string_chunks.append(b"".join(string_pending))
+        string_pending.clear()
+    headers = bytearray(b"\0" * (20 + len(obj.sections) * 40))
+    chunks = [headers]
+    pending = []
+    pending_size = 0
+    size = len(headers)
     for index, sec in enumerate(obj.sections):
         if sec.align <= 0 or sec.align & (sec.align - 1) or sec.align > 8192:
             raise CoffError("invalid COFF section alignment")
-        raw = len(data)
-        data.extend(sec.data)
-        reloc = len(data)
+        raw = size
+        payload = _coff_section_payload(sec.data)
+        pending_size = _append_coff_chunk(chunks, pending, pending_size, payload)
+        size += len(payload)
+        reloc = size
         count = len(sec.relocations)
         flags = sec.flags | ((sec.align.bit_length()) << 20)
         if count >= 65535:
             flags |= 0x01000000
-            data.extend(struct.pack("<IIH", count + 1, 0, 0))
+            pending_size = _append_coff_chunk(
+                chunks, pending, pending_size, struct.pack("<IIH", count + 1, 0, 0),
+            )
+            size += 10
         for record in sec.relocations:
             width = _width(record.kind)
             if record.offset < 0 or record.offset + width > len(sec.data):
                 raise CoffError("COFF relocation exceeds section")
             if not 0 <= record.symbol < len(obj.symbols):
                 raise CoffError("COFF relocation symbol out of range")
-            data.extend(struct.pack("<IIH", record.offset, record.symbol, record.kind))
+            pending_size = _append_coff_chunk(
+                chunks, pending, pending_size,
+                struct.pack("<IIH", record.offset, record.symbol, record.kind),
+            )
+            size += 10
         encoded = ("/" + str(names[sec.name])).encode() if sec.name in names else sec.name.encode()
-        struct.pack_into("<8sIIIIIIHHI", data, 20 + index * 40, encoded,
+        struct.pack_into("<8sIIIIIIHHI", headers, 20 + index * 40, encoded,
                          0, 0, len(sec.data), raw, reloc if count else 0, 0,
                          min(count, 65535), 0, flags)
-    symoff = len(data)
+    symoff = size
     for symbol in obj.symbols:
         encoded = (struct.pack("<II", 0, names[symbol.name]) if symbol.name in names
                    else symbol.name.encode().ljust(8, b"\0"))
-        data.extend(struct.pack("<8sIhHBB", encoded, symbol.value, symbol.section,
-                                0x20 if symbol.function else 0,
-                                2 if symbol.external else 3, 0))
-    data.extend(strings)
-    struct.pack_into("<HHIIIHH", data, 0, 0x8664, len(obj.sections), 0,
+        pending_size = _append_coff_chunk(
+            chunks, pending, pending_size,
+            struct.pack("<8sIhHBB", encoded, symbol.value, symbol.section,
+                        0x20 if symbol.function else 0,
+                        2 if symbol.external else 3, 0),
+        )
+    if pending:
+        chunks.append(b"".join(pending))
+        pending.clear()
+    chunks.extend(string_chunks)
+    string_chunks.clear()
+    struct.pack_into("<HHIIIHH", headers, 0, 0x8664, len(obj.sections), 0,
                      symoff, len(obj.symbols), 0, 0)
-    return bytes(data)
+    return b"".join(chunks)
 
 
 def parse_object(data: bytes) -> CoffObject:
@@ -199,9 +267,11 @@ def _unwind_source(text):
     return "\n".join(lines), procedures
 
 
-def assemble(text: str) -> CoffObject:
+def assemble(
+    text: str, *, stack_map_plans=None, consume_stack_map_plans=False,
+    phase_timing=None,
+) -> CoffObject:
     from .x86_64_asm_driver import assemble_file_keeping_labels
-    from .elf_x86_64 import SHF_EXECINSTR, SHF_WRITE, SHF_TLS, STB_LOCAL, STT_FUNC
     clean, procedures = _unwind_source(text)
     # The unwind markers are unreferenced local labels, which the assembler
     # otherwise leaves out of .symtab; _append_unwind reads their offsets.
@@ -209,7 +279,64 @@ def assemble(text: str) -> CoffObject:
     for _name, actions, prolog_end, end in procedures:
         markers.update(label for label, _op, _args in actions)
         markers.update((prolog_end, end))
-    elf = assemble_file_keeping_labels(clean, markers)
+    if stack_map_plans is None:
+        if phase_timing is None:
+            elf = assemble_file_keeping_labels(clean, markers)
+        else:
+            elf = assemble_file_keeping_labels(clean, markers, phase_timing=phase_timing)
+    else:
+        from .x86_64_asm_driver import assemble_file_with_stack_maps_keeping_labels
+        from .self_backend_x86_64_linux import _asm_symbol, _block_label
+
+        # Reuse the owned target-final packer before the unchanged ELF-to-COFF
+        # relocation conversion. SEH labels remain available to _append_unwind.
+        if phase_timing is None:
+            elf = assemble_file_with_stack_maps_keeping_labels(
+                clean, stack_map_plans, markers,
+                function_symbol=_asm_symbol, block_label=_block_label,
+                consume_stack_map_plans=consume_stack_map_plans,
+            )
+        else:
+            elf = assemble_file_with_stack_maps_keeping_labels(
+                clean, stack_map_plans, markers,
+                function_symbol=_asm_symbol, block_label=_block_label,
+                consume_stack_map_plans=consume_stack_map_plans,
+                phase_timing=phase_timing,
+            )
+    return _coff_from_elf(elf, procedures)
+
+
+def assemble_builder(
+    builder, *, stack_map_plans=None, consume_stack_map_plans=False,
+    phase_timing=None,
+) -> CoffObject:
+    """The COFF object of a module streamed into an unwind-aware builder.
+
+    The builder named its unwind markers and procedures while lines arrived,
+    as the text route's directive pass does, so no module text is rebuilt.
+    """
+    from .x86_64_asm_driver import assemble_builder as assemble_elf
+    from .self_backend_x86_64_linux import _asm_symbol, _block_label
+
+    markers = builder.unwind_markers()
+    if phase_timing is None:
+        elf = assemble_elf(
+            builder, markers, stack_map_plans,
+            function_symbol=_asm_symbol, block_label=_block_label,
+            consume_stack_map_plans=consume_stack_map_plans,
+        )
+    else:
+        elf = assemble_elf(
+            builder, markers, stack_map_plans,
+            function_symbol=_asm_symbol, block_label=_block_label,
+            consume_stack_map_plans=consume_stack_map_plans,
+            phase_timing=phase_timing,
+        )
+    return _coff_from_elf(elf, builder.unwind_procedures)
+
+
+def _coff_from_elf(elf, procedures) -> CoffObject:
+    from .elf_x86_64 import SHF_EXECINSTR, SHF_WRITE, SHF_TLS, STB_LOCAL, STT_FUNC
     symbols = [CoffSymbol(sym.name, sym.section_index, sym.value,
                           sym.binding != STB_LOCAL, sym.type == STT_FUNC) for sym in elf.symbols[1:]]
     sections = []
@@ -247,6 +374,10 @@ def assemble(text: str) -> CoffObject:
                 kind, addend = REL32, addend + 4
             elif r.type == 1:
                 kind = ADDR64
+            elif r.type == 23:
+                # ELF's local-exec offset becomes the Windows module TLS
+                # offset. The 32-bit MOV zero-extends the unsigned SECREL.
+                kind = SECREL
             elif r.type in (10, 11):
                 kind = ADDR32
             else:
@@ -323,5 +454,55 @@ def _append_unwind(sections, symbols, procedures):
     sections.append(CoffSection(".pdata", bytes(pdata), 0x40000040, 4, tuple(relocations)))
 
 
-def assemble_object(text: str) -> bytes:
-    return emit_object(assemble(text))
+def assemble_builder_object(
+    builder, *, stack_map_plans=None, consume_stack_map_plans=False,
+    phase_timing=None,
+) -> bytes:
+    started = phase_timing.start() if phase_timing is not None else 0
+    if phase_timing is None:
+        obj = assemble_builder(
+            builder, stack_map_plans=stack_map_plans,
+            consume_stack_map_plans=consume_stack_map_plans,
+        )
+    else:
+        obj = assemble_builder(
+            builder, stack_map_plans=stack_map_plans,
+            consume_stack_map_plans=consume_stack_map_plans,
+            phase_timing=phase_timing,
+        )
+        phase_timing.add(9, started)
+        started = phase_timing.start()
+    encoded = emit_object(obj)
+    if phase_timing is not None:
+        phase_timing.add(10, started)
+    return encoded
+
+
+def assemble_object(
+    text: str, *, stack_map_plans=None, consume_stack_map_plans=False,
+    phase_timing=None,
+) -> bytes:
+    started = phase_timing.start() if phase_timing is not None else 0
+    if stack_map_plans is None:
+        if phase_timing is None:
+            obj = assemble(text)
+        else:
+            obj = assemble(text, phase_timing=phase_timing)
+    elif phase_timing is None:
+        obj = assemble(
+            text, stack_map_plans=stack_map_plans,
+            consume_stack_map_plans=consume_stack_map_plans,
+        )
+    else:
+        obj = assemble(
+            text, stack_map_plans=stack_map_plans,
+            consume_stack_map_plans=consume_stack_map_plans,
+            phase_timing=phase_timing,
+        )
+    if phase_timing is not None:
+        phase_timing.add(9, started)
+        started = phase_timing.start()
+    encoded = emit_object(obj)
+    if phase_timing is not None:
+        phase_timing.add(10, started)
+    return encoded

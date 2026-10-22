@@ -121,9 +121,9 @@ def test_functools_partial_kwargs_calls_native_function_no_libpython(tmp_path):
 
 def test_functools_partial_result_stays_dynamic_with_provider_class_export():
     """The native partial projection is PyFunc, never the scaffold class."""
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.py_ast import Assign, DynType, Name
-    from pcc.py_frontend.type_infer import infer_module
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.py_ast import Assign, DynType, Name
+    from pcc.frontends.python.type_infer import infer_module
 
     module = parse_and_lift(
         "import functools\n"
@@ -208,7 +208,7 @@ def test_functools_partial_compiled_sibling_function_no_libpython(tmp_path):
             str(pkg / "__main__.py") + "=pkg.__main__",
             str(pkg / "consumer.py") + "=pkg.consumer",
             str(pkg / "provider.py") + "=pkg.provider",
-            str(repo_root / "pcc" / "py_stdlib" / "functools.py")
+            str(repo_root / "pcc" / "stdlib" / "functools.py")
             + "=functools",
         ],
         text=True,

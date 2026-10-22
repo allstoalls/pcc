@@ -3,7 +3,7 @@
 The production compatibility archive is derived from the immutable,
 content-addressed pcc-Python runtime archive.  This test repeats that small
 archive transformation in ``tmp_path`` so it never consumes a mutable archive
-from ``pcc/py_runtime`` and cannot pass merely because a prebuilt libpython
+from ``pcc/runtime`` and cannot pass merely because a prebuilt libpython
 variant happened to be present.
 """
 
@@ -21,7 +21,7 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_ROOT = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_ROOT = REPO_ROOT / "pcc" / "runtime"
 
 
 def _command_from_env(name: str, default: str) -> list[str]:
@@ -103,11 +103,11 @@ def _archive_members(archive: Path) -> set[str]:
 @pytest.fixture
 def libpython_variant_archive(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> Path:
     """Create the Makefile's libpython variant from the cached base archive."""
 
-    base_archive = pcc_py_runtime_archive.resolve()
+    base_archive = pcc_runtime_archive.resolve()
     base_members = _archive_members(base_archive)
     assert len(base_members) > 20, "content-addressed base archive is vacuous"
     assert "py_extension_loader_runtime.o" in base_members
@@ -125,7 +125,7 @@ def libpython_variant_archive(
             *_command_from_env("CC", "cc"),
             *cppflags,
             *cflags,
-            "-DPCC_WITH_THREADS=0",
+            "-DPCC_WITH_THREADS=1",
             "-DPCC_WITH_LIBPYTHON=1",
             *_python_config_flags("--includes"),
             "-I",
@@ -184,7 +184,7 @@ def test_libpython_bridge_concurrent_first_entry_callback_reentry_and_bigint(
     tmp_path: Path,
     libpython_variant_archive: Path,
 ) -> None:
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     (tmp_path / "bridge_callback_helper.py").write_text(
         "import sys\n"
@@ -1172,7 +1172,7 @@ def test_libpython_bridge_dynamic_failure_arguments_preserve_error_and_ownership
     libpython_variant_archive: Path,
 ) -> None:
     """Dynamic argument failures preserve errors and stealing contracts."""
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     (tmp_path / "bridge_dynamic_failure_helper.py").write_text(
         "target_calls = 0\n"
@@ -1498,7 +1498,7 @@ def test_libpython_bridge_reverse_container_graph_survives_gc4_relocation(
     libpython_variant_archive: Path,
 ) -> None:
     """Reverse conversion preserves topology while GC4 moves partial output."""
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     (tmp_path / "reverse_bridge_helper.py").write_text(
         "class MutatingIndex:\n"
@@ -1760,7 +1760,7 @@ def test_libpython_bridge_sys_path_setup_cannot_exit_successfully(
     libpython_variant_archive: Path,
 ) -> None:
     """A setup-time SystemExit must fail closed instead of returning zero."""
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     (tmp_path / "glob.py").write_text("raise SystemExit(0)\n", encoding="utf-8")
     harness = tmp_path / "libpython_seed_failure.c"

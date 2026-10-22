@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.bindgen import BindgenError, generate_bindings, main
+from pcc.frontends.c.bindgen import BindgenError, generate_bindings, main
 
 HEADER = """
 typedef unsigned long length_t;
@@ -69,7 +69,7 @@ def test_rejects_non_lp64_target():
 
 def test_host_cli_and_public_api_do_real_generation(tmp_path, capsys):
     import pcc
-    from pcc.cli_core import cli_main
+    from pcc.driver.cli_core import cli_main
 
     source = tmp_path / "api.h"
     source.write_text("int abs(int value);\n")
@@ -100,7 +100,7 @@ def test_public_api_without_third_party_parser_or_toolchain():
 import sys
 import pcc
 print(pcc.generate_bindings('int abs(int value);', target='arm64-apple-darwin'))
-for forbidden in ('pycparser', 'ply', 'llvmlite', 'cffi', 'pcc.ply'):
+for forbidden in ('pycparser', 'ply', 'llvmlite', 'cffi', 'pcc.frontends.c.ply'):
     assert not any(n == forbidden or n.startswith(forbidden + '.') for n in sys.modules), forbidden
 """
     proc = subprocess.run(
@@ -115,7 +115,7 @@ for forbidden in ('pycparser', 'ply', 'llvmlite', 'cffi', 'pcc.ply'):
 
 
 def test_native_dispatch_keeps_c_header_arguments_off_host_path(monkeypatch):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     calls = []
     monkeypatch.setattr(
@@ -128,4 +128,4 @@ def test_native_dispatch_keeps_c_header_arguments_off_host_path(monkeypatch):
     )
     args = ["api.h", "-o", "bindings.py", "--target", "arm64-apple-darwin"]
     assert cli.bootstrap_cli_main(["bindgen"] + args) == 9
-    assert calls == [("pcc.bindgen", args)]
+    assert calls == [("pcc.frontends.c.bindgen", args)]

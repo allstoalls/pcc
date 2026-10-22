@@ -13,8 +13,6 @@ import os
 import subprocess
 from pathlib import Path
 
-import pytest
-
 
 _PROGRAM = """\
 class Box:
@@ -155,14 +153,6 @@ def test_hasattr_probe_releases_fabricated_attributes(tmp_path):
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "pre-existing: AttributeError from bare 2-arg getattr escapes the "
-        "enclosing except AttributeError handler (try/except-AttributeError "
-        "codegen family)"
-    ),
-)
 def test_two_arg_getattr_miss_is_catchable(tmp_path):
     exe = _build(tmp_path, _RAISE_PROGRAM)
     env = os.environ.copy()

@@ -4,7 +4,6 @@ from pathlib import Path
 import subprocess
 import sys
 
-from llvmlite import binding as llvm
 
 from pcc.tools import ir_to_obj
 from pcc.tools import runtime_archive_provenance as provenance
@@ -66,26 +65,34 @@ entry:
 '''
     driver = tmp_path / "driver.c"
     driver.write_text('extern long long execute(void);\nint main(void) { return execute() == 42 ? 0 : 1; }\n')
-    symbols = []
-    for level in (0, 2):
-        obj, _ = ir_to_obj._emit_object_with_triple(source, optimization_level=level)
-        object_path = tmp_path / ("level" + str(level) + ".o")
-        object_path.write_bytes(obj)
-        symbols.append(subprocess.check_output(["nm", str(object_path)], text=True, timeout=10))
-        executable = object_path.with_suffix("")
-        subprocess.run(["clang", str(driver), str(object_path), "-o", str(executable)],
-                       check=True, capture_output=True, timeout=30)
-        subprocess.run([str(executable)], check=True, capture_output=True, timeout=10)
-    assert "prepare" in symbols[0]
-    assert "prepare" not in symbols[1]
+    from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+    from pcc.driver.project import TranslationUnit
+    from pcc.ir.optimization.driver import optimize_ir
+    from pcc.frontends.python.pipeline_targets import host_target_triple
+
+    source = 'target triple = "' + host_target_triple() + '"\n' + source
+    evaluator = CEvaluator()
+    main_units = evaluator.compile_translation_units([
+        TranslationUnit(name="driver.c", path=str(driver), source=driver.read_text())
+    ], use_compile_cache=False)
+    optimized = optimize_ir(source, "inline,mem2reg,sroa,instsimplify,instcombine,dce")
+    assert "define internal void @prepare" in source
+    assert "define internal void @prepare" not in optimized
+    for index, text in enumerate((source, optimized)):
+        obj, _triple, emitter = ir_to_obj._emit_object_with_triple(text)
+        assert emitter == "pcc"
+        executable = tmp_path / ("owned" + str(index))
+        evaluator.emit_executable(main_units + [("kernel.ll", text, None, ())], str(executable), optimize=False)
+        result = subprocess.run([str(executable)], capture_output=True, timeout=10)
+        assert result.returncode == 0, result.stderr
 
 
 def test_runtime_receipts_invalidate_when_emitter_policy_changes(monkeypatch):
     monkeypatch.setattr(provenance, "_CODEGEN_CHECKSUM_CACHE", {})
-    monkeypatch.setattr(provenance, "_runtime_emitter_source_identity", lambda: "first")
+    monkeypatch.setattr(provenance, "_runtime_emitter_source_identity", lambda _root=None: "first")
     before = provenance.codegen_checksum()
     provenance._CODEGEN_CHECKSUM_CACHE.clear()
-    monkeypatch.setattr(provenance, "_runtime_emitter_source_identity", lambda: "second")
+    monkeypatch.setattr(provenance, "_runtime_emitter_source_identity", lambda _root=None: "second")
     after = provenance.codegen_checksum()
     assert before != after
     assert provenance.manifest_is_stale_for_current_codegen({"members": [{"codegen_checksum": before}]})

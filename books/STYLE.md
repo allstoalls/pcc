@@ -10,7 +10,7 @@ CS:APP、《The Garbage Collection Handbook》。这意味着:
 1. **设计理由先于机制。** 每个小节先回答"为什么是这个设计、备选是什么、为什么放弃",
    再讲"怎么实现的"。机制描述没有理由支撑的,删。
 2. **一切断言落在真实代码上。** 引用真实文件、真实函数名、真实结构体、真实 enum。
-   引用格式:`pcc/py_runtime/src/py_gc_backend.c` 中的 `pcc_gc_store_ptr()`。
+   引用格式:`pcc/runtime/src/py_gc_backend.c` 中的 `pcc_gc_store_ptr()`。
    **禁止引用行号**(行号会腐烂),用函数/类型/标识符名定位。
    **禁止发明不存在的 API、文件、数字。** 写之前必须读过对应源码。
 3. **诚实是文体的一部分。** pcc 的声明卫生(mode-labeled claims)同样约束本书:

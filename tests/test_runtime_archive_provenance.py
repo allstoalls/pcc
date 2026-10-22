@@ -7,7 +7,7 @@ import shlex
 import subprocess
 import sys
 
-from llvmlite import binding as llvm
+from pcc.frontends.python.pipeline_targets import host_target_triple
 import pytest
 
 import pcc.tools.ir_to_obj as ir_to_obj_module
@@ -27,7 +27,7 @@ from pcc.tools.runtime_archive_provenance import (
 )
 
 REPO = Path(__file__).resolve().parents[1]
-RUNTIME = REPO / "pcc" / "py_runtime"
+RUNTIME = REPO / "pcc" / "runtime"
 _TEST_CAPI_SYMBOLS = ["PyRuntime_TestAnchor", "_PyRuntime_TestInternal"]
 
 
@@ -58,40 +58,10 @@ def test_runtime_cache_identity_distinguishes_owned_and_oracle_emitters(monkeypa
     assert owned != oracle
 
 
-def test_ir_to_obj_initializes_native_inline_asm_parser(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("PCC_IR_TO_OBJ_EMITTER", "llvmlite")
-    target_triple = llvm.get_default_triple()
-    ir_path = tmp_path / "native-inline-asm.ll"
-    object_path = tmp_path / "native-inline-asm.o"
-    ir_path.write_text(
-        f'target triple = "{target_triple}"\n'
-        "define void @native_inline_asm_probe() {\n"
-        '  call void asm sideeffect "nop", "~{memory}"()\n'
-        "  ret void\n"
-        "}\n",
-        encoding="utf-8",
-    )
-
-    process = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pcc.tools.ir_to_obj",
-            str(ir_path),
-            str(object_path),
-        ],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-
-    assert process.returncode == 0, process.stdout + process.stderr
-    assert object_path.stat().st_size > 0
 
 
 def _foreign_target_triple() -> str:
-    native_arch = llvm.get_triple_parts(llvm.get_default_triple()).Arch
+    native_arch = host_target_triple().split("-")[0]
     if native_arch in ("x86", "x86_64"):
         return "aarch64-unknown-linux-gnu"
     return "x86_64-unknown-linux-gnu"
@@ -123,7 +93,7 @@ def _run_ir_to_obj(
 def test_ir_to_obj_rejects_explicit_target_module_triple_mismatch(
     tmp_path: Path,
 ) -> None:
-    module_triple = llvm.get_default_triple()
+    module_triple = host_target_triple()
     requested_triple = _foreign_target_triple()
     ir_path = tmp_path / "target-mismatch.ll"
     object_path = tmp_path / "target-mismatch.o"
@@ -174,39 +144,6 @@ def test_ir_to_obj_rejects_target_data_layout_mismatch(tmp_path: Path) -> None:
     assert not object_path.exists()
 
 
-def test_ir_to_obj_rejects_foreign_target_inline_asm_before_llvm_emission(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    # This parser-registration limit belongs to the explicit LLVM oracle.
-    # Owned cross-target assembly does not consult LLVM's native parser.
-    monkeypatch.setenv("PCC_IR_TO_OBJ_EMITTER", "llvmlite")
-    target_triple = _foreign_target_triple()
-    ir_path = tmp_path / "foreign-inline-asm.ll"
-    object_path = tmp_path / "foreign-inline-asm.o"
-    ir_path.write_text(
-        f'target triple = "{target_triple}"\n'
-        "define void @foreign_inline_asm_probe() {\n"
-        '  call void asm sideeffect "nop", "~{memory}"()\n'
-        "  ret void\n"
-        "}\n",
-        encoding="utf-8",
-    )
-
-    process = _run_ir_to_obj(
-        ir_path,
-        object_path,
-        target=target_triple,
-    )
-
-    assert process.returncode == 1
-    assert (
-        "ir_to_obj: foreign-target inline assembly is unsupported:"
-        in process.stderr
-    )
-    assert target_triple in process.stderr
-    assert llvm.get_default_triple() in process.stderr
-    assert not object_path.exists()
 
 
 def test_ir_to_obj_allows_ordinary_foreign_target_ir_without_inline_asm(
@@ -267,12 +204,12 @@ def _build_provenanced_archive(
     *,
     member_stems: tuple[str, ...] = ("member",),
 ) -> tuple[Path, Path, list[Path], dict[str, object]]:
-    runtime_root = root / "pcc" / "py_runtime"
+    runtime_root = root / "pcc" / "runtime"
     source_root = runtime_root / "py"
     build_root = runtime_root / "build_py"
     source_root.mkdir(parents=True)
     build_root.mkdir(parents=True)
-    target_triple = llvm.get_default_triple()
+    target_triple = host_target_triple()
     objects: list[Path] = []
     for value, stem in enumerate(member_stems, start=1):
         source = source_root / f"{stem}.py"
@@ -325,7 +262,7 @@ def test_manifest_validation_does_not_start_external_tools(tmp_path, monkeypatch
 
 
 def test_runtime_selection_checks_do_not_resolve_host_python(tmp_path):
-    from pcc.py_frontend.pipeline_runtime_archive import (
+    from pcc.frontends.python.pipeline_runtime_archive import (
         provenance_codegen_stale, provenance_valid,
     )
 
@@ -401,7 +338,7 @@ def test_non_regular_archive_is_rejected_before_ar_is_invoked(
     tmp_path: Path,
     archive_header: bytes,
 ) -> None:
-    runtime_root = tmp_path / "pcc" / "py_runtime"
+    runtime_root = tmp_path / "pcc" / "runtime"
     runtime_root.mkdir(parents=True)
     archive = runtime_root / "libpy_runtime_pcc_py.a"
     archive.write_bytes(archive_header)
@@ -423,7 +360,7 @@ def test_unsafe_archive_member_is_rejected_before_extraction(
     tmp_path: Path,
     unsafe_member: str,
 ) -> None:
-    runtime_root = tmp_path / "pcc" / "py_runtime"
+    runtime_root = tmp_path / "pcc" / "runtime"
     runtime_root.mkdir(parents=True)
     archive = runtime_root / "libpy_runtime_pcc_py.a"
     name = unsafe_member.encode()
@@ -439,13 +376,13 @@ def test_unsafe_archive_member_is_rejected_before_extraction(
     invocation_log = tmp_path / "ar-invocations.txt"
     fake_ar = tmp_path / "fake-ar"
     _fake_ar_listing(fake_ar, member=unsafe_member, invocation_log=invocation_log)
-    target_triple = llvm.get_default_triple()
+    target_triple = host_target_triple()
     record = {
         "schema": RECEIPT_SCHEMA,
         "member": unsafe_member,
         "object_sha256": "0" * 64,
         "ir_sha256": "0" * 64,
-        "source": "pcc/py_runtime/py/member.py",
+        "source": "pcc/runtime/py/member.py",
         "source_sha256": "0" * 64,
         "source_kind": "pcc-python",
         "producer_kind": "pcc-python-library-ir-to-obj",
@@ -484,14 +421,14 @@ def test_unsafe_archive_member_is_rejected_before_extraction(
 def test_pcc_python_archive_manifest_round_trips_without_build_paths(
     tmp_path: Path,
 ) -> None:
-    runtime_root = tmp_path / "checkout" / "pcc" / "py_runtime"
+    runtime_root = tmp_path / "checkout" / "pcc" / "runtime"
     source = runtime_root / "py" / "demo_runtime.py"
     object_path = runtime_root / "build_py" / "demo_runtime.o"
     ir_path = runtime_root / "build_py" / "demo_runtime.ll"
     source.parent.mkdir(parents=True)
     object_path.parent.mkdir(parents=True)
     source.write_text("def demo() -> int:\n    return 7\n", encoding="utf-8")
-    target_triple = llvm.get_default_triple()
+    target_triple = host_target_triple()
     ir_text = (
         'source_filename = "<string>"\n'
         f'target triple = "{target_triple}"\n'
@@ -533,7 +470,7 @@ def test_pcc_python_archive_manifest_round_trips_without_build_paths(
     assert manifest["capi_symbol_count"] == len(_TEST_CAPI_SYMBOLS)
     assert manifest["capi_symbols"] == _TEST_CAPI_SYMBOLS
     assert manifest["members"][0]["member"] == "demo_runtime.o"
-    assert manifest["members"][0]["source"] == "pcc/py_runtime/py/demo_runtime.py"
+    assert manifest["members"][0]["source"] == "pcc/runtime/py/demo_runtime.py"
     serialized = json.dumps(manifest, sort_keys=True)
     assert str(tmp_path) not in serialized
 
@@ -676,9 +613,9 @@ def test_receipt_hashes_require_lowercase_sha256_hex(
 @pytest.mark.parametrize(
     "noncanonical_source",
     [
-        "pcc/py_runtime/py/./member.py",
-        "pcc/py_runtime//py/member.py",
-        "pcc/py_runtime/py/member.py/",
+        "pcc/runtime/py/./member.py",
+        "pcc/runtime//py/member.py",
+        "pcc/runtime/py/member.py/",
         r"pcc\py_runtime\py\member.py",
     ],
 )
@@ -704,7 +641,7 @@ def test_logical_source_rejects_symlink_escape(tmp_path):
     outside.write_text("value = 42\n")
     (root / "py/member.py").symlink_to(outside)
     with pytest.raises(ProvenanceError, match="escapes runtime root"):
-        provenance_module._source_from_logical_path("pcc/py_runtime/py/member.py", root)
+        provenance_module._source_from_logical_path("pcc/runtime/py/member.py", root)
     with pytest.raises(ProvenanceError, match="outside runtime root"):
         provenance_module._logical_source_path(root / "py/member.py", root)
 
@@ -716,7 +653,7 @@ def test_portable_archive_basename_rejects_drive_and_control_names(member):
 
 
 def test_production_manifest_requires_at_least_one_member(tmp_path: Path) -> None:
-    runtime_root = tmp_path / "pcc" / "py_runtime"
+    runtime_root = tmp_path / "pcc" / "runtime"
     runtime_root.mkdir(parents=True)
     archive = runtime_root / "libpy_runtime_pcc_py.a"
     archive.write_bytes(b"!<arch>\n")
@@ -731,7 +668,7 @@ def test_production_manifest_requires_at_least_one_member(tmp_path: Path) -> Non
 
 
 def test_verifier_rejects_an_empty_production_manifest(tmp_path: Path) -> None:
-    runtime_root = tmp_path / "pcc" / "py_runtime"
+    runtime_root = tmp_path / "pcc" / "runtime"
     runtime_root.mkdir(parents=True)
     archive = runtime_root / "libpy_runtime_pcc_py.a"
     archive.write_bytes(b"!<arch>\n")
@@ -742,7 +679,7 @@ def test_verifier_rejects_an_empty_production_manifest(tmp_path: Path) -> None:
                 "schema": MANIFEST_SCHEMA,
                 "archive": archive.name,
                 "policy": PRODUCTION_POLICY,
-                "target_triple": llvm.get_default_triple(),
+                "target_triple": host_target_triple(),
                 "member_count": 1,
                 "members_sha256": (
                     "e3b0c44298fc1c149afbf4c8996fb924"
@@ -787,7 +724,7 @@ def test_explicit_archive_member_name_must_be_nonempty(tmp_path: Path) -> None:
             ir_path=object_path.with_suffix(".ll"),
             source_path=runtime_root / "py" / "member.py",
             runtime_root=runtime_root,
-            target_triple=llvm.get_default_triple(),
+            target_triple=host_target_triple(),
             member="",
         )
 
@@ -861,7 +798,7 @@ def test_receipt_publish_does_not_reuse_a_fixed_temp_name(tmp_path: Path) -> Non
         ir_path=object_path.with_suffix(".ll"),
         source_path=runtime_root / "py" / "member.py",
         runtime_root=runtime_root,
-        target_triple=llvm.get_default_triple(),
+        target_triple=host_target_triple(),
     )
 
     assert legacy_temp.read_bytes() == b"unrelated-writer"
@@ -943,14 +880,14 @@ def test_receipt_publish_failure_removes_the_new_object(
 def test_ir_to_obj_emits_a_build_authoritative_pcc_python_receipt(
     tmp_path: Path,
 ) -> None:
-    runtime_root = tmp_path / "copy" / "pcc" / "py_runtime"
+    runtime_root = tmp_path / "copy" / "pcc" / "runtime"
     source = runtime_root / "py" / "emitted_runtime.py"
     ir_path = runtime_root / "build_py" / "emitted_runtime.ll"
     object_path = runtime_root / "build_py" / "emitted_runtime.o"
     source.parent.mkdir(parents=True)
     ir_path.parent.mkdir(parents=True)
     source.write_text("def emitted() -> int:\n    return 11\n", encoding="utf-8")
-    target_triple = llvm.get_default_triple()
+    target_triple = host_target_triple()
     ir_path.write_text(
         f'target triple = "{target_triple}"\n'
         "define i32 @emitted() {\n"
@@ -979,7 +916,7 @@ def test_ir_to_obj_emits_a_build_authoritative_pcc_python_receipt(
         receipt_path_for_object(object_path).read_text(encoding="utf-8")
     )
     assert receipt["member"] == "emitted_runtime.o"
-    assert receipt["source"] == "pcc/py_runtime/py/emitted_runtime.py"
+    assert receipt["source"] == "pcc/runtime/py/emitted_runtime.py"
     assert receipt["target_triple"] == target_triple
     assert receipt["uses_host_cc"] is False
     assert str(tmp_path) not in json.dumps(receipt, sort_keys=True)
@@ -988,7 +925,7 @@ def test_ir_to_obj_emits_a_build_authoritative_pcc_python_receipt(
 def test_ir_to_obj_receipt_failure_does_not_publish_new_object(
     tmp_path: Path,
 ) -> None:
-    runtime_root = tmp_path / "pcc" / "py_runtime"
+    runtime_root = tmp_path / "pcc" / "runtime"
     invalid_source = runtime_root / "src" / "not_python.c"
     ir_path = runtime_root / "build_py" / "not_python.ll"
     object_path = runtime_root / "build_py" / "not_python.o"
@@ -996,7 +933,7 @@ def test_ir_to_obj_receipt_failure_does_not_publish_new_object(
     invalid_source.parent.mkdir(parents=True)
     ir_path.parent.mkdir(parents=True)
     invalid_source.write_text("int value(void) { return 9; }\n", encoding="utf-8")
-    target_triple = llvm.get_default_triple()
+    target_triple = host_target_triple()
     ir_path.write_text(
         f'target triple = "{target_triple}"\n'
         "define i32 @value() {\n  ret i32 9\n}\n",
@@ -1028,7 +965,7 @@ def test_ir_to_obj_receipt_failure_does_not_publish_new_object(
 def test_same_named_host_cc_object_without_emitter_receipt_is_rejected(
     tmp_path: Path,
 ) -> None:
-    runtime_root = tmp_path / "pcc" / "py_runtime"
+    runtime_root = tmp_path / "pcc" / "runtime"
     python_source = runtime_root / "py" / "looks_python.py"
     c_source = runtime_root / "src" / "looks_python.c"
     object_path = runtime_root / "build_py" / "looks_python.o"
@@ -1056,14 +993,14 @@ def test_same_named_host_cc_object_without_emitter_receipt_is_rejected(
 
 
 def test_receipt_explicitly_labeled_host_cc_is_rejected(tmp_path: Path) -> None:
-    runtime_root = tmp_path / "pcc" / "py_runtime"
+    runtime_root = tmp_path / "pcc" / "runtime"
     source = runtime_root / "py" / "host_labeled.py"
     ir_path = runtime_root / "build_py" / "host_labeled.ll"
     object_path = runtime_root / "build_py" / "host_labeled.o"
     source.parent.mkdir(parents=True)
     ir_path.parent.mkdir(parents=True)
     source.write_text("def value() -> int:\n    return 5\n", encoding="utf-8")
-    target_triple = llvm.get_default_triple()
+    target_triple = host_target_triple()
     ir_text = (
         f'target triple = "{target_triple}"\n' "define i32 @value() {\n  ret i32 5\n}\n"
     )
@@ -1095,14 +1032,14 @@ def test_receipt_explicitly_labeled_host_cc_is_rejected(tmp_path: Path) -> None:
 
 
 def test_stale_receipt_cannot_authorize_replaced_object_bytes(tmp_path: Path) -> None:
-    runtime_root = tmp_path / "pcc" / "py_runtime"
+    runtime_root = tmp_path / "pcc" / "runtime"
     source = runtime_root / "py" / "replace_me.py"
     ir_path = runtime_root / "build_py" / "replace_me.ll"
     object_path = runtime_root / "build_py" / "replace_me.o"
     source.parent.mkdir(parents=True)
     ir_path.parent.mkdir(parents=True)
     source.write_text("def value() -> int:\n    return 1\n", encoding="utf-8")
-    target_triple = llvm.get_default_triple()
+    target_triple = host_target_triple()
     original_ir = (
         f'target triple = "{target_triple}"\n' "define i32 @value() {\n  ret i32 1\n}\n"
     )
@@ -1134,7 +1071,7 @@ def test_stale_receipt_cannot_authorize_replaced_object_bytes(tmp_path: Path) ->
 
 
 def test_unmanifested_archive_member_is_rejected(tmp_path: Path) -> None:
-    runtime_root = tmp_path / "pcc" / "py_runtime"
+    runtime_root = tmp_path / "pcc" / "runtime"
     source = runtime_root / "py" / "owned.py"
     ir_path = runtime_root / "build_py" / "owned.ll"
     owned_object = runtime_root / "build_py" / "owned.o"
@@ -1142,7 +1079,7 @@ def test_unmanifested_archive_member_is_rejected(tmp_path: Path) -> None:
     source.parent.mkdir(parents=True)
     ir_path.parent.mkdir(parents=True)
     source.write_text("def owned() -> int:\n    return 1\n", encoding="utf-8")
-    target_triple = llvm.get_default_triple()
+    target_triple = host_target_triple()
     ir_text = (
         f'target triple = "{target_triple}"\n' "define i32 @owned() {\n  ret i32 1\n}\n"
     )
@@ -1172,7 +1109,7 @@ def test_unmanifested_archive_member_is_rejected(tmp_path: Path) -> None:
 def test_manifest_is_deterministic_across_checkout_and_cache_roots(
     tmp_path: Path,
 ) -> None:
-    target_triple = llvm.get_default_triple()
+    target_triple = host_target_triple()
     ir_text = (
         f'target triple = "{target_triple}"\n'
         "define i32 @stable() {\n  ret i32 3\n}\n"
@@ -1180,7 +1117,7 @@ def test_manifest_is_deterministic_across_checkout_and_cache_roots(
     object_bytes = emit_object(ir_text)
 
     def build_under(root: Path) -> str:
-        runtime_root = root / "pcc" / "py_runtime"
+        runtime_root = root / "pcc" / "runtime"
         source = runtime_root / "py" / "stable.py"
         ir_path = runtime_root / "build_py" / "stable.ll"
         object_path = runtime_root / "build_py" / "stable.o"

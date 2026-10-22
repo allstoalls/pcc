@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-import pcc.cli_bootstrap as cli_bootstrap
+import pcc.driver.cli_bootstrap as cli_bootstrap
 import pcc.package.install as install_mod
 from pcc1_gate import find_current_pcc1, repo_root, skip_or_fail_no_current_pcc1
 from pcc.package.install import install_package

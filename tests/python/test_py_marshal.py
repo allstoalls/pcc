@@ -1,6 +1,6 @@
-from pcc.llvm_capi.compat import ir
-from pcc.py_frontend.codegen import marshal
-from pcc.py_frontend.py_ast import Type
+from pcc.ir.compat import ir
+from pcc.frontends.python.codegen import marshal
+from pcc.frontends.python.py_ast import Type
 
 
 def _pointer_arg():

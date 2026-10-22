@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.corpus_manifest import runtime_cases_except
 from tests.clang_c_cases import compile_native, compile_pcc, run_native, run_pcc
 
 
@@ -23,6 +24,13 @@ CLANG_C_RUNTIME_EXACT_MATCH_CASES = CLANG_C_MANIFEST.get("runtime_exact_match", 
 CLANG_C_RUNTIME_SUCCESS_CASES = (
     CLANG_C_RUNTIME_EXACT_MATCH_CASES
     + CLANG_C_MANIFEST.get("runtime_returncode_match_only", [])
+)
+CLANG_C_RUNTIME_COMPARISON_CASES = (
+    CLANG_C_RUNTIME_EXACT_MATCH_CASES
+    + runtime_cases_except(
+        CLANG_C_MANIFEST,
+        {"runtime_exact_match", "runtime_returncode_match_only", "runtime_both_fail"},
+    )
 )
 
 CLANG_C_RUNTIME_BOTH_FAIL_CASES = CLANG_C_MANIFEST.get("runtime_both_fail", [])
@@ -52,20 +60,26 @@ if CLANG_C_RUNTIME_SUCCESS_CASES:
         native_result = run_native(case_path, REPO_ROOT)
         pcc_result = run_pcc(case_path, REPO_ROOT)
 
+        native_result.require_execution(f"host reference {filename}")
+        pcc_result.require_execution(f"owned pcc {filename}")
+
         assert (
             pcc_result.returncode == native_result.returncode
         ), f"{filename} return code mismatch:\nnative={native_result.returncode}\npcc={pcc_result.returncode}\npcc stderr:\n{pcc_result.stderr}"
 
 
-if CLANG_C_RUNTIME_EXACT_MATCH_CASES:
+if CLANG_C_RUNTIME_COMPARISON_CASES:
 
-    @pytest.mark.parametrize("filename", CLANG_C_RUNTIME_EXACT_MATCH_CASES)
+    @pytest.mark.parametrize("filename", CLANG_C_RUNTIME_COMPARISON_CASES)
     def test_clang_c_runtime_matches_native_exactly(filename):
         case_path = CLANG_C_TESTS_DIR / filename
         assert case_path.is_file(), f"missing clang C test case: {case_path}"
 
         native_result = run_native(case_path, REPO_ROOT)
         pcc_result = run_pcc(case_path, REPO_ROOT)
+
+        native_result.require_execution(f"host reference {filename}")
+        pcc_result.require_execution(f"owned pcc {filename}")
 
         assert (
             pcc_result.returncode == native_result.returncode
@@ -129,6 +143,9 @@ if CLANG_C_RUNTIME_BOTH_FAIL_CASES:
 
         native_result = run_native(case_path, REPO_ROOT)
         pcc_result = run_pcc(case_path, REPO_ROOT)
+
+        native_result.require_execution("host reference")
+        pcc_result.require_execution("owned pcc")
 
         assert native_result.returncode != 0, f"native runtime unexpectedly succeeded for {filename}"
         assert pcc_result.returncode != 0, f"pcc unexpectedly accepted {filename}"

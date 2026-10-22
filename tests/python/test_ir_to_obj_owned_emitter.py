@@ -2,8 +2,7 @@
 
 `libpy_runtime_pcc_py.a`'s members are the objects pcc1 links.  Emitting them
 with llvmlite made an llvmlite-free pcc1 depend on llvmlite to exist at all.
-pcc owns the targets it owns; llvmlite stays reachable as the differential
-oracle behind an explicit environment selection.
+pcc owns the supported targets and rejects retired emitter selections.
 """
 
 from __future__ import annotations
@@ -46,10 +45,10 @@ def _blocked_llvmlite_dir(tmp_path: Path) -> Path:
 
 def test_emitter_env_name_does_not_collide_with_the_tool_command():
     """`PCC_IR_TO_OBJ` is the Makefile's *command* for running this tool
-    (pcc/py_runtime/Makefile), so reading it as an emitter name would compare a
+    (pcc/runtime/Makefile), so reading it as an emitter name would compare a
     path against 'pcc'/'llvmlite'."""
     assert ir_to_obj._EMITTER_ENV == "PCC_IR_TO_OBJ_EMITTER"
-    makefile = (REPO_ROOT / "pcc" / "py_runtime" / "Makefile").read_text(
+    makefile = (REPO_ROOT / "pcc" / "runtime" / "Makefile").read_text(
         encoding="utf-8"
     )
     assert "PCC_IR_TO_OBJ ?= $(PYTHON) -m pcc.tools.ir_to_obj" in makefile
@@ -80,27 +79,16 @@ def test_default_emission_does_not_import_llvmlite(tmp_path):
     assert out_path.read_bytes()[:4] == b"\xcf\xfa\xed\xfe"  # MH_MAGIC_64
 
 
-def test_llvmlite_stays_available_as_the_differential_oracle(tmp_path):
-    pytest.importorskip("llvmlite")
+def test_removed_llvmlite_emitter_is_rejected_before_creating_output(tmp_path, monkeypatch, capsys):
     ir_path = tmp_path / "probe.ll"
     ir_path.write_text(_PROBE_IR, encoding="utf-8")
-    owned = tmp_path / "owned.o"
     oracle = tmp_path / "oracle.o"
-
-    ir_to_obj.main([str(ir_path), str(owned)])
-    import os
-
-    os.environ["PCC_IR_TO_OBJ_EMITTER"] = "llvmlite"
-    try:
-        ir_to_obj.main([str(ir_path), str(oracle)])
-    finally:
-        del os.environ["PCC_IR_TO_OBJ_EMITTER"]
-
-    assert owned.read_bytes() != oracle.read_bytes(), (
-        "the two emitters produced identical bytes, so the selection did "
-        "nothing"
-    )
-    assert oracle.stat().st_size > 0
+    monkeypatch.setenv("PCC_IR_TO_OBJ_EMITTER", "llvmlite")
+    with pytest.raises(ir_to_obj.ObjectEmissionContractError, match="expected 'pcc'"):
+        ir_to_obj.emit_object(_PROBE_IR)
+    assert ir_to_obj.main([str(ir_path), str(oracle)]) == 1
+    assert "unknown PCC_IR_TO_OBJ_EMITTER value 'llvmlite'; expected 'pcc'" in capsys.readouterr().err
+    assert not oracle.exists()
 
 
 def test_unknown_emitter_selection_fails_closed(tmp_path, monkeypatch):
@@ -121,7 +109,8 @@ def test_owned_elf_emission_uses_the_existing_x86_backend(monkeypatch):
         def __getattr__(self, name):
             pytest.fail("owned ELF emission consulted LLVM: " + name)
 
-    monkeypatch.setattr(ir_to_obj, "llvm", ForbiddenLLVM())
+    monkeypatch.setitem(sys.modules, "llvmlite", ForbiddenLLVM())
+    monkeypatch.setitem(sys.modules, "llvmlite.binding", ForbiddenLLVM())
     data = ir_to_obj.emit_object(_PROBE_IR.replace("arm64-apple-darwin", "x86_64-unknown-linux-gnu"))
     assert data[:4] == b"\x7fELF"
     assert int.from_bytes(data[18:20], "little") == 62  # EM_X86_64

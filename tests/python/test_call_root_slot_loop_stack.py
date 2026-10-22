@@ -16,7 +16,7 @@ import textwrap
 
 
 def test_call_in_loop_reuses_entry_root_slot_and_stays_balanced():
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     td = tempfile.mkdtemp(prefix="pcc_call_root_loop_")
     src = os.path.join(td, "prog.py")

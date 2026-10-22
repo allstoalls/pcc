@@ -45,10 +45,10 @@ pcc2      -> pcc3    pcc2/pcc3 稳定 == 自托管不动点
 
 不动点不只是一次字节比较。`pcc2` 与 `pcc3` 字节同一,意味着 pcc 的 Python 语义、运行时、代码生成、对象模型、后端和诊断已经相干到足以复现自身——任何一层有不确定性,都会在两次自编译之间放大成差异。当前的权威状态冻结在 [tests/bootstrap_gate_baseline.json](../../tests/bootstrap_gate_baseline.json)(2026-05-01 捕获,Issue 1 关闭证据):在 macOS arm64 上,LLVM 链与 self 后端链的全部三个阶段都不链接 `libpython`;严格路径(`--backend self --python-libpython=off --ir-scaffold=on`)下 `pcc2`/`pcc3` 发射的 IR 字节同一且含 0 个 `py_cpy_*` 调用,二进制在去除 Mach-O 签名后字节同一。注意这句声明的每个限定词都是刻意的——平台、后端、模式、比较方法——这正是 1.4 节要讲的声明卫生。自举的全部细节见第 15 章。
 
-**五 GC 对比运行时。** 运行时装载五个 GC 后端槽位,由环境变量 `PCC_GC_BACKEND` 在进程启动时选择,枚举定义在 [pcc/py_runtime/include/py_runtime.h](../../pcc/py_runtime/include/py_runtime.h) 中:
+**五 GC 对比运行时。** 运行时装载五个 GC 后端槽位,由环境变量 `PCC_GC_BACKEND` 在进程启动时选择,枚举定义在 [pcc/runtime/include/py_runtime.h](../../pcc/runtime/include/py_runtime.h) 中:
 
 ```c
-// pcc/py_runtime/include/py_runtime.h
+// pcc/runtime/include/py_runtime.h
 enum {
     PCC_GC_KIND_REFCOUNT_CYCLE = 0,
     PCC_GC_KIND_INCREMENTAL_TRICOLOR = 1,
@@ -182,7 +182,7 @@ Linux 部署失败 -> self 后端    五 GC 矩阵   -> 运行时可信度
 
 **错误假设。** 把脚手架当成了实现。[pcc/value_model.py](../../pcc/value_model.py) 里确实存在名为 `ValuePayload`、`ValueBox`、`SpecializedArray`、`GenericSpecialization` 的宿主侧 dataclass——名字与计划中的 V1–V6 一一对应,表观上像完成了。
 
-**证据链。** 代码检视给出了相反的结论:真正接入类型推断与类低层化的只有 V0 切片([pcc/py_frontend/py_ast.py](../../pcc/py_frontend/py_ast.py) 定义 `ValueClassType`,[pcc/py_frontend/type_infer.py](../../pcc/py_frontend/type_infer.py) 识别 `@pcc.valueclass`);V1 没有直接的 LLVM 结构 ABI、没有证明热路径避免对象分配的 IR 形状闸门;V4 的 `pcc.array[Point]` 连续载荷运行时不存在;V5 的单态化与类型元组缓存不存在;V6 的热对象迁移与分配基准不存在。计划要求的 V1–V4 测试文件在调查开启前部分缺失。
+**证据链。** 代码检视给出了相反的结论:真正接入类型推断与类低层化的只有 V0 切片([pcc/frontends/python/py_ast.py](../../pcc/frontends/python/py_ast.py) 定义 `ValueClassType`,[pcc/frontends/python/type_infer.py](../../pcc/frontends/python/type_infer.py) 识别 `@pcc.valueclass`);V1 没有直接的 LLVM 结构 ABI、没有证明热路径避免对象分配的 IR 形状闸门;V4 的 `pcc.array[Point]` 连续载荷运行时不存在;V5 的单态化与类型元组缓存不存在;V6 的热对象迁移与分配基准不存在。计划要求的 V1–V4 测试文件在调查开启前部分缺失。
 
 **真正根因。** 状态表面没有区分"元数据存在"与"运行时实现完成"——这正是后来 §0.10 表中 `metadata exists != runtime implementation complete` 那一行的出处。
 
@@ -202,7 +202,7 @@ def value_model_status() -> dict[str, object]:
     }
 ```
 
-状态本身变成了可断言的测试对象。这个故事还有一个递归的注脚:第一版为 V0 添加源形状诊断的补丁,自己就把 `pcc.py_frontend.type_infer` 的 no-libpython 回退计数从基线 846 推高到 951(棘轮上限 888),被 [tests/python/test_fallback_baseline.py](../../tests/python/test_fallback_baseline.py) 当场拦下——连"为了诚实而写的诊断代码"也要过同一道棘轮。修复(把诊断构造收敛到一个 `_raise_frontend_error` 辅助函数)把计数压回 851。教训:过度声明不是品德问题,是缺少装置的问题;装置到位后,它会被测试抓住,而不是被读者抓住。
+状态本身变成了可断言的测试对象。这个故事还有一个递归的注脚:第一版为 V0 添加源形状诊断的补丁,自己就把 `pcc.frontends.python.type_infer` 的 no-libpython 回退计数从基线 846 推高到 951(棘轮上限 888),被 [tests/python/test_fallback_baseline.py](../../tests/python/test_fallback_baseline.py) 当场拦下——连"为了诚实而写的诊断代码"也要过同一道棘轮。修复(把诊断构造收敛到一个 `_raise_frontend_error` 辅助函数)把计数压回 851。教训:过度声明不是品德问题,是缺少装置的问题;装置到位后,它会被测试抓住,而不是被读者抓住。
 
 ### 1.8.2 真实 NumPy 的首次导入:`if package == "numpy"` 禁令的来源(2026-05-27)
 
@@ -210,9 +210,9 @@ def value_model_status() -> dict[str, object]:
 
 **错误假设与诊断纪律。** 第一次短调试追踪只给出 `py_cpy_ensure_init()` 之前的两行 IR,不足以定位;完整 IR 转储才显示第一条回退边在 `user_numpy___getattr__` 里——`numpy/__init__.py` 的 `__getattr__` 导入了 `warnings`。调查据此留下一条诊断护栏:两行的 `PCC_DEBUG_BOOTSTRAP_TRACE` 上下文只是定位器,不是根因证据;动代码之前必须从完整 IR 确认所在 `define`、实际的 `py_cpy_*` 调用与参数来源。
 
-**方法:只修通用机制。** 接下来的每一次回退收缩都是一条通用编译器能力,且在调查中逐条标注"不含 NumPy 特定分支":`import warnings` 注册为原生内建模块别名([pcc/py_frontend/codegen/import_lowering.py](../../pcc/py_frontend/codegen/import_lowering.py),镜像既有的 [pcc/py_stdlib/warnings.py](../../pcc/py_stdlib/warnings.py) 垫片);字面量 `textwrap.dedent(...)` 常量折叠(动态字符串仍走回退,不冒充完整 textwrap 兼容);`typing.TYPE_CHECKING` 在代码生成期折叠为假、`TypeVar(..., covariant=True)` 接受元数据关键字——这一项使 `numpy._typing._nested_sequence` 的 `py_cpy_*` 调用点从 10 降到 0;`os.path.getsize`、`Path(...).suffix` 的原生低层化;直接形式 `re.match/search` 与 `re.I`/`re.S` 常量的原生子集;`re.compile(...).match/search` 低层化为返回真实 `PY_TYPE_FUNC` 对象的运行时辅助(明确写道:这是绑定方法边界,不是假的真值正则对象)。受限的 `findall` 子集只接受两个被实测命中的字面量模式,并写明:不支持的模式**保留回退路径,而不是用假的空列表顶替**。每一节证据末尾重复同一句限定:这只是回退表面收缩,不证明 `import numpy` 成功。`numpy.f2py.crackfortran` 模块的回退辅助计数随之从 1555 降到 1302、1228、1220——进度以可测数字呈现,声明以不变的边界封顶。
+**方法:只修通用机制。** 接下来的每一次回退收缩都是一条通用编译器能力,且在调查中逐条标注"不含 NumPy 特定分支":`import warnings` 注册为原生内建模块别名([pcc/frontends/python/codegen/import_lowering.py](../../pcc/frontends/python/codegen/import_lowering.py),镜像既有的 [pcc/stdlib/warnings.py](../../pcc/stdlib/warnings.py) 垫片);字面量 `textwrap.dedent(...)` 常量折叠(动态字符串仍走回退,不冒充完整 textwrap 兼容);`typing.TYPE_CHECKING` 在代码生成期折叠为假、`TypeVar(..., covariant=True)` 接受元数据关键字——这一项使 `numpy._typing._nested_sequence` 的 `py_cpy_*` 调用点从 10 降到 0;`os.path.getsize`、`Path(...).suffix` 的原生低层化;直接形式 `re.match/search` 与 `re.I`/`re.S` 常量的原生子集;`re.compile(...).match/search` 低层化为返回真实 `PY_TYPE_FUNC` 对象的运行时辅助(明确写道:这是绑定方法边界,不是假的真值正则对象)。受限的 `findall` 子集只接受两个被实测命中的字面量模式,并写明:不支持的模式**保留回退路径,而不是用假的空列表顶替**。每一节证据末尾重复同一句限定:这只是回退表面收缩,不证明 `import numpy` 成功。`numpy.f2py.crackfortran` 模块的回退辅助计数随之从 1555 降到 1302、1228、1220——进度以可测数字呈现,声明以不变的边界封顶。
 
-**真实包作为研究数据。** 这条调查同时暴露了与 NumPy 毫无关系的两个通用 bug(Proposal No.3):并行导出 worker 的浅层提升器把类头关键字(`class _DTypeDict(_DTypeDictBase, total=False)`)误送进表达式提升而崩溃;跨 worker 的导出线格式把非字面量默认值(`dtype=int`、`axis=-1`、`keepdims=np._NoValue`)序列化成"无默认值",使它们变成必填参数。两者都修在 [pcc/py_frontend/pipeline.py](../../pcc/py_frontend/pipeline.py) 的通用路径上,并以新鲜的完整三阶段自举验证。这正是 1.7 节的闭环:工业失败(导入一个真实包)产出研究数据(前端并行化的语义等价缺陷)。
+**真实包作为研究数据。** 这条调查同时暴露了与 NumPy 毫无关系的两个通用 bug(Proposal No.3):并行导出 worker 的浅层提升器把类头关键字(`class _DTypeDict(_DTypeDictBase, total=False)`)误送进表达式提升而崩溃;跨 worker 的导出线格式把非字面量默认值(`dtype=int`、`axis=-1`、`keepdims=np._NoValue`)序列化成"无默认值",使它们变成必填参数。两者都修在 [pcc/frontends/python/pipeline.py](../../pcc/frontends/python/pipeline.py) 的通用路径上,并以新鲜的完整三阶段自举验证。这正是 1.7 节的闭环:工业失败(导入一个真实包)产出研究数据(前端并行化的语义等价缺陷)。
 
 **留下的不变式。** 为什么禁止 `if package == "numpy"`?因为这条调查展示了特判的真实代价:一个包名分支可以让闸门转绿,却不会让任何机制存在——下一个包在同一个缺口上原样失败,而状态板上已经写着"支持 NumPy"。通用机制路线慢,但每一步都是单调的:回退棘轮只收紧、闸门记录当前失败形状、证据与声明逐条对齐。[AGENTS.md](../../AGENTS.md) 的 Package/NumPy Claim Hygiene 一节把这套实践固化成规则:安装成功不是导入成功;合成的同名包不算数;cpython-compat 证据不冒充 pcc-native 证据。
 
@@ -222,7 +222,7 @@ pcc 的论题是把 Python 的执行变成可拥有的:原生、可审计、可�
 
 ## 练习
 
-1. **(读源码验证)** 打开 [pcc/py_runtime/include/py_runtime.h](../../pcc/py_runtime/include/py_runtime.h),找到 `PCC_GC_KIND_*` 枚举的五个成员,并在 [docs/refs_docs/gc-research/](../../docs/refs_docs/gc-research) 下找到每个后端对应的参照实现目录。哪个后端是默认?在哪份调查文档里记录了这个决定?
+1. **(读源码验证)** 打开 [pcc/runtime/include/py_runtime.h](../../pcc/runtime/include/py_runtime.h),找到 `PCC_GC_KIND_*` 枚举的五个成员,并在 [docs/refs_docs/gc-research/](../../docs/refs_docs/gc-research) 下找到每个后端对应的参照实现目录。哪个后端是默认?在哪份调查文档里记录了这个决定?
 
 2. **(读基线验证)** 阅读 [tests/bootstrap_gate_baseline.json](../../tests/bootstrap_gate_baseline.json)。用模式标注的语言写出它**能**证明的三条声明(注明平台、后端、比较方法),再写出两条它**不能**证明的、表面相似的声明(例如涉及 Linux 或涉及运行时性能的)。
 

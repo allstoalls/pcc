@@ -1,4 +1,4 @@
-from pcc.build_cache import compute_cache_key, explain_cache_miss
+from pcc.driver.build_cache import compute_cache_key, explain_cache_miss
 
 
 def test_content_change_changes_key(tmp_path):

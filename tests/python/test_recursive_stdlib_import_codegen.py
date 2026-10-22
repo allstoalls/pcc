@@ -22,7 +22,7 @@ _BUILD.mkdir(parents=True, exist_ok=True)
 
 
 def _compile_to_ll(source: str, name: str, *, recursive: bool) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -66,8 +66,8 @@ def test_recursive_import_skips_py_cpy_import():
     )
 
 
-def test_pcc_py_stdlib_constant_import_stays_native():
-    """``import string`` should use the pcc/py_stdlib port and resolve
+def test_pcc_stdlib_constant_import_stays_native():
+    """``import string`` should use the pcc/stdlib port and resolve
     exported literal constants without CPython module fallback."""
     program = textwrap.dedent("""
         import string
@@ -77,11 +77,16 @@ def test_pcc_py_stdlib_constant_import_stays_native():
     ir_text = _compile_to_ll(program, "rec_import_string_on", recursive=True)
     assert "call ptr @py_cpy_import" not in ir_text
     assert "@.cpy.mod.string" not in ir_text
-    assert "abcdefghijklmnopqrstuvwxyz" in ir_text
+    from pcc.backend.self_backend_parse import decode_llvm_c_string
+
+    constants = re.findall(r'c"(?:[^"\\]|\\[0-9A-Fa-f]{2})*"', ir_text)
+    assert b"abcdefghijklmnopqrstuvwxyz\0" in [
+        decode_llvm_c_string(value) for value in constants
+    ]
 
 
-def test_pcc_py_stdlib_from_import_constant_stays_native():
-    """``from string import CONST`` should bind the exported pcc/py_stdlib
+def test_pcc_stdlib_from_import_constant_stays_native():
+    """``from string import CONST`` should bind the exported pcc/stdlib
     constant directly, using normal CPython spelling without a module
     fallback."""
     program = textwrap.dedent("""
@@ -100,9 +105,9 @@ def test_pcc_py_stdlib_from_import_constant_stays_native():
     assert "abcdefghijklmnopqrstuvwxyz" in ir_text
 
 
-def test_dotted_pcc_py_stdlib_import_routes_to_native_submodule():
+def test_dotted_pcc_stdlib_import_routes_to_native_submodule():
     """``import urllib.parse`` should bind the top-level CPython name
-    while routing ``urllib.parse.fn`` to the native pcc/py_stdlib
+    while routing ``urllib.parse.fn`` to the native pcc/stdlib
     submodule."""
     program = textwrap.dedent("""
         import urllib.parse
@@ -120,10 +125,54 @@ def test_dotted_pcc_py_stdlib_import_routes_to_native_submodule():
     assert "@user_urllib_parse_quote" in ir_text
 
 
+def test_owned_urljoin_provider_and_result_handoff_ir(tmp_path, monkeypatch):
+    """A wrapper result remains owned when passed to a dynamic slot call.
+
+    This reproduces the local result handoff that failed for page_url. The
+    callee is a generic callback, so no package installer special case applies.
+    Only host IR emission is checked here; native execution is a separate gate.
+    """
+    from pcc.frontends.python.pipeline import compile_python
+
+    monkeypatch.setenv("PCC_PY_FRONTEND_JOBS", "1")
+    monkeypatch.setenv("PCC_PY_FRONTEND_IN_PROCESS_CODEGEN", "1")
+    source = tmp_path / "urljoin_handoff.py"
+    output = tmp_path / "urljoin_handoff.ll"
+    source.write_text(
+        "import urllib.parse\n"
+        "def resolve(base, ref):\n"
+        "    return urllib.parse.urljoin(base, ref)\n"
+        "def invoke(callback, base, ref):\n"
+        "    page_url = resolve(base, ref)\n"
+        "    return callback(page_url)\n"
+        "def main():\n"
+        "    print(resolve('https://example.test/a/b', '../c?x#f'))\n"
+        "main()\n",
+        encoding="utf-8",
+    )
+    compile_python(
+        str(source), str(output), emit_llvm_only=True,
+        recursive_stdlib=True, libpython_mode="off", ir_scaffold_mode="on",
+        backend="self",
+    )
+    text = output.read_text(encoding="utf-8")
+    has_public_provider = "@user_urllib_parse_urljoin" in text
+    has_resolution_helper = "@user_urllib_parse__urljoin_text" in text
+    assert has_public_provider, "owned urljoin export is missing"
+    assert has_resolution_helper, "owned URL resolution body is missing"
+    assert not re.search(r"\bcall\b[^\n]*@py_cpy_", text)
+    assert "strict_nolib_unavailable" not in text
+    invoke = re.search(r"^define [^\n]*@user_[^\n(]*_invoke\([^\n]*\).*?^}",
+                       text, re.M | re.S)
+    assert invoke is not None
+    assert "@pcc_gc_root_copy_lease" in invoke.group(0)
+    assert "@py_obj_call_slots" in invoke.group(0)
+
+
 def test_native_sibling_import_alias_value_position_stays_native():
     """A function-local ``import pkg.sub as sub; return sub`` should not
     re-materialize the native sibling module through CPython fallback."""
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     root = _BUILD / "native_pkg_alias_value"
     pkg = root / "pkg_alias_value"
@@ -159,7 +208,7 @@ def test_native_sibling_import_alias_value_position_stays_native():
 
 
 def test_default_off_mode_auto_routes_available_native_stdlib():
-    """With libpython off by default, an available pcc/py_stdlib provider
+    """With libpython off by default, an available pcc/stdlib provider
     should be selected automatically; users should not need a private
     ``std.*`` spelling or an explicit recursive_stdlib flag."""
     program = textwrap.dedent("""
@@ -257,3 +306,76 @@ def test_off_mode_preserves_py_cpy_import():
     ir_text = _compile_to_ll(program, "rec_import_keyword_off", recursive=False)
     # Without recursive_stdlib, status quo: py_cpy_import is emitted.
     assert "@py_cpy_import" in ir_text
+
+
+def test_owned_html_parser_subclass_constructor_and_callbacks_ir(tmp_path, monkeypatch):
+    """Owned provider/export proof only; native callback execution is separate."""
+    from pcc.frontends.python.pipeline import compile_python
+
+    monkeypatch.setenv('PCC_PY_FRONTEND_JOBS', '1')
+    monkeypatch.setenv('PCC_PY_FRONTEND_IN_PROCESS_CODEGEN', '1')
+    source = tmp_path / 'html_subclass.py'
+    output = tmp_path / 'html_subclass.ll'
+    source.write_text("""from html.parser import HTMLParser
+class Survey(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.items = []
+    def handle_starttag(self, tag, attrs):
+        self.items.append((tag, attrs))
+    def handle_data(self, data):
+        self.items.append(data)
+def main():
+    parser = Survey()
+    parser.feed('<a h="a&amp;b">x</a>')
+    parser.close()
+    print(parser.items)
+main()
+""", encoding='utf-8')
+    compile_python(str(source), str(output), emit_llvm_only=True,
+                   recursive_stdlib=True, libpython_mode='off',
+                   ir_scaffold_mode='on', backend='self')
+    text = output.read_text(encoding='utf-8')
+    assert not re.search(r'\bcall\b[^\n]*@py_cpy_', text)
+    assert 'strict_nolib_unavailable' not in text
+    for method in ('__init__', 'feed', 'close', 'reset', 'parse_starttag', 'goahead'):
+        assert re.search(r'^define [^\n]*@user_html_parser_HTMLParser_' + method + r'\(',
+                         text, re.M), method
+    constructor = re.search(r'^define [^\n]*@user_html_subclass_Survey___init__\([^\n]*\).*?^}',
+                            text, re.M | re.S)
+    assert constructor is not None
+    assert 'HTMLParser.__init__.super' in constructor.group(0)
+    parser = re.search(r'^define [^\n]*@user_html_parser_HTMLParser_parse_starttag\([^\n]*\).*?^}',
+                       text, re.M | re.S)
+    assert parser is not None
+    assert '@py_obj_load_method' in parser.group(0)
+    assert 'handle_starttag' in parser.group(0)
+    assert '@py_obj_call_method' in parser.group(0)
+
+
+def test_owned_html_parser_original_source_subclass_ir(tmp_path, monkeypatch):
+    """Compile the unchanged original class body; full imported execution is separate."""
+    import ast
+    from pcc.frontends.python.pipeline import compile_python
+
+    monkeypatch.setenv('PCC_PY_FRONTEND_JOBS', '1')
+    monkeypatch.setenv('PCC_PY_FRONTEND_IN_PROCESS_CODEGEN', '1')
+    acquire = (_REPO_ROOT / 'pcc/package/acquire.py').read_text(encoding='utf-8')
+    node = next(node for node in ast.parse(acquire).body
+                if isinstance(node, ast.ClassDef) and node.name == '_SimpleLinks')
+    source = tmp_path / 'html_original_class.py'
+    output = tmp_path / 'html_original_class.ll'
+    source.write_text('from html.parser import HTMLParser\n' +
+                      ast.get_source_segment(acquire, node) +
+                      '\ndef main():\n    parser = _SimpleLinks()\n'
+                      '    parser.feed(\'<a href="x&amp;y">\')\n'
+                      '    parser.close()\n    print(parser.links)\nmain()\n',
+                      encoding='utf-8')
+    compile_python(str(source), str(output), emit_llvm_only=True,
+                   recursive_stdlib=True, libpython_mode='off',
+                   ir_scaffold_mode='on', backend='self')
+    text = output.read_text(encoding='utf-8')
+    assert not re.search(r'\bcall\b[^\n]*@py_cpy_', text)
+    assert 'strict_nolib_unavailable' not in text
+    assert '@user_html_parser_HTMLParser___init__' in text
+    assert '@user_html_original_class__SimpleLinks_handle_starttag' in text

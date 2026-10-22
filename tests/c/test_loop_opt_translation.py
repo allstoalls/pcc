@@ -1,6 +1,6 @@
-from pcc.parse.c_parser import CParser
-from pcc.passes import PassContext
-from pcc.passes.loop_opt import LoopOptPass
+from pcc.frontends.c.parse.c_parser import CParser
+from pcc.frontends.c.passes import PassContext
+from pcc.frontends.c.passes.loop_opt import LoopOptPass
 
 
 def _loop_opt_context(code: str):

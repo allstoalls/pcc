@@ -1,0 +1,60 @@
+--- a/pcc/frontends/python/codegen/class_gen.py
++++ b/pcc/frontends/python/codegen/class_gen.py
+@@ -4900,7 +4900,7 @@
+             not isinstance(helper, ir.Function)
+             or helper.module is not parent.module
+             or str(helper.function_type) != str(fnty)
+-            or helper.linkage != "internal" or "noinline" not in helper.attributes
++            or helper.linkage != "internal" or "noinline" not in helper.attributes._attrs
+             or not helper.blocks
+         ):
+             raise L1CodegenError("incompatible class-init outline declaration: " + name)
+--- a/tests/python/test_class_init_outlining.py
++++ b/tests/python/test_class_init_outlining.py
+@@ -11,6 +11,7 @@
+ import pytest
+ 
+ from pcc.frontends.python.codegen.class_gen import ClassLowering
++from pcc.frontends.python.codegen.errors import L1CodegenError
+ from pcc.frontends.python.codegen.layer1 import L1CodeGen
+ from pcc.frontends.python.codegen.stmt_dispatch_lowering import StmtDispatchLoweringMixin
+ from pcc.frontends.python.compiled_owned_passes import run_owned_passes
+@@ -166,6 +167,38 @@
+             assert sum(_calls(body).count(name) for body in bodies.values()) == 2
+             _assert_status_boundary(bodies[INIT], name)
+             _assert_status_boundary(bodies[wrapper], name)
++
++
++@pytest.mark.parametrize("other_attribute", [None, "alwaysinline"], ids=["empty", "other-only"])
++def test_reused_helper_without_noinline_is_rejected(monkeypatch, other_attribute):
++    original = ClassLowering._maybe_emit_class_init_outline
++    changed = []
++
++    def reject_reuse(self, cd, info):
++        parent = self.parent
++        if parent.current_function.name == TOP:
++            helpers = [value for name, value in parent.module.globals.items() if name.startswith(PREFIX)]
++            assert len(helpers) == 1
++            helper = helpers[0]
++            assert isinstance(helper, ir.Function)
++            assert helper.module is parent.module
++            assert str(helper.function_type) == str(ir.FunctionType(ir.IntType(32), [], var_arg=False))
++            assert helper.linkage == "internal" and helper.blocks
++            assert "noinline" in helper.attributes._attrs
++            # Use the actual owned attributes object, not an iterable stand-in.
++            # Empty and unrelated nonempty attributes must both fail closed.
++            helper.attributes = ir.FunctionAttributes()
++            if other_attribute is not None:
++                helper.attributes.add(other_attribute)
++            assert helper.attributes._attrs == ([] if other_attribute is None else [other_attribute])
++            changed.append(helper.name)
++        return original(self, cd, info)
++
++    monkeypatch.setattr(ClassLowering, "_maybe_emit_class_init_outline", reject_reuse)
++    with pytest.raises(L1CodegenError) as raised:
++        _emit("class Admitted:\n    value = ('closed',)\n")
++    assert len(changed) == 1
++    assert str(raised.value) == "incompatible class-init outline declaration: " + changed[0]
+ 
+ 
+ @pytest.mark.parametrize("threads", ["0", "1"])

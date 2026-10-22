@@ -6,8 +6,8 @@ import pytest
 
 
 @pytest.mark.parametrize("expression", ['re.match(r"(?P<word>[a-z]+)", "alpha")', 'pattern.match("alpha")', 'pattern.match((" alpha ").strip())'])
-def test_walrus_match_survives_truth_test_and_collection(tmp_path: Path, pcc_py_runtime_archive, expression):
-    from pcc.py_frontend.pipeline import compile_python
+def test_walrus_match_survives_truth_test_and_collection(tmp_path: Path, pcc_runtime_archive, expression):
+    from pcc.frontends.python.pipeline import compile_python
     source = tmp_path / "walrus_match.py"
     source.write_text('''import re
 import gc
@@ -24,7 +24,7 @@ exercise()
 '''.replace("MATCH_EXPRESSION", expression))
     binary = tmp_path / "walrus_match"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
                              capture_output=True, text=True, timeout=15)
@@ -32,8 +32,8 @@ exercise()
         assert ran.stdout.strip() == "alpha"
 
 
-def test_walrus_borrowed_aliases_rebinding_and_truth_failure(tmp_path: Path, pcc_py_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+def test_walrus_borrowed_aliases_rebinding_and_truth_failure(tmp_path: Path, pcc_runtime_archive):
+    from pcc.frontends.python.pipeline import compile_python
     source = tmp_path / "walrus_aliases.py"
     source.write_text('''import gc
 released = []
@@ -83,7 +83,7 @@ main()
 ''')
     binary = tmp_path / "walrus_aliases"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
                              capture_output=True, text=True, timeout=15)

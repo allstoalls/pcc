@@ -27,7 +27,7 @@ class MultiFileCompileTests(unittest.TestCase):
         pipeline the dotted module name each source file should
         simulate. Default: filename stem.
         """
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_test_")
         self.addCleanup(self._rmtree, td)
@@ -54,7 +54,7 @@ class MultiFileCompileTests(unittest.TestCase):
         shutil.rmtree(path, ignore_errors=True)
 
     def test_from_import_computed_raw_int_uses_importer_owned_scalar_slot(self):
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_imported_raw_int_")
         self.addCleanup(self._rmtree, td)
@@ -131,7 +131,7 @@ class MultiFileCompileTests(unittest.TestCase):
         self.assertEqual(out, "1\n2\n")
 
     def test_native_extension_literal_module_dependency_enters_closure(self):
-        from pcc.py_frontend import pipeline
+        from pcc.frontends.python import pipeline
 
         td = tempfile.mkdtemp(prefix="pcc_multi_extension_literal_import_")
         self.addCleanup(self._rmtree, td)
@@ -159,7 +159,7 @@ class MultiFileCompileTests(unittest.TestCase):
         self.assertNotIn("not.a.real.module", modules)
 
     def test_module_scope_same_package_absolute_import_enters_closure(self):
-        from pcc.py_frontend import pipeline
+        from pcc.frontends.python import pipeline
 
         td = tempfile.mkdtemp(prefix="pcc_multi_absolute_import_")
         self.addCleanup(self._rmtree, td)
@@ -183,7 +183,7 @@ class MultiFileCompileTests(unittest.TestCase):
         self.assertNotIn("pkg.lazy", modules)
 
     def test_multi_compile_backend_self_uses_self_link(self):
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_backend_self_")
         self.addCleanup(self._rmtree, td)
@@ -192,12 +192,12 @@ class MultiFileCompileTests(unittest.TestCase):
             fh.write("print(1)\n")
         exe = os.path.join(td, "a.out")
         with mock.patch(
-            "pcc.py_frontend.pipeline._ensure_runtime",
+            "pcc.frontends.python.pipeline._ensure_runtime",
             return_value="/tmp/fake_runtime.a",
         ):
-            with mock.patch("pcc.py_frontend.pipeline._link_with_clang") as clang_link:
+            with mock.patch("pcc.frontends.python.pipeline._link_with_clang") as clang_link:
                 with mock.patch(
-                    "pcc.py_frontend.pipeline._link_with_self_backend_ir_texts"
+                    "pcc.frontends.python.pipeline._link_with_self_backend_ir_texts"
                 ) as self_link:
                     compile_python_multi(
                         [src],
@@ -210,7 +210,7 @@ class MultiFileCompileTests(unittest.TestCase):
         clang_link.assert_not_called()
 
     def test_multi_compile_direct_indexed_assembly_runs(self):
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_direct_indexed_")
         self.addCleanup(self._rmtree, td)
@@ -271,7 +271,7 @@ class MultiFileCompileTests(unittest.TestCase):
             self.assertIn("link_macho_" + phase + "_ms", profile["counters"])
 
     def test_multi_compile_direct_assembly_path_handoff_runs(self):
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_direct_asm_path_")
         self.addCleanup(self._rmtree, td)
@@ -322,7 +322,7 @@ class MultiFileCompileTests(unittest.TestCase):
         self.assertEqual(profile["counters"]["multi_direct_ir_text_bytes"], 0)
 
     def test_multi_compile_deferred_direct_link_runs(self):
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_deferred_link_")
         self.addCleanup(self._rmtree, td)
@@ -380,7 +380,7 @@ class MultiFileCompileTests(unittest.TestCase):
         self.assertEqual(result.stdout, "42\n")
 
     def test_single_compile_direct_indexed_assembly_runs(self):
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         td = tempfile.mkdtemp(prefix="pcc_single_direct_indexed_")
         self.addCleanup(self._rmtree, td)
@@ -436,7 +436,7 @@ class MultiFileCompileTests(unittest.TestCase):
         self.assertEqual(out, "entry\n")
 
     def test_sibling_top_init_has_once_guard(self):
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_once_guard_")
         self.addCleanup(self._rmtree, td)
@@ -486,7 +486,7 @@ class MultiFileCompileTests(unittest.TestCase):
         self.assertEqual(out, "start\nbanner called\ndone\n")
 
     def test_cross_module_none_return_extern_uses_void_abi(self):
-        from pcc.py_frontend import pipeline
+        from pcc.frontends.python import pipeline
 
         td = tempfile.mkdtemp(prefix="pcc_multi_none_return_")
         self.addCleanup(self._rmtree, td)
@@ -517,7 +517,7 @@ class MultiFileCompileTests(unittest.TestCase):
         self.assertRegex(ir_text, rf"call void (?:\(\) )?@{sym}\(\)")
 
     def test_tuple_unpack_rebind_to_borrowed_value_does_not_overrelease(self):
-        from pcc.py_frontend import pipeline
+        from pcc.frontends.python import pipeline
 
         td = tempfile.mkdtemp(prefix="pcc_tuple_unpack_owned_flag_")
         self.addCleanup(self._rmtree, td)
@@ -564,7 +564,7 @@ class MultiFileCompileTests(unittest.TestCase):
         self.assertEqual(run.stdout.splitlines(), ["pkg.a", "pkg.b", "pkg.c", "ok"])
 
     def test_borrowed_object_local_rebind_keeps_gc_root(self):
-        from pcc.py_frontend import pipeline
+        from pcc.frontends.python import pipeline
 
         td = tempfile.mkdtemp(prefix="pcc_borrowed_local_root_")
         self.addCleanup(self._rmtree, td)
@@ -594,17 +594,19 @@ class MultiFileCompileTests(unittest.TestCase):
         with open(out_ll, "r", encoding="utf-8") as fh:
             ir_text = fh.read()
 
+        # The frame map and the pending slot are passed directly, or through
+        # identity pointer aliases.
+        pending_slots = [r"%pending\.addr[^,)\s]*"]
         pending_root = re.search(
             r"(?P<slot>%gc\.frame\.slots\.ptr\.[^ ]+) = " r"bitcast ptr %pending\.addr",
             ir_text,
         )
-        self.assertIsNotNone(pending_root)
+        if pending_root is not None:
+            pending_slots.append(re.escape(pending_root.group("slot")))
         self.assertRegex(
             ir_text,
             r"call void \(ptr, ptr\) @pcc_gc_frame_enter"
-            r"\(ptr %gc\.frame\.map\.ptr\.[^,]+, ptr "
-            + re.escape(pending_root.group("slot"))
-            + r"\)",
+            r"\(ptr [%@][^,]+, ptr (?:" + "|".join(pending_slots) + r")\)",
         )
         borrowed_rebind = re.search(
             r"%pending\.local\.copy\.retain[^\n]+ = call ptr \(ptr\) "
@@ -623,9 +625,10 @@ class MultiFileCompileTests(unittest.TestCase):
         # exact value, and the owned flag at equal strictness.
         body = borrowed_rebind.group("body")
         rooted_store = re.search(
-            r"%(?P<gcptr>gc\.ptr\.[^ ]+) = bitcast ptr %pending\.addr[^\n]*\n"
-            r"\s*call void \(ptr, ptr\) @pcc_gc_store_root_take\(ptr "
-            r"%(?P=gcptr), ptr (?P<temp>%pending\.local\.copy\.retain[^)\n]+)\)",
+            r"(?:%(?P<gcptr>gc\.ptr\.[^ ]+) = bitcast ptr %pending\.addr[^\n]*\n\s*)?"
+            r"call void \(ptr, ptr\) @pcc_gc_store_root_take\(ptr "
+            r"(?(gcptr)%(?P=gcptr)|%pending\.addr[^,]*), "
+            r"ptr (?P<temp>%pending\.local\.copy\.retain[^)\n]+)\)",
             body,
         )
         self.assertIsNotNone(rooted_store, body)
@@ -698,7 +701,7 @@ class MultiFileCompileTests(unittest.TestCase):
         implementation modules via ``from .impl import *`` or explicit
         ``from .leaf import name`` chains.
         """
-        from pcc.py_frontend import pipeline
+        from pcc.frontends.python import pipeline
 
         td = tempfile.mkdtemp(prefix="pcc_multi_reexport_chain_")
         self.addCleanup(self._rmtree, td)
@@ -757,7 +760,7 @@ class MultiFileCompileTests(unittest.TestCase):
         ``if not __NUMPY_SETUP__: from ._core import (..., ones, ...);
         def _sanity_check(): ones()``.
         """
-        from pcc.py_frontend import pipeline
+        from pcc.frontends.python import pipeline
 
         td = tempfile.mkdtemp(prefix="pcc_multi_if_import_predeclare_")
         self.addCleanup(self._rmtree, td)
@@ -832,7 +835,7 @@ class MultiFileCompileTests(unittest.TestCase):
         otherwise self-backend links fail with undefined ``.class.pkg_api.Base``
         symbols even though ``pkg.base`` is compiled in the same closure.
         """
-        from pcc.py_frontend import pipeline
+        from pcc.frontends.python import pipeline
 
         td = tempfile.mkdtemp(prefix="pcc_multi_class_reexport_")
         self.addCleanup(self._rmtree, td)
@@ -898,7 +901,7 @@ class MultiFileCompileTests(unittest.TestCase):
         """A native sibling constant passed to a sibling class constructor
         must not become getattr(module-name-string, constant-name).
         """
-        from pcc.py_frontend import pipeline
+        from pcc.frontends.python import pipeline
 
         td = tempfile.mkdtemp(prefix="pcc_multi_module_constant_ctor_arg_")
         self.addCleanup(self._rmtree, td)
@@ -958,7 +961,7 @@ class MultiFileCompileTests(unittest.TestCase):
         self.assertEqual(result.stdout, "0\n")
 
     def test_native_module_class_unbound_method_call_uses_explicit_receiver(self):
-        from pcc.py_frontend import pipeline
+        from pcc.frontends.python import pipeline
 
         td = tempfile.mkdtemp(prefix="pcc_multi_unbound_class_method_")
         self.addCleanup(self._rmtree, td)
@@ -1020,7 +1023,7 @@ class MultiFileCompileTests(unittest.TestCase):
         must bind to that sibling's native module-global slot, not to
         a CPython ``from ... import`` fallback.
         """
-        from pcc.py_frontend import pipeline
+        from pcc.frontends.python import pipeline
 
         td = tempfile.mkdtemp(prefix="pcc_multi_static_table_")
         self.addCleanup(self._rmtree, td)
@@ -1079,7 +1082,7 @@ class MultiFileCompileTests(unittest.TestCase):
         native module proxy rather than finding only an initializer-local
         alloca.
         """
-        from pcc.py_frontend import pipeline
+        from pcc.frontends.python import pipeline
 
         td = tempfile.mkdtemp(prefix="pcc_multi_module_unpack_")
         self.addCleanup(self._rmtree, td)
@@ -1182,7 +1185,7 @@ class MultiFileCompileTests(unittest.TestCase):
         package name before falling back to CPython import. Otherwise
         codegen emits ``py_cpy_import('')`` and leaves a pending
         ``ValueError`` behind at runtime."""
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_ir_")
         self.addCleanup(self._rmtree, td)
@@ -1217,7 +1220,7 @@ class MultiFileCompileTests(unittest.TestCase):
         well as trying ``pkg.Name`` as a possible sibling module.  Otherwise
         an exported exception class silently lowers through ``py_cpy_call1``.
         """
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_package_attr_")
         self.addCleanup(self._rmtree, td)
@@ -1251,7 +1254,7 @@ class MultiFileCompileTests(unittest.TestCase):
     def test_missing_native_relative_import_raises_importerror_without_libpython(self):
         """A missing same-package optional import should raise native
         ImportError instead of routing through ``py_cpy_import``."""
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_missing_rel_")
         self.addCleanup(self._rmtree, td)
@@ -1300,7 +1303,7 @@ class MultiFileCompileTests(unittest.TestCase):
     def test_missing_external_optional_import_folds_to_none_without_libpython(self):
         """A missing external optional import caught as ImportError should
         not leave CPython import/call fallback in the strict native closure."""
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_missing_ext_optional_")
         self.addCleanup(self._rmtree, td)
@@ -1347,7 +1350,7 @@ class MultiFileCompileTests(unittest.TestCase):
     def test_self_submodule_import_from_parent_uses_native_module_attrs(self):
         """A compiled ``pkg.sub`` can use ``from pkg import sub`` to publish
         into its live module namespace without materialising a host package."""
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_self_submodule_import_")
         self.addCleanup(self._rmtree, td)
@@ -1390,7 +1393,7 @@ class MultiFileCompileTests(unittest.TestCase):
         self.assertIn("@py_module_attr_set", ir_text)
 
     def test_dynamic_native_module_attrs_calls_and_sys_modules_stay_native(self):
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_dynamic_module_attrs_")
         self.addCleanup(self._rmtree, td)
@@ -1424,7 +1427,7 @@ class MultiFileCompileTests(unittest.TestCase):
     def test_self_dunder_class_constructor_starstar_kwargs_without_libpython(self):
         """A `self.__class__(..., **kwargs)` clone shape should avoid
         libpython call fallback in no-libpython mode."""
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_self_dunder_class_ctor_")
         self.addCleanup(self._rmtree, td)
@@ -1483,7 +1486,7 @@ class MultiFileCompileTests(unittest.TestCase):
     def test_os_path_getsize_lowers_without_libpython(self):
         """os.path.getsize is part of the package-import path native
         os.path subset and must not route through CPython fallback."""
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_os_path_getsize_")
         self.addCleanup(self._rmtree, td)
@@ -1530,8 +1533,8 @@ class MultiFileCompileTests(unittest.TestCase):
 
     def test_pathlib_path_suffix_lowers_without_libpython(self):
         """Path(...).suffix is common package-import code and should stay
-        native when pathlib Path/PurePath are imported as builtin aliases."""
-        from pcc.py_frontend.pipeline import compile_python_multi
+        native through the owned Path/PurePath classes and property."""
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_pathlib_suffix_")
         self.addCleanup(self._rmtree, td)
@@ -1572,8 +1575,9 @@ class MultiFileCompileTests(unittest.TestCase):
         )
         with open(out_ll, "r", encoding="utf-8") as fh:
             ir_text = fh.read()
-        self.assertIn("@py_os_path_splitext", ir_text)
-        self.assertIn("@py_tuple_get", ir_text)
+        self.assertIn(".class.pathlib.Path", ir_text)
+        self.assertIn(".class.pathlib.PurePath", ir_text)
+        self.assertIn("@user_pathlib_PurePath_suffix", ir_text)
         self.assertNotIn("call ptr (ptr, ptr) @py_cpy_getattr", ir_text)
         self.assertNotIn("call ptr (ptr) @py_cpy_call_noargs", ir_text)
         self.assertNotIn("call ptr (ptr, ptr) @py_cpy_call1", ir_text)
@@ -1584,7 +1588,7 @@ class MultiFileCompileTests(unittest.TestCase):
         The native path must keep this as bytes/tuple startswith logic rather
         than CPython getattr/call fallback.
         """
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_codecs_bom_")
         self.addCleanup(self._rmtree, td)
@@ -1639,7 +1643,7 @@ class MultiFileCompileTests(unittest.TestCase):
 
     def test_fileinput_fileinput_lowers_without_libpython(self):
         """NumPy f2py scans source files through fileinput.FileInput."""
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_fileinput_")
         self.addCleanup(self._rmtree, td)
@@ -1708,7 +1712,7 @@ class MultiFileCompileTests(unittest.TestCase):
     def test_native_relative_import_from_concrete_module_still_binds_export(self):
         """The missing-optional-import path must not turn concrete
         sibling-module exports into ImportError."""
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_rel_export_")
         self.addCleanup(self._rmtree, td)
@@ -1746,7 +1750,7 @@ class MultiFileCompileTests(unittest.TestCase):
 
     def test_typing_type_checking_branches_are_compile_time_false(self):
         """typing.TYPE_CHECKING-only imports should not enter runtime lowering."""
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_type_checking_")
         self.addCleanup(self._rmtree, td)
@@ -1792,7 +1796,7 @@ class MultiFileCompileTests(unittest.TestCase):
 
     def test_typing_literal_aliases_are_compile_time_metadata(self):
         """typing Literal/Union aliases should not allocate CPython typing objects."""
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_typing_literal_alias_")
         self.addCleanup(self._rmtree, td)
@@ -1846,7 +1850,7 @@ class MultiFileCompileTests(unittest.TestCase):
 
     def test_typing_metadata_aliases_survive_native_reexports(self):
         """Compiled siblings must not materialize typing-only exports."""
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_typing_reexport_")
         self.addCleanup(self._rmtree, td)
@@ -1885,7 +1889,7 @@ class MultiFileCompileTests(unittest.TestCase):
         self.assertEqual(run.stdout, "typing reexport\n")
 
     def test_compiled_sibling_module_docstring_is_importable(self):
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_module_docstring_")
         self.addCleanup(self._rmtree, td)
@@ -1918,7 +1922,7 @@ class MultiFileCompileTests(unittest.TestCase):
         """Explicit multi-file compiles should recursively add missing
         relative-import siblings, so callers can seed just the entry
         module and still keep same-package helpers on the native path."""
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_auto_closure_")
         self.addCleanup(self._rmtree, td)
@@ -1956,7 +1960,7 @@ class MultiFileCompileTests(unittest.TestCase):
         """``from .sub import helper`` should keep
         ``helper.answer()`` on the native sibling path when that
         submodule is compiled in the same one-source closure."""
-        from pcc.py_frontend.pipeline import compile_python_multi
+        from pcc.frontends.python.pipeline import compile_python_multi
 
         td = tempfile.mkdtemp(prefix="pcc_multi_submodule_alias_")
         self.addCleanup(self._rmtree, td)
@@ -1987,7 +1991,7 @@ class MultiFileCompileTests(unittest.TestCase):
     def test_assign_int_width_mismatch_casting(self):
         """Test that assigning an i32 parameter (from a C-ABI signature override)
         to an i64 stack slot compiles successfully with correct width casting."""
-        from pcc.py_frontend.pipeline import compile_python
+        from pcc.frontends.python.pipeline import compile_python
 
         td = tempfile.mkdtemp(prefix="pcc_cast_test_")
         self.addCleanup(self._rmtree, td)

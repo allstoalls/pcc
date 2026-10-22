@@ -10,8 +10,8 @@ this_dir = os.path.dirname(os.path.abspath(__file__))
 # rely on tests/conftest.py's global Path.resolve/dirname shim.
 parent_dir = os.path.dirname(os.path.dirname(this_dir))
 sys.path.insert(0, parent_dir)
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.preprocessor import preprocess
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.frontends.c.preprocessor import preprocess
 import unittest
 
 
@@ -65,7 +65,8 @@ class TestIncludeUser(unittest.TestCase):
 
     def test_missing_user_header_raises(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(RuntimeError, match="system cpp failed"):
+            # Owned and system preprocessing both name the missing header.
+            with pytest.raises(RuntimeError, match=r"missing_header\.h"):
                 CEvaluator().evaluate(
                     """
                     #include "missing_header.h"

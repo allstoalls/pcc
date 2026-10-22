@@ -1,4 +1,4 @@
-from pcc.functional_result import Result, fuse_map_filter
+from pcc.library.functional_result import Result, fuse_map_filter
 
 
 def test_result_map_bind():

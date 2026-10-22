@@ -1,7 +1,7 @@
 """Phase 2 Task 7: scaffold lowering for ``builder.store``.
 
 Verifies the first real Path A method — ``self.builder.store(v, p)``
-in user source becomes ``call void @user_pcc_llvm_capi_ir_IRBuilder_store(i8*, i8*, i8*, i8*)``
+in user source becomes ``call void @user_pcc_ir_ir_IRBuilder_store(i8*, i8*, i8*, i8*)``
 in the emitted IR (no ``py_cpy_*`` dispatch). The final operand is the
 explicit Python default for ``align``.
 
@@ -30,7 +30,7 @@ _BUILD.mkdir(parents=True, exist_ok=True)
 def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
     """Compile ``source`` with the given ir_scaffold_mode and return
     the resulting IR text."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -45,7 +45,7 @@ def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
 
 _USE_STORE_PROGRAM = textwrap.dedent(
     """
-    from pcc.llvm_capi.compat import ir
+    from pcc.ir.compat import ir
 
     def use_store(val, ptr) -> None:
         builder = ir.IRBuilder()
@@ -60,12 +60,12 @@ _PTR = r"(?:ptr|i8\s*\*)"
 
 def test_on_mode_emits_extern_call():
     ir_text = _compile_to_ll(_USE_STORE_PROGRAM, "store_on", mode="on")
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_store" in ir_text, (
+    assert "@user_pcc_ir_ir_IRBuilder_store" in ir_text, (
         "ON mode must emit the scaffold extern call; got IR without it:\n"
         + ir_text
     )
     decl_pattern = re.compile(
-        r"declare[^\n]+void\s+@user_pcc_llvm_capi_ir_IRBuilder_store\s*\(\s*"
+        r"declare[^\n]+void\s+@user_pcc_ir_ir_IRBuilder_store\s*\(\s*"
         + _PTR + r"\s*,\s*" + _PTR + r"\s*,\s*"
         + _PTR + r"\s*,\s*" + _PTR + r"\s*\)"
     )
@@ -84,7 +84,7 @@ def test_on_mode_use_store_body_has_no_py_cpy():
     assert body is not None, (
         "could not locate use_store function body in IR:\n" + ir_text
     )
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_store" in body, (
+    assert "@user_pcc_ir_ir_IRBuilder_store" in body, (
         "use_store body must call the scaffold extern; got:\n" + body
     )
     assert "py_cpy_" not in body, (
@@ -101,7 +101,7 @@ def test_off_mode_still_uses_py_cpy_for_store_callsite():
     IR (so the two modes don't accidentally share scaffold
     references), and OFF mode is never *worse* than ON."""
     ir_text = _compile_to_ll(_USE_STORE_PROGRAM, "store_off", mode="off")
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_store" not in ir_text, (
+    assert "@user_pcc_ir_ir_IRBuilder_store" not in ir_text, (
         "OFF mode must NOT emit scaffold extern; got:\n" + ir_text
     )
     body = _function_body(ir_text, "use_store")
@@ -126,7 +126,7 @@ def test_extern_declared_once_for_multiple_call_sites():
     must not duplicate it."""
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi.compat import ir
+        from pcc.ir.compat import ir
 
         def two_stores(v1, p1, v2, p2) -> None:
             builder = ir.IRBuilder()
@@ -136,13 +136,13 @@ def test_extern_declared_once_for_multiple_call_sites():
     )
     ir_text = _compile_to_ll(program, "store_dup", mode="on")
     decl_count = len(re.findall(
-        r"declare[^\n]+void\s+@user_pcc_llvm_capi_ir_IRBuilder_store", ir_text,
+        r"declare[^\n]+void\s+@user_pcc_ir_ir_IRBuilder_store", ir_text,
     ))
     assert decl_count == 1, (
         f"expected exactly 1 extern decl, got {decl_count}:\n" + ir_text
     )
     call_count = len(re.findall(
-        r"call[^\n]+void[^\n]+@user_pcc_llvm_capi_ir_IRBuilder_store", ir_text,
+        r"call[^\n]+void[^\n]+@user_pcc_ir_ir_IRBuilder_store", ir_text,
     ))
     assert call_count == 2, (
         f"expected 2 call sites, got {call_count}:\n" + ir_text

@@ -13,16 +13,16 @@ from pcc.backend.self_backend_parse import parse_self_backend_module
 from pcc.backend.self_backend_prepare import prepare_parsed_function
 from pcc.backend.self_backend_stackprep import assign_stack_slots
 from pcc.backend.self_backend_module_symbols import prepare_module_symbols
-from pcc.codegen.c_codegen import LLVMCodeGenerator, postprocess_ir_text
-from pcc.parse.c_parser import CParser
-from pcc.llvm_capi import ir
+from pcc.frontends.c.codegen.c_codegen import CCodeGenerator, postprocess_ir_text
+from pcc.frontends.c.parse.c_parser import CParser
+from pcc.ir import ir
 
 
 @pytest.mark.parametrize("target", [
     "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "x86_64-pc-windows-msvc",
 ])
 def test_c_variadic_call_preserves_mixed_aggregate_abi_type(target):
-    generator = LLVMCodeGenerator()
+    generator = CCodeGenerator()
     generator.module.triple = target
     generator.generate_code(CParser().parse("""
         struct pair { double real; long long integer; };
@@ -33,11 +33,16 @@ def test_c_variadic_call_preserves_mixed_aggregate_abi_type(target):
         }
     """))
     module = parse_self_backend_module(postprocess_ir_text(str(generator.module)))
-    calls = [instruction for function in module.functions for block in function.blocks
-             for instruction in block.instructions
-             if instruction.kind == "call" and instruction.data[2] == "take"]
+    from pcc.backend.self_backend_kernel import get_indexed_function_kernel
+
+    calls = []
+    for function in module.functions:
+        kernel = get_indexed_function_kernel(function)
+        for call_id in range(len(kernel.call_scalars) // 8):
+            if kernel.call_texts[kernel.call_header(call_id).second] == "take":
+                calls.append(kernel.diagnostic_call_data(call_id))
     assert len(calls) == 1
-    argument_type = calls[0].data[4][1][0]
+    argument_type = calls[0][4][1][0]
     assert argument_type.is_struct
     assert [member.kind for member in argument_type.fields] == ["fp", "int"]
     from pcc.backend.self_backend_sysv_aggregates import classes
@@ -66,8 +71,10 @@ def _aarch64_start(named_types):
     from pcc.backend.self_backend_aarch64_linux import emit_linux_vararg_start
     named = ", ".join(ty + " %a" + str(index) for index, ty in enumerate(named_types))
     text = ('target triple = "aarch64-unknown-linux-gnu"\n'
+            + 'declare void @llvm.va_start(ptr)\n'
             + 'define void @probe(' + named + ', ...) {\nentry:\n'
-            + '  %ap = alloca {ptr, ptr, ptr, i32, i32}\n  ret void\n}\n')
+            + '  %ap = alloca {ptr, ptr, ptr, i32, i32}\n'
+            + '  call void @llvm.va_start(ptr %ap)\n  ret void\n}\n')
     module = parse_self_backend_module(text)
     function = module.functions[0]
     prepare_parsed_function(function)
@@ -102,7 +109,7 @@ def test_linux_va_arg_rejects_unimplemented_wide_scalar_without_truncating():
 
 
 def test_sysv_va_list_parameter_uses_record_pointer_not_its_local_slot(monkeypatch):
-    generator = LLVMCodeGenerator()
+    generator = CCodeGenerator()
     generator.module.triple = "x86_64-unknown-linux-gnu"
     record = ir.LiteralStructType([ir.IntType(32), ir.IntType(32),
                                   ir.IntType(8).as_pointer(), ir.IntType(8).as_pointer()])

@@ -65,7 +65,7 @@ _PROGRAM = """
 
 
 def _compile_to_ll(source: str, name: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -108,7 +108,7 @@ def test_set_from_dict_lowers_through_dict_keys():
 
 
 def test_set_and_frozenset_of_dict_have_dict_length(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -118,7 +118,7 @@ def test_set_and_frozenset_of_dict_have_dict_length(tmp_path):
         str(exe),
         ir_scaffold_mode="on",
         libpython_mode="off",
-        backend="llvm",
+        backend="self",
     )
     native = subprocess.run(
         [str(exe)], capture_output=True, text=True, timeout=60,
@@ -129,7 +129,7 @@ def test_set_and_frozenset_of_dict_have_dict_length(tmp_path):
 
 @pytest.mark.parametrize("call", ["set", "frozenset"])
 def test_dict_keys_survive_a_non_string_key(tmp_path, call):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     # Integer keys are the case the broken lowering could accidentally get
     # right: py_obj_getitem(d, 0) really does find the key 0.  Use keys that
@@ -159,7 +159,7 @@ def test_dict_keys_survive_a_non_string_key(tmp_path, call):
         str(exe),
         ir_scaffold_mode="on",
         libpython_mode="off",
-        backend="llvm",
+        backend="self",
     )
     native = subprocess.run(
         [str(exe)], capture_output=True, text=True, timeout=60,
@@ -196,7 +196,7 @@ _FAMILY = """
 
 def test_mapping_builtin_family_matches_cpython(tmp_path):
     """dict(), any(), all() and zip() over a mapping iterate its keys."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -206,7 +206,7 @@ def test_mapping_builtin_family_matches_cpython(tmp_path):
         str(exe),
         ir_scaffold_mode="on",
         libpython_mode="off",
-        backend="llvm",
+        backend="self",
     )
     native = subprocess.run(
         [str(exe)], capture_output=True, text=True, timeout=60,
@@ -221,7 +221,7 @@ def test_mapping_builtin_family_matches_cpython(tmp_path):
 
 # ---------------------------------------------------------------------------
 # Ownership.  py_dict_keys / py_list_get / py_dict_get all return NEW refs
-# (pcc/py_runtime/include/py_runtime.h), and py_dict_set / py_set_add retain
+# (pcc/runtime/include/py_runtime.h), and py_dict_set / py_set_add retain
 # what they store rather than stealing it.  The mapping normalisation added
 # for set/dict/any/zip therefore creates owned temporaries, and the first cut
 # of that sweep leaked every one of them.  Output-only tests cannot see a
@@ -354,7 +354,7 @@ def test_strict_zip_over_a_mapping_still_lowers(tmp_path):
     combination reached neither and died at runtime with
     `NameError: name 'zip' is not defined`.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -364,7 +364,7 @@ def test_strict_zip_over_a_mapping_still_lowers(tmp_path):
         str(exe),
         ir_scaffold_mode="on",
         libpython_mode="off",
-        backend="llvm",
+        backend="self",
     )
     native = subprocess.run(
         [str(exe)], capture_output=True, text=True, timeout=60,

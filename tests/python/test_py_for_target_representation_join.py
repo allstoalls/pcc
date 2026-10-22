@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.owned_ir_validation import verify_ir_text
+
 import re
 import subprocess
 import textwrap
@@ -10,15 +12,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from pcc.py_frontend.codegen.for_loop_lowering import (
+from pcc.frontends.python.codegen.for_loop_lowering import (
     _for_prepare_owned_object_target,
     ir,
 )
-from pcc.py_frontend.codegen.errors import L1CodegenError
+from pcc.frontends.python.codegen.errors import L1CodegenError
 
 
 def _compile_to_ll(tmp_path: Path, source: str, name: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / f"{name}.py"
     out = tmp_path / f"{name}.ll"
@@ -68,6 +70,10 @@ def test_live_cpython_native_target_join_remains_fail_closed():
     """Do not replace an arbitrary foreign object with a lossy pcc projection."""
     host = SimpleNamespace(
         env={"item": (object(), ir.IntType(8).as_pointer(), object())},
+        # Inside a def, with no module global of that name (read since
+        # 816fb03fa, before the binding domains are compared).
+        _module_globals={},
+        current_func_def=object(),
         _cpy_env_flags={"item": True},
         # A live pre-loop value is the whole reason the two representations
         # would have to join; the drop below is only reachable for a dead one.
@@ -189,7 +195,7 @@ def test_mixed_domain_for_target_join_matches_cpython_at_runtime(tmp_path):
     being replaced by a fail-closed stub, and compared to CPython on the same
     file -- the drop is only correct if the observable answer is unchanged.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = textwrap.dedent(
         '''
@@ -425,7 +431,6 @@ def test_dyn_tuple_unpack_reuses_planned_exact_int_slot_with_valid_ir(tmp_path):
     object slot for the whole function, so tuple unpack must transfer the
     owned object into that slot instead of unboxing it to i64 first.
     """
-    from llvmlite import binding as llvm
 
     ir_text = _compile_to_ll(
         tmp_path,
@@ -453,7 +458,7 @@ def test_dyn_tuple_unpack_reuses_planned_exact_int_slot_with_valid_ir(tmp_path):
     next_unpack_pos = body.index("%unpack.1", unpack_pos + 1)
     first_transfer = body[unpack_pos:next_unpack_pos]
     assert "@pcc_gc_store_root" in first_transfer, first_transfer
-    llvm.parse_assembly(ir_text).verify()
+    verify_ir_text(ir_text)
 
 
 def test_dyn_for_target_can_rebind_to_exact_int_in_the_planned_slot(tmp_path):
@@ -535,11 +540,11 @@ def test_for_target_join_covers_zero_nonzero_break_continue_and_error_edges(tmp_
 def test_enumerate_i64_target_rebound_from_dyn_list_verifies_and_runs(
     tmp_path,
     monkeypatch,
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
-    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_py_runtime_archive))
+    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_runtime_archive))
     src = tmp_path / "for_target_join_run.py"
     exe = tmp_path / "for_target_join_run.out"
     fixture = (
@@ -592,7 +597,7 @@ def test_for_target_owned_state_is_function_local(tmp_path):
 
 def test_pipeline_init_rewriter_distinct_target_static_canary():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "pcc/py_frontend/pipeline_libpython.py").read_text(
+    source = (repo_root / "pcc/frontends/python/pipeline_libpython.py").read_text(
         encoding="utf-8"
     )
     assert "for init_call_index in init_call_lines:" in source

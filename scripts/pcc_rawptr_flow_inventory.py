@@ -49,9 +49,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from pcc.parse.py_lift import parse_and_lift  # noqa: E402
-from pcc.py_frontend import py_ast as pa  # noqa: E402
-from pcc.py_frontend.type_infer import (  # noqa: E402
+from pcc.frontends.python.py_lift import parse_and_lift  # noqa: E402
+from pcc.frontends.python import py_ast as pa  # noqa: E402
+from pcc.frontends.python.type_infer import (  # noqa: E402
     _UNSAFE_INTRINSIC_RETURN_TYPES,
     TYPE_DYN,
     type_eq,

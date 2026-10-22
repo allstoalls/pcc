@@ -2,10 +2,10 @@
 import os
 import subprocess
 import sys
-from pcc.py_frontend.pipeline import compile_python_multi
+from pcc.frontends.python.pipeline import compile_python_multi
 
 
-def test_type_name_preserves_calls_errors_and_dynamic_default(tmp_path, pcc_py_runtime_archive):
+def test_type_name_preserves_calls_errors_and_dynamic_default(tmp_path, pcc_runtime_archive):
     owner = tmp_path / 'type_names.py'
     owner.write_text('''def runtime_name(value=None):
     return type(value).__name__
@@ -44,7 +44,7 @@ main()
     binary = tmp_path / 'type_name_entry'
     compile_python_multi([str(owner), str(source)], str(binary),
                          module_names=['type_names', 'type_name_entry'], entry_module='type_name_entry',
-                         backend='self', libpython_mode='off', runtime_archive=str(pcc_py_runtime_archive))
+                         backend='self', libpython_mode='off', runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(gc)))

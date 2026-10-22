@@ -37,7 +37,7 @@ from .self_backend_ir import (
     parsed_function_publish_alloca_slot,
     parsed_function_publish_value_slot,
 )
-from .self_backend_value_arena import CompilerInt4
+from .self_backend_value_arena import CompilerInt2, CompilerInt4
 
 
 def _legacy_instruction_result_type(kind_id: int, data) -> TypeDesc | None:
@@ -272,6 +272,13 @@ def assign_stack_slots(
                 )
             phi_index += 1
         block_fact: CompilerInt4 = kernel.block_fact(current_block_id)
+        # An inline error edge uses its condition at trigger + 1, a position
+        # no instruction use list names.  Free it there like any other last
+        # use; otherwise every condition stayed active for the rest of the
+        # function, its slot was never reused, and each block end re-sorted
+        # all of them (quadratic in the number of call sites).
+        edge_span: CompilerInt2 = kernel.inline_error_edge_span(current_block_id)
+        edge_cursor = 0
         instruction_index = 0
         instruction_count = block_fact.second
         while instruction_index < instruction_count:
@@ -348,6 +355,18 @@ def assign_stack_slots(
                     instruction_index,
                 )
                 use_index += 1
+            # Edges are published in trigger order within their block.
+            while (
+                edge_cursor < edge_span.second
+                and kernel.inline_error_edge_trigger(edge_span.first + edge_cursor) + 1
+                <= instruction_index
+            ):
+                edge_id = edge_span.first + edge_cursor
+                maybe_free_local_value(
+                    kernel.inline_error_edge_condition(edge_id),
+                    kernel.inline_error_edge_trigger(edge_id) + 1,
+                )
+                edge_cursor += 1
             instruction_index += 1
         term_pos = instruction_count
         # Same order as before (by value name); the IDs are already at hand,

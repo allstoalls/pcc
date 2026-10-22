@@ -51,34 +51,18 @@ def compiler_source_identity() -> str:
 
 
 def observe_worker(manifest: Path, output: Path) -> int:
-    # Set before importing codegen: compat's choice is latched at import.
-    forbidden = [
-        key
-        for key in (
-            "PCC_USE_LLVMLITE",
-            "PCC_USE_LLVMLITE_PY",
-            "PCC_USE_LLVMLITE_C",
-            "PCC_USE_LLVMLITE_PASSES",
-        )
-        if os.environ.get(key) == "1"
-    ]
-    if forbidden:
-        raise ValueError(
-            "owned scaffold audit cannot use external providers: "
-            + ", ".join(forbidden)
-        )
-    from pcc.py_frontend.pipeline_frontend_workers import read_worker_manifest
+    from pcc.frontends.python.pipeline_frontend_workers import read_worker_manifest
 
     selected = read_worker_manifest(str(manifest))
     if selected["job_kind"] != "codegen":
         raise ValueError("scaffold observation requires a codegen worker")
     if selected["ir_scaffold_mode"] != "on" or selected["libpython_mode"] != "off":
         raise ValueError("scaffold baseline requires ir-scaffold=on and libpython=off")
-    from pcc.llvm_capi import compat, ir
+    from pcc.ir import compat, ir
 
     if compat.ir is not ir:
         raise ValueError("compat.ir is not the owned provider in this observer")
-    from pcc.py_frontend.pipeline import run_python_multi_codegen_worker
+    from pcc.frontends.python.pipeline import run_python_multi_codegen_worker
     from pcc.tools.ir_scaffold_observer import (
         ScaffoldDecisionRecorder,
         observe_scaffold_decisions,
@@ -125,7 +109,7 @@ def main(argv=None) -> int:
             definition_signatures,
         )
 
-        provider = args.provider or ROOT / "pcc/llvm_capi/ir.py"
+        provider = args.provider or ROOT / "pcc/ir/ir.py"
         issues = current_signature_issues(provider)
         payload = {
             "schema": "pcc.scaffold-signature-audit.v1",
@@ -146,7 +130,7 @@ def main(argv=None) -> int:
     if args.action == "_observe-worker":
         return observe_worker(args.manifest, args.output)
 
-    from scripts.replay_pcc_codegen_worker import prepare_replay
+    from scripts.replay_pcc_frontends_c_codegen_worker import prepare_replay
     from pcc.tools.ir_scaffold_observer import compare_decision_records
 
     output_root = args.output_dir.resolve()
@@ -219,7 +203,7 @@ def main(argv=None) -> int:
         "completed_workers": sum(item["returncode"] == 0 for item in receipts),
         "workers": receipts,
         "stage_receipt_sha256": digest(args.stage_receipt),
-        "provider_sha256": digest(ROOT / "pcc/llvm_capi/ir.py"),
+        "provider_sha256": digest(ROOT / "pcc/ir/ir.py"),
         "observer_sha256": digest(ROOT / "pcc/tools/ir_scaffold_observer.py"),
         "compiler_source_before": source_before,
         "compiler_source_after": source_after,

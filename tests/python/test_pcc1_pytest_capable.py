@@ -50,15 +50,15 @@ pytestmark = pytest.mark.pcc_gate(probe="pcc1")
 
 
 @pytest.fixture(scope="module", autouse=True)
-def _capable_pcc_py_runtime(pcc_py_runtime_archive):
+def _capable_pcc_runtime(pcc_runtime_archive):
     """Ensure the pcc-Python runtime archive pcc1 links is built before these
-    tests (shared ``pcc_py_runtime_archive`` fixture in conftest). Without it a
+    tests (shared ``pcc_runtime_archive`` fixture in conftest). Without it a
     tree missing ``libpy_runtime_pcc_py.a`` fails every pcc1 link with
     undefined ``py_*`` symbols."""
     previous = os.environ.get("PCC_RUNTIME_ARCHIVE")
-    os.environ["PCC_RUNTIME_ARCHIVE"] = str(pcc_py_runtime_archive)
+    os.environ["PCC_RUNTIME_ARCHIVE"] = str(pcc_runtime_archive)
     try:
-        yield pcc_py_runtime_archive
+        yield pcc_runtime_archive
     finally:
         if previous is None:
             os.environ.pop("PCC_RUNTIME_ARCHIVE", None)

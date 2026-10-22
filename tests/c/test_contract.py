@@ -1,4 +1,4 @@
-from pcc.util import Base, PositiveInteger
+from pcc.support.util import Base, PositiveInteger
 
 
 dx: PositiveInteger

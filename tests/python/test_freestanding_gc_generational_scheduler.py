@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import (
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import (
     FREESTANDING_GC_CROSS_OBJECT_SIGNATURES,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_generational_scheduler.py"
 MANAGED_SOURCE = RUNTIME_DIR / "py" / "py_gc_backend.py"
 BARRIER_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_barrier_dispatcher.py"
@@ -37,6 +37,11 @@ RAW_FUNCTION_IMPORTS = {
     "pcc_builtin_type_root_slots",
     "pcc_capi_visit_extension_module_state_roots",
     "pcc_gc_backend3_continuation_root_scan_cursor",
+    # The remembered-roots drain attributes medium nodes another thread
+    # enqueued (983254526).
+    "pcc_current_thread_id",
+    "pcc_gc_backend4_store_buffer_cross_thread_medium_flushed_entries_count",
+    "pcc_gc_backend4_store_buffer_cross_thread_medium_flushes_count",
     "pcc_gc_backend4_store_buffer_drain_batches_count",
     "pcc_gc_backend4_store_buffer_drained_entries_count",
     "pcc_gc_backend4_store_buffer_entries_count",
@@ -72,6 +77,7 @@ RAW_FUNCTION_IMPORTS = {
     "pcc_gc_object_node_is_active",
     "pcc_gc_root_registry_revision",
     "pcc_gc_scheduler_root_head",
+    "pcc_gc_store_buffer_member_forget",
     "pcc_gc_trace_referents_for_promotion",
     "pcc_gc_visit_mapped_root_slot",
     "pcc_py_gc_minor_graph_lock",
@@ -290,10 +296,10 @@ def test_extension_module_traverse_runs_after_graph_unlock() -> None:
 
 
 def test_production_archive_has_one_generational_scheduler_owner(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.owned_ir_validation import verify_ir_text
+
 import hashlib
 import os
 import platform
@@ -13,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.macho_normalize import normalize_macho_metadata
+from pcc.diagnostics.macho_normalize import normalize_macho_metadata
 from tests.host_pcc_pcc1_parity import (
     ParityContractError,
     load_applicability_manifest,
@@ -4834,7 +4836,6 @@ def test_pcc1_duplicate_definition_ir_matches_host_shape(
 ):
     """Host/pcc1 keep two bodies and pcc1 executes both live bindings."""
 
-    from llvmlite import binding as llvm
 
     src = tmp_path / "duplicate_definition_shape.py"
     src.write_text(
@@ -4866,8 +4867,8 @@ def test_pcc1_duplicate_definition_ir_matches_host_shape(
 
     host_text = host_ir.read_text(encoding="utf-8")
     pcc1_text = pcc1_ir.read_text(encoding="utf-8")
-    llvm.parse_assembly(host_text).verify()
-    llvm.parse_assembly(pcc1_text).verify()
+    verify_ir_text(host_text)
+    verify_ir_text(pcc1_text)
     expected = [
         "user_duplicate_definition_shape_choose.definition.0",
         "user_duplicate_definition_shape_choose.definition.1",

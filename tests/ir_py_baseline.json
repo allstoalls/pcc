@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "Frozen baseline for pcc/llvm_capi/ir.py compiled in ON mode.",
+    "Frozen baseline for pcc/ir/ir.py compiled in ON mode.",
     "Captured 2026-04-28 (after removing unused 'import math').",
     "",
     "This file is the ratchet for Phase 9: getting ir.py to 0 py_cpy_*",

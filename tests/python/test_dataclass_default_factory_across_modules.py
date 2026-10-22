@@ -10,7 +10,7 @@ not survived, so the field became required.  The caller was then rejected with
 The cost of that was not academic.  ``pcc/backend/self_backend_ir.py`` ends
 ``ParsedFunction`` with ``aarch64_tail_call_ids: list[int] =
 field(default_factory=list)``, and one construction site in
-``pcc/llvm_capi/direct_indexed_kernel.py`` omits it.  That single omission
+``pcc/ir/direct_indexed_kernel.py`` omits it.  That single omission
 failed the stage1 self-host build, so pcc could not produce a pcc1 at all.
 Two other construction sites had already been made to pass
 ``aarch64_tail_call_ids=[]`` explicitly, which is the shape of a workaround
@@ -24,13 +24,14 @@ factory call can be rebuilt no matter which layer recomputes the signature.
 from __future__ import annotations
 
 import subprocess
+import sys
 import textwrap
 from pathlib import Path
 
-from pcc.py_frontend.pipeline import compile_python
-from pcc.py_frontend.pipeline_exports import export_default_factory_name
-from pcc.parse.py_lift import parse_and_lift
-from pcc.py_frontend.py_ast import Assign, ClassDef
+from pcc.frontends.python.pipeline import compile_python
+from pcc.frontends.python.pipeline_exports import export_default_factory_name
+from pcc.frontends.python.py_lift import parse_and_lift
+from pcc.frontends.python.py_ast import Assign, ClassDef
 
 
 def _class_body_defaults(source: str, class_name: str) -> dict:
@@ -142,7 +143,7 @@ def test_an_importing_module_may_omit_a_default_factory_field(tmp_path: Path) ->
     assert done.stdout == "a 2 0 0\nb 3 2\n1 0\n5 0\n"
 
 
-def test_the_arity_error_names_the_signature_it_rejected(tmp_path: Path, capfd) -> None:
+def test_the_arity_error_names_the_signature_it_rejected(tmp_path: Path) -> None:
     """A genuine caller mistake still fails, and says enough to act on.
 
     The old message was ``missing required argument 'x'`` with only counts,
@@ -175,23 +176,24 @@ def test_the_arity_error_names_the_signature_it_rejected(tmp_path: Path, capfd) 
         ).lstrip(),
         encoding="utf-8",
     )
-    raised = ""
-    try:
-        compile_python(
-            str(app),
-            str(tmp_path / "app"),
-            libpython_mode="off",
-            ir_scaffold_mode="on",
-            backend="self",
-        )
-    except Exception as exc:  # noqa: BLE001 - the diagnostic is the contract
-        raised = str(exc)
-    assert raised, "the call should not have compiled"
-    # The parallel frontend worker reports the detail on stderr; the exception
-    # the caller sees is only "parallel frontend codegen worker failed".  That
-    # propagation gap is separate from this contract, so read the diagnostic
-    # where the worker actually writes it.
-    message = capfd.readouterr().err
-    assert "missing required argument 'second'" in message, message
-    assert "signature=first<none>,second<none>" in message, message
-    assert "supplied=first" in message, message
+    # Imports are live bindings (168e4d069): the call binds when it runs,
+    # as in CPython, so the program compiles and the call raises CPython's
+    # TypeError naming the function and the missing parameter.
+    exe = tmp_path / "app"
+    compile_python(
+        str(app),
+        str(exe),
+        libpython_mode="off",
+        ir_scaffold_mode="on",
+        backend="self",
+    )
+    expected = subprocess.run(
+        [sys.executable, str(app)], cwd=tmp_path, capture_output=True, text=True, timeout=60,
+    )
+    done = subprocess.run([str(exe)], capture_output=True, text=True, timeout=60)
+    assert expected.returncode == 1
+    assert done.returncode == expected.returncode, done.stderr
+    assert done.stdout == expected.stdout == ""
+    assert done.stderr.splitlines()[-1] == expected.stderr.splitlines()[-1] == (
+        "TypeError: need() missing 1 required positional argument: 'second'"
+    )

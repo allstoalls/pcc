@@ -681,13 +681,23 @@ class CompilerIntArena:
                 raise ValueError("compiler word arena value is outside uint32")
             index += 1
         if self._address == 0:
+            # Joining one bytes object per word retains both the entire
+            # object list and join's per-item scratch beside the input arena.
+            # Bound that scratch before joining the final compact payloads.
             chunks = []
+            word_chunks = []
+            host_pack_chunk_words = 1024
             index = 0
             while index < self._length:
-                chunks.append(
+                word_chunks.append(
                     self._values[index].to_bytes(4, "little")
                 )
                 index += 1
+                if len(word_chunks) == host_pack_chunk_words:
+                    chunks.append(b"".join(word_chunks))
+                    word_chunks.clear()
+            if word_chunks:
+                chunks.append(b"".join(word_chunks))
             return b"".join(chunks)
         total = self._length * 4
         allocation = malloc(total)

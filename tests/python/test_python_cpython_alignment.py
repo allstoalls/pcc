@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 @dataclass(frozen=True)

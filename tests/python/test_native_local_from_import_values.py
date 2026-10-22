@@ -221,7 +221,7 @@ def _sources(tmp_path, lifetime):
 
 @pytest.mark.parametrize("scaffold", ("on", "off"))
 def test_function_import_real_ir_binds_owned_local(tmp_path, monkeypatch, scaffold):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     _configure(monkeypatch)
     output = tmp_path / "imports.ll"
@@ -249,7 +249,7 @@ def explicit_runtime():
     requested = os.environ.get("PCC_RUNTIME_ARCHIVE", "")
     assert requested, "set explicit prebuilt matching runtime; no auto-build"
     runtime = Path(requested).resolve(strict=True)
-    verify_runtime_archive_manifest(runtime, runtime_root=_ROOT / "pcc/py_runtime")
+    verify_runtime_archive_manifest(runtime, runtime_root=_ROOT / "pcc/runtime")
     return runtime
 
 
@@ -257,7 +257,7 @@ def explicit_runtime():
 @pytest.mark.parametrize("lifetime", (False, True), ids=("bindings", "lifetimes"))
 @pytest.mark.parametrize("scaffold", ("on", "off"))
 def test_host_emitted_local_import_scopes_and_owners(tmp_path, monkeypatch, explicit_runtime, lifetime, scaffold):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     _configure(monkeypatch, explicit_runtime)
     binary = tmp_path / "imports"

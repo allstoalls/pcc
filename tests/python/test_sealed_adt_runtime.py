@@ -1,6 +1,6 @@
 import pytest
 
-from pcc.sealed_adt import ExhaustivenessError, SealedADT, VariantSpec, decision_tree_order
+from pcc.library.sealed_adt import ExhaustivenessError, SealedADT, VariantSpec, decision_tree_order
 
 
 def test_sealed_adt_construct_and_exhaustive():

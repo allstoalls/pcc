@@ -336,7 +336,7 @@ def test_blocked_file_lock_participates_in_threaded_gc(tmp_path, request):
     # Use the existing fixture only after requiring its explicit prebuilt
     # archive; the test must never implicitly build a threaded runtime.
     assert os.environ.get("PCC_THREADED_RUNTIME_ARCHIVE"), "set prebuilt PCC_THREADED_RUNTIME_ARCHIVE"
-    runtime = request.getfixturevalue("threaded_pcc_py_runtime_archive")
+    runtime = request.getfixturevalue("threaded_pcc_runtime_archive")
     compiler = os.environ.get("PCC_FILE_LOCKING_COMPILER", "")
     assert compiler and Path(compiler).is_file(), "set PCC_FILE_LOCKING_COMPILER"
     path = tmp_path / "thread-lockfile"

@@ -50,7 +50,8 @@ def test_owned_process_argv_environment_and_suppression(native_compiler, tmp_pat
     ''', suffix=".c", expected="process-ok\n", extra_env={"PCC_PARENT_ONLY": "hidden"})
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows handle inheritance boundary")
+# Windows handle inheritance boundary
+@pytest.mark.pcc_gate(probe=lambda: not (os.name != "nt"))
 def test_windows_process_pipe_eof_and_handle_cleanup(native_compiler, tmp_path):
     compile_run(native_compiler, tmp_path, r'''
         #include <string.h>
@@ -149,7 +150,8 @@ def test_subprocess_direct_argv_and_replaced_environment(native_compiler, tmp_pa
     ''', expected="subprocess-ok\n", extra_env={"PCC_PARENT_ONLY": "hidden"})
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Linux raw descriptor collision")
+# Linux raw descriptor collision
+@pytest.mark.pcc_gate(probe=lambda: not (os.name == "nt"))
 def test_linux_capture_with_original_stdout_and_stderr_closed(native_compiler, tmp_path):
     compile_run(native_compiler, tmp_path, r'''
         extern long long pcc_platform_spawnp(char **, char **, long long);
@@ -176,7 +178,8 @@ def test_linux_capture_with_original_stdout_and_stderr_closed(native_compiler, t
     ''', suffix=".c")
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Linux pipe2/dup2 descriptor collision")
+# Linux pipe2/dup2 descriptor collision
+@pytest.mark.pcc_gate(probe=lambda: not (os.name == "nt"))
 def test_linux_pipe_reuses_closed_standard_descriptors(native_compiler, tmp_path):
     compile_run(native_compiler, tmp_path, r'''
         import subprocess

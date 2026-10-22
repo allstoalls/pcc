@@ -41,7 +41,7 @@ def _select_installed_bundle(
     archive: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     monkeypatch.setenv("PCC_RUNTIME_CC", "pcc")
     monkeypatch.delenv("PCC_RUNTIME_ARCHIVE", raising=False)
@@ -54,10 +54,10 @@ def test_installed_runtime_bundle_is_selected_without_host_provenance_process(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     archive = _write_installed_bundle(
-        tmp_path / "site-packages" / "pcc" / "py_runtime",
+        tmp_path / "site-packages" / "pcc" / "runtime",
         pipeline._runtime_archive_target_id(),
     )
     pipeline = _select_installed_bundle(archive, monkeypatch)
@@ -83,7 +83,7 @@ def test_installed_runtime_receipt_binds_archive_manifest_and_inventory(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     for damaged_suffix in ("", ".provenance.json", ".capi_syms"):
         case = tmp_path / ("case-" + (damaged_suffix.lstrip(".") or "archive"))
@@ -111,10 +111,10 @@ def test_installed_runtime_inventory_link_read_uses_same_hostless_receipt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     archive = _write_installed_bundle(
-        tmp_path / "site-packages" / "pcc" / "py_runtime",
+        tmp_path / "site-packages" / "pcc" / "runtime",
         pipeline._runtime_archive_target_id(),
     )
 
@@ -135,7 +135,7 @@ def test_installed_runtime_inventory_link_read_uses_same_hostless_receipt(
 def test_legacy_unbound_wheel_marker_is_not_a_hostless_completion_receipt(
     tmp_path: Path,
 ) -> None:
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     archive = tmp_path / "libpy_runtime_pcc_py.a"
     archive.write_bytes(b"archive")

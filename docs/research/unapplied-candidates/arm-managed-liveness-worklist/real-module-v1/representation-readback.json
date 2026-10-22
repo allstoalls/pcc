@@ -1,0 +1,156 @@
+{
+  "actual_candidate_weighted_reduction_percent": 0.24414612690352167,
+  "baseline_source_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "call_stream": {
+    "bytes": 13353250,
+    "name": "call-states.jsonl",
+    "sha256": "211f173de037ff428e042315dd365ace16eeeb566f1dfa5662c2baaac359c992"
+  },
+  "candidate_source_inventory_sha256": "6e6b6d034804c0ebeb4c48fbfc11df2614043ea5150c816cd8b7d014f2fe9d2b",
+  "constraints": [
+    "Dense-word and indexed-record shares are not CPU or whole-codegen shares",
+    "Nonprotocol live-after sparsity does not mean absent registered GC roots; protocol calls and full stackmaps remain required",
+    "Matrix sizes are logical i64 payloads per function, not measured host RSS; sequential scratch owners must not be summed as peak memory",
+    "K1 and zero changed rows imply no growth of initially zero live_in; PHI live_out seeds may still be nonzero",
+    "Both module init/top-init entrypoints are promised by the library API; no runtime call may be removed solely from this readback",
+    "No new optimization, compiler, profile, timing arm, native execution or pcc1 diagnostic was performed for this analysis"
+  ],
+  "decision": "HOLD_NO_MATERIAL_ROW_WORK_REDUCTION",
+  "evidence_sha256": {
+    "QUALIFICATION.json": "ee16084467a85a237a1fe1075f0dcaaeff36cf2845ef346115c42eafd0edff0e",
+    "baseline/payload/result.json": "5e1398dac364315a7a65fab215646101e3faaaa1480bc2d4d81b26d112f08b20",
+    "candidate/comparison.json": "7555892906fbdf1ce8e974bb684e35d78cc0f218e139cd7ddfc5b3b0a6bf2562",
+    "candidate/payload/result.json": "c86203206bdd9fbf298713642f3064e6809f266f81444af9ce96659c8dee383c"
+  },
+  "first_sweep_weight_floor": 15970220,
+  "fixture": "pcc/frontends/c/ast/c_ast.py",
+  "functions": [
+    {
+      "B": 20507,
+      "E": 29934,
+      "T": 3370,
+      "W": 113,
+      "baseline_K": 1,
+      "candidate_row_visits": 20507,
+      "candidate_weighted_word_units": 8017124,
+      "changed_rows": 0,
+      "distinct_values_ever_live_after_nonprotocol_calls": 114,
+      "four_matrix_nominal_i64_payload_bytes": 74153312,
+      "indexed_instruction_records": 91901,
+      "live_after_size_histogram": {
+        "0": 35527,
+        "1": 454
+      },
+      "live_state_records_including_empty": 115,
+      "name": "_pcc_py_module_top_pcc_frontends_c_ast_c_ast",
+      "nonempty_live_calls": 454,
+      "nonempty_sites_by_callee": {
+        "pcc_gc_pin": 1,
+        "py_incref": 1,
+        "py_tuple_set_item": 452
+      },
+      "nonprotocol_calls": 35981,
+      "one_dense_matrix_word_slots": 2317291,
+      "other_singleton_examples": [
+        {
+          "callee": "py_incref",
+          "live_values": [
+            "function.current.94291.1456"
+          ]
+        },
+        {
+          "callee": "pcc_gc_pin",
+          "live_values": [
+            "function.current.94291.1456"
+          ]
+        }
+      ],
+      "overflow_scalars": 0,
+      "protocol_calls": 7259,
+      "row_visits": 20507,
+      "value_ids": 59544,
+      "weighted_word_units": 8017124
+    },
+    {
+      "B": 20435,
+      "E": 29826,
+      "T": 3359,
+      "W": 112,
+      "baseline_K": 1,
+      "candidate_row_visits": 20435,
+      "candidate_weighted_word_units": 7917952,
+      "changed_rows": 0,
+      "distinct_values_ever_live_after_nonprotocol_calls": 112,
+      "four_matrix_nominal_i64_payload_bytes": 73239040,
+      "indexed_instruction_records": 90944,
+      "live_after_size_histogram": {
+        "0": 35331,
+        "1": 448
+      },
+      "live_state_records_including_empty": 113,
+      "name": "_pcc_py_module_init_pcc_frontends_c_ast_c_ast",
+      "nonempty_live_calls": 448,
+      "nonempty_sites_by_callee": {
+        "py_tuple_set_item": 448
+      },
+      "nonprotocol_calls": 35779,
+      "one_dense_matrix_word_slots": 2288720,
+      "other_singleton_examples": [],
+      "overflow_scalars": 0,
+      "protocol_calls": 7070,
+      "row_visits": 20435,
+      "value_ids": 58879,
+      "weighted_word_units": 7917952
+    }
+  ],
+  "input_pidx_sha256": "d5f8711ac0e6fdf09d9836938aedf590314527e947c1d8cf59b9258de97ee14d",
+  "kind": "read-only arithmetic and source interpretation of sealed results; no new execution",
+  "maximum_repeat_removal_reduction_percent": 0.24899307211629917,
+  "module_cfg": {
+    "blocks": 48161,
+    "functions": 231,
+    "instructions": 219614
+  },
+  "module_totals": {
+    "B": 48161,
+    "E": 69622,
+    "T": 7566,
+    "changed_rows": 135,
+    "dense_successor_visits": 73645,
+    "nonempty_live_calls": 1110,
+    "nonprotocol_calls": 85689,
+    "positive_word_row_visits": 50889,
+    "protocol_calls": 17820,
+    "row_visits": 51083,
+    "weighted_word_units": 16010084
+  },
+  "object": {
+    "bytes": 18577664,
+    "name": "module.pco",
+    "sha256": "2a684530426482465ec2a808f6621093ac4cc357d84fc440db33eed105392154"
+  },
+  "positive_word_function_K_histogram": {
+    "1": 108,
+    "4": 1
+  },
+  "production_base_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "published_hold_receipt_commit": "a2c5b5e73e482b52a26f43a26289267964bdf190",
+  "schema": "pcc.arm-dense-domain-source-readback.v1",
+  "source_file_sha256": {
+    "pcc/backend/self_backend_kernel.py": "021d6add950632188eefa65195338f9ab7ec6aef0b396a71b5cc170a67fc822d",
+    "pcc/backend/self_backend_precise_stackmaps.py": "bfc3630f958d6c63a1c4f0677b2d55082dfb4d90960978df84cf2c83a72eaa64",
+    "pcc/backend/self_backend_value_arena.py": "d6e98642a2c653e34ba7bf7831601187d63a3502d1773ae401850503bec41caa",
+    "pcc/frontends/c/ast/c_ast.py": "21eacf1370cec218ea7ff97092ee47a96752505067caad2699f20239c74f2b58",
+    "pcc/frontends/python/codegen/class_gen.py": "d4ec2c4ccc6a9123ed502108fbaf32cdc1dd1a979169ba4628506cb902f4b53e",
+    "pcc/frontends/python/codegen/generation_lowering.py": "0982b9b0209b8785552b75cd552c3e18837ff39f92c289cf53df373eaa140904",
+    "pcc/frontends/python/codegen/module_lifecycle_lowering.py": "1be2d14c16eb3805373aa3f4d7ba09e63d7a6e2966121103215cfb941bf690cd",
+    "pcc/frontends/python/codegen/stmt_dispatch_lowering.py": "e3b28cf9eec3dbcb48e66006bdcc4baa41ea5c3ed6b90c0bea65b0352b45823f",
+    "pcc/frontends/python/codegen/user_function_lowering.py": "7d3d6c7827a3f1ac7d005921ac5ac9af21f10f377656431f420835ed79587f3f",
+    "pcc/frontends/python/pipeline.py": "8fe68eeee47d158d63a7955fdb896d0e4652a7ef9faea45fc5eb618326572fed"
+  },
+  "target": "arm64-apple-darwin23.6.0",
+  "top_level_class_methods": 112,
+  "top_level_classes": 56,
+  "two_function_indexed_instruction_share_percent": 83.25744260384128,
+  "two_function_weighted_share_percent": 99.53149527510287
+}

@@ -16,9 +16,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .elf_x86_64 import (
+    R_X86_64_64,
     R_X86_64_GOTTPOFF,
     R_X86_64_PC32,
     R_X86_64_PLT32,
+    R_X86_64_TPOFF32,
 )
 
 
@@ -70,6 +72,12 @@ class _Imm:
 @dataclass(frozen=True)
 class _Target:
     name: str
+
+
+@dataclass(frozen=True)
+class _SymbolImmediate:
+    name: str
+    relocation: int
 
 
 @dataclass(frozen=True)
@@ -141,6 +149,24 @@ _SET_CONDITIONS = {
 }
 
 
+_X87_FIXED = {
+    "faddp": b"\xde\xc1", "fsubp": b"\xde\xe9",
+    "fmulp": b"\xde\xc9", "fdivp": b"\xde\xf9",
+    "fchs": b"\xd9\xe0", "fabs": b"\xd9\xe1",
+    "fsqrt": b"\xd9\xfa", "fprem": b"\xd9\xf8",
+    "frndint": b"\xd9\xfc", "fldz": b"\xd9\xee",
+}
+
+_X87_STACK = {
+    ("fxch", "st(1)"): b"\xd9\xc9",
+    ("fld", "st(0)"): b"\xd9\xc0",
+    ("fstp", "st(0)"): b"\xdd\xd8",
+    ("fstp", "st(1)"): b"\xdd\xd9",
+    ("fucomip", "st(0), st(1)"): b"\xdf\xe9",
+    ("fnstsw", "ax"): b"\xdf\xe0",
+}
+
+
 def _parse_int(text: str) -> int:
     try:
         return int(text.strip(), 0)
@@ -149,6 +175,27 @@ def _parse_int(text: str) -> int:
 
 
 def _split_operands(text: str) -> list[str]:
+    # Emitted memory operands never nest brackets or hold a comma, so check
+    # that with native searches and split on every comma. Any other text
+    # takes the character scan, which also owns the diagnostics.
+    position = 0
+    while True:
+        opened = text.find("[", position)
+        closed = text.find("]", position)
+        if opened < 0 and closed < 0:
+            break
+        if opened < 0 or closed < opened:
+            return _scan_operands(text)
+        if text.find("[", opened + 1, closed) >= 0 or text.find(",", opened, closed) >= 0:
+            return _scan_operands(text)
+        position = closed + 1
+    result = [part.strip() for part in text.split(",")]
+    if not result[-1]:
+        result.pop()
+    return result
+
+
+def _scan_operands(text: str) -> list[str]:
     result: list[str] = []
     depth = 0
     start = 0
@@ -256,9 +303,176 @@ def _parse_operand(text: str):
         return _Imm(int(text.strip(), 0))
     except ValueError:
         name = text.strip()
-        if not name or any(char.isspace() for char in name):
+        # Only an exact input guarantees that strip removed edge whitespace.
+        # Subclasses can return arbitrary names or override their iteration.
+        if not name or (
+            len(name.split(None, 1)) > 1 if type(text) is str
+            else any(char.isspace() for char in name)
+        ):
             raise X86EncodeError(f"bad operand {text!r}")
         return _Target(name)
+
+
+
+def _parse_encoding_operand(text: str):
+    # Keep ordinary operands, including subclass protocols, on the original
+    # parser. Symbol immediates belong to the encoding dialect, not its target
+    # whitespace predicate.
+    if type(text) is not str:
+        return _parse_operand(text)
+    name = text.strip()
+    if not name.startswith("OFFSET FLAT:"):
+        return _parse_operand(text)
+    name = name[len("OFFSET FLAT:"):]
+    relocation = R_X86_64_64
+    if name.endswith("@TPOFF"):
+        name = name[:-len("@TPOFF")]
+        relocation = R_X86_64_TPOFF32
+    if not name or len(name.split(None, 1)) > 1:
+        raise X86EncodeError(f"bad operand {text!r}")
+    return _SymbolImmediate(name, relocation)
+
+
+_OPERAND_CACHE_MAX_ENTRIES = 4096
+_OPERAND_CACHE_MAX_KEY_BYTES = 1_048_576
+# Independent file-local bounds include source keys, machine bytes, and the
+# branch syntax below. No PC-dependent encoding or relocation is retained.
+_INSTRUCTION_ENCODING_CACHE_MAX_ENTRIES = 4096
+_INSTRUCTION_ENCODING_CACHE_MAX_BYTES = 1_048_576
+# Charge retained syntax record/target metadata as well as their text.
+# Only a single register or symbol target is admitted, never an operand graph.
+_BRANCH_SYNTAX_ENTRY_BYTES = 1024
+# An explicit allowlist keeps future PC-sensitive instructions (including
+# loop/jrcxz families) on the ordinary encoder until their contract is audited.
+_PC_INDEPENDENT_INSTRUCTION_MNEMONICS = frozenset((
+    "mov", "add", "or", "and", "sub", "xor", "cmp", "test", "lea",
+    "imul", "neg", "mul", "div", "idiv", "shl", "shr", "sar",
+    "movzx", "movsx", "movsxd", "xchg", "xadd", "cmpxchg",
+    "push", "pop", "nop", "cdq", "cqo", "syscall", "mfence", "ret", "ud2",
+))
+
+
+@dataclass(frozen=True)
+class _BranchSyntax:
+    mnemonic: str
+    target: _Reg | _Target
+
+
+class _OperandParseCache:
+    """Bounded file-local reuse of immutable, PC-independent operand syntax."""
+
+    def __init__(self) -> None:
+        self.entries: dict[str, _Reg | _Mem | _Imm | _Target | _SymbolImmediate] = {}
+        self.key_bytes = 0
+        self.instruction_encodings: dict[str, bytes] = {}
+        self.instruction_encoding_bytes = 0
+        self.branch_syntaxes: dict[str, _BranchSyntax] = {}
+        self.branch_syntax_bytes = 0
+
+    def parse(self, text: str):
+        # A str subclass can override len/hash/equality. Preserve the parser's
+        # original treatment without performing cache-only operations on it.
+        if type(text) is not str:
+            return _parse_operand(text)
+        key_bytes = 4 * len(text)
+        cacheable = (
+            _OPERAND_CACHE_MAX_ENTRIES > 0
+            and key_bytes <= _OPERAND_CACHE_MAX_KEY_BYTES
+        )
+        if not cacheable:
+            return _parse_encoding_operand(text)
+        result = self.entries.get(text)
+        if result is not None:
+            return result
+        # Invalid operands must still fail at their actual encounter point.
+        result = _parse_encoding_operand(text)
+        if (
+            len(self.entries) >= _OPERAND_CACHE_MAX_ENTRIES
+            or self.key_bytes + key_bytes > _OPERAND_CACHE_MAX_KEY_BYTES
+        ):
+            self.entries.clear()
+            self.key_bytes = 0
+        self.entries[text] = result
+        self.key_bytes += key_bytes
+        return result
+
+    def instruction_encoding(self, text: str):
+        if (
+            type(text) is not str
+            or _INSTRUCTION_ENCODING_CACHE_MAX_ENTRIES <= 0
+            or 4 * len(text) > _INSTRUCTION_ENCODING_CACHE_MAX_BYTES
+        ):
+            return None
+        return self.instruction_encodings.get(text)
+
+    def remember_instruction_encoding(self, text: str, encoded) -> None:
+        if type(text) is not str or encoded.relocations:
+            return
+        # Every admitted operation uses PC solely for relocation offsets,
+        # excluded above, and never reads labels or section_name. Branches,
+        # prefixes, and every unaudited mnemonic remain on the original path.
+        mnemonic = text.strip().partition(" ")[0].lower()
+        if mnemonic not in _PC_INDEPENDENT_INSTRUCTION_MNEMONICS:
+            return
+        storage_bytes = 4 * len(text) + len(encoded.code)
+        if (
+            _INSTRUCTION_ENCODING_CACHE_MAX_ENTRIES <= 0
+            or storage_bytes > _INSTRUCTION_ENCODING_CACHE_MAX_BYTES
+        ):
+            return
+        if (
+            len(self.instruction_encodings) >= _INSTRUCTION_ENCODING_CACHE_MAX_ENTRIES
+            or self.instruction_encoding_bytes + storage_bytes > _INSTRUCTION_ENCODING_CACHE_MAX_BYTES
+        ):
+            self.instruction_encodings.clear()
+            self.instruction_encoding_bytes = 0
+        # Syntax uses only spare capacity: it must not change the original
+        # machine-byte cache's admission or eviction sequence.
+        if (
+            len(self.instruction_encodings) + len(self.branch_syntaxes) >= _INSTRUCTION_ENCODING_CACHE_MAX_ENTRIES
+            or self.instruction_encoding_bytes + self.branch_syntax_bytes + storage_bytes > _INSTRUCTION_ENCODING_CACHE_MAX_BYTES
+        ):
+            self.branch_syntaxes.clear()
+            self.branch_syntax_bytes = 0
+        self.instruction_encodings[text] = encoded.code
+        self.instruction_encoding_bytes += storage_bytes
+
+    def branch_syntax(self, text: str):
+        if (
+            type(text) is not str
+            or _INSTRUCTION_ENCODING_CACHE_MAX_ENTRIES <= 0
+            or 4 * len(text) > _INSTRUCTION_ENCODING_CACHE_MAX_BYTES
+        ):
+            return None
+        return self.branch_syntaxes.get(text)
+
+    def remember_branch_syntax(self, text: str, mnemonic: str, operands) -> None:
+        # Called only after the real branch encoder has succeeded. Its single
+        # frozen register/symbol operand contains no PC, label map, or result.
+        if (
+            type(text) is not str
+            or len(operands) != 1
+            or (type(operands[0]) is not _Reg and type(operands[0]) is not _Target)
+        ):
+            return
+        if text in self.branch_syntaxes:
+            return
+        storage_bytes = _BRANCH_SYNTAX_ENTRY_BYTES + 4 * (
+            len(text) + len(mnemonic) + len(operands[0].name)
+        )
+        if (
+            len(self.instruction_encodings) >= _INSTRUCTION_ENCODING_CACHE_MAX_ENTRIES
+            or self.instruction_encoding_bytes + storage_bytes > _INSTRUCTION_ENCODING_CACHE_MAX_BYTES
+        ):
+            return
+        if (
+            len(self.instruction_encodings) + len(self.branch_syntaxes) >= _INSTRUCTION_ENCODING_CACHE_MAX_ENTRIES
+            or self.instruction_encoding_bytes + self.branch_syntax_bytes + storage_bytes > _INSTRUCTION_ENCODING_CACHE_MAX_BYTES
+        ):
+            self.branch_syntaxes.clear()
+            self.branch_syntax_bytes = 0
+        self.branch_syntaxes[text] = _BranchSyntax(mnemonic, operands[0])
+        self.branch_syntax_bytes += storage_bytes
 
 
 def _int_bytes(value: int, width: int) -> bytes:
@@ -432,10 +646,50 @@ def _same_width(first, second, *, owner: str) -> int:
     return width
 
 
+def _encode_symbol_immediate(mnemonic: str, operands: list, pc: int) -> EncodedInstruction:
+    if len(operands) != 2:
+        raise X86EncodeError("symbol immediate expects two operands")
+    dst, src = operands
+    if not isinstance(dst, _Reg) or dst.kind != "gp" or not isinstance(src, _SymbolImmediate):
+        raise X86EncodeError("symbol immediate requires a GP register and OFFSET FLAT:symbol")
+    if src.relocation == R_X86_64_64:
+        if mnemonic != "movabs" or dst.width != 64:
+            raise X86EncodeError("absolute symbol immediate requires movabs to a 64-bit register")
+        width = 8
+    elif src.relocation == R_X86_64_TPOFF32:
+        if mnemonic != "mov" or dst.width != 32:
+            raise X86EncodeError("TLS offset immediate requires mov to a 32-bit register")
+        width = 4
+    else:
+        raise X86EncodeError("unsupported symbol immediate relocation")
+    head = _rex(w=width == 8, r=0, x=0, b=dst.high) + bytes((0xB8 + dst.low,))
+    return EncodedInstruction(
+        head + b"\0" * width,
+        (EncodedRelocation(pc + len(head), src.name, src.relocation, 0),),
+    )
+
+
 def _encode_mov(operands: list, pc: int) -> EncodedInstruction:
     if len(operands) != 2:
         raise X86EncodeError("mov expects two operands")
     dst, src = operands
+    if isinstance(dst, _Mem) and isinstance(src, _Imm):
+        width = dst.width
+        if width not in (8, 16, 32, 64):
+            raise X86EncodeError("mov memory immediate requires an explicit scalar width")
+        immediate_width = 1 if width == 8 else 2 if width == 16 else 4
+        _require_immediate_bits(src.value, immediate_width, owner="mov", signed_only=width == 64)
+        base = _modrm_instruction(
+            pc=pc, legacy=_legacy_width(width), opcode=b"\xc6" if width == 8 else b"\xc7",
+            width=width, reg=_Reg("group", 0, width), rm=dst,
+        )
+        tail = _int_bytes(src.value, immediate_width)
+        # RIP-relative displacements refer to the end of the whole instruction,
+        # including the immediate that follows the addressing bytes.
+        relocations = tuple(EncodedRelocation(rel.offset, rel.symbol, rel.type,
+                                            rel.addend - immediate_width)
+                            for rel in base.relocations)
+        return EncodedInstruction(base.code + tail, relocations)
     if isinstance(dst, _Reg) and dst.kind == "gp" and isinstance(src, _Imm):
         width = dst.width
         if width == 8:
@@ -873,6 +1127,13 @@ def _encode_sse(mnemonic: str, operands: list, pc: int) -> EncodedInstruction:
     raise X86EncodeError(f"SSE mnemonic {mnemonic!r} not proven")
 
 
+def _is_branch_mnemonic(mnemonic: str) -> bool:
+    """Whether ``_branch`` encodes ``mnemonic``: call, jmp or a jcc."""
+    return mnemonic in ("call", "jmp") or (
+        mnemonic.startswith("j") and mnemonic[1:] in _SET_CONDITIONS
+    )
+
+
 def _branch(
     mnemonic: str,
     operands: list,
@@ -928,6 +1189,41 @@ def encode_instruction(
     pc: int,
     labels: dict[str, tuple[str, int]],
     section_name: str,
+    operand_cache: _OperandParseCache | None = None,
+) -> EncodedInstruction:
+    """Encode at the real PC, reusing PC-independent bytes or branch syntax."""
+    # Preserve the existing duck-typed/subclass operand-cache path. The owned
+    # assembler creates this exact file-local cache type for both passes.
+    reusable = type(operand_cache) is _OperandParseCache
+    if reusable:
+        code = operand_cache.instruction_encoding(line)
+        if code is not None:
+            # Each caller still owns a fresh immutable result record.
+            return EncodedInstruction(code)
+        syntax = operand_cache.branch_syntax(line)
+        if syntax is not None:
+            # A syntax hit still resolves symbols and checks rel32 at this PC.
+            # Keep the encoder's existing list argument/native ABI unchanged.
+            return _branch(
+                syntax.mnemonic, [syntax.target], pc=pc, labels=labels,
+                section_name=section_name,
+            )
+    encoded = _encode_instruction_uncached(
+        line, pc=pc, labels=labels, section_name=section_name,
+        operand_cache=operand_cache,
+    )
+    if reusable:
+        operand_cache.remember_instruction_encoding(line, encoded)
+    return encoded
+
+
+def _encode_instruction_uncached(
+    line: str,
+    *,
+    pc: int,
+    labels: dict[str, tuple[str, int]],
+    section_name: str,
+    operand_cache: _OperandParseCache | None = None,
 ) -> EncodedInstruction:
     """Encode one normalized Intel-syntax instruction at ``pc``."""
     stripped = line.strip()
@@ -937,27 +1233,12 @@ def encode_instruction(
     mnemonic = mnemonic.lower()
     # x87 register-stack operations have implicit operands.  Keep the owned
     # dialect finite: these exact spellings are emitted by the fp80 lowering.
-    x87_fixed = {
-        "faddp": b"\xde\xc1", "fsubp": b"\xde\xe9",
-        "fmulp": b"\xde\xc9", "fdivp": b"\xde\xf9",
-        "fchs": b"\xd9\xe0", "fabs": b"\xd9\xe1",
-        "fsqrt": b"\xd9\xfa", "fprem": b"\xd9\xf8",
-        "frndint": b"\xd9\xfc", "fldz": b"\xd9\xee",
-    }
-    if mnemonic in x87_fixed:
+    if mnemonic in _X87_FIXED:
         if rest.strip():
             raise X86EncodeError(f"{mnemonic} takes no operands in the owned dialect")
-        return EncodedInstruction(x87_fixed[mnemonic])
-    x87_stack = {
-        ("fxch", "st(1)"): b"\xd9\xc9",
-        ("fld", "st(0)"): b"\xd9\xc0",
-        ("fstp", "st(0)"): b"\xdd\xd8",
-        ("fstp", "st(1)"): b"\xdd\xd9",
-        ("fucomip", "st(0), st(1)"): b"\xdf\xe9",
-        ("fnstsw", "ax"): b"\xdf\xe0",
-    }
-    if (mnemonic, rest.strip()) in x87_stack:
-        return EncodedInstruction(x87_stack[(mnemonic, rest.strip())])
+        return EncodedInstruction(_X87_FIXED[mnemonic])
+    if (mnemonic, rest.strip()) in _X87_STACK:
+        return EncodedInstruction(_X87_STACK[(mnemonic, rest.strip())])
     if mnemonic == "lock":
         nested_mnemonic = rest.strip().partition(" ")[0].lower()
         if nested_mnemonic not in ("xadd", "cmpxchg"):
@@ -969,12 +1250,16 @@ def encode_instruction(
             pc=pc + 1,
             labels=labels,
             section_name=section_name,
+            operand_cache=operand_cache,
         )
         return EncodedInstruction(
             b"\xf0" + nested.code,
             nested.relocations,
         )
-    operands = [_parse_operand(item) for item in _split_operands(rest)]
+    operands = [
+        _parse_encoding_operand(item) if operand_cache is None else operand_cache.parse(item)
+        for item in _split_operands(rest)
+    ]
     if mnemonic in ("fld", "fstp", "fild", "fistp", "fnstcw", "fldcw"):
         if len(operands) != 1 or not isinstance(operands[0], _Mem):
             raise X86EncodeError(f"{mnemonic} requires one sized memory operand")
@@ -997,7 +1282,11 @@ def encode_instruction(
             raise X86EncodeError("MXCSR transfer requires one DWORD memory operand")
         return _modrm_instruction(pc=pc, legacy=b"", opcode=b"\x0f\xae", width=32,
                                   reg=_Reg("group", 3 if mnemonic == "stmxcsr" else 2, 32), rm=operands[0])
+    if mnemonic == "movabs":
+        return _encode_symbol_immediate(mnemonic, operands, pc)
     if mnemonic == "mov":
+        if len(operands) == 2 and isinstance(operands[1], _SymbolImmediate):
+            return _encode_symbol_immediate(mnemonic, operands, pc)
         return _encode_mov(operands, pc)
     if mnemonic in _BINARY_REG_RM:
         return _encode_binary(mnemonic, operands, pc)
@@ -1027,13 +1316,14 @@ def encode_instruction(
         "cvtsd2ss", "cvtss2sd",
     }:
         return _encode_sse(mnemonic, operands, pc)
-    if mnemonic in ("call", "jmp") or (
-        mnemonic.startswith("j") and mnemonic[1:] in _SET_CONDITIONS
-    ):
-        return _branch(
+    if _is_branch_mnemonic(mnemonic):
+        encoded = _branch(
             mnemonic, operands, pc=pc, labels=labels,
             section_name=section_name,
         )
+        if type(operand_cache) is _OperandParseCache:
+            operand_cache.remember_branch_syntax(line, mnemonic, operands)
+        return encoded
     if mnemonic in ("push", "pop"):
         if len(operands) != 1:
             raise X86EncodeError(f"{mnemonic} expects one register")

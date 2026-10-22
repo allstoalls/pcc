@@ -1,0 +1,47 @@
+{
+  "application_status": "UNAPPLIED",
+  "coverage_limits": [
+    "Host list storage and helper controls only",
+    "Real-module work reduction, object equivalence, native lowering and timing remain unrun"
+  ],
+  "execution_status": "UNRUN",
+  "files": [
+    {
+      "mode": "100644",
+      "path": "tests/python/test_native_liveness_worklist.py",
+      "postimage_bytes": 16364,
+      "postimage_sha256": "c461144abc54e4633feff94d818a46e7576839ce426dc69a01e3df7ca2c0c3b5",
+      "preimage_bytes": 14360,
+      "preimage_sha256": "53d25748a4963fe3c24b5c399a2adce90d6c48d8afad8110c7fadce11effdb09"
+    }
+  ],
+  "limits": {
+    "exclusive_shared_lock": true,
+    "free_reserve_bytes": 4294967296,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "seconds": 300
+  },
+  "original_failure_commit": "2e17768d069bb9a8a48cc0e3384636054c5e7c0a",
+  "original_failure_payload_sha256": "5a24d9dacb2357fb53c33c9e7a24646e41b8e004a436aa295efab175d7b9330a",
+  "original_failure_qualification_sha256": "1276dbddd29065f23ddee07b19cec71f02593ce70824ed53b10dc13be8199d0b",
+  "original_test_manifest_sha256": "c87fc5bb8878bd48a6909be7766c145cf5f0f0d1ff48c83d214b7252827b3763",
+  "patch_kind": "test-only successor delta; apply after original host-tests-v1 patch",
+  "patch_sha256": "16f1e1a47f65fce7cd6ba456ba82fe9f58b8adc385845556566a089c5e3e4aef",
+  "production_manifest_sha256": "8d8de3cd946c9fdc7013e7b29f31bfb76f29951254af2d257b89259da235a978",
+  "production_patch_sha256": "90928dbd238208e4a11868dae4b0e7d171fbc24d28a875377d5dbf31b90f7f67",
+  "proposed_host_selection": {
+    "tests/python/test_managed_phi_liveness.py": 18,
+    "tests/python/test_native_liveness_worklist.py": 33
+  },
+  "proposed_total_host_cases": 51,
+  "public_files": [
+    "tests.patch",
+    "README.md",
+    "manifest.json"
+  ],
+  "readme_sha256": "1c2d7d4689111f765c2b196503d8505539bfe62b706e8faf9cf4081aa30fa504",
+  "schema": "pcc.arm-managed-liveness-worklist-host-tests.v2",
+  "source_review_status": "PASS: independent exact-postimage review confirms complete pre-detach reachability, exact unreachable complement, target-only metadata coherence, unchanged counts/error/lifetime contracts; execution remains UNRUN.",
+  "unchanged_production_postimage_sha256": "f1882fa4c29ad15c8843d30a9bf4d4bebf5b52307d0dc4daa155157b8d8289fe"
+}

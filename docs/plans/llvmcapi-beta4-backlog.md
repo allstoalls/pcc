@@ -85,7 +85,7 @@ Just 2 APIs dominate:
 | `llvm.parse_assembly` | 657 | text → ModuleRef |
 | `llvm.ModuleRef.verify` | 657 | Validator |
 
-Plus stub support for `llvm.ModuleRef.functions` iteration (for the few passes that walk the parsed module). Already have the C bindings in `pcc.llvm_capi/__init__.py`. Work is the Python-side wrapper.
+Plus stub support for `llvm.ModuleRef.functions` iteration (for the few passes that walk the parsed module). Already have the C bindings in `pcc.ir/__init__.py`. Work is the Python-side wrapper.
 
 Extra bindings for actual JIT/object emit (not hit by trace but needed for `pcc foo.c` end-to-end):
 - `llvm.Target.from_triple` + `create_target_machine`
@@ -99,13 +99,13 @@ Extra bindings for actual JIT/object emit (not hit by trace but needed for `pcc 
 
 The `-g` workload in the trace produced **zero** DI* hits. That likely means:
 
-1. `LLVMCodeGenerator(emit_debug=True)` path wasn't fully exercised by my test harness (needs closer look)
+1. `CCodeGenerator(emit_debug=True)` path wasn't fully exercised by my test harness (needs closer look)
 2. OR: pcc's default compile path doesn't emit debug info in test corpus
 
 Decision: defer β4.3 until there's a concrete user needing `-g` — or at least until a β4.2 gate run reveals the actual gap. **β4.1 + β4.2 as scoped will carry a functioning self-host path.**
 
 ## Next concrete step
 
-Start β4.1 Tier 1. Write `pcc/llvm_capi/ir.py` with the 12 Tier-1 classes, expose under `PCC_USE_LLVMCAPI=1` opt-in, gate on `py_corpus/phase1` parity with llvmlite.
+Start β4.1 Tier 1. Write `pcc/ir/ir.py` with the 12 Tier-1 classes, expose under `PCC_USE_LLVMCAPI=1` opt-in, gate on `py_corpus/phase1` parity with llvmlite.
 
 Estimated: 3 days to first green Tier-1 parity; 5 days total through Tier 3.

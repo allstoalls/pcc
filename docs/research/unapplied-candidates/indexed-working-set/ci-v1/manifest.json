@@ -1,0 +1,64 @@
+{
+  "base_commit": "db1830cf83174428c48607819ae98e84f887c9b9",
+  "files": [
+    {
+      "mode": "100644",
+      "path": ".github/workflows/pcc1-package-parity.yml",
+      "postimage_bytes": 16523,
+      "postimage_sha256": "1b95873dc67e87925f31df95a6d0a8e45f55e9ea9adde7d19fef9e1de874b133",
+      "preimage_bytes": 14159,
+      "preimage_sha256": "58be154ce677eaea2b9f2f0bbd272e7cbb516ee58ce6890079b36ee9f9513c36"
+    },
+    {
+      "mode": "100644",
+      "path": "scripts/ci_macos_regression_gate.py",
+      "postimage_bytes": 14427,
+      "postimage_sha256": "440936e23482c012200b19fa0aef2fb508e4c1da9a95fae93bfaeb22b88cf7ae",
+      "preimage_bytes": 13020,
+      "preimage_sha256": "5d3587a735add8a754a69fec70ec455e840640acd9332ad9ba38d0cc9a9fffef"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/python/test_indexed_handoff_closed_world.py",
+      "postimage_bytes": 10014,
+      "postimage_sha256": "1c3a2d496b00cb34abfd47aa62e8387f9f64e4f40b9e5a3f72a896718330def4",
+      "preimage_bytes": 0,
+      "preimage_sha256": null
+    },
+    {
+      "mode": "100644",
+      "path": "tests/python/test_indexed_process_split_real.py",
+      "postimage_bytes": 12719,
+      "postimage_sha256": "4bd4ece121b95e2ed4d292bd94907d1078f0a6e006be247edfcffdf70d6ee3c0",
+      "preimage_bytes": 0,
+      "preimage_sha256": null
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_ci_macos_regression_gate.py",
+      "postimage_bytes": 25381,
+      "postimage_sha256": "7638dbb8ce85e0e1e5ee994e4364bd08646e7b381af6e79cb57ddc77baa4ce1f",
+      "preimage_bytes": 18999,
+      "preimage_sha256": "dfdc1384641f6f4a41268c0ee5e4926d2162f6e1bca3284b54ce3110b5fa8ac0"
+    }
+  ],
+  "host_selection": {
+    "tests/test_ci_macos_regression_gate.py": 39
+  },
+  "patch_sha256": "fabcf7c84d63ced5ffb4a7bb9a69a5488eb91c9e46a27bcc3f3edc4c9e77d701",
+  "public_files": [
+    "source.patch",
+    "README.md",
+    "manifest.json"
+  ],
+  "readme_sha256": "2b2a800f2b46e8591cb78529aca963e6c723b3fe7b30ad8b06044f74176e5d3d",
+  "real_ci_nodes": [
+    "tests/python/test_worker_resource_plan.py::test_failure_retires_running_peers_and_does_not_launch_tail",
+    "tests/python/test_worker_resource_plan.py::test_progressive_retry_drains_peers_then_restores_concurrency",
+    "tests/python/test_indexed_process_split_real.py::test_real_split_and_unsplit_match_complete_objects",
+    "tests/python/test_indexed_handoff_closed_world.py::test_handoff_provider_closed_world_aarch64"
+  ],
+  "required_bridge": "indexed-working-set V1 plus V2 publication successor",
+  "schema": "pcc.indexed-working-set-ci.v1",
+  "status": "UNAPPLIED_SOURCE_ONLY_REVIEW_PENDING_EXECUTION_UNRUN"
+}

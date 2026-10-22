@@ -2,7 +2,7 @@
 
 Package environment identity is keyed only by the semantic Python target,
 pcc-native ABI, target triple, and package ABI mode
-(``pcc/package_environment.py``). Runtime policy — GC backend, execution
+(``pcc/package/environment.py``). Runtime policy — GC backend, execution
 backend owner, threaded runtime, virtual-thread scheduling, accelerator
 availability — must never key the environment root, the sync key, or the
 per-package build keys: switching policy reuses the same installed CPU
@@ -29,11 +29,11 @@ RUNTIME_PROFILE_SCHEMA = "pcc.runtime-profile.v1"
 # Runtime-policy environment variables that must never affect package
 # environment identity, sync keys, build keys, or installed-artifact
 # digests. tests/python/test_package_runtime_profile_environment.py defends
-# this list against pcc/package_environment.py and the uv-lock sync keys.
+# this list against pcc/package/environment.py and the uv-lock sync keys.
 RUNTIME_PROFILE_ENV_VARS = (
     "PCC_GC_BACKEND",  # GC backend 0..4
     "PCC_REFCOUNT_KIND",  # refcount strategy variant
-    "PCC_BACKEND",  # llvm / llvm_capi / self execution owner
+    "PCC_BACKEND",  # owned self backend execution owner
     "PCC_WITH_THREADS",  # threaded runtime on/off
     "PCC_VTHREAD_PARKED",  # virtual-thread scheduler parking policy
     "PCC_GPU_BACKEND",  # accelerator execution owner

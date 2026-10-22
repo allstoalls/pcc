@@ -13,7 +13,7 @@ _BUILD.mkdir(parents=True, exist_ok=True)
 
 
 def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -76,7 +76,7 @@ def test_with_open_write_uses_native_file_runtime():
 
 
 def test_native_file_runtime_round_trip(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     data = tmp_path / "native-file.txt"
     src = tmp_path / "prog.py"

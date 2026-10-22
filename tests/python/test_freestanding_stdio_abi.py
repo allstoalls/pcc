@@ -20,8 +20,8 @@ def test_stdio_abi_outputs_are_generated_from_one_spec():
     )
     assert check.returncode == 0, check.stdout + check.stderr
 
-    from pcc.py_frontend.codegen.freestanding_abi_constants import ABI_CONSTANTS
-    from pcc.py_runtime.freestanding_abi_spec import ABI_SPEC
+    from pcc.frontends.python.codegen.freestanding_abi_constants import ABI_CONSTANTS
+    from pcc.runtime.freestanding_abi_spec import ABI_SPEC
 
     assert ABI_CONSTANTS == ABI_SPEC
     assert ABI_CONSTANTS["stdio.file.size"] == 64
@@ -29,7 +29,7 @@ def test_stdio_abi_outputs_are_generated_from_one_spec():
     assert ABI_CONSTANTS["stdio.file.flags_offset"] == 16
     assert ABI_CONSTANTS["stdio.flag.append"] == 32
     header = (
-        REPO_ROOT / "pcc" / "py_runtime" / "include" / "pcc_stdio_abi.h"
+        REPO_ROOT / "pcc" / "runtime" / "include" / "pcc_stdio_abi.h"
     ).read_text(encoding="utf-8")
     assert "typedef struct PccOwnedFile" in header
     assert "PCC_STDIO_FILE_SIZE 64" in header
@@ -43,7 +43,7 @@ def test_stdio_abi_outputs_are_generated_from_one_spec():
 
 def test_freestanding_stdio_consumes_generated_abi_constants():
     source = (
-        REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_stdio.py"
+        REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_stdio.py"
     ).read_text(encoding="utf-8")
     assert "5783538579059651889" not in source
     for name in (

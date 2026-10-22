@@ -37,6 +37,22 @@ def test_scan_artifact_detects_libpython_bytes(tmp_path):
     assert scan_artifact(clean)["links_libpython"] is False
 
 
+def test_scan_artifact_matches_ascii_patterns_in_non_ascii_bytes(tmp_path):
+    # pcc's native regex subset rejects non-ASCII text, which stopped pcc1's
+    # build-exec on its first linked .so. The probe text is ASCII; Unicode
+    # whitespace still separates an edge as it does in CPython's decode.
+    artifact = tmp_path / "mixed.so"
+    artifact.write_bytes(
+        b"\xff\xfeELF\0caf\xc3\xa9\xc2\xa0libpython3.13.so\0"
+        b"\xe2\x80\xa8libpython3.11\0x\xc3\xa9-lpython3.12\0"
+    )
+
+    scan = scan_artifact(artifact)
+
+    assert scan["links_libpython"] is True
+    assert scan["link_libpython_edges"] == ["libpython3.13", "libpython3.11"]
+
+
 def test_scan_artifact_does_not_treat_python_framework_namespace_as_libpython(tmp_path):
     artifact = tmp_path / "mlx_like.so"
     artifact.write_bytes(b"METAL...python.framework.ops.EagerTensor\0")
@@ -114,7 +130,7 @@ def test_static_archive_debug_paths_do_not_count_as_runtime_libpython(tmp_path):
 
 
 def test_bootstrap_native_artifact_scan_uses_small_tool_output(monkeypatch, tmp_path):
-    from pcc import cli_bootstrap
+    from pcc.driver import cli_bootstrap
 
     artifact = tmp_path / "demo.so"
     artifact.write_bytes(b"ELF\0" + (b"x" * 4_000_000))
@@ -178,7 +194,7 @@ def test_linkage_report_blocks_cpython_extension_abi_in_pcc_native_mode(tmp_path
 def test_bootstrap_native_linkage_blocks_cpython_extension_abi_in_pcc_native_mode(
     tmp_path,
 ):
-    from pcc import cli_bootstrap
+    from pcc.driver import cli_bootstrap
 
     artifact = tmp_path / "_demo.cpython-314-darwin.so"
     artifact.write_text("libpcc_runtime", encoding="utf-8")
@@ -202,7 +218,7 @@ def test_bootstrap_native_linkage_blocks_cpython_extension_abi_in_pcc_native_mod
 
 
 def test_bootstrap_native_linkage_ignores_python_framework_namespace(tmp_path):
-    from pcc import cli_bootstrap
+    from pcc.driver import cli_bootstrap
 
     artifact = tmp_path / "mlx_like.so"
     artifact.write_text("python.framework.ops.EagerTensor", encoding="utf-8")
@@ -217,7 +233,7 @@ def test_bootstrap_native_linkage_ignores_python_framework_namespace(tmp_path):
 
 
 def test_bootstrap_native_linkage_still_detects_python_framework_path(tmp_path):
-    from pcc import cli_bootstrap
+    from pcc.driver import cli_bootstrap
 
     artifact = tmp_path / "framework_link.so"
     artifact.write_text(
@@ -308,7 +324,7 @@ def test_pcc1_native_libpython_scan_parity_with_host_patterns():
     artifact that links the pcc runtime) as a libpython edge, failing every
     pcc-native artifact under a pcc1-run build-exec/linkage scan.
     """
-    from pcc.cli_bootstrap import (
+    from pcc.driver.cli_bootstrap import (
         _native_libpython_edge,
         _native_text_has_libpython,
     )

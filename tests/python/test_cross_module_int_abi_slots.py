@@ -17,7 +17,7 @@ import subprocess
 import textwrap
 from pathlib import Path
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 _RAW_INT_MODULE = """
     \"\"\"A raw-int module: importing pcc.unsafe puts ints in the i64 lane.\"\"\"

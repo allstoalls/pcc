@@ -1,7 +1,7 @@
 import sys
 
 sys.path.insert(0, "../pcc")
-from pcc.evaluater.c_evaluator import CEvaluator
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
 
 import unittest
 

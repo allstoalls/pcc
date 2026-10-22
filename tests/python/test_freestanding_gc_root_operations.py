@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import (
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import (
     FREESTANDING_GC_RUNTIME_GLOBALS,
     RUNTIME_SIGNATURES,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 ROOT_OPS_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_root_operations.py"
 MANAGED_SOURCE = RUNTIME_DIR / "py" / "py_gc_backend.py"
 PIN_CALLER_SOURCE = RUNTIME_DIR / "py" / "py_obj.py"
@@ -23,12 +23,16 @@ MAKEFILE = RUNTIME_DIR / "Makefile"
 
 PIN_SYMBOLS = {"pcc_gc_pin", "pcc_gc_unpin"}
 TRANSFER_SYMBOLS = {"pcc_gc_take_pinned_slot"}
-OWNED_SYMBOLS = PIN_SYMBOLS | TRANSFER_SYMBOLS | {
+LEASE_SYMBOLS = {"pcc_gc_foreign_lease_acquire", "pcc_gc_foreign_lease_release", "pcc_gc_object_is_address_pinned"}
+HANDLED_SYMBOLS = {"py_handled_context_push", "py_handled_context_pop", "py_handled_context_swap", "py_handled_exception_slot"}
+OWNED_DATA_SYMBOLS = {"pcc_gc_foreign_lease_active", "pcc_tls_handled_exception_context"}
+OWNED_SYMBOLS = PIN_SYMBOLS | TRANSFER_SYMBOLS | LEASE_SYMBOLS | HANDLED_SYMBOLS | {
     "pcc_gc_gray_count_decrement_acq_rel",
     "pcc_gc_gray_count_increment_acq_rel",
     "pcc_gc_gray_count_load_acquire",
     "pcc_gc_gray_count_store_release",
     "pcc_gc_mark_root_gray_if_known",
+    "pcc_gc_set_mark_color",
     "pcc_gc_object_is_known_no_lock",
     "pcc_gc_resolve_root_slot_unlocked",
 }
@@ -36,7 +40,11 @@ RAW_ONLY_CROSS_OBJECT_SYMBOLS = {
     "pcc_gc_forwarding_index_find",
     "pcc_gc_object_index_find",
 }
-RAW_FUNCTION_IMPORTS = RAW_ONLY_CROSS_OBJECT_SYMBOLS | {"py_decref", "py_incref"}
+RAW_FUNCTION_IMPORTS = RAW_ONLY_CROSS_OBJECT_SYMBOLS | {
+    "py_decref", "py_incref", "pcc_gc_config_ensure",
+    "pcc_py_gc_minor_graph_lock", "pcc_py_gc_minor_graph_unlock",
+    "pcc_gc_granule_is_object_start", "pcc_gc_managed_pointer_index_contains",
+}
 RAW_GLOBAL_IMPORTS = {"pcc_gc_backend_selected", "pcc_gc_gray_count", "pcc_gc_metric_pin"}
 
 
@@ -85,7 +93,17 @@ def test_root_operations_have_one_strict_source_owner():
     assert "freestanding_gc_root_operations" in makefile
     assert _exported_symbols(pin_caller).isdisjoint(PIN_SYMBOLS)
     for symbol in OWNED_SYMBOLS:
-        caller = pin_caller if symbol in PIN_SYMBOLS else transfer_caller if symbol in TRANSFER_SYMBOLS else managed
+        if symbol == "pcc_gc_set_mark_color":
+            caller = strict
+        elif symbol in LEASE_SYMBOLS:
+            caller = (REPO_ROOT / "pcc/frontends/python/codegen/extern_lowering.py").read_text()
+            if symbol == "pcc_gc_object_is_address_pinned":
+                caller = managed
+        elif symbol in HANDLED_SYMBOLS:
+            caller = (REPO_ROOT / "pcc/frontends/python/codegen/exception_lowering.py").read_text()
+            caller += (RUNTIME_DIR / "py/py_virtual_thread_runtime.py").read_text()
+        else:
+            caller = pin_caller if symbol in PIN_SYMBOLS else transfer_caller if symbol in TRANSFER_SYMBOLS else managed
         assert f'"{symbol}"' in caller
 
 
@@ -129,7 +147,7 @@ def test_root_operations_object_has_exact_raw_closure(tmp_path: Path, emitter: s
         for line in symbols_result.stdout.splitlines()
         if line.strip() and " U " not in line
     }
-    assert defined == OWNED_SYMBOLS
+    assert defined == OWNED_SYMBOLS | OWNED_DATA_SYMBOLS
 
 
 def _root_operations_harness_source() -> str:
@@ -301,10 +319,10 @@ def _link_harness(tmp_path: Path, name: str, source_text: str, archive: Path) ->
 
 
 def test_archive_owns_root_operations_and_executes_semantics(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ):
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -325,7 +343,7 @@ def test_archive_owns_root_operations_and_executes_semantics(
         tmp_path,
         "root_operations_pcc_python",
         _root_operations_harness_source(),
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
     )
     result = subprocess.run(
         [str(executable)], capture_output=True, text=True, timeout=30
@@ -335,13 +353,13 @@ def test_archive_owns_root_operations_and_executes_semantics(
 
 
 def test_gray_counter_survives_threaded_increment_decrement(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ):
     executable = _link_harness(
         tmp_path,
         "root_operations_counter_threads",
         _counter_thread_harness_source(),
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
     )
     result = subprocess.run(
         [str(executable)], capture_output=True, text=True, timeout=30
@@ -352,13 +370,13 @@ def test_gray_counter_survives_threaded_increment_decrement(
 
 def test_strict_gc3_known_object_gate_executes_deallocating_rejection(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ):
     executable = _link_harness(
         tmp_path,
         "root_operations_gc3_deallocating",
         _gc3_deallocating_known_harness_source(),
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
     )
     result = subprocess.run(
         [str(executable)], capture_output=True, text=True, timeout=30

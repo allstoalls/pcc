@@ -1,0 +1,115 @@
+{
+  "archive_sidecars_and_elf_after": "PASS",
+  "base_commit": "761bcdaf62408d56060bb9074585218e6b8bccc4",
+  "codegen_checksum": "819d8a565812fb28205d0056fc859ac8810d2cd5518ca3129a80e8674173fc35",
+  "compile_qualification_sha256": "7dcb140d04060ab744fc7fd3056ca294ef95bc9bfffc0220cebd8d217dc81d06",
+  "compile_result_sha256": "6571f3e04c0e74483ea54cf27e4c601b5f30abfd8bf58e424c6054840afeef7b",
+  "coverage": [
+    "Missing text and bytes filenames",
+    "Exact FileNotFoundError dispatch and sibling exclusion",
+    "errno/args/strerror/filename type/filename2/formatting",
+    "Exception survives explicit collection",
+    "FileExistsError from exclusive creation preserves existing contents"
+  ],
+  "executable_sha256": "68c60e691451a2764623301abd7a0c5809676f0ddb29d7642b753a3573faf84d",
+  "fixture_changes": "None; original statements, assertions and original host strerror substitutions retained",
+  "fixture_path": "tests/python/test_native_open_errno.py",
+  "fixture_sha256": "7d0ee61bb23e1e75132dfc2c9c8480cda828f520e628eb0812a1d2982c54821a",
+  "guard": {
+    "continuous_minimum_free_bytes": 4294967296,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "max_filesystem_growth_bytes": 67108864,
+    "native_alarm_seconds": 10,
+    "outer_timeout_seconds": 15,
+    "private_temporary_root": "new mode0700 directory per execution",
+    "same_pid_fd_exec": true
+  },
+  "limits": "GC2-4 cannot be qualified under hard NPROC0. These two native executions do not establish Darwin, native pcc1, constructor PROGRAM, broad suite or Stage1 acceptance.",
+  "packet_manifest_sha256": "d7a23e2f1c8be06fbb9c7f5ad54ad8cef61038f7285136fad6b1922e70fa605a",
+  "performance_claim": "None",
+  "preservation_commit": "7be10c6c612485e80c49670aef2db6a57edbd6a0",
+  "production_base_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "program_sha256": "4b2bddca6830f26c7b9f1d7148fe494906694a04188f191ab08bca939b6ab35d",
+  "qualification_sha256": "e5f3b35c412a85c7dc54b70aa832b8c683378c265b2501fab421584bffc89532",
+  "results": [
+    {
+      "cleanup": "CLEAN",
+      "collection_events": 4,
+      "echild": true,
+      "elapsed_seconds": 0.2468533920000482,
+      "gc": 0,
+      "guard_sha256": "c46503e528871252bf63ebb742f0ac9f5910468136ad71117dc4000d461ed9cf",
+      "observed_gc": [
+        0
+      ],
+      "peak_sampled_root_rss_bytes": 21884928,
+      "private_tmp_after": "empty",
+      "private_tmp_mode": "0700",
+      "provenance_probe": "2",
+      "result_sha256": "151bdca1457676747acbd9ceaa1d0697b9aca93f262d163109e683abcf51c9ea",
+      "returncode": 0,
+      "root_reaped": true,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "OPEN_ERRNO_OK\n"
+    },
+    {
+      "cleanup": "CLEAN",
+      "collection_events": 4,
+      "echild": true,
+      "elapsed_seconds": 0.20599414900061674,
+      "gc": 1,
+      "guard_sha256": "9307b30bec06c5c89bd1ced2dd7d3a59a031c40f71acf7eda958c6570d30b666",
+      "observed_gc": [
+        1
+      ],
+      "peak_sampled_root_rss_bytes": 21950464,
+      "private_tmp_after": "empty",
+      "private_tmp_mode": "0700",
+      "provenance_probe": "2",
+      "result_sha256": "fdc5ef7cea91f05abe5b16fe3a11d5d1b945bd11a8cf8ea7edee4747dd7f26a4",
+      "returncode": 0,
+      "root_reaped": true,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "OPEN_ERRNO_OK\n"
+    }
+  ],
+  "runtime_config": {
+    "refcount": "atomic",
+    "threads": true
+  },
+  "runtime_result_sha256": "252f882546155bf9ed91dfc5e686d8b40c377e4f226de66f867243f0a6cccd58",
+  "runtime_sha256": "42ed3029a7fdf560dba6ba8f8c22133f736e2cba0a0ed65267505f25d51af97a",
+  "runtime_source_after": {
+    "bytes": 5144901,
+    "files": 220,
+    "status": "PASS"
+  },
+  "schema": "pcc.oserror_open_public_native_qualification.v1",
+  "scope": "Unchanged original open-errno PROGRAM and exact owned ELF, observed GC0/GC1 on Linux x86-64",
+  "source_after": {
+    "bytes": 44453538,
+    "files": 3866,
+    "status": "PASS"
+  },
+  "source_before": {
+    "bytes": 44453538,
+    "files": 3866,
+    "status": "PASS"
+  },
+  "source_manifest_sha256": "03538c5d750db4b1e8541cae229d0c5695a376a2b5ed80b6a451cb7818319c19",
+  "status": "PASS",
+  "unrun": [
+    "constructor PROGRAM",
+    "GC2",
+    "GC3",
+    "GC4",
+    "Darwin",
+    "native pcc1",
+    "full async/gateway",
+    "broad regressions",
+    "full Stage1"
+  ]
+}

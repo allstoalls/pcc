@@ -1,13 +1,13 @@
 from pathlib import Path
 import subprocess
 
-from pcc.py_frontend import pipeline
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.project import TranslationUnit
+from pcc.frontends.python import pipeline
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.driver.project import TranslationUnit
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MEM_STR_SOURCE = REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_mem_str.py"
+MEM_STR_SOURCE = REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_mem_str.py"
 MEM_STR_SYMBOLS = (
     "memcpy",
     "memmove",
@@ -471,7 +471,7 @@ def test_explicit_bzero_remains_an_explicit_store_body(tmp_path):
 
 
 def test_pcc_python_runtime_archive_plan_selects_python_mem_str_object():
-    runtime_dir = REPO_ROOT / "pcc" / "py_runtime"
+    runtime_dir = REPO_ROOT / "pcc" / "runtime"
     plan = subprocess.run(
         ["make", "-B", "-n", "libpy_runtime_pcc_py.a"],
         cwd=runtime_dir,

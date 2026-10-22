@@ -34,13 +34,13 @@ print(answer())
 @pytest.mark.parametrize("filename", ["program-name.py", "program name.py"])
 @pytest.mark.parametrize("program", PROGRAMS, ids=["function", "adapters"])
 def test_script_filename_punctuation_does_not_break_import_publication(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, filename, program,
+    tmp_path, pcc_runtime_archive, python_program_compiler, filename, program,
 ):
     source = tmp_path / filename
     source.write_text(program)
     output = tmp_path / "program"
     python_program_compiler(str(source), str(output), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     result = subprocess.run([str(output)], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stderr
     assert result.stdout == "42\n"

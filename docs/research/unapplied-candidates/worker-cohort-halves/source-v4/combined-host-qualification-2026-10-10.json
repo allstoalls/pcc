@@ -1,0 +1,99 @@
+{
+  "base_and_postimage_origins_after": "PASS",
+  "base_commit": "92c787b62061611d5df755e8622c805e4444b6cb",
+  "base_tree": "ed9be9f491fa20f941edacef3d10ec6e1c2377a9",
+  "by_selector": {
+    "tests/python/test_native_open_errno.py::test_fopen_allocation_failure_publishes_enomem_after_close": 1,
+    "tests/python/test_native_open_errno.py::test_fopen_restores_seek_errno_after_close": 2,
+    "tests/python/test_native_open_errno.py::test_open_errno_keeps_original_filename_and_args": 10,
+    "tests/python/test_native_open_errno.py::test_open_errno_metadata_failure_keeps_allocation_exception": 1,
+    "tests/python/test_os_error_constructors.py::test_blocking_numeric_third_argument_known_unqualified_field": 1,
+    "tests/python/test_os_error_constructors.py::test_os_error_constructor_allocation_error_does_not_leak_arguments": 2,
+    "tests/python/test_os_error_constructors.py::test_os_error_constructor_payload_matches_cpython": 340,
+    "tests/python/test_os_error_constructors.py::test_os_error_direct_constructor_uses_authoritative_call_slots": 6,
+    "tests/python/test_os_error_constructors.py::test_os_error_null_argument_tuple_means_no_arguments": 1,
+    "tests/python/test_owned_fdopen_provider.py::test_dynamic_file_methods_publish_before_releasing_captures": 1,
+    "tests/python/test_owned_fdopen_provider.py::test_errno_metadata_failure_preserves_allocation_exception": 1,
+    "tests/python/test_owned_fdopen_provider.py::test_fdopen_adopts_without_truncation_and_closes_once": 1,
+    "tests/python/test_owned_fdopen_provider.py::test_fdopen_borrowed_descriptor_and_append": 1,
+    "tests/python/test_owned_fdopen_provider.py::test_fdopen_invalid_descriptor_preserves_errno": 1,
+    "tests/python/test_owned_fdopen_provider.py::test_fdopen_invalid_mode_does_not_take_descriptor": 5,
+    "tests/python/test_owned_fdopen_provider.py::test_fdopen_reordered_binary_mode_and_context_identity": 1,
+    "tests/python/test_owned_fdopen_provider.py::test_fdopen_signature_is_canonical_and_contains_forwarded_options": 1,
+    "tests/python/test_slot_call_status_reporting.py": 64,
+    "tests/python/test_worker_admission_diagnostics.py": 15,
+    "tests/python/test_worker_codegen_cohorts.py": 41,
+    "tests/test_ci_macos_regression_gate.py": 19
+  },
+  "candidate_pcc_tree": "2d087588b3dce59d5f3ddceaa7af327b0f70f010",
+  "codegen_checksum": "fd426a9915c9123023f533839feadde4ddeceaf0e839fe44a9e589e9a21b9f75",
+  "collection_semantics": "515 actual selected session items; the sole preserved real-child node is separately deselected. Collection alone is not a pass: 514 call outcomes passed and one named strict XFAIL completed.",
+  "counts": {
+    "collected": 515,
+    "errors": 0,
+    "failed": 0,
+    "passed": 514,
+    "skipped": 0,
+    "xfailed": 1,
+    "xpassed": 0
+  },
+  "deselected_unrun": [
+    "tests/python/test_worker_codegen_cohorts.py::test_small_real_children_keep_cohort_barrier_and_original_outputs"
+  ],
+  "external_source_postseal_sha256": "e86b87fdcf7a15603d38c6a290666182da78f6342a393dd56eec59b9029de686",
+  "guard": {
+    "bootstrap_sha256": "6d5c7dc6a120b619db1ee3a80b40e4779668d22ce69d96d78aaae10a398a9860",
+    "cleanup": "CLEAN",
+    "denied_events": 0,
+    "echild": true,
+    "elapsed_s": 78.30587933499919,
+    "free_floor_bytes": 4294967296,
+    "growth_limit_bytes": 536870912,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "peak_sampled_root_rss_bytes": 132132864,
+    "result_sha256": "bbc41bea615ee5a92d58b621dbd32a58e0d9d2e8170654f187ce61d29f0b3f42",
+    "returncode": 0,
+    "root_reaped": true,
+    "status": "COMPLETE",
+    "timeout_s": 300
+  },
+  "host_result_sha256": "9db70d7f230636d8e69e7eebbf97ccf9e5b862b48a987e08ac6eeaa84c99a85e",
+  "import_roots": "PASS",
+  "independent_ci_runner_import_root": "PASS",
+  "known_limit": "BlockingIOError.characters_written remains a strict expected failure. One real-child cohort test is explicitly deselected and UNRUN under the hard-NPROC boundary.",
+  "lock_released": true,
+  "prior_branch_qualifications": {
+    "cohort_56_pass": "6d9a3038b999fc3d847285462d549bcfd974b0803e63e893735121308a1f2d21",
+    "oserror_439_pass_1_strict_xfail": "182ba4233c743c061764e59ef270f6f23d778e863b97f17dcde272b09d2a280a"
+  },
+  "qualification_relation": "One exact merged-source execution for nine OSError, four cohort/admission and three independent Mac CI postimages. Prior old Linux open GC0/1 evidence does not establish current-source native behavior.",
+  "qualification_sha256": "3b08c8aac9f742f7314be3775732066f8f48b84676a76fbf6f436e4f007edb9b",
+  "schema": "pcc.cohort_oserror_independent_ci.combined_host_qualification.v1",
+  "scope": "Exact current-production closure plus sixteen combined postimages. 440 OSError/cold-slot controls (one known strict XFAIL), 56 cohort/admission controls and 19 independent-CI runner tests. The single real-child cohort test is excluded and UNRUN; no runtime build, actual child dispatch or emitted native execution.",
+  "source_before_after": "PASS",
+  "source_closure": {
+    "bytes": 44543328,
+    "complete_trees": [
+      ".github",
+      "pcc",
+      "scripts",
+      "tests"
+    ],
+    "files": 3870,
+    "full_repository_checkout": false,
+    "other_source_preserved": "Exact current remote .github/pcc/scripts/tests and seven root files; only the sixteen frozen cohort, OSError and independent CI-gate postimages changed."
+  },
+  "source_manifest_sha256": "9bcbbbc70d70b9347f5bc689a83aa1262ea86641f30dc504ea955697e1a50347",
+  "status": "PASS_WITH_ONE_KNOWN_STRICT_XFAIL",
+  "unrun": [
+    "tests/python/test_worker_codegen_cohorts.py::test_small_real_children_keep_cohort_barrier_and_original_outputs",
+    "New-source matched runtime and emitted OSError/open execution; prior local constructor child-capability denial was not retried",
+    "Actual worker scheduling and Stage1 performance, native pcc1 and full fixed point",
+    "Complete test_async_await.py and gateway suites include native/child routes outside this approved single-process capability; other host-compatible subsets were not selected in this gate",
+    "Current-source Darwin and GC0-4 native behavior. New independent Mac gate requests five configurations through the original helper, which does not verify collector-selection telemetry."
+  ],
+  "xfail_nodes": [
+    "tests/python/test_os_error_constructors.py::test_blocking_numeric_third_argument_known_unqualified_field"
+  ]
+}

@@ -6,13 +6,13 @@ import os
 from pathlib import Path
 import subprocess
 
-from pcc.py_frontend.pipeline import compile_python_multi
+from pcc.frontends.python.pipeline import compile_python_multi
 
 
-def test_compiled_driver_builds_and_calls_native_action_table(tmp_path, pcc_py_runtime_archive):
+def test_compiled_driver_builds_and_calls_native_action_table(tmp_path, pcc_runtime_archive):
     repo = Path(__file__).resolve().parents[2]
     source = tmp_path / 'parser_probe.py'
-    source.write_text('''from pcc.parse.c_parse_driver import CParseDriver
+    source.write_text('''from pcc.frontends.c.parse.c_parse_driver import CParseDriver
 def main():
     parser = CParseDriver()
     tree = parser.parse("int add(int a, int b) { return a+b; } int main(void) { return add(20,22); }")
@@ -22,10 +22,10 @@ main()
 ''', encoding='utf-8')
     binary = tmp_path / 'parser_probe'
     compile_python_multi(
-        [str(repo / 'pcc/parse/c_parse_driver.py'), str(source)], str(binary),
-        module_names=['pcc.parse.c_parse_driver', 'parser_probe'],
+        [str(repo / 'pcc/frontends/c/parse/c_parse_driver.py'), str(source)], str(binary),
+        module_names=['pcc.frontends.c.parse.c_parse_driver', 'parser_probe'],
         entry_module='parser_probe', recursive_stdlib=True, backend='self',
-        libpython_mode='off', runtime_archive=str(pcc_py_runtime_archive),
+        libpython_mode='off', runtime_archive=str(pcc_runtime_archive),
     )
     for gc in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=15,

@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from pcc.py_frontend import pipeline_self_backend_emit as emit
+from pcc.frontends.python import pipeline_self_backend_emit as emit
 from scripts import bootstrap_platform, pcc_link_elf
 
 
@@ -70,7 +70,30 @@ def test_elf_wrapper_preserves_historical_default(tmp_path, monkeypatch):
     assert seen == ["x86_64-unknown-linux-gnu"]
 
 
-@pytest.mark.parametrize("kind", ["direct", "hardlink", "symlink", "previous"])
+def _link_creation_supported(kind):
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as directory:
+        source = Path(directory) / "source"
+        source.write_bytes(b"")
+        target = Path(directory) / "target"
+        try:
+            if kind == "hardlink":
+                target.hardlink_to(source)
+            else:
+                target.symlink_to(source)
+        except OSError:
+            return False
+    return True
+
+
+# A filesystem that does not permit a link kind deselects that case.
+@pytest.mark.parametrize("kind", [
+    "direct",
+    pytest.param("hardlink", marks=pytest.mark.pcc_gate(probe=lambda: _link_creation_supported("hardlink"))),
+    pytest.param("symlink", marks=pytest.mark.pcc_gate(probe=lambda: _link_creation_supported("symlink"))),
+    "previous",
+])
 def test_elf_wrapper_rejects_input_alias_before_link(tmp_path, monkeypatch, kind):
     from pcc.backend import owned_elf_link
 
@@ -80,13 +103,10 @@ def test_elf_wrapper_rejects_input_alias_before_link(tmp_path, monkeypatch, kind
     output = source
     if kind in ("hardlink", "symlink"):
         output = tmp_path / "output"
-        try:
-            if kind == "hardlink":
-                output.hardlink_to(source)
-            else:
-                output.symlink_to(source)
-        except OSError as exc:
-            pytest.skip("filesystem does not permit link creation: " + str(exc))
+        if kind == "hardlink":
+            output.hardlink_to(source)
+        else:
+            output.symlink_to(source)
     arguments = ["--object", str(source), "--out", str(output)]
     if kind == "previous":
         output = tmp_path / "previous"
@@ -170,8 +190,8 @@ def test_native_batch_rejects_external_assembler_before_workers(tmp_path, monkey
 
 
 @pytest.mark.parametrize("relative", [
-    "pcc/backend/owned_elf_link.py", "pcc/codegen/c_codegen.py",
-    "pcc/py_runtime/py/freestanding_linux_threads.py", "pcc/py_runtime/Makefile",
+    "pcc/backend/owned_elf_link.py", "pcc/frontends/c/codegen/c_codegen.py",
+    "pcc/runtime/py/freestanding_linux_threads.py", "pcc/runtime/Makefile",
     "scripts/bootstrap_platform.py", "scripts/platform_process_watchdog.py",
     "utils/fake_libc_include/_fake_typedefs.h",
 ])

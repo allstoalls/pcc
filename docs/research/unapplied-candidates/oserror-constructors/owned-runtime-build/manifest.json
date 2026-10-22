@@ -1,0 +1,78 @@
+{
+  "adapter_sha256": "9e76530d34e07c9b5b26b4682d586377fd2b2332a51985a01324aa05be165f70",
+  "bootstrap_sha256": "861d88f3126630eb67010f5bb904687c915bb4e9406bd8a58182fb25e1314c1c",
+  "candidate_source_inventory_sha256": "03538c5d750db4b1e8541cae229d0c5695a376a2b5ed80b6a451cb7818319c19",
+  "canonical_snapshot_commit": "761bcdaf62408d56060bb9074585218e6b8bccc4",
+  "canonical_tree": "8b61d8b68c59c51d82de51d08c9694945d15d9ef",
+  "driver_sha256": "efa87c12dba8cea2d7a490263cc546de167470da2950d8e216dbe47c8611c782",
+  "execution_owner": "unchanged owned_runtime_build.build_runtime_archive, one single-process host invocation",
+  "execution_status": "UNRUN",
+  "expected_codegen_checksum": "819d8a565812fb28205d0056fc859ac8810d2cd5518ca3129a80e8674173fc35",
+  "expected_member_count": 191,
+  "five_gc_behavior": "UNRUN",
+  "host_interpreter_sha256": "56045822d9c10027323c6f24ac5876901915b1c3ff8bfc6591d363c280246c82",
+  "host_qualification_counts": {
+    "collected": 440,
+    "passed": 439,
+    "strict_xfailed": 1
+  },
+  "host_qualification_sha256": "ce01bb102d3f259749cce917c82d2125569cca8f5a58be3b5129af39d1f9b3bd",
+  "independent_review_status": "PENDING",
+  "limits": {
+    "address_space_bytes": 4294967296,
+    "exclusive_shared_lock": true,
+    "hard_nproc": 0,
+    "minimum_free_bytes": 4294967296,
+    "planned_output_reservation_bytes": 4294967296,
+    "seconds_total": 1200
+  },
+  "native_execution": "UNRUN",
+  "predecessor_driver_sha256": "fd073d6fa747e9786eb938b09821148824b51af596a1ee1745cfd5634a437674",
+  "preserved_source_patches": {
+    "oserror-constructors": "3a1489db9eb213e6519ab9918e380870086384e1e95e817f7b663c1b434e7052",
+    "owned-open-errno-v2": "e8a6c82c0fe089ee700f9c5381e64c825e2639bd58246c681cc780662659b23c"
+  },
+  "production_base_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "readme_sha256": "97ece90c204bd76745f42e26340729b6c100dfb30ec7b1ce2fedc76a3be69dc3",
+  "runtime_build_config": {
+    "refcount": "atomic",
+    "threads": true
+  },
+  "runtime_source_bytes": 5144901,
+  "runtime_source_files": 220,
+  "schema": "pcc.oserror_owned_runtime_packet.v1",
+  "source_owners": {
+    "pcc/backend/ar.py": "09004d2f85728f454c3d32b29832feb3e2b51f9f4003adde51872618e8baf81e",
+    "pcc/backend/ar_writer.py": "463bb83200c6fcc34e1c8968d27d7e838fe635b260d968488e0e2208ded044fd",
+    "pcc/backend/owned_object_emit.py": "ee036f0afecb83d9dccc581a529488e61491ffb28ff0b3ea3e1c64d9c5afb5f6",
+    "pcc/driver/native_provisioning.py": "63a0aeaea59bc6ddae7a576db290bd539cb2e5ee09014e3112388ac43d1c7117",
+    "pcc/frontends/python/codegen/_l1_codegen_static_methods.py": "49d41a9aef23e7c3df10d10d97ef1d2e3d8267fe6a6def75f230a0520942c451",
+    "pcc/frontends/python/codegen/call_object_lowering.py": "162c0a78aae28546fd4326f870e68295bb7b4c8555fa27ce648e5e17fbcd1bde",
+    "pcc/frontends/python/codegen/exception_lowering.py": "1b3c62ca08b3d626b3edff65261f59f01b190d0ef90bc0659359ae6410c72509",
+    "pcc/frontends/python/codegen/host_contract.py": "23c09a811bf9e82a5804d6296a8662b3250f2464268f65ea2445b394b2d18dae",
+    "pcc/frontends/python/compiled_owned_passes.py": "b6a9b39366247ce972ebf81fc66872d068070cb64f5afd819bcc026883cfae44",
+    "pcc/frontends/python/owned_runtime_build.py": "e8e519c62942b7ff33127e0c878562495e1c58d86ebfa0646df000d6a81420f3",
+    "pcc/frontends/python/pipeline.py": "8fe68eeee47d158d63a7955fdb896d0e4652a7ef9faea45fc5eb618326572fed",
+    "pcc/frontends/python/pipeline_runtime_archive.py": "c5127b5b3c1af08adc2b9536fbcb58f3538f607a0a2e5eb37e7ffd8416a7bd9a",
+    "pcc/frontends/python/pipeline_targets.py": "9e7e528fefd3ed276567a9764db4196209f41e418543422517d0407b875ca793",
+    "pcc/ir/optimization/driver.py": "ff6d3eb6861e652c6cfece94ca0238196a87ef6ddc535aa9da8ea9fb27c6728d",
+    "pcc/runtime/Makefile": "3f4dc9f1dbb2cad911e88000e867949f00d57cbe0a64fd5923a17ce5153d18b2",
+    "pcc/runtime/include/py_runtime.h": "2f90df77f0e564a04611a1ceda3cd886afef06d5ea00557e81ded12b2019df79",
+    "pcc/runtime/py/freestanding_stdio.py": "58f5b320443dae3c10aae3c0587eb75660ac9281d5808685f13f6d18a28562f8",
+    "pcc/runtime/py/py_exc_objects.py": "d14f1136bd8828310de9f84ca2adea00d475268f695546a00acdb46105fe8ac2",
+    "pcc/runtime/py/py_file.py": "ef899b95e11d10bf4e489225c3c23f55f4a759a7b28526c6ba3c6a0150f1080a",
+    "pcc/runtime/py/py_obj_ops_dispatch.py": "893e1bf8f9566d6d4e13dd96895d1003ae66911438b244f76825c2010d880929",
+    "pcc/tools/runtime_archive_provenance.py": "fccfe0bcbb34e780e825ed68e77e8aaf06298bc9d4f9813db5aaac0a2947233e",
+    "tests/runtime_fixture_provenance.py": "3d3956a512ecfefb2410a983a83f16b841abe38eeb6a427a851fb9008c9105eb"
+  },
+  "source_scope": "Ordinary complete pcc/scripts/tests/.github plus seven root files; not full repository checkout",
+  "successor_scope": "Exact new OSError candidate/runtime identities and expected compiler checksum; actual build owner, options, admission and limits unchanged",
+  "supersedes_runtime_reuse": "New archive required; prior a664 cold-slot archive is not admitted for these changed sources",
+  "supervisor_reservation": {
+    "budget_bytes": 4294967296,
+    "owned_root_and_parent_check": true,
+    "schema": "pcc.worker-tree-rss.v1",
+    "state_path": "explicit --worker-state argument and unchanged inherited environment"
+  },
+  "target": "x86_64-unknown-linux-gnu"
+}

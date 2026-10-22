@@ -12,13 +12,7 @@ from contextlib import contextmanager
 from collections import Counter
 from typing import Callable
 
-from pcc.py_frontend.codegen.call_identity import (
-    CallIdentityDecision,
-    ReceiverIdentity,
-    SymbolIdentity,
-    resolve_codegen_method_identity,
-    resolve_method_identity,
-)
+from pcc.frontends.python.codegen.call_identity import CallIdentityDecision, ReceiverIdentity, SymbolIdentity, resolve_codegen_method_identity, resolve_method_identity
 
 
 def unresolved_codegen_identity(host, expression):
@@ -145,7 +139,7 @@ class ScaffoldDecisionRecorder:
         if not self._active or function is None:
             return
         symbol = str(getattr(function, "name", ""))
-        if not symbol.startswith("user_pcc_llvm_capi_ir_"):
+        if not symbol.startswith("user_pcc_ir_ir_"):
             return
         function_type = function.function_type
         self._active[-1][1]["legacy_callees"].append(
@@ -166,7 +160,7 @@ class ScaffoldDecisionRecorder:
         if not self._active:
             return
         name = str(getattr(pointer, "name", ""))
-        if name.startswith(".class.pcc_llvm_capi_ir."):
+        if name.startswith(".class.pcc_ir_ir."):
             self._active[-1][1]["legacy_value_globals"].append(name)
 
     def finish(self, record, error=None):
@@ -236,8 +230,8 @@ def observe_scaffold_decisions(recorder: ScaffoldDecisionRecorder):
     global _OBSERVER_ACTIVE
     if _OBSERVER_ACTIVE:
         raise RuntimeError("nested scaffold observation is not supported")
-    from pcc.py_frontend.codegen.ir_scaffold_lowering import IrScaffoldLoweringMixin
-    from pcc.llvm_capi import ir
+    from pcc.frontends.python.codegen.ir_scaffold_lowering import IrScaffoldLoweringMixin
+    from pcc.ir import ir
 
     scaffold = IrScaffoldLoweringMixin
     original_call = scaffold._maybe_emit_ir_scaffold_call

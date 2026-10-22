@@ -7,6 +7,7 @@ native pcc1 must fail that step; this gate never substitutes the host launcher.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -47,6 +48,61 @@ def _installed_command(venv_root: Path, name: str) -> Path:
     raise RuntimeError(f"installed wheel has no {name} command in {bin_dir}")
 
 
+def _isolated_environment(source: dict[str, str]) -> dict[str, str]:
+    """Do not let checkout routing or pip configuration select the test subject."""
+    environment = {
+        name: value
+        for name, value in source.items()
+        if not name.upper().startswith(("PCC_", "PYTHON", "PIP_"))
+        and name.upper() != "VIRTUAL_ENV"
+    }
+    environment["PYTHONNOUSERSITE"] = "1"
+    environment["PIP_CONFIG_FILE"] = os.devnull
+    return environment
+
+
+def _installed_identity(
+    python: Path,
+    venv_root: Path,
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    wheel_version: str,
+) -> tuple[int, int, int]:
+    probe = (
+        "import importlib.metadata, json, pcc\n"
+        "from pcc.driver import python_target\n"
+        "distribution = importlib.metadata.distribution('python-cc')\n"
+        "print(json.dumps({"
+        "'package': pcc.__file__, "
+        "'target_module': python_target.__file__, "
+        "'distribution_root': str(distribution.locate_file('')), "
+        "'version': distribution.version, "
+        "'target': python_target.PYTHON_TARGET_VERSION_INFO}))\n"
+    )
+    identity = json.loads(_run(
+        [str(python), "-I", "-c", probe], cwd=cwd, env=env, timeout=30,
+    ))
+    root = venv_root.resolve()
+    for field in ("package", "target_module", "distribution_root"):
+        if not Path(identity[field]).resolve().is_relative_to(root):
+            raise RuntimeError(f"installed-wheel {field} escaped its venv: {identity[field]}")
+    if identity["version"] != wheel_version:
+        raise RuntimeError(
+            f"installed distribution version {identity['version']!r} "
+            f"does not match wheel {wheel_version!r}"
+        )
+    target = identity["target"]
+    if (
+        not isinstance(target, list)
+        or len(target) != 3
+        or any(type(part) is not int or part < 0 for part in target)
+    ):
+        raise RuntimeError(f"invalid installed Python target version: {target!r}")
+    print("installed identity=" + json.dumps(identity, sort_keys=True), flush=True)
+    return tuple(target)
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: ci_native_wheel_gate.py WHEEL_DIRECTORY")
@@ -59,6 +115,14 @@ def main() -> None:
         wheel_metadata = [name for name in names if name.endswith(".dist-info/WHEEL")]
         if len(wheel_metadata) != 1:
             raise RuntimeError("wheel must contain exactly one WHEEL metadata file")
+        metadata_name = wheel_metadata[0].removesuffix("WHEEL") + "METADATA"
+        from email.parser import Parser
+
+        metadata = Parser().parsestr(archive.read(metadata_name).decode("utf-8"))
+        versions = metadata.get_all("Version", [])
+        if len(versions) != 1 or not versions[0].strip():
+            raise RuntimeError("wheel must declare exactly one distribution version")
+        wheel_version = versions[0].strip()
         tags = [
             line.removeprefix("Tag: ")
             for line in archive.read(wheel_metadata[0]).decode("utf-8").splitlines()
@@ -74,7 +138,7 @@ def main() -> None:
         )
     if not any(name.endswith((".data/scripts/pcc1", ".data/scripts/pcc1.exe")) for name in names):
         raise RuntimeError("wheel does not contain its native pcc1 script")
-    if "pcc/py_runtime/libpy_runtime_pcc_py.a" not in names:
+    if "pcc/runtime/libpy_runtime_pcc_py.a" not in names:
         raise RuntimeError("wheel does not contain the matching native runtime")
 
     with wheel.open("rb") as stream:
@@ -87,10 +151,11 @@ def main() -> None:
         venv_root = root / "venv"
         venv.EnvBuilder(with_pip=True).create(venv_root)
         python = _installed_command(venv_root, "python")
-        environment = os.environ.copy()
+        environment = _isolated_environment(dict(os.environ))
         _run(
             [
                 str(python),
+                "-I",
                 "-m",
                 "pip",
                 "install",
@@ -102,6 +167,9 @@ def main() -> None:
             env=environment,
             timeout=180,
         )
+        target_version = _installed_identity(
+            python, venv_root, cwd=root, env=environment, wheel_version=wheel_version,
+        )
         host = _installed_command(venv_root, "pcc")
         native = _installed_command(venv_root, "pcc1")
         _run([str(host), "--help"], cwd=root, env=environment, timeout=30)
@@ -109,9 +177,11 @@ def main() -> None:
 
         source = root / "main.py"
         source.write_text(
+            "import sys\n\n"
             "def add(left: int, right: int) -> int:\n"
             "    return left + right\n\n"
-            "print(add(20, 22))\n",
+            "print(add(20, 22))\n"
+            "print(sys.version_info)\n",
             encoding="utf-8",
         )
         output = root / ("program.exe" if os.name == "nt" else "program")
@@ -128,8 +198,9 @@ def main() -> None:
                 "installed pcc1 returned success without a native output"
             )
         stdout = _run([str(output)], cwd=root, env=environment, timeout=30)
-        if stdout != "42\n":
-            raise RuntimeError(f"native program printed {stdout!r}, expected '42\\n'")
+        expected = "42\n" + str(target_version) + "\n"
+        if stdout != expected:
+            raise RuntimeError(f"native program printed {stdout!r}, expected {expected!r}")
     print("installed pcc and pcc1: native compile and execution passed", flush=True)
 
 

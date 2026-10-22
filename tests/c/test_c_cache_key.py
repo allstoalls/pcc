@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from pcc.c_cache_key import build_cache_key
+from pcc.driver.c_cache_key import build_cache_key
 
 
 def test_cache_key_changes_on_content_not_mtime(tmp_path):

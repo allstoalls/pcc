@@ -21,12 +21,13 @@ Categories checked:
   - ``match`` / ``case`` (PEP 634)
   - imports of stdlib modules pcc has no replacement for yet
 
-Output: one line per issue, followed by a summary. Exit code is 0 if
-no issues remain (self-host-ready), 1 otherwise.
+This historical static checklist is navigation, not an execution or ownership
+proof. Exit code 0 means no checklist findings; native readiness requires the
+current bootstrap and fallback gates.
 
 Usage:
     python scripts/audit_selfhost.py              # audit pcc/
-    python scripts/audit_selfhost.py pcc/ssa      # audit a subtree
+    python scripts/audit_selfhost.py pcc/frontends/c/ssa      # audit a subtree
     python scripts/audit_selfhost.py -v           # verbose
 """
 from __future__ import annotations
@@ -44,14 +45,14 @@ from pathlib import Path
 _DECORATOR_WHITELIST = frozenset({
     "property", "staticmethod", "classmethod",
     "dataclass", "dataclasses.dataclass",
-    # ABC framework — our pcc.py_stdlib.abc stub implements
+    # ABC framework — our pcc.stdlib.abc stub implements
     # @abstractmethod as a flag; no codegen work needed.
     "abstractmethod", "abc.abstractmethod",
     # pcc uses functools.wraps + lru_cache on a small number of
-    # helpers; both have stub impls in pcc.py_stdlib.functools.
+    # helpers; both have stub impls in pcc.stdlib.functools.
     "wraps", "functools.wraps",
     "lru_cache", "functools.lru_cache", "cache", "functools.cache",
-    # @contextmanager becomes a generator decorator — our pcc.py_stdlib
+    # @contextmanager becomes a generator decorator — our pcc.stdlib
     # .contextlib stub implements it in terms of the ``__enter__`` /
     # ``__exit__`` protocol the existing codegen already handles.
     "contextmanager", "contextlib.contextmanager",
@@ -59,16 +60,16 @@ _DECORATOR_WHITELIST = frozenset({
     # specially at the audit level (endswith ".setter" etc).
 })
 
-# Stdlib modules with a pcc replacement stub (pcc/py_stdlib/).
+# Stdlib modules with a pcc replacement stub (pcc/stdlib/).
 _STDLIB_STUBS_AVAILABLE = frozenset({
-    # Stubs under pcc/py_stdlib/:
+    # Stubs under pcc/stdlib/:
     "sys", "os", "re", "json", "io", "math", "typing", "dataclasses",
     "collections", "functools", "itertools", "string", "time",
     "pathlib", "enum", "copy", "subprocess", "shutil", "tempfile",
     "logging", "warnings", "contextlib", "abc", "platform",
     "operator", "struct", "traceback", "shlex", "fcntl",
     # ``ctypes`` stub is a name-only placeholder — real FFI routes
-    # through ``pcc.extern`` + ``pcc.llvm_capi`` in the self-host build.
+    # through ``pcc.extern`` + ``pcc.ir`` in the self-host build.
     "ctypes",
     # ``multiprocessing`` + ``concurrent`` stubs degrade to sequential
     # execution. The MCJIT subprocess guard and parallel-compile pool
@@ -76,7 +77,7 @@ _STDLIB_STUBS_AVAILABLE = frozenset({
     # fork/spawn lands with a later ``posix_spawn`` extern binding.
     "multiprocessing", "concurrent",
     # ``ast`` is used only by the CPython-ast-backed fallback parser
-    # at ``pcc/py_frontend/parser.py``. P6C.3's native parser is a
+    # at ``pcc/frontends/python/parser.py``. P6C.3's native parser is a
     # drop-in replacement; this entry marks the fallback module as a
     # deletion target once PCC_NATIVE_PARSER becomes the hard default.
     "ast",
@@ -95,10 +96,7 @@ _STDLIB_STUBS_AVAILABLE = frozenset({
     # Compile-time only; no runtime surface.
     "__future__",
     # pcc frontend primitives.
-    "pcc", "pcc.extern", "pcc.llvm_capi",
-    # llvmlite imports are the P6C.2 adapter's replacement target —
-    # once the adapter lands these resolve to pcc.llvm_capi instead.
-    "llvmlite", "llvmlite.binding", "llvmlite.ir",
+    "pcc", "pcc.extern", "pcc.ir",
 })
 
 
@@ -214,7 +212,7 @@ class Auditor(ast.NodeVisitor):
         if node.level and node.level > 0:
             return
         mod = node.module or ""
-        if mod.startswith("pcc.") or mod in ("pcc.extern", "pcc.llvm_capi"):
+        if mod.startswith("pcc.") or mod in ("pcc.extern", "pcc.ir"):
             return
         top = mod.split(".", 1)[0] if mod else ""
         if top and top not in _STDLIB_STUBS_AVAILABLE:
@@ -270,7 +268,7 @@ def main() -> int:
     #   - py_stdlib/: self-host stubs aren't self-host-compilable yet
     #     (they use generators/*args to match CPython's surface)
     #   - ply/: vendored PLY lexer/parser generator. Self-host plan
-    #     replaces it wholesale with pcc.parse.py_parse (P6C.3).
+    #     replaces it wholesale with pcc.frontends.python.py_parse (P6C.3).
     #   - lex/: PLY-flavored C lexer (@TOKEN decorators). Same
     #     category — replaced by the P6C.3 native parser.
     EXCLUDE_DIRS = {"__pycache__", "py_stdlib", "ply", "lex"}
@@ -278,11 +276,11 @@ def main() -> int:
     #   - util.py: experimental "contracts" helper, never imported by
     #     the pcc frontend (one test uses it in isolation).
     #   - plyparser.py: thin glue layer on top of the vendored PLY
-    #     library (pcc/ply/, already in EXCLUDE_DIRS). The P6C.5
+    #     library (pcc/frontends/c/ply/, already in EXCLUDE_DIRS). The P6C.5
     #     de-PLY task (docs/plans/python-frontend-plan.md) replaces
     #     the entire PLY-based C frontend wholesale — plyparser.py is
     #     deleted by that refactor, not migrated file-by-file. Same
-    #     category as pcc/ply/ and pcc/lex/.
+    #     category as pcc/frontends/c/ply/ and pcc/frontends/c/lex/.
     EXCLUDE_FILES = {
         "util.py",
         "plyparser.py",

@@ -8,7 +8,7 @@ import pytest
 
 @pytest.mark.parametrize("container", ["[(True, 2)]", "((True, 2),)", "{(True, 2)}", "{(True, 2): 1}"])
 def test_membership_releases_temporary_tuple_needle(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, monkeypatch, container,
+    tmp_path, pcc_runtime_archive, python_program_compiler, monkeypatch, container,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = tmp_path / "membership_owner.py"
@@ -34,7 +34,7 @@ main()
 ''')
     binary = tmp_path / "membership_owner"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         run = subprocess.run([str(binary)], capture_output=True, text=True, timeout=15,
                              env=dict(os.environ, PCC_GC_BACKEND=str(backend)))
@@ -45,7 +45,7 @@ main()
 
 
 def test_membership_tuple_literal_evaluates_once_in_order_and_short_circuits(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     source = tmp_path / "membership_order.py"
     source.write_text('''events = []
@@ -74,14 +74,14 @@ main()
 ''')
     binary = tmp_path / "membership_order"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout == "True\n[1, 2, 3]\nTrue\n[1, 2, 3, 4]\n"
 
 
 def test_membership_cleans_operands_on_errors_and_retains_borrowed_needle(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     source = tmp_path / "membership_errors.py"
     source.write_text('''import gc
@@ -125,7 +125,7 @@ main()
 ''')
     binary = tmp_path / "membership_errors"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         run = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10,
                              env=dict(os.environ, PCC_GC_BACKEND=str(backend)))

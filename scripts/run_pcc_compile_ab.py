@@ -128,12 +128,12 @@ STAGE_RESULT_COMPARISON_CONTRACT = {
     "hardware_counters_allowed_for_stage_verdict": False,
 }
 SOURCE_MANIFEST_SCHEMA = "pcc.bootstrap-source-manifest.v1"
-PRIMARY_SOURCE = "pcc/llvm_capi/ir.py"
+PRIMARY_SOURCE = "pcc/ir/ir.py"
 BUILD_SOURCE_SUPPORT = (
     "AGENTS.md",
     "pyproject.toml",
-    "scripts/bootstrap.sh",
-    "scripts/run_pcc_native_deferred.sh",
+    "scripts/bootstrap.py",
+    "scripts/run_pcc_native_deferred.py",
     "scripts/run_pcc_deferred_link.py",
     "scripts/pcc_link_macho.py",
     "scripts/pcc_link_elf.py",
@@ -709,7 +709,7 @@ def _runtime_source_path(
     if not isinstance(logical, str) or not logical:
         raise CompileABError("runtime manifest member has no source")
     pure = PurePosixPath(logical)
-    prefix = PurePosixPath("pcc/py_runtime")
+    prefix = PurePosixPath("pcc/runtime")
     try:
         relative = pure.relative_to(prefix)
     except ValueError as exc:
@@ -799,9 +799,6 @@ def _seal_runtime_bundle(
         ar=str(ar_path),
     )
     target_path = Path(str(bundled_archive) + ".target")
-    target_id = target_path.read_text(encoding="utf-8").strip()
-    if not target_id or "\n" in target_id or "\r" in target_id:
-        raise CompileABError("runtime target stamp is invalid")
     manifest_target = manifest.get("target_triple")
     member_count = manifest.get("member_count")
     members = manifest.get("members")
@@ -814,11 +811,25 @@ def _seal_runtime_bundle(
         or len(members) != member_count
     ):
         raise CompileABError("runtime provenance target/member summary is invalid")
+    from pcc.backend.self_backend_target_match import is_aarch64_darwin_triple
+    if ("\n" in manifest_target or "\r" in manifest_target
+            or not is_aarch64_darwin_triple(manifest_target)):
+        raise CompileABError("runtime provenance target differs from the Darwin arm64 claim platform")
     expected_target_id = f"darwin:arm64:{manifest_target}"
-    if target_id != expected_target_id:
-        raise CompileABError(
-            f"runtime target {target_id!r} != claim platform {expected_target_id!r}"
-        )
+    # The owned builder binds its actual target in the verified manifest.
+    # A legacy Make stamp is redundant, but, when supplied, must still agree.
+    # Do not manufacture a missing stamp and attribute it to the producer.
+    target_id = expected_target_id
+    target_identity_source = "verified-manifest"
+    if target_path.exists() or target_path.is_symlink():
+        target_id = target_path.read_text(encoding="utf-8").strip()
+        if not target_id or "\n" in target_id or "\r" in target_id:
+            raise CompileABError("runtime target stamp is invalid")
+        if target_id != expected_target_id:
+            raise CompileABError(
+                f"runtime target {target_id!r} != claim platform {expected_target_id!r}"
+            )
+        target_identity_source = "verified-manifest+legacy-stamp"
     emitters = sorted({row.get("object_emitter") for row in members})
     member_checksums = [row.get("codegen_checksum") for row in members]
     if len(emitters) != 1 or not isinstance(emitters[0], str) or not emitters[0]:
@@ -849,6 +860,7 @@ def _seal_runtime_bundle(
         "manifest_target": manifest_target,
         "manifest_member_count": member_count,
         "wheel_target": target_id,
+        "target_identity_source": target_identity_source,
         "object_emitter": emitters[0],
         "producer_claim": "binary-integrity-only; producer source closure not proven",
     }
@@ -886,6 +898,8 @@ def _prepare_runtime_bundle(
         for suffix in RUNTIME_SIDECAR_SUFFIXES:
             source = Path(str(runtime_archive) + suffix)
             target = Path(str(bundled_archive) + suffix)
+            if suffix == ".target" and not source.exists() and not source.is_symlink():
+                continue
             _copy_frozen(source, target, "runtime sidecar " + suffix)
             copied[target.relative_to(bundle_dir).as_posix()] = _path_receipt(target)
 
@@ -922,7 +936,7 @@ def _prepare_runtime_bundle(
             source_root = (
                 REPO_ROOT if runtime_source_root is None else runtime_source_root
             )
-            source = source_root / "pcc" / "py_runtime" / relative
+            source = source_root / "pcc" / "runtime" / relative
             target = bundle_dir / relative
             _copy_frozen(source, target, "runtime source")
             if sha256_path(target) != expected:
@@ -1007,6 +1021,8 @@ def runtime_bundle_evidence(bundle: dict[str, Any]) -> dict[str, Any]:
         "object_emitter": verification.get("object_emitter"),
         "producer_claim": verification.get("producer_claim"),
     }
+    if "target_identity_source" in verification:
+        evidence["target_identity_source"] = verification["target_identity_source"]
     # Exactly one of these is present, and neither is ever null.
     for key in ("codegen_checksum", "codegen_checksums"):
         if key in verification:
@@ -1675,7 +1691,7 @@ def _validate_single_variable(
     allowed = sorted(allowed_changed_sources)
     if allowed != [PRIMARY_SOURCE]:
         raise CompileABError(
-            "this optimization-slice harness only admits pcc/llvm_capi/ir.py; "
+            "this optimization-slice harness only admits pcc/ir/ir.py; "
             "host-helper changes require a different experiment"
         )
     if changed != allowed:

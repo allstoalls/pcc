@@ -9,9 +9,9 @@ import pytest
 
 @pytest.mark.parametrize("source,key", [("[Item(7)]", "0"), ('{"key": Item(7)}', '"key"')])
 def test_dynamic_subscript_result_does_not_retain_its_tree(
-    tmp_path: Path, pcc_py_runtime_archive, source, key,
+    tmp_path: Path, pcc_runtime_archive, source, key,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     program = tmp_path / "dynamic_item.py"
     program.write_text('''from pcc.extern import c_int64, extern
@@ -42,7 +42,7 @@ main()
 '''.replace("KEY", key).replace("SOURCE", source))
     binary = tmp_path / "dynamic_item"
     compile_python(str(program), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND="0"),
                          capture_output=True, text=True, timeout=15)
     assert ran.returncode == 0, ran.stdout + ran.stderr

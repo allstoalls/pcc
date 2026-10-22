@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 def _compile_and_run(tmp_path: Path, source: str) -> list[str]:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "probe.py"
     exe = tmp_path / "probe.out"
@@ -75,10 +75,10 @@ def test_nested_list_dict_set_comp_target_named_h_is_not_captured(tmp_path):
 
 
 def test_nested_local_capture_shadows_same_named_module_function():
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
-    from pcc.py_frontend.pipeline import count_py_cpy_fallback_calls
-    from pcc.py_frontend.type_infer import infer_module
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.pipeline import count_py_cpy_fallback_calls
+    from pcc.frontends.python.type_infer import infer_module
 
     source = textwrap.dedent("""
         def outer():
@@ -110,10 +110,10 @@ def test_module_top_lambda_rechecks_conservative_module_free_var(monkeypatch):
     module name.  It must not force the general CPython lambda wrapper merely
     because module globals are absent from the local function ``env``.
     """
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
-    from pcc.py_frontend.pipeline import count_py_cpy_fallback_calls
-    from pcc.py_frontend.type_infer import infer_module
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.pipeline import count_py_cpy_fallback_calls
+    from pcc.frontends.python.type_infer import infer_module
 
     source = textwrap.dedent("""
         def dtype(value):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from pcc.parse import py_lex
+from pcc.frontends.python import py_lex
 
 
 def test_lexer_slice_does_not_poll_environment_after_init(monkeypatch):

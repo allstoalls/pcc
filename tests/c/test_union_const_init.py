@@ -1,7 +1,5 @@
 import os
 import sys
-import subprocess
-import tempfile
 
 this_dir = os.path.dirname(os.path.abspath(__file__))
 # tests/{c,python}/<file>.py -> repo root is two levels up. This used to
@@ -9,42 +7,9 @@ this_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(os.path.dirname(this_dir))
 sys.path.insert(0, parent_dir)
 
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.parse.c_parser import CParser
-from pcc.codegen.c_codegen import LLVMCodeGenerator, postprocess_ir_text
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
 
-
-def _compile_and_run(source):
-    processed = CEvaluator._system_cpp(source, base_dir=parent_dir)
-    ast = CParser().parse(processed)
-    cg = LLVMCodeGenerator()
-    cg.generate_code(ast)
-
-    with tempfile.TemporaryDirectory(prefix="pcc_union_init_") as tmpdir:
-        ir_path = os.path.join(tmpdir, "union.ll")
-        obj_path = os.path.join(tmpdir, "union.o")
-        bin_path = os.path.join(tmpdir, "union_bin")
-
-        with open(ir_path, "w") as f:
-            f.write(postprocess_ir_text(str(cg.module)))
-
-        r = subprocess.run(
-            ["cc", "-c", "-w", ir_path, "-o", obj_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        assert r.returncode == 0, r.stderr
-
-        r = subprocess.run(
-            ["cc", obj_path, "-o", bin_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        assert r.returncode == 0, r.stderr
-
-        return subprocess.run([bin_path], capture_output=True, text=True, timeout=30)
+from tests.owned_c_execution import compile_and_run_owned_c
 
 
 def test_static_const_union_scalar_initializer():
@@ -57,7 +22,7 @@ def test_static_const_union_scalar_initializer():
         }
     """
 
-    r = _compile_and_run(source)
+    r = compile_and_run_owned_c(source)
     assert r.returncode == 0, r.stderr
 
 
@@ -114,5 +79,5 @@ def test_static_const_union_nested_struct_initializer():
         }
     """
 
-    r = _compile_and_run(source)
+    r = compile_and_run_owned_c(source)
     assert r.returncode == 0, r.stderr

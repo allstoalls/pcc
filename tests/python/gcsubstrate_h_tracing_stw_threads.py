@@ -353,6 +353,9 @@ def test_tracing_finish_claim_real_pthread_windows_and_single_finisher(
             int main(void) {
                 if (pcc_threads_enabled() != 1) return 2;
                 if (pcc_current_thread_id() <= 0) return 3;
+                /* Only the explicit steps below advance cycles: with
+                 * collection disabled the GC1 collector thread stays out. */
+                py_gc_disable();
 
                 /* Window 1: first age owner+child through one rooted epoch so
                  * FRESH_ALLOC cannot make the target falsely black.  In the
@@ -663,7 +666,7 @@ def test_tracing_gc_finalizer_handles_thread_objects_and_refcount_side_table():
     assert 'tag == abi_constant("object.type.thread")' in sweep_collector
     assert "py_dealloc_thread_thread(obj)" in sweep_collector
 
-    thread_port = (REPO_ROOT / "pcc" / "py_runtime" / "py" / "py_threading.py").read_text(
+    thread_port = (REPO_ROOT / "pcc" / "runtime" / "py" / "py_threading.py").read_text(
         encoding="utf-8"
     )
     assert '@c_abi_export("py_dealloc_thread_thread")' in thread_port
@@ -674,7 +677,7 @@ def test_tracing_gc_finalizer_handles_thread_objects_and_refcount_side_table():
 
 
 def test_no_libpython_all_backends_collect_through_thread_gate(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -957,7 +960,7 @@ def test_threaded_allocator_boundary_is_safepoint_for_stw(tmp_path):
 
 
 def test_thread_safepoint_composes_with_all_gc_backends(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -1004,7 +1007,7 @@ def test_thread_safepoint_composes_with_all_gc_backends(tmp_path):
 
 
 def test_threading_substrate_runs_in_no_libpython_binary(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -1043,4 +1046,6 @@ def test_threading_substrate_runs_in_no_libpython_binary(tmp_path):
         [str(exe)], capture_output=True, text=True, timeout=20,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip().splitlines() == ["0", "0", "True", "0", "0"]
+    # Every runtime is threaded since 560c23fdf: threads enabled, atomic
+    # reference counts (PCC_REFCOUNT_STRATEGY_ATOMIC).
+    assert result.stdout.strip().splitlines() == ["1", "1", "True", "0", "0"]

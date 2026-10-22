@@ -21,7 +21,7 @@ Runs under ``--backend self --python-libpython=off`` in DEFAULT runtime mode
 from __future__ import annotations
 import os, subprocess
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def _run(tmp_path, source):

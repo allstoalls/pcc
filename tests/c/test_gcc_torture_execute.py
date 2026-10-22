@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.corpus_manifest import runtime_cases_except
 from tests.gcc_torture_cases import run_native_and_pcc
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
@@ -15,6 +16,19 @@ GCC_TORTURE_RUNTIME_EXACT_MATCH_CASES = GCC_TORTURE_MANIFEST.get(
 )
 GCC_TORTURE_RUNTIME_RETURNCODE_CASES = GCC_TORTURE_MANIFEST.get(
     "runtime_returncode_match_only", []
+)
+GCC_TORTURE_RUNTIME_COMPARISON_CASES = (
+    GCC_TORTURE_RUNTIME_EXACT_MATCH_CASES
+    + runtime_cases_except(
+        GCC_TORTURE_MANIFEST,
+        {
+            "runtime_exact_match",
+            "runtime_returncode_match_only",
+            "runtime_both_fail",
+            "runtime_native_fail_pcc_pass",
+            "runtime_native_pass_pcc_fail",
+        },
+    )
 )
 GCC_TORTURE_RUNTIME_BOTH_FAIL_CASES = GCC_TORTURE_MANIFEST.get("runtime_both_fail", [])
 GCC_TORTURE_RUNTIME_NATIVE_FAIL_PCC_PASS_CASES = GCC_TORTURE_MANIFEST.get(
@@ -53,21 +67,27 @@ if GCC_TORTURE_RUNTIME_RETURNCODE_CASES:
 
         native_result, pcc_result = run_native_and_pcc(case_path, REPO_ROOT)
 
+        native_result.require_execution("host reference")
+        pcc_result.require_execution("owned pcc")
+
         assert (
             pcc_result.returncode == native_result.returncode
         ), f"{relative_path} return code mismatch:\nnative={native_result.returncode}\npcc={pcc_result.returncode}\npcc stderr:\n{pcc_result.stderr}"
 
 
-if GCC_TORTURE_RUNTIME_EXACT_MATCH_CASES:
+if GCC_TORTURE_RUNTIME_COMPARISON_CASES:
 
     @pytest.mark.parametrize(
-        "relative_path", _case_params(GCC_TORTURE_RUNTIME_EXACT_MATCH_CASES)
+        "relative_path", _case_params(GCC_TORTURE_RUNTIME_COMPARISON_CASES)
     )
     def test_gcc_torture_runtime_matches_native_exactly(relative_path):
         case_path = _case_path(relative_path)
         assert case_path.is_file(), f"missing gcc torture case: {case_path}"
 
         native_result, pcc_result = run_native_and_pcc(case_path, REPO_ROOT)
+
+        native_result.require_execution("host reference")
+        pcc_result.require_execution("owned pcc")
 
         assert (
             pcc_result.returncode == native_result.returncode
@@ -91,6 +111,9 @@ if GCC_TORTURE_RUNTIME_BOTH_FAIL_CASES:
 
         native_result, pcc_result = run_native_and_pcc(case_path, REPO_ROOT)
 
+        native_result.require_execution("host reference")
+        pcc_result.require_execution("owned pcc")
+
         assert (
             native_result.returncode != 0
         ), f"native runtime unexpectedly succeeded for {relative_path}"
@@ -107,6 +130,9 @@ if GCC_TORTURE_RUNTIME_NATIVE_FAIL_PCC_PASS_CASES:
         assert case_path.is_file(), f"missing gcc torture case: {case_path}"
 
         native_result, pcc_result = run_native_and_pcc(case_path, REPO_ROOT)
+
+        native_result.require_execution("host reference")
+        pcc_result.require_execution("owned pcc")
 
         assert (
             native_result.returncode != 0
@@ -126,6 +152,9 @@ if GCC_TORTURE_RUNTIME_NATIVE_PASS_PCC_FAIL_CASES:
         assert case_path.is_file(), f"missing gcc torture case: {case_path}"
 
         native_result, pcc_result = run_native_and_pcc(case_path, REPO_ROOT)
+
+        native_result.require_execution("host reference")
+        pcc_result.require_execution("owned pcc")
 
         assert (
             native_result.returncode == 0

@@ -4,7 +4,7 @@ from copy import deepcopy
 
 import pytest
 
-from pcc.py_frontend.codegen.call_identity import (
+from pcc.frontends.python.codegen.call_identity import (
     ClassIdentity,
     MethodIdentity,
     ReceiverIdentity,
@@ -20,7 +20,7 @@ from pcc.tools.ir_scaffold_observer import (
 
 
 def _compile(tmp_path, source, output):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     path = tmp_path / "source.py"
     path.write_text(source, encoding="utf-8")
@@ -31,7 +31,7 @@ def _compile(tmp_path, source, output):
 
 def test_observer_does_not_change_emitted_ir(tmp_path):
     source = (
-        "from pcc.llvm_capi.compat import ir\n"
+        "from pcc.ir.compat import ir\n"
         "def use_method(a, b):\n"
         "    builder = ir.IRBuilder()\n"
         "    return builder.add(a, b)\n"
@@ -45,7 +45,7 @@ def test_observer_does_not_change_emitted_ir(tmp_path):
     assert len(calls) == 1
     row = calls[0]
     assert row["member"] == "add"
-    assert row["legacy_callees"][0]["symbol"] == "user_pcc_llvm_capi_ir_IRBuilder_add"
+    assert row["legacy_callees"][0]["symbol"] == "user_pcc_ir_ir_IRBuilder_add"
     assert len(row["legacy_callees"][0]["parameter_types"]) == 4
     assert row["resolution"] == "unknown"
     assert not row["same_emitted_target"]
@@ -53,7 +53,7 @@ def test_observer_does_not_change_emitted_ir(tmp_path):
 
 def test_nested_calls_are_attributed_to_their_own_receiver(tmp_path):
     source = (
-        "from pcc.llvm_capi.compat import ir\n"
+        "from pcc.ir.compat import ir\n"
         "def use_method(a, b):\n"
         "    builder = ir.IRBuilder()\n"
         "    return builder.add(builder.mul(a, b), b)\n"
@@ -65,7 +65,7 @@ def test_nested_calls_are_attributed_to_their_own_receiver(tmp_path):
     assert {row["member"] for row in rows} == {"add", "mul"}
     for row in rows:
         assert [callee["symbol"] for callee in row["legacy_callees"]] == [
-            "user_pcc_llvm_capi_ir_IRBuilder_" + row["member"]
+            "user_pcc_ir_ir_IRBuilder_" + row["member"]
         ]
 
 
@@ -74,13 +74,13 @@ def test_provider_class_value_is_recorded_without_a_call(tmp_path):
     with observe_scaffold_decisions(recorder):
         _compile(
             tmp_path,
-            "from pcc.llvm_capi.compat import ir\n"
+            "from pcc.ir.compat import ir\n"
             "def class_value():\n    return ir.IRBuilder\n",
             "class-value.ll",
         )
     rows = [row for row in recorder.records if row["kind"] == "symbol-value"]
     assert len(rows) == 1
-    assert rows[0]["legacy_value_globals"] == [".class.pcc_llvm_capi_ir.IRBuilder"]
+    assert rows[0]["legacy_value_globals"] == [".class.pcc_ir_ir.IRBuilder"]
     assert rows[0]["legacy_callees"] == []
 
 
@@ -152,7 +152,7 @@ def test_verified_flow_uses_the_real_user_class_declaration(tmp_path):
 
 
 def test_observer_restores_methods_after_lowering_failure(tmp_path):
-    from pcc.py_frontend.codegen.ir_scaffold_lowering import IrScaffoldLoweringMixin
+    from pcc.frontends.python.codegen.ir_scaffold_lowering import IrScaffoldLoweringMixin
 
     original = IrScaffoldLoweringMixin._maybe_emit_ir_scaffold_call
     recorder = ScaffoldDecisionRecorder()
@@ -160,7 +160,7 @@ def test_observer_restores_methods_after_lowering_failure(tmp_path):
         with observe_scaffold_decisions(recorder):
             _compile(
                 tmp_path,
-                "from pcc.llvm_capi.compat import ir\n"
+                "from pcc.ir.compat import ir\n"
                 "def broken():\n"
                 "    builder = ir.IRBuilder()\n"
                 "    return builder.add()\n",

@@ -14,14 +14,14 @@ import sys
 from pathlib import Path
 from unittest import mock
 
-from pcc.dependency_verdict import probe_artifact_dependency
+from pcc.diagnostics.dependency_verdict import probe_artifact_dependency
 
 import pytest
 
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-SPIKE_SRC = REPO_ROOT / "pcc" / "py_runtime" / "py" / "py_tuple_spike.py"
-PY_RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+SPIKE_SRC = REPO_ROOT / "pcc" / "runtime" / "py" / "py_tuple_spike.py"
+PY_RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 PY_RUNTIME_PY_DIR = PY_RUNTIME_DIR / "py"
 
 
@@ -73,15 +73,15 @@ def _make_var_words(name: str) -> list[str]:
 
 
 def test_no_libpython_runtime_selector_defaults_to_pcc_python_archive():
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     with mock.patch.dict(os.environ, {}, clear=True):
         with mock.patch(
-            "pcc.py_frontend.pipeline.os.path.isfile",
+            "pcc.frontends.python.pipeline.os.path.isfile",
             return_value=True,
         ):
             with mock.patch(
-                "pcc.py_frontend.pipeline._runtime_archive_stale",
+                "pcc.frontends.python.pipeline._runtime_archive_stale",
                 return_value=False,
             ):
                 archive = pipeline._ensure_runtime(
@@ -92,14 +92,14 @@ def test_no_libpython_runtime_selector_defaults_to_pcc_python_archive():
 
 
 def test_runtime_selector_ignores_retired_c_runtime_selectors():
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     with mock.patch(
-        "pcc.py_frontend.pipeline.os.path.isfile",
+        "pcc.frontends.python.pipeline.os.path.isfile",
         return_value=True,
     ):
         with mock.patch(
-            "pcc.py_frontend.pipeline._runtime_archive_stale",
+            "pcc.frontends.python.pipeline._runtime_archive_stale",
             return_value=False,
         ):
             with mock.patch.dict(
@@ -117,7 +117,7 @@ def test_runtime_selector_ignores_retired_c_runtime_selectors():
 
 
 def test_resolve_pcc_binary_prefers_current_stage_binary(tmp_path):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     stage = tmp_path / "pcc1"
     stage.write_text("#!/bin/sh\n", encoding="utf-8")
@@ -129,7 +129,7 @@ def test_resolve_pcc_binary_prefers_current_stage_binary(tmp_path):
 
 
 def test_resolve_pcc_binary_ignores_pytest_argv0(tmp_path):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     pytest_bin = tmp_path / "pytest"
     pytest_bin.write_text("#!/bin/sh\n", encoding="utf-8")
@@ -209,7 +209,7 @@ def test_pcc_python_archive_has_no_libpython_object():
 
 
 def test_no_libpython_pcc_python_archive_staleness_ignores_libpython_bridge(tmp_path):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     runtime_dir = tmp_path / "py_runtime"
     src_dir = runtime_dir / "src"
@@ -268,7 +268,7 @@ def test_no_libpython_pcc_python_archive_staleness_ignores_libpython_bridge(tmp_
 
 
 def test_pcc_python_archive_staleness_ignores_c_sources(tmp_path):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     runtime_dir = tmp_path / "py_runtime"
     src_dir = runtime_dir / "src"
@@ -323,7 +323,7 @@ def test_pcc_python_archive_staleness_ignores_c_sources(tmp_path):
 
 
 def test_pcc_python_archive_requires_valid_provenance_before_wheel_shortcut(tmp_path):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     archive = tmp_path / "libpy_runtime_pcc_py.a"
     archive.write_bytes(b"archive")
@@ -346,7 +346,7 @@ def test_pcc_python_archive_requires_valid_provenance_before_wheel_shortcut(tmp_
 
 
 def test_pcc_emitted_archive_staleness_tracks_compiler_sources(tmp_path):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     runtime_dir = tmp_path / "py_runtime"
     include_dir = runtime_dir / "include"
@@ -392,7 +392,7 @@ def test_pcc_emitted_archive_staleness_tracks_compiler_sources(tmp_path):
 
 
 def test_pcc_python_codegen_checksum_staleness_forces_full_rebuild(tmp_path):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     runtime_dir = tmp_path / "py_runtime"
     runtime_dir.mkdir()
@@ -457,7 +457,7 @@ def test_pcc_python_codegen_checksum_staleness_forces_full_rebuild(tmp_path):
 def test_pcc_python_rebuild_fails_if_codegen_freshness_remains_unprovable(
     tmp_path,
 ):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     runtime_dir = tmp_path / "py_runtime"
     runtime_dir.mkdir()
@@ -515,7 +515,7 @@ def test_pcc_python_rebuild_fails_if_codegen_freshness_remains_unprovable(
 
 
 def test_explicit_pcc_python_archive_does_not_compare_current_codegen(tmp_path):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     archive = tmp_path / "libpy_runtime_pcc_py.a"
     archive.write_bytes(b"archive")
@@ -542,7 +542,7 @@ def test_explicit_pcc_python_archive_does_not_compare_current_codegen(tmp_path):
 
 
 def test_pcc_python_runtime_build_rejects_missing_provenance(tmp_path):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     runtime_dir = tmp_path / "py_runtime"
     runtime_dir.mkdir()
@@ -577,7 +577,7 @@ def test_pcc_python_runtime_build_rejects_missing_provenance(tmp_path):
 
 
 def test_libpython_pcc_python_archive_staleness_tracks_libpython_bridge(tmp_path):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     runtime_dir = tmp_path / "py_runtime"
     src_dir = runtime_dir / "src"
@@ -658,7 +658,7 @@ def test_pcc_python_runtime_makefile_uses_python_library_mode_not_text_stripping
 
 
 def test_python_library_mode_emits_module_without_program_main(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "libmod.py"
     out_ll = tmp_path / "libmod.ll"
@@ -684,7 +684,7 @@ def test_python_library_mode_emits_module_without_program_main(tmp_path):
 
 
 def test_python_library_mode_statically_initializes_scalar_literals(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "library_constants.py"
     out_ll = tmp_path / "library_constants.ll"
@@ -721,7 +721,7 @@ def test_python_library_mode_statically_initializes_scalar_literals(tmp_path):
 def test_python_library_copied_runtime_source_suppresses_implicit_frame_roots(
     tmp_path,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     runtime_copy_py = tmp_path / "py_runtime_pcc_py" / "py"
     runtime_copy_py.mkdir(parents=True)
@@ -1154,7 +1154,7 @@ def test_pcc_python_runtime_bigint_divmod_matches_python(tmp_path):
     harness = tmp_path / "bigint_divmod_harness.c"
     harness.write_text(
         """
-        #include "pcc/py_runtime/src/py_internal.h"
+        #include "pcc/runtime/src/py_internal.h"
         #include <stdio.h>
         #include <stdlib.h>
 
@@ -1245,7 +1245,7 @@ def test_pcc_python_traceback_archive_formats_exception(tmp_path):
     harness = tmp_path / "traceback_harness.c"
     harness.write_text(
         """
-        #include "pcc/py_runtime/include/py_runtime.h"
+        #include "pcc/runtime/include/py_runtime.h"
         int main(void) {
             PyObject *exc = py_exc_new(2, "boom");
             py_exc_append_frame(exc, "fn", "file.py", 12);
@@ -1300,7 +1300,7 @@ def test_pcc_python_relocate_copy_rejects_oversized_copy(tmp_path):
     harness = tmp_path / "relocate_copy_size_harness.c"
     harness.write_text(
         """
-        #include "pcc/py_runtime/include/py_runtime.h"
+        #include "pcc/runtime/include/py_runtime.h"
         #include <stdio.h>
         #include <stdlib.h>
 
@@ -1364,7 +1364,7 @@ def test_pcc_python_relocate_copy_consumes_relocation_entry(tmp_path):
     harness = tmp_path / "relocate_copy_single_forward_harness.c"
     harness.write_text(
         """
-        #include "pcc/py_runtime/include/py_runtime.h"
+        #include "pcc/runtime/include/py_runtime.h"
         #include <stdio.h>
         #include <stdlib.h>
 
@@ -1437,7 +1437,7 @@ def test_pcc_python_relocating_step_copies_simple_object(tmp_path):
     harness = tmp_path / "relocating_step_harness.c"
     harness.write_text(
         """
-        #include "pcc/py_runtime/include/py_runtime.h"
+        #include "pcc/runtime/include/py_runtime.h"
         #include <stdio.h>
         #include <stdlib.h>
 
@@ -1498,9 +1498,9 @@ def test_pcc_python_relocating_step_copies_simple_object(tmp_path):
 
 
 def test_pcc_python_traceback_helpers_ignore_ambient_exception_tls(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
-    src = REPO_ROOT / "pcc" / "py_runtime" / "py" / "py_exc_traceback.py"
+    src = REPO_ROOT / "pcc" / "runtime" / "py" / "py_exc_traceback.py"
     ll = tmp_path / "py_exc_traceback.ll"
     compile_python(
         str(src),
@@ -1521,9 +1521,9 @@ def test_pcc_python_traceback_helpers_ignore_ambient_exception_tls(tmp_path):
 
 
 def test_pcc_python_dict_lookup_matches_unsigned_hash_perturb(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
-    src = REPO_ROOT / "pcc" / "py_runtime" / "py" / "py_dict.py"
+    src = REPO_ROOT / "pcc" / "runtime" / "py" / "py_dict.py"
     ll = tmp_path / "py_dict.ll"
     compile_python(
         str(src),
@@ -1554,9 +1554,9 @@ def test_pcc_python_dict_lookup_matches_unsigned_hash_perturb(tmp_path):
 
 
 def test_pcc_python_set_lookup_matches_unsigned_hash_perturb(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
-    src = REPO_ROOT / "pcc" / "py_runtime" / "py" / "py_set.py"
+    src = REPO_ROOT / "pcc" / "runtime" / "py" / "py_set.py"
     ll = tmp_path / "py_set.ll"
     compile_python(
         str(src),
@@ -1594,8 +1594,8 @@ def test_pcc_python_set_lookup_matches_unsigned_hash_perturb(tmp_path):
 
 
 def test_runtime_mirror_probe_and_backend0_latch_source_parity():
-    py_set = (REPO_ROOT / "pcc/py_runtime/py/py_set.py").read_text(encoding="utf-8")
-    py_dict = (REPO_ROOT / "pcc/py_runtime/py/py_dict.py").read_text(encoding="utf-8")
+    py_set = (REPO_ROOT / "pcc/runtime/py/py_set.py").read_text(encoding="utf-8")
+    py_dict = (REPO_ROOT / "pcc/runtime/py/py_dict.py").read_text(encoding="utf-8")
 
     helper_pattern = r"def _perturb_shift5\(perturb: int\) -> int:\n(?P<body>.*?)(?=\n\ndef )"
     set_helper = re.search(helper_pattern, py_set, re.S)
@@ -1611,9 +1611,9 @@ def test_runtime_mirror_probe_and_backend0_latch_source_parity():
         assert "limit: int = capacity * 2" in source
         assert "9223372036854775807" not in source
 
-    py_gc = (REPO_ROOT / "pcc/py_runtime/py/py_gc_backend.py").read_text(encoding="utf-8")
+    py_gc = (REPO_ROOT / "pcc/runtime/py/py_gc_backend.py").read_text(encoding="utf-8")
     gc_state = (
-        REPO_ROOT / "pcc/py_runtime/py/freestanding_gc_state.py"
+        REPO_ROOT / "pcc/runtime/py/freestanding_gc_state.py"
     ).read_text(encoding="utf-8")
     assert 'define_global_i32("pcc_gc_backend0_frame_roots_enabled", 0)' in gc_state
     assert 'store_i32(global_addr("pcc_gc_backend0_frame_roots_enabled"), 0, 1)' in py_gc

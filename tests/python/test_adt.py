@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from pcc.adt import Err, MatchError, Nothing, Ok, Some, check_exhaustive, match
+from pcc.library.adt import Err, MatchError, Nothing, Ok, Some, check_exhaustive, match
 
 
 def test_option_result_variants_and_match():

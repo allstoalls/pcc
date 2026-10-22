@@ -36,6 +36,8 @@ def test_symbol_atoms_relocate_but_local_and_recursive_jumps_stay_relative():
     assert struct.unpack_from("<I", recursive.code)[0] == 0x14000000
 
 
+# AArch64 Darwin execution
+@pytest.mark.pcc_gate(probe=lambda: not (sys.platform != "darwin" or platform.machine() != "arm64"))
 def test_tail_transfer_links_and_executes_across_native_objects(tmp_path):
     from pcc.backend.self_backend_aarch64_darwin import emit_aarch64_darwin_indexed_transport
     from pcc.backend.self_backend_parse import parse_self_backend_module
@@ -72,8 +74,6 @@ entry:
         objects.append(NativeObject.from_sections(sections, undefined=undefined))
         if transport.encoded_line_records is not None:
             transport.encoded_line_records.close()
-    if sys.platform != "darwin" or platform.machine() != "arm64":
-        pytest.skip("AArch64 Darwin execution")
     for index, ordered in enumerate((objects, list(reversed(objects)))):
         executable = tmp_path / ("tail-object-" + str(index))
         executable.write_bytes(link_executable(ordered))

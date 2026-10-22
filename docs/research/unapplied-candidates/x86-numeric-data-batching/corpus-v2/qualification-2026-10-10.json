@@ -1,0 +1,206 @@
+{
+  "candidate_status": "UNAPPLIED",
+  "complete_byte_and_decoded_contract_equal": true,
+  "decision": "MECHANISM_THRESHOLD_MET_REVIEW_ONLY",
+  "driver_sha256": "30b93c704469b6368ec6d5d1625c3d832cc74f824a9a75f6c63a96cdd04c9633",
+  "evidence_sha256": {
+    "base_postseal": "c57a2fa494e8aff068a19c4be493449a4b4cc3e03c52969a162b43cf65d2c4bf",
+    "bootstrap": "6d5c7dc6a120b619db1ee3a80b40e4779668d22ce69d96d78aaae10a398a9860",
+    "candidate_postseal": "7a890e146dfb0acb482459e05de1b6988f5e47504770fbbf900ed446f48f0133",
+    "guard": "5e289f36f1227df910fc17f7eed40644b239d36f65206c6b86099d7302fde1e6",
+    "payload_result": "82e106300dfde845a2fdcf21989cd53ce7048a705c20d4c1d5d8c823ea1048b2",
+    "qualification": "c040e107db94637973cc639381278e904e7daf39df8b1bf28011138bd6c22ba5",
+    "wrapper": "320af5d991173edd0306885696206e31999ac87e1871a5f0640b8d4a57b9994b"
+  },
+  "executed": {
+    "counts": {
+      "data_payload_bytes": 3685946,
+      "data_records": 114742,
+      "float_payload_calls": 0,
+      "integer_payload_calls": 1162090,
+      "maximum_data_payload_bytes": 8192,
+      "parser_calls": 1,
+      "scalar_payload_bytes": 3685946
+    },
+    "data_by_section": {
+      ".data": {
+        "data_payload_bytes": 9420,
+        "data_records": 311
+      },
+      ".note.GNU-stack": {
+        "data_payload_bytes": 0,
+        "data_records": 0
+      },
+      ".pcc_stackmaps": {
+        "data_payload_bytes": 3659528,
+        "data_records": 113801
+      },
+      ".rodata": {
+        "data_payload_bytes": 16998,
+        "data_records": 630
+      },
+      ".text": {
+        "data_payload_bytes": 0,
+        "data_records": 0
+      }
+    },
+    "fixed_minimum_record_reduction_percent": 50,
+    "legacy_count_proof": "Actual successful scalar payload callbacks in this invocation; the pinned base parser creates exactly one _Data for each callback. The baseline was not reparsed or re-encoded by this gate.",
+    "legacy_per_scalar_equivalent_records": 1162090,
+    "observers_restored": true,
+    "ordinary_encode_assembly_object_calls": 1,
+    "performance_claim": false,
+    "record_reduction_fraction": 0.9012623807106163,
+    "threshold_met": true,
+    "timing_evidence": "NONE: scalar callbacks and plan census are counted; no performance timers."
+  },
+  "history": "Corpus observer V1 was never executed. V2 restricts integer-payload counting to active parsing and preserves non-parser calls. Production source and the 50% threshold are unchanged. The earlier size-only observation stays closed at HOLD.",
+  "input": {
+    "assembly": {
+      "bytes": 76565862,
+      "sha256": "8ad079c23208ef05f5385e975d45421ac5c50f882a14b68d942cf9134567f919"
+    },
+    "historical_cfg": {
+      "blocks": 48161,
+      "functions": 231,
+      "instructions": 219614
+    },
+    "no_regeneration": true,
+    "reference_object": {
+      "bytes": 12228800,
+      "sha256": "4d910a121adc58f3f57f9d5041abcb406ff9ad3c6a5748581c6671d6cdcfcb6a"
+    },
+    "reference_qualification_sha256": "4864338559a67bcd79b003832fbbad6983bf35160ded8741253c58f5d9f1ab9b",
+    "reference_result_sha256": "6afb6237c6075a64b54c7076e53cfb1fea7e3aff220282586a704293fe927ef4",
+    "scope": "Sealed historical pre-class-outline c_ast Windows assembly, not current frontend output or current CI frequency evidence.",
+    "target": "x86_64-pc-windows-msvc"
+  },
+  "object": {
+    "bytes": 12228800,
+    "sha256": "4d910a121adc58f3f57f9d5041abcb406ff9ad3c6a5748581c6671d6cdcfcb6a"
+  },
+  "packet_manifest_sha256": "e08590a6918bdb0b152a7262e2c47c18973546af555f560e2516e2baf36050b3",
+  "prerequisite_host": {
+    "counts": {
+      "collected": 46,
+      "other_outcomes": 0,
+      "passed": 46
+    },
+    "host_qualification_sha256": "3a65e08bfbe400cc9a6a3d8ae53a7ffbb623f78012d5c148cbb9cec4f5bde1d5",
+    "host_result_sha256": "63325b954a9c581ccfdfd62a2d2ded32a712a64ce58542d0be4c3d8d911e9b31",
+    "published_result_commit": "e75360e6a405ce90e83d1583d59a65e1b71b9214"
+  },
+  "preserved_driver_commit": "9e6fc1e8c7c821b782fb53c4b839a8fecc3bc560",
+  "preserved_source_commit": "6abedec4388663f7ffbb2f43eff92210cea0744b",
+  "qualification_date_utc": "2026-10-10",
+  "resource_and_cleanup": {
+    "cleanup": "CLEAN; exact root reaped; ECHILD; no active handles",
+    "continuous_free_reserve_bytes": 4294967296,
+    "denied_audit_events": 0,
+    "exclusive_shared_lock_released": true,
+    "guard_duration_scope": "Resource and cleanup accounting only; not performance evidence.",
+    "guard_elapsed_seconds": 22.83527205700375,
+    "guard_status": "COMPLETE",
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "max_output_growth_bytes": 536870912,
+    "outer_seconds": 300,
+    "returncode": 0,
+    "rss_scope": "Sampled process RSS, including imports, counters and post-encode validation; not a hard RSS bound or per-phase measurement.",
+    "sampled_peak_root_rss_bytes": 447062016
+  },
+  "schema": "pcc.numeric_data_batching_corpus_public_qualification.v1",
+  "sections": [
+    {
+      "align": 8,
+      "bytes": 9912,
+      "name": ".data",
+      "relocations": 0
+    },
+    {
+      "align": 8,
+      "bytes": 17010,
+      "name": ".rodata",
+      "relocations": 1
+    },
+    {
+      "align": 16,
+      "bytes": 6362931,
+      "name": ".text",
+      "relocations": 150410
+    },
+    {
+      "align": 8,
+      "bytes": 4135736,
+      "name": ".pcc_stackmaps",
+      "relocations": 231
+    },
+    {
+      "align": 1,
+      "bytes": 0,
+      "name": ".note.GNU-stack",
+      "relocations": 0
+    },
+    {
+      "align": 4,
+      "bytes": 7384,
+      "name": ".xdata",
+      "relocations": 0
+    },
+    {
+      "align": 4,
+      "bytes": 2772,
+      "name": ".pdata",
+      "relocations": 693
+    }
+  ],
+  "source": {
+    "base_pcc_tree": "ee02ba6bf0d79e9706c1791aa650093f5f91c338",
+    "base_production_commit": "d2334624197b5fc14aaca93bb916683fb1afcb79",
+    "base_source_manifest_sha256": "568c44d837939cde5ab4da2c2f0115ab30f978716bc423a40e07d9cf2bdc0185",
+    "candidate_pcc_tree": "930263bf204e578796c72dab5d4aa31fd7ab27ae",
+    "candidate_source_manifest_sha256": "7430a30766c11a59e7185758b725b289388ae131498ce6a8a568bdf10ff773ba",
+    "full_checkout_claim": false,
+    "relation": "Only the V2 assembler and new focused test differ from the retained baseline; its complete pcc subtree equals d233 production, while unrelated retained snapshot files differ from the full current checkout.",
+    "retained_snapshot_codegen_checksum": "ce75a8770afcdad0679e4fb854f4bb6752fec786ae7558bf07fa46ec52152eb6"
+  },
+  "source_postseals": "Complete candidate and base inventories PASS before/after, with independent post-guard verification; all input pins and imported PCC origins remain exact.",
+  "status": "PASS: complete object/decoded equality and fixed mechanism screen",
+  "unrun_groups": [
+    {
+      "group": "complete tests/python/test_async_await.py",
+      "reason": "Not selected by the admitted 46-case or corpus gate. Its full compile/run coverage needs ordinary subprocess/native execution outside the current hard-NPROC0 and process-audit boundary.",
+      "status": "UNRUN"
+    },
+    {
+      "group": "gateway host subsets",
+      "reason": "Not selected or executed for this exact candidate. A compatible host subset would require its own reviewed selection; no earlier gateway result is inherited.",
+      "status": "UNRUN"
+    },
+    {
+      "group": "gateway full/native suite",
+      "reason": "Ordinary compile/run and process-based integration work is outside this single-process corpus admission; no candidate-matched runtime/executable gate has been run.",
+      "status": "UNRUN"
+    },
+    {
+      "group": "pcc0 native and observed GC0/GC1",
+      "reason": "No matched runtime build and hash-bound executable gate for this new candidate. Previous exact-ELF admissions and witnesses cannot be transferred.",
+      "status": "UNRUN"
+    },
+    {
+      "group": "observed GC2/GC3/GC4",
+      "reason": "No candidate native gate; required thread/process behavior cannot be represented by the hard-NPROC0 host boundary.",
+      "status": "UNRUN"
+    },
+    {
+      "group": "native compiler/pcc1, full Stage1/fixed point and platform CI",
+      "reason": "The candidate remains an unapplied artifact. No exact-candidate native compiler build or CI run has occurred; older production CI evidence is not reused.",
+      "status": "UNRUN"
+    },
+    {
+      "group": "performance",
+      "reason": "This gate contains scalar counters and a parser census, with no performance timers. Resource guard duration is not a benchmark.",
+      "status": "UNRUN"
+    }
+  ]
+}

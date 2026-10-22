@@ -5,7 +5,7 @@ defining the same private helper is resolved silently by the MRO — one
 definition simply wins, and a later edit to the losing copy does nothing.
 That is the failure this lint exists to prevent (ARCH-P3-LAYER1-STATE-PROTOCOL).
 
-It also keeps `pcc/py_frontend/codegen/layer1_state.py` honest: the declared
+It also keeps `pcc/frontends/python/codegen/layer1_state.py` honest: the declared
 shared-state surface must stay a superset of what the mixins actually read.
 """
 
@@ -15,7 +15,7 @@ import ast
 import collections
 from pathlib import Path
 
-from pcc.py_frontend.codegen.layer1_state import (
+from pcc.frontends.python.codegen.layer1_state import (
     SHARED_STATE_ATTRIBUTES,
     L1CodeGenState,
 )
@@ -30,7 +30,7 @@ def _repo_root() -> Path:
     raise RuntimeError("AGENTS.md not found above " + __file__)
 
 
-CODEGEN = _repo_root() / "pcc" / "py_frontend" / "codegen"
+CODEGEN = _repo_root() / "pcc" / "frontends" / "python" / "codegen"
 
 
 def _mixin_methods() -> dict[str, list[tuple[str, str]]]:

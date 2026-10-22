@@ -5,15 +5,15 @@ import textwrap
 
 
 def test_annotated_builtin_buffers_keep_semantic_types_for_isinstance():
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
-    from pcc.py_frontend.py_ast import (
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_ast import (
         ByteArrayType,
         BytesType,
         MemoryViewType,
         SetType,
     )
-    from pcc.py_frontend.type_infer import infer_module
+    from pcc.frontends.python.type_infer import infer_module
 
     source = textwrap.dedent("""
         def check_bytes(value: bytes) -> bool:
@@ -44,7 +44,7 @@ def test_annotated_builtin_buffers_keep_semantic_types_for_isinstance():
 
 
 def test_dynamic_isinstance_second_arg_dispatches_to_runtime(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "dynamic_isinstance.py"
     src.write_text(
@@ -86,7 +86,7 @@ def test_isinstance_builtin_exception_matches(tmp_path):
     object via its exc_class MRO. The frontend previously constant-folded a
     builtin exception class name (not a user class, not a builtin type tag) to
     False, and the runtime py_isinstance returned 0 for a PY_TYPE_EXC object."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "isinstance_exc.py"
     src.write_text(
@@ -128,7 +128,7 @@ def test_builtin_exception_class_can_be_captured_as_default(tmp_path):
     must be the same cached native object used by exception construction and
     matching, without a CPython builtin lookup.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "exception_default.py"
     src.write_text(
@@ -156,7 +156,7 @@ def test_builtin_exception_class_can_be_captured_as_default(tmp_path):
 
 
 def test_dyn_builtin_isinstance_uses_runtime_type_tag(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "builtin_dyn_isinstance.py"
     src.write_text(
@@ -188,7 +188,7 @@ def test_dyn_builtin_isinstance_uses_runtime_type_tag(tmp_path):
 
 
 def test_dyn_bytes_bytearray_and_set_isinstance_use_runtime_type_tags(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "builtin_buffer_isinstance.py"
     src.write_text(
@@ -230,7 +230,7 @@ def test_dyn_bytes_bytearray_and_set_isinstance_use_runtime_type_tags(tmp_path):
 
 
 def test_isinstance_tuple_accepts_type_none(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "isinstance_type_none.py"
     src.write_text(
@@ -263,7 +263,7 @@ def test_isinstance_tuple_accepts_type_none(tmp_path):
 
 
 def test_isinstance_accepts_dynamic_type_call(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "isinstance_dynamic_type.py"
     src.write_text(
@@ -296,7 +296,7 @@ def test_isinstance_accepts_dynamic_type_call(tmp_path):
 
 
 def test_isinstance_tuple_accepts_dynamic_type_call(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "isinstance_tuple_dynamic_type.py"
     src.write_text(
@@ -335,7 +335,7 @@ def test_isinstance_slice_and_getitem_slice(tmp_path):
     ``if isinstance(key, slice):`` __getitem__ idiom). Both were previously
     broken: isinstance(x, slice) constant-folded to False, and slice subscript
     on a ClassType raised "Layer 1 slice on type ClassType not supported"."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "slice_gi.py"
     src.write_text(

@@ -1,5 +1,5 @@
-from pcc.py_frontend.py_ast import DictType, DynType, IntType, StrType
-from pcc.py_frontend.type_infer import _Scope, _is_assignable
+from pcc.frontends.python.py_ast import DictType, DynType, IntType, StrType
+from pcc.frontends.python.type_infer import _Scope, _is_assignable
 
 
 class _DictTypeShell:

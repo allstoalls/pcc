@@ -58,9 +58,9 @@ def _defined_function_names(ir_text: str) -> list[str]:
 def test_duplicate_function_definitions_emit_distinct_verified_bodies(
     tmp_path: Path,
 ) -> None:
-    from llvmlite import binding as llvm
+    from tests.owned_ir_validation import verify_ir_text
 
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "duplicate_definition_probe.py"
     output = tmp_path / "duplicate_definition_probe.ll"
@@ -73,8 +73,7 @@ def test_duplicate_function_definitions_emit_distinct_verified_bodies(
         libpython_mode="off",
     )
     ir_text = output.read_text(encoding="utf-8")
-    parsed = llvm.parse_assembly(ir_text)
-    parsed.verify()
+    verify_ir_text(ir_text)
 
     choose_bodies = [
         name
@@ -101,19 +100,19 @@ def test_duplicate_function_definitions_emit_distinct_verified_bodies(
         ) in ir_text
 
 
-@pytest.mark.parametrize("backend", ["llvm", "self"])
+@pytest.mark.parametrize("backend", [pytest.param(None, id="default-self"), pytest.param("self", id="explicit-self")])
 def test_duplicate_function_definition_rebind_preserves_escaped_callable(
     tmp_path: Path,
     monkeypatch,
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
     backend: str,
 ) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / f"duplicate_definition_{backend}.py"
     output = tmp_path / f"duplicate_definition_{backend}.out"
     source.write_text(_SOURCE, encoding="utf-8")
-    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_py_runtime_archive))
+    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_runtime_archive))
 
     compile_python(
         str(source),
@@ -131,19 +130,19 @@ def test_duplicate_function_definition_rebind_preserves_escaped_callable(
     assert result.stdout == "1\n1 12\n"
 
 
-@pytest.mark.parametrize("backend", ["llvm", "self"])
+@pytest.mark.parametrize("backend", [pytest.param(None, id="default-self"), pytest.param("self", id="explicit-self")])
 def test_control_flow_duplicate_definition_rebinds_only_on_executed_path(
     tmp_path: Path,
     monkeypatch,
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
     backend: str,
 ) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / f"control_flow_duplicate_definition_{backend}.py"
     output = tmp_path / f"control_flow_duplicate_definition_{backend}.out"
     source.write_text(_CONTROL_FLOW_SOURCE, encoding="utf-8")
-    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_py_runtime_archive))
+    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_runtime_archive))
 
     compile_python(
         str(source),
@@ -162,7 +161,7 @@ def test_control_flow_duplicate_definition_rebinds_only_on_executed_path(
 
 
 def test_duplicate_definition_codegen_state_is_in_closed_world_host_contract() -> None:
-    from pcc.py_frontend.codegen.host_contract import L1_CODEGEN_HOST_ATTRS
+    from pcc.frontends.python.codegen.host_contract import L1_CODEGEN_HOST_ATTRS
 
     assert {
         "_duplicate_module_function_names",

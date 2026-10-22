@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from pcc.gc_log import RuntimeLogEvent, parse_log_line, parse_log_lines, summarize, validate_gc_event
+from pcc.diagnostics.gc_log import RuntimeLogEvent, parse_log_line, parse_log_lines, summarize, validate_gc_event
 
 
 def test_json_log_event_roundtrip_and_summary():

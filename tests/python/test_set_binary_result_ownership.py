@@ -9,7 +9,7 @@ import pytest
 @pytest.mark.parametrize("operator", ["-", "|", "&", "^"])
 @pytest.mark.parametrize("use", ["assign", "discard"])
 def test_native_set_binary_result_releases_elements(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive,
     operator, use,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
@@ -54,7 +54,7 @@ main()
     binary = tmp_path / "set_result_owner"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         ran = subprocess.run(

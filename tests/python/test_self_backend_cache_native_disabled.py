@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def _function_ir(ir_text: str, name: str) -> str:
     result_type = {"maintain": "void", "plan": "ptr", "publish": "i1"}[name]
     signature = (
         "define external " + result_type
-        + " @user_pcc_py_frontend_pipeline_self_backend_cache_" + name + "("
+        + " @user_pcc_frontends_python_pipeline_self_backend_cache_" + name + "("
     )
     start = ir_text.index(signature)
     end = ir_text.index("\n}", start) + 2
@@ -18,7 +18,7 @@ def _function_ir(ir_text: str, name: str) -> str:
 
 def test_disabled_object_cache_entrypoints_remain_native(tmp_path):
     root = Path(__file__).resolve().parents[2]
-    source = root / "pcc/py_frontend/pipeline_self_backend_cache.py"
+    source = root / "pcc/frontends/python/pipeline_self_backend_cache.py"
     ir_path = tmp_path / "cache.ll"
     compile_python(
         str(source),
@@ -35,7 +35,7 @@ def test_disabled_object_cache_entrypoints_remain_native(tmp_path):
 
 
 def test_disabled_object_cache_does_not_touch_cache_files(monkeypatch, tmp_path):
-    from pcc.py_frontend import pipeline_self_backend_cache as cache
+    from pcc.frontends.python import pipeline_self_backend_cache as cache
 
     monkeypatch.delenv(cache.OBJECT_CACHE_IDENTITY_ENV, raising=False)
     missing = str(tmp_path / "missing.ll")

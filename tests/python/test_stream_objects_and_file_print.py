@@ -86,7 +86,7 @@ print([(type(item.message).__name__, str(item.message)) for item in caught])
 
 
 def test_stream_objects_file_methods_and_file_print_match_cpython(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -105,7 +105,7 @@ def test_stream_objects_file_methods_and_file_print_match_cpython(tmp_path):
 
 
 def test_warnings_warn_writes_category_and_message_to_stderr(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "warn.py"
     exe = tmp_path / "warn.out"

@@ -106,7 +106,7 @@ main()
 
 @pytest.fixture(scope="module")
 def out(compile_and_run):
-    r = compile_and_run(PROGRAM, backend="llvm")
+    r = compile_and_run(PROGRAM, backend="self")
     # The program is written to always run to completion (it never propagates
     # an exception), so a non-zero exit is itself a failure to surface.
     assert r.returncode == 0, r.stdout + r.stderr

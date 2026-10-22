@@ -71,7 +71,7 @@ class NativeObjectError(Exception):
 MAGIC = b"PCCNOBJ\x01"
 _NONE_INDEX = 0xFFFFFFFF
 _MAX_COUNT = 8_000_000  # merged pcc compiler closure exceeds 1M relocations
-_FINAL_LINK_ORDER_LIMIT = 8_388_608  # 23-bit index in private sorted rows
+_FINAL_LINK_RELOCATION_COUNT_MAX = 0xFFFFFFFF  # Mach-O section nreloc is u32
 _MAX_NAME_BYTES = 1_048_576
 
 _HEADER = struct.Struct("<8sII")
@@ -85,18 +85,30 @@ _DATA_IN_CODE = struct.Struct("<QII")
 
 _SYMBOL_EXTERNAL = 1
 _SYMBOL_PRIVATE_EXTERNAL = 2
+_SYMBOL_WEAK_REFERENCE = 4
 _UINT64_MAX = (1 << 64) - 1
 _RELOCATION_SCALAR_COUNT = 9
 _FINAL_LINK_RELOCATION_SCALAR_COUNT = 6
 
 
 def _validate_final_link_relocation_count(count: int) -> None:
-    """The private final-link order packs each index into 23 bits.
+    """Validate the private merged rows against the section's u32 count.
 
-    Individual public objects retain the stricter _MAX_COUNT contract.
+    Individual public objects retain the stricter _MAX_COUNT contract. A
+    transient order key uses up to 31 address bits and 32 index bits, which
+    together remain within the nonnegative signed-i64 arena range.
     """
-    if count < 0 or count > _FINAL_LINK_ORDER_LIMIT:
-        raise NativeObjectError("relocation ordering index exceeds 23 bits")
+    if count < 0 or count > _FINAL_LINK_RELOCATION_COUNT_MAX:
+        raise NativeObjectError("final-link relocation count is outside u32 nreloc range")
+
+
+def _final_link_order_index_base(count: int) -> int:
+    """One power-of-two radix for every encoded/decoded index in a batch."""
+    _validate_final_link_relocation_count(count)
+    base = 1
+    while base < count:
+        base *= 2
+    return base
 
 
 _py_bytes_new: "extern" = extern("py_bytes_new", (c_ptr, c_int64), c_obj)
@@ -167,6 +179,7 @@ class NativeSymbol:
     offset: int
     external: bool
     private_external: bool = False
+    weak_reference: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,6 +230,7 @@ class NativeObject:
         sections: list[Section] | tuple[Section, ...],
         *,
         undefined: list[str] | tuple[str, ...] = (),
+        weak_undefined: tuple[str, ...] = (),
         _consume_relocations: bool = False,
     ) -> "NativeObject":
         """Build the indexed object; normally borrow all source containers.
@@ -229,6 +243,9 @@ class NativeObject:
         """
         source_sections = tuple(sections)
         undefined_names = tuple(undefined)
+        weak_names = set(weak_undefined)
+        if not weak_names.issubset(undefined_names):
+            raise NativeObjectError("weak references must name undefined symbols")
         _validate_source_sections(source_sections, undefined_names)
         if _consume_relocations:
             for section in source_sections:
@@ -262,6 +279,7 @@ class NativeObject:
                 section_index=0,
                 offset=0,
                 external=True,
+                weak_reference=name in weak_names,
             ))
 
         symbol_index = {symbol.name: index for index, symbol in enumerate(symbols)}
@@ -385,7 +403,10 @@ class NativeObject:
     def to_macho(self) -> bytes:
         """Materialise a standard MH_OBJECT at an explicit external boundary."""
         sections, undefined = self.to_sections()
-        return emit_object(sections, undefined=undefined)
+        return emit_object(
+            sections, undefined=undefined,
+            weak_undefined=tuple(s.name for s in self.symbols if s.weak_reference),
+        )
 
     def link_view(self) -> "NativeObjectView":
         """Return the cached-table interface consumed by the Mach-O linker."""
@@ -408,6 +429,10 @@ class PackedNativeSymbol:
     @property
     def private_external(self) -> bool:
         return bool(self.flags & _SYMBOL_PRIVATE_EXTERNAL)
+
+    @property
+    def weak_reference(self) -> bool:
+        return bool(self.flags & _SYMBOL_WEAK_REFERENCE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -494,6 +519,98 @@ class PackedNativeObject:
             )
 
 
+def _validate_source_section_names(
+    section: Section, seen: set[str], seen_zerofill_segments: set[str],
+) -> None:
+    """Validate source names and ordering without reading the payload."""
+    if section.is_zerofill:
+        seen_zerofill_segments.add(section.segname)
+    elif section.segname in seen_zerofill_segments:
+        raise MachOEmitError(
+            f"content section {section.sectname} after a zerofill "
+            "section"
+        )
+    for symbol in section.symbols:
+        if "\0" in symbol.name:
+            raise MachOEmitError(
+                f"symbol name {symbol.name!r} contains NUL"
+            )
+        if symbol.name in seen:
+            raise MachOEmitError(
+                f"duplicate symbol {symbol.name!r}"
+            )
+        seen.add(symbol.name)
+
+
+def _validate_source_undefined_names(undefined: tuple[str, ...], seen: set[str]) -> None:
+    """Complete the source-name domain before validating relocations."""
+    if not seen:
+        raise MachOEmitError("at least one defined symbol is required")
+    for name in undefined:
+        if not isinstance(name, str) or not name or not name.isascii():
+            raise MachOEmitError(f"bad undefined symbol name {name!r}")
+        if "\0" in name:
+            raise MachOEmitError(f"symbol name {name!r} contains NUL")
+        if name in seen:
+            raise MachOEmitError(
+                f"symbol {name!r} both defined and undefined"
+            )
+        seen.add(name)
+
+
+def _validate_source_section_relocations(
+    section: Section, known: dict[str, int],
+    section_by_name: dict[tuple[str, str], Section], relocations,
+    count: int, proven: int = 0,
+) -> None:
+    """Validate one payload window against the complete source metadata."""
+    relocation_offsets: set[int] = set()
+    offset_bitmap = _relocation_offset_bitmap(len(section.data), count)
+    if not 0 <= proven <= count:
+        raise MachOEmitError(
+            "proven relocation prefix exceeds the records of "
+            f"{section.segname},{section.sectname}"
+        )
+    if proven:
+        data_size = len(section.data)
+        for index in range(count):
+            relocation = relocations[index]
+            if index < proven:
+                if not (
+                    0 <= relocation.offset
+                    <= data_size - (1 << relocation.length)
+                ):
+                    raise MachOEmitError(
+                        f"relocation offset {relocation.offset} "
+                        f"outside {section.sectname}"
+                    )
+            else:
+                _validate_relocation(
+                    section, relocation, known, section_by_name,
+                )
+            if not _claim_relocation_offset(
+                relocation.offset, offset_bitmap, relocation_offsets,
+            ):
+                raise MachOEmitError(
+                    "multiple relocation requests at offset "
+                    f"{relocation.offset} in {section.segname},"
+                    f"{section.sectname}"
+                )
+        return
+    for relocation in relocations:
+        _validate_relocation(
+            section, relocation, known, section_by_name,
+        )
+        if not _claim_relocation_offset(
+            relocation.offset, offset_bitmap, relocation_offsets,
+        ):
+            raise MachOEmitError(
+                "multiple relocation requests at offset "
+                f"{relocation.offset} in {section.segname},"
+                f"{section.sectname}"
+            )
+
+
 def _validate_source_sections(
     sections: tuple[Section, ...],
     undefined: tuple[str, ...],
@@ -501,6 +618,7 @@ def _validate_source_sections(
     relocation_source=None,
     relocation_counts=None,
     proven_relocations=None,
+    compact_budget=None,
 ) -> None:
     # ``proven_relocations[i]`` leading records of section i were validated
     # at packed decode against their input section, and the merge that
@@ -515,7 +633,17 @@ def _validate_source_sections(
         seen: set[str] = set()
         seen_zerofill_segments: set[str] = set()
         for section_index, section in enumerate(sections):
-            if relocation_source is None:
+            if compact_budget is not None:
+                if relocation_source is None:
+                    _validate_section(section, compact_budget=compact_budget)
+                else:
+                    _validate_section(
+                        section,
+                        relocations=relocation_source(section_index),
+                        relocation_count=relocation_counts[section_index],
+                        compact_budget=compact_budget,
+                    )
+            elif relocation_source is None:
                 _validate_section(section)
             else:
                 _validate_section(
@@ -523,47 +651,20 @@ def _validate_source_sections(
                     relocations=relocation_source(section_index),
                     relocation_count=relocation_counts[section_index],
                 )
-            if section.is_zerofill:
-                seen_zerofill_segments.add(section.segname)
-            elif section.segname in seen_zerofill_segments:
-                raise MachOEmitError(
-                    f"content section {section.sectname} after a zerofill "
-                    "section"
-                )
-            for symbol in section.symbols:
-                if "\0" in symbol.name:
-                    raise MachOEmitError(
-                        f"symbol name {symbol.name!r} contains NUL"
-                    )
-                if symbol.name in seen:
-                    raise MachOEmitError(
-                        f"duplicate symbol {symbol.name!r}"
-                    )
-                seen.add(symbol.name)
-        if not seen:
-            raise MachOEmitError("at least one defined symbol is required")
-        for name in undefined:
-            if not isinstance(name, str) or not name or not name.isascii():
-                raise MachOEmitError(f"bad undefined symbol name {name!r}")
-            if "\0" in name:
-                raise MachOEmitError(f"symbol name {name!r} contains NUL")
-            if name in seen:
-                raise MachOEmitError(
-                    f"symbol {name!r} both defined and undefined"
-                )
-            seen.add(name)
+            _validate_source_section_names(
+                section, seen, seen_zerofill_segments,
+            )
+        _validate_source_undefined_names(undefined, seen)
         section_by_name = {
             (section.segname, section.sectname): section
             for section in sections
         }
         known = {name: index for index, name in enumerate(seen)}
         for section_index, section in enumerate(sections):
-            relocation_offsets: set[int] = set()
             count = (
                 len(section.relocations) if relocation_counts is None
                 else relocation_counts[section_index]
             )
-            offset_bitmap = _relocation_offset_bitmap(len(section.data), count)
             relocations = (
                 section.relocations if relocation_source is None
                 else relocation_source(section_index)
@@ -571,49 +672,9 @@ def _validate_source_sections(
             proven = 0
             if proven_relocations is not None and relocation_source is None:
                 proven = proven_relocations[section_index]
-                if not 0 <= proven <= count:
-                    raise MachOEmitError(
-                        "proven relocation prefix exceeds the records of "
-                        f"{section.segname},{section.sectname}"
-                    )
-            if proven:
-                data_size = len(section.data)
-                for index in range(count):
-                    relocation = relocations[index]
-                    if index < proven:
-                        if not (
-                            0 <= relocation.offset
-                            <= data_size - (1 << relocation.length)
-                        ):
-                            raise MachOEmitError(
-                                f"relocation offset {relocation.offset} "
-                                f"outside {section.sectname}"
-                            )
-                    else:
-                        _validate_relocation(
-                            section, relocation, known, section_by_name,
-                        )
-                    if not _claim_relocation_offset(
-                        relocation.offset, offset_bitmap, relocation_offsets,
-                    ):
-                        raise MachOEmitError(
-                            "multiple relocation requests at offset "
-                            f"{relocation.offset} in {section.segname},"
-                            f"{section.sectname}"
-                        )
-                continue
-            for relocation in relocations:
-                _validate_relocation(
-                    section, relocation, known, section_by_name,
-                )
-                if not _claim_relocation_offset(
-                    relocation.offset, offset_bitmap, relocation_offsets,
-                ):
-                    raise MachOEmitError(
-                        "multiple relocation requests at offset "
-                        f"{relocation.offset} in {section.segname},"
-                        f"{section.sectname}"
-                    )
+            _validate_source_section_relocations(
+                section, known, section_by_name, relocations, count, proven,
+            )
     except MachOEmitError as exc:
         raise NativeObjectError(str(exc)) from exc
 
@@ -659,6 +720,10 @@ def _validate_native_object(obj: NativeObject) -> None:
             symbol.private_external, bool
         ):
             raise NativeObjectError("symbol visibility flags must be boolean")
+        if not isinstance(symbol.weak_reference, bool):
+            raise NativeObjectError("weak reference flag must be boolean")
+        if symbol.weak_reference and symbol.section_index:
+            raise NativeObjectError("weak reference must be undefined")
         if symbol.section_index == 0:
             saw_undefined = True
             if not symbol.external or symbol.private_external or symbol.offset != 0:
@@ -939,7 +1004,7 @@ class NativeObjectView:
                 "name": symbol.name,
                 "n_type": n_type,
                 "n_sect": symbol.section_index,
-                "n_desc": 0,
+                "n_desc": spec.N_WEAK_REF if symbol.weak_reference else 0,
                 "n_value": n_value,
             })
 
@@ -1001,6 +1066,19 @@ class NativeObjectView:
         if index not in self._relocations:
             self._relocations[index] = _raw_relocations(self.native.sections[index])
         return self._relocations[index]
+
+    def relocation_infos(self, section: dict) -> list[int]:
+        """The packed r_info word of each ``relocations`` row (MachOObject protocol)."""
+        out = []
+        for row in self.relocations(section):
+            out.append(
+                row["r_symbolnum"]
+                | (row["r_pcrel"] << spec.RELOC_PCREL_SHIFT)
+                | (row["r_length"] << spec.RELOC_LENGTH_SHIFT)
+                | (row["r_extern"] << spec.RELOC_EXTERN_SHIFT)
+                | (row["r_type"] << spec.RELOC_TYPE_SHIFT)
+            )
+        return out
 
     def iter_relocations(self, section: dict, *, ordered: bool = True):
         index = self._relocation_section_index(section)
@@ -1232,6 +1310,7 @@ def encode_native_object(obj: NativeObject) -> bytes:
                 _SYMBOL_PRIVATE_EXTERNAL
                 if symbol.private_external else 0
             )
+            | (_SYMBOL_WEAK_REFERENCE if symbol.weak_reference else 0)
         )
         out.append(_SYMBOL.pack(symbol.section_index, symbol.offset, flags))
     for section in obj.sections:
@@ -1279,6 +1358,77 @@ def _source_symbols_in_offset_order(section: Section):
     return section.symbols
 
 
+def _final_section_rows(
+    source_sections, payloads, addrs, relocation_counts=None, *, payload_sizes=None,
+) -> list[dict]:
+    """The common final section numbering/file layout for owned views."""
+    result = []
+    file_size = 0
+    for index, section in enumerate(source_sections):
+        if section.vm_size == section.zerofill_size and section.zerofill_size:
+            file_offset = 0
+        else:
+            file_offset = _align_up(file_size, section.align_log2)
+            payload_size = (
+                len(payloads[index]) if payload_sizes is None
+                else payload_sizes[index]
+            )
+            file_size = file_offset + payload_size
+        if relocation_counts is None:
+            count = len(section.relocations)
+            for relocation in section.relocations:
+                if relocation.addend:
+                    count += 1
+                if relocation.type == spec.ARM64_RELOC_SUBTRACTOR:
+                    count += 1
+        else:
+            count = relocation_counts[index]
+        result.append({
+            "segname_str": section.segname,
+            "sectname_str": section.sectname,
+            "flags": section.flags,
+            "align": section.align_log2,
+            "addr": addrs[index],
+            "offset": file_offset,
+            "size": section.vm_size,
+            "nreloc": count,
+            "_pcc_source_index": index,
+        })
+
+    return result
+
+
+def _final_symbol_rows(source_sections, undefined_names, weak_names, addrs) -> list[dict]:
+    """Canonical locals/externals/undefined numbering shared by preparation."""
+    result = []
+    for external in (False, True):
+        for index, section in enumerate(source_sections, start=1):
+            for symbol in _source_symbols_in_offset_order(section):
+                if symbol.external != external:
+                    continue
+                n_type = spec.N_SECT
+                if symbol.external:
+                    n_type |= spec.N_EXT
+                if symbol.private_external:
+                    n_type |= spec.N_PEXT
+                result.append({
+                    "name": symbol.name,
+                    "n_type": n_type,
+                    "n_sect": index,
+                    "n_desc": 0,
+                    "n_value": addrs[index - 1] + symbol.offset,
+                })
+    for name in sorted(undefined_names):
+        result.append({
+            "name": name,
+            "n_type": spec.N_UNDF | spec.N_EXT,
+            "n_sect": 0,
+            "n_desc": spec.N_WEAK_REF if name in weak_names else 0,
+            "n_value": 0,
+        })
+    return result
+
+
 class OwnedMergedSourceView:
     """Final-link view over one validated, privately owned section merge.
 
@@ -1289,13 +1439,41 @@ class OwnedMergedSourceView:
     seven-million-record relocation graph before executable layout.
     """
 
-    def __init__(self, sections, *, undefined=(), proven_relocations=None) -> None:
+    def __init__(
+        self, sections, *, undefined=(), weak_undefined=(),
+        proven_relocations=None, compact_budget=None, _compact_rows=None, _row_storage=None,
+        _payload_storage=None,
+    ) -> None:
+        import sys as execution_runtime
+        if execution_runtime.implementation.name == "cpython":
+            if _compact_rows is not None or _row_storage is not None or _payload_storage is not None:
+                from .macho_host_prepare import _initialize_checked_compact_view
+                try:
+                    _initialize_checked_compact_view(
+                        self, sections, undefined, weak_undefined, _compact_rows,
+                        compact_budget, _row_storage=_row_storage, _payload_storage=_payload_storage,
+                    )
+                finally:
+                    sections = undefined = weak_undefined = _compact_rows = _row_storage = _payload_storage = None
+                return
+        if _compact_rows is not None or _row_storage is not None or _payload_storage is not None:
+            raise NativeObjectError("compact source rows require the explicit host budget")
         source_sections = tuple(sections)
         undefined_names = tuple(undefined)
-        _validate_source_sections(
-            source_sections, undefined_names,
-            proven_relocations=proven_relocations,
-        )
+        weak_names = set(weak_undefined)
+        if not weak_names.issubset(undefined_names):
+            raise NativeObjectError("weak references must name undefined symbols")
+        if compact_budget is None:
+            _validate_source_sections(
+                source_sections, undefined_names,
+                proven_relocations=proven_relocations,
+            )
+        else:
+            _validate_source_sections(
+                source_sections, undefined_names,
+                proven_relocations=proven_relocations,
+                compact_budget=compact_budget,
+            )
         self._source_sections = source_sections
         self._payloads = [section.data for section in source_sections]
 
@@ -1350,58 +1528,8 @@ class OwnedMergedSourceView:
                     target_value.to_bytes(width, "little")
                 )
 
-        self._sections = []
-        file_size = 0
-        for index, section in enumerate(source_sections):
-            if section.vm_size == section.zerofill_size and section.zerofill_size:
-                file_offset = 0
-            else:
-                file_offset = _align_up(file_size, section.align_log2)
-                file_size = file_offset + len(self._payloads[index])
-            count = len(section.relocations)
-            for relocation in section.relocations:
-                if relocation.addend:
-                    count += 1
-                if relocation.type == spec.ARM64_RELOC_SUBTRACTOR:
-                    count += 1
-            self._sections.append({
-                "segname_str": section.segname,
-                "sectname_str": section.sectname,
-                "flags": section.flags,
-                "align": section.align_log2,
-                "addr": addrs[index],
-                "offset": file_offset,
-                "size": section.vm_size,
-                "nreloc": count,
-                "_pcc_source_index": index,
-            })
-
-        self._symbols = []
-        for external in (False, True):
-            for index, section in enumerate(source_sections, start=1):
-                for symbol in _source_symbols_in_offset_order(section):
-                    if symbol.external != external:
-                        continue
-                    n_type = spec.N_SECT
-                    if symbol.external:
-                        n_type |= spec.N_EXT
-                    if symbol.private_external:
-                        n_type |= spec.N_PEXT
-                    self._symbols.append({
-                        "name": symbol.name,
-                        "n_type": n_type,
-                        "n_sect": index,
-                        "n_desc": 0,
-                        "n_value": addrs[index - 1] + symbol.offset,
-                    })
-        for name in sorted(undefined_names):
-            self._symbols.append({
-                "name": name,
-                "n_type": spec.N_UNDF | spec.N_EXT,
-                "n_sect": 0,
-                "n_desc": 0,
-                "n_value": 0,
-            })
+        self._sections = _final_section_rows(source_sections, self._payloads, addrs)
+        self._symbols = _final_symbol_rows(source_sections, undefined_names, weak_names, addrs)
         self._symbol_index = {
             symbol["name"]: index for index, symbol in enumerate(self._symbols)
         }
@@ -1413,6 +1541,19 @@ class OwnedMergedSourceView:
         # those six scalar fields while the already-validated source records
         # are still here, then retire their managed-object graph. The public
         # NativeObject and relocatable-link representations are unchanged.
+        import sys as execution_runtime
+        if execution_runtime.implementation.name == "cpython":
+            if compact_budget is not None:
+                from .macho_host_relocations import pack_owned_final_link_rows
+                self._raw_relocations = pack_owned_final_link_rows(
+                    source_sections, self._payloads, self._sections,
+                    self._symbols, self._symbol_index, self._section_index,
+                    addrs, undefined_names, weak_names,
+                    source_container=sections,
+                    compact_budget=compact_budget,
+                )
+                self._source_sections = ()
+                return
         self._raw_relocations = []
         for section_index, section in enumerate(source_sections):
             records = CompilerIntArena(
@@ -1449,14 +1590,36 @@ class OwnedMergedSourceView:
         index = section.get("_pcc_source_index")
         if not isinstance(index, int) or not 0 <= index < len(self._payloads):
             raise NativeObjectError("section does not belong to this source view")
+        import sys as execution_runtime
+        if execution_runtime.implementation.name == "cpython":
+            if getattr(self, "_host_payload_store", None) is not None:
+                from .macho_host_prepare import copy_staged_section_data
+                return copy_staged_section_data(self, index)
         return self._payloads[index]
+
+    def take_section_data(self, section):
+        """Return a section's payload and retire it from this view.
+
+        The owned final link copies each payload into its mutable output once
+        and never reads the source again; retiring it there keeps one copy of
+        the image resident instead of two. A view is single-use afterwards.
+        """
+        import sys as execution_runtime
+        if execution_runtime.implementation.name == "cpython":
+            if getattr(self, "_host_payload_store", None) is not None:
+                # Only the private output owner can admit its growing aggregate
+                # mutable graph before consuming a file-owned backing.
+                raise NativeObjectError("staged payload transfer requires owned output")
+        payload = self.section_data(section)
+        self._payloads[section["_pcc_source_index"]] = b""
+        return payload
 
     def iter_relocations(self, section, *, ordered=True):
         index = section.get("_pcc_source_index")
         if not isinstance(index, int) or not 0 <= index < len(self._raw_relocations):
             raise NativeObjectError("section does not belong to this source view")
         return self._iter_section_relocations(
-            self._raw_relocations[index], ordered, False,
+            self.compact_relocation_rows(section), ordered, False,
         )
 
     def iter_compact_relocations(self, section, *, ordered=True):
@@ -1470,6 +1633,11 @@ class OwnedMergedSourceView:
         index = section.get("_pcc_source_index")
         if not isinstance(index, int) or not 0 <= index < len(self._raw_relocations):
             raise NativeObjectError("section does not belong to this source view")
+        import sys as execution_runtime
+        if execution_runtime.implementation.name == "cpython":
+            if getattr(self, "_host_row_store", None) is not None:
+                from .macho_host_prepare import copy_staged_relocation_rows
+                return copy_staged_relocation_rows(self, index)
         rows = self._raw_relocations[index]
         if len(rows) % _FINAL_LINK_RELOCATION.size:
             raise NativeObjectError("final-link relocation rows are truncated")
@@ -1481,33 +1649,52 @@ class OwnedMergedSourceView:
             self.compact_relocation_rows(section), ordered,
         )
 
+    def compact_relocation_index_list(self, section, *, ordered=True) -> list[int]:
+        """``iter_compact_relocation_indices`` as one list, for hot linker loops."""
+        return self._section_relocation_index_list(
+            self.compact_relocation_rows(section), ordered,
+        )
+
     def _iter_section_relocation_indices(self, rows: bytes, ordered: bool):
-        count = len(rows) // _FINAL_LINK_RELOCATION.size
+        for index in self._section_relocation_index_list(rows, ordered):
+            yield index
+
+    def _section_relocation_index_list(self, rows: bytes, ordered: bool) -> list[int]:
+        # A list, not a generator: the final link walks every index, and under
+        # pcc1 each generator resume went through py_obj_next (a fifth of a
+        # prior-gate link).
+        row_size = _FINAL_LINK_RELOCATION.size
+        if len(rows) % row_size:
+            raise NativeObjectError("final-link relocation rows are truncated")
+        count = len(rows) // row_size
         _validate_final_link_relocation_count(count)
-        order_capacity = 0
-        if ordered:
-            order_capacity = count
-        order = CompilerIntArena(order_capacity)
-        try:
-            if ordered:
-                for index in range(count):
-                    start = index * _FINAL_LINK_RELOCATION.size
-                    if _NATIVE_PAYLOAD_READS:
-                        offset = load_i32(
-                            rows, abi_constant("object.bytes.data_offset") + start
-                        ) & 0xFFFFFFFF
-                    else:
-                        offset = _U32.unpack_from(rows, start)[0]
-                    if offset < 0 or offset > 0x7FFFFFFF:
-                        raise NativeObjectError(
-                            "relocation offset exceeds signed r_address range"
-                        )
-                    order.append((0x7FFFFFFF - offset) * _FINAL_LINK_ORDER_LIMIT + index)
-                order.sort_nonnegative_radix()
+        indices: list[int] = []
+        if not ordered:
             for index in range(count):
-                yield order.get_unchecked(index) & 0x7FFFFF if ordered else index
+                indices.append(index)
+            return indices
+        index_base = _final_link_order_index_base(count)
+        index_mask = index_base - 1
+        order = CompilerIntArena(count)
+        try:
+            data_offset = abi_constant("object.bytes.data_offset") if _NATIVE_PAYLOAD_READS else 0
+            for index in range(count):
+                start = index * row_size
+                if _NATIVE_PAYLOAD_READS:
+                    offset = load_i32(rows, data_offset + start) & 0xFFFFFFFF
+                else:
+                    offset = _U32.unpack_from(rows, start)[0]
+                if offset < 0 or offset > 0x7FFFFFFF:
+                    raise NativeObjectError(
+                        "relocation offset exceeds signed r_address range"
+                    )
+                order.append((0x7FFFFFFF - offset) * index_base + index)
+            order.sort_nonnegative_radix()
+            for index in range(count):
+                indices.append(order.get_unchecked(index) & index_mask)
         finally:
             order.close()
+        return indices
 
     def _iter_section_relocations(
         self,
@@ -1515,7 +1702,7 @@ class OwnedMergedSourceView:
         ordered: bool,
         compact: bool,
     ):
-        for source_index in self._iter_section_relocation_indices(rows, ordered):
+        for source_index in self._section_relocation_index_list(rows, ordered):
             start = source_index * _FINAL_LINK_RELOCATION.size
             if _NATIVE_PAYLOAD_READS:
                 cursor = abi_constant("object.bytes.data_offset") + start
@@ -1717,7 +1904,7 @@ def decode_native_object(data: bytes) -> NativeObject:
     for _index in range(symbol_count):
         name = reader.name("symbol")
         section_index, offset, flags = reader.unpack(_SYMBOL)
-        if flags & ~(_SYMBOL_EXTERNAL | _SYMBOL_PRIVATE_EXTERNAL):
+        if flags & ~(_SYMBOL_EXTERNAL | _SYMBOL_PRIVATE_EXTERNAL | _SYMBOL_WEAK_REFERENCE):
             raise NativeObjectError("native symbol has unknown flag bits")
         symbols.append(NativeSymbol(
             name=name,
@@ -1725,6 +1912,7 @@ def decode_native_object(data: bytes) -> NativeObject:
             offset=offset,
             external=bool(flags & _SYMBOL_EXTERNAL),
             private_external=bool(flags & _SYMBOL_PRIVATE_EXTERNAL),
+            weak_reference=bool(flags & _SYMBOL_WEAK_REFERENCE),
         ))
 
     sections: list[NativeSection] = []
@@ -1803,7 +1991,7 @@ def decode_packed_native_object(data: bytes) -> PackedNativeObject:
     for _index in range(symbol_count):
         name = reader.name("symbol")
         section_index, offset, flags = reader.unpack(_SYMBOL)
-        if flags & ~(_SYMBOL_EXTERNAL | _SYMBOL_PRIVATE_EXTERNAL):
+        if flags & ~(_SYMBOL_EXTERNAL | _SYMBOL_PRIVATE_EXTERNAL | _SYMBOL_WEAK_REFERENCE):
             raise NativeObjectError("native symbol has unknown flag bits")
         symbols.append(PackedNativeSymbol(name, section_index, offset, flags))
 
@@ -1865,13 +2053,41 @@ def decode_packed_native_object(data: bytes) -> PackedNativeObject:
 
 def _packed_relocation_sort_indices(packed: PackedNativeObject, section: PackedNativeSection):
     """Stable descending order for the uncommon non-monotone wire table."""
-    return sorted(
-        range(section.relocation_count),
-        key=lambda index: _relocation_offset_at(
-            packed.encoded, section.relocation_offset + index * _RELOCATION.size,
-        ),
-        reverse=True,
-    )
+    data = packed.encoded
+    start = section.relocation_offset
+    row_size = _RELOCATION.size
+    offsets: list = []
+    for index in range(section.relocation_count):
+        offsets.append(_relocation_offset_at(data, start + index * row_size))
+    return _descending_stable_order(offsets)
+
+
+def _descending_stable_order(offsets: list) -> list:
+    """Indices of ``offsets`` by descending value, ties in ascending index.
+
+    The order ``sorted(range(n), key=offsets.__getitem__, reverse=True)``
+    gives. Offsets within 31 bits go through one radix pass over an int
+    arena, as the final link does: under pcc1 the keyed ``sorted`` called a
+    lambda per row and drained a generator (two thirds of a prior-gate
+    merge's relocation reads). Larger offsets keep ``sorted``.
+    """
+    count = len(offsets)
+    for offset in offsets:
+        if offset > 0x7FFFFFFF:
+            return sorted(range(count), key=lambda index: offsets[index], reverse=True)
+    index_base = _final_link_order_index_base(count)
+    index_mask = index_base - 1
+    order = CompilerIntArena(count)
+    indices: list[int] = []
+    try:
+        for index in range(count):
+            order.append((0x7FFFFFFF - offsets[index]) * index_base + index)
+        order.sort_nonnegative_radix()
+        for index in range(count):
+            indices.append(order.get_unchecked(index) & index_mask)
+    finally:
+        order.close()
+    return indices
 
 
 def _packed_section_target_relocations(packed: PackedNativeObject, section_index: int):
@@ -1977,6 +2193,10 @@ def _validate_packed_native_object(
         seen_names.add(symbol.name)
         if not 0 <= symbol.offset <= _UINT64_MAX:
             raise NativeObjectError("symbol offset is outside uint64 range")
+        if not isinstance(symbol.weak_reference, bool):
+            raise NativeObjectError("weak reference flag must be boolean")
+        if symbol.weak_reference and symbol.section_index:
+            raise NativeObjectError("weak reference must be undefined")
         if symbol.section_index == 0:
             saw_undefined = True
             if (

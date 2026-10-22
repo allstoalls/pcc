@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 from pcc1_gate import find_current_pcc1
 
 
@@ -151,12 +151,12 @@ def _assert_channel_output(stdout: str) -> None:
 def test_bounded_mpsc_oneshot_select2_sequential_contract(
     tmp_path: Path,
     monkeypatch,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     source = tmp_path / "virtual_thread_channels.py"
     executable = tmp_path / "virtual_thread_channels"
     source.write_text(CHANNEL_SOURCE, encoding="utf-8")
-    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_py_runtime_archive))
+    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_runtime_archive))
 
     compile_python(
         str(source),
@@ -179,7 +179,7 @@ def test_bounded_mpsc_oneshot_select2_sequential_contract(
 @pytest.mark.xdist_group(name="pcc1_vthread_channels")
 def test_current_pcc1_self_no_libpython_channels(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """Compile once with current pcc1/self, then exercise channels on GC0..4."""
     pcc1 = find_current_pcc1(REPO)
@@ -191,7 +191,7 @@ def test_current_pcc1_self_no_libpython_channels(
     source.write_text(CHANNEL_SOURCE, encoding="utf-8")
     environment = dict(os.environ)
     environment.pop("LC_ALL", None)
-    environment["PCC_RUNTIME_ARCHIVE"] = str(pcc_py_runtime_archive)
+    environment["PCC_RUNTIME_ARCHIVE"] = str(pcc_runtime_archive)
     command = [
         str(pcc1),
         "--backend",

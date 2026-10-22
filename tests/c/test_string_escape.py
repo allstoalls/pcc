@@ -6,15 +6,15 @@ this_dir = os.path.dirname(os.path.abspath(__file__))
 # rely on tests/conftest.py's global Path.resolve/dirname shim.
 parent_dir = os.path.dirname(os.path.dirname(this_dir))
 sys.path.insert(0, parent_dir)
-from pcc.codegen.c_codegen import LLVMCodeGenerator
-from pcc.parse.c_parser import CParser
+from pcc.frontends.c.codegen.c_codegen import CCodeGenerator
+from pcc.frontends.c.parse.c_parser import CParser
 import unittest
 
 
 class TestStringEscape(unittest.TestCase):
     def test_escape_processing(self):
         """Test that escape sequences are processed in the codegen."""
-        cg = LLVMCodeGenerator()
+        cg = CCodeGenerator()
         assert cg._process_escapes(r"hello\nworld") == "hello\nworld"
         assert cg._process_escapes(r"tab\there") == "tab\there"
         assert cg._process_escapes(r"back\\slash") == "back\\slash"
@@ -24,7 +24,7 @@ class TestStringEscape(unittest.TestCase):
 
     def test_string_with_newline_in_ir(self):
         """Test that \\n in string becomes actual newline byte in IR."""
-        cg = LLVMCodeGenerator()
+        cg = CCodeGenerator()
         p = CParser()
         ast = p.parse(r"""
             int main(){

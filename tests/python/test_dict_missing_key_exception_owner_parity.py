@@ -1,7 +1,7 @@
 """C/strict parity for the dict missing-key exception owner.
 
 `py_raise` increfs the exception it stores in TLS (see
-`pcc/py_runtime/src/py_exc_tls.c`), so a caller that created the exception
+`pcc/runtime/src/py_exc_tls.c`), so a caller that created the exception
 still owns its own reference and must release it.  The C runtime does this at
 every dict missing-key site; the strict pcc-Python mirror did not, leaking one
 KeyError per missing-key subscript, pop or popitem.

@@ -1,6 +1,6 @@
 import json
 
-from pcc.pass_explain import PassDecision, format_pass_explain
+from pcc.diagnostics.pass_explain import PassDecision, format_pass_explain
 
 
 def test_pass_explain_json():

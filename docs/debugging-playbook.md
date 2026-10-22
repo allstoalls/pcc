@@ -8,7 +8,7 @@ Section numbers (`§1`..`§12`) stay stable for investigation links.
 
 ### 1. Make the failure deterministic first
 
-Don't start by reading all of `c_codegen.py` or `pcc/py_frontend/codegen/`.
+Don't start by reading all of `c_codegen.py` or `pcc/frontends/python/codegen/`.
 Make it repeatable before guessing the cause: fix the random seed; replace
 filesystem/time input with constants; run with `-n0`; isolate one test file, not
 a whole suite. If the failure is random, removing the randomness IS the first job.
@@ -31,11 +31,11 @@ LLVM/llvmlite cannot execute a compiler product step or satisfy pcc1 ownership;
 see the [dependency contract](compiler-contract.md#dependency-ownership-contract-maintainer-directive-2026-09-07).
 
 If the failure looks like a codegen / IR-builder regression in
-`pcc/llvm_capi/`, do not guess. Re-run the same minimized repro under
+`pcc/ir/`, do not guess. Re-run the same minimized repro under
 `llvmlite`:
 
 ```bash
-PCC_USE_LLVMLITE_C=1 env -u LC_ALL uv run pytest \
+PCC_USE_LLVMLITE_C=1 uv run pytest \
   'tests/c/test_clang_compat.py::test_unsigned_int_to_float_conversion_uses_unsigned_semantics' -q -n0
 ```
 
@@ -83,7 +83,7 @@ the repo (see §9).
   the *current* harness before debugging `pcc`. Manifests drift.
 - **Parser cache (mandatory):** after changing parser grammar or lexer token
   sets, **bump the default PLY cache version** in
-  [`pcc/parse/c_parser.py`](../pcc/parse/c_parser.py). Otherwise the repo silently
+  [`pcc/frontends/c/parse/c_parser.py`](../pcc/frontends/c/parse/c_parser.py). Otherwise the repo silently
   keeps the old `yacctab`/`lextab` and the parser looks "still broken" after the
   source fix. Then run a focused parser regression first, then one representative
   compile/runtime case — not a large project suite.
@@ -97,6 +97,9 @@ When a compiled stage binary segfaults, LLDB should answer two questions:
 
 1. Which generated/project function first received invalid data?
 2. What runtime object did the bad pointer actually point to?
+
+The locale prefix below is only a workaround for LLDB locale startup errors;
+otherwise omit it. See [locale troubleshooting](developer-reference.md#locale-troubleshooting).
 
 ```bash
 # Run + backtrace on crash. Always with a hard timeout.
@@ -117,15 +120,15 @@ suspect object at the stop. Rules:
   the *caller* passed a bad object; walk to the first `user_*`/project frame.
 - Validate object layout with `register read`/`memory read`: the pcc-Python type
   tag is at `obj + 8` (e.g. `PY_TYPE_STR == 4`); confirm offsets against
-  `pcc/py_runtime/include/py_runtime.h` and `pcc/py_runtime/src/py_internal.h`.
+  `pcc/runtime/include/py_runtime.h` and `pcc/runtime/src/py_internal.h`.
 - Decode the *object*, not just the address (a `str` param that's actually a
   `Value` whose `_ref` points at `"%.6"` is a dispatch/type-flow bug above the
   runtime). LLDB localizes; the fix still needs a minimized regression test.
 
 ### 9. Do not stack unverified edits in shared codegen
 
-`pcc/codegen/c_codegen.py` and
-`pcc/py_frontend/codegen/{*_lowering,native_*}.py` are shared by almost every
+`pcc/frontends/c/codegen/c_codegen.py` and
+`pcc/frontends/python/codegen/{*_lowering,native_*}.py` are shared by almost every
 meaningful path. `layer1.py` is now a thin facade; the broad blast radius lives
 in the lowering mixins and native module lowering files. A "small local
 cleanup" there can break Lua, SQLite, GCC torture, GC backends, and unrelated

@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
+import platform
+import sys
+
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend import pipeline_self_backend_link as self_link
-from pcc.py_frontend import pipeline_self_link as link_contract
+from pcc.frontends.python import pipeline
+from pcc.frontends.python import pipeline_self_backend_link as self_link
+from pcc.frontends.python import pipeline_self_link as link_contract
 
 
-@pytest.mark.parametrize("manifest_input", [False, True])
-@pytest.mark.parametrize("sync", [False, True])
-def test_profiled_packed_native_link_executes_without_a_host_interpreter(tmp_path, monkeypatch, manifest_input, sync):
+def _profiled_packed_native_image(tmp_path, monkeypatch, manifest_input, sync):
     import json
-    import subprocess
-    from pcc.backend import macho_exec
+    from pcc.backend import macho_exec, macho_spec
     from pcc.backend.arm64_asm_driver import assemble_file
+    from pcc.backend.macho_codesign import build_signature, parse_signature
     from pcc.backend.native_object import encode_native_object_from_sections
 
     sections, undefined = assemble_file(".section __TEXT,__text,regular,pure_instructions\n.globl _main\n_main:\n  movz x0, #42\n  ret\n")
@@ -46,6 +47,7 @@ def test_profiled_packed_native_link_executes_without_a_host_interpreter(tmp_pat
             pcc_native_object_inputs=() if manifest_input else (str(packed),),
             pcc_internal_input_manifest=str(manifest) if manifest_input else None,
             link_profile_path=str(profile),
+            target_triple="arm64-apple-darwin",
             resolve_self_link_mode=lambda **_kwargs: "pcc",
             validate_pcc_self_link_surface=lambda **kwargs: None,
             repo_root_for_link=forbidden, host_python_command=forbidden,
@@ -58,8 +60,19 @@ def test_profiled_packed_native_link_executes_without_a_host_interpreter(tmp_pat
             profile_begin=lambda profile: 0, profile_end=lambda *args: None,
             publish_sync_enabled=lambda: sync,
         )
-    result = subprocess.run([str(final)], capture_output=True, timeout=10)
-    assert result.returncode == 42, result.stderr
+    image = final.read_bytes()
+    header = macho_spec.parse_object(image).header
+    assert header["filetype"] == macho_spec.MH_EXECUTE
+    assert header["cputype"] == macho_spec.CPU_TYPE_ARM64
+    assert header["cpusubtype"] == macho_spec.CPU_SUBTYPE_ARM64_ALL
+    signature = parse_signature(image)
+    assert signature.identifier == b"pcc-linked"
+    assert image[signature.dataoff:] == build_signature(
+        image[:signature.dataoff], identifier=signature.identifier,
+        exec_seg_base=signature.exec_seg_base,
+        exec_seg_limit=signature.exec_seg_limit,
+        exec_seg_flags=signature.exec_seg_flags,
+    )
     assert transferred == [True]
     receipt = json.loads(profile.read_text())
     assert receipt["inputs"] == {"asm": 0, "native_object": 1, "object": 0, "archive": 0}
@@ -67,6 +80,32 @@ def test_profiled_packed_native_link_executes_without_a_host_interpreter(tmp_pat
     assert receipt["phases_ms"]["sign"] > 0
     assert receipt["phases_ms"]["validate"] > 0
     pipeline._record_macho_link_profile({}, str(profile))
+    return final
+
+
+@pytest.mark.parametrize("manifest_input", [False, True])
+@pytest.mark.parametrize("sync", [False, True])
+def test_profiled_packed_native_link_publishes_owned_macho_without_a_host_interpreter(
+    tmp_path, monkeypatch, manifest_input, sync,
+):
+    """Cross-target owned link/publication evidence; does not execute Mach-O."""
+    _profiled_packed_native_image(tmp_path, monkeypatch, manifest_input, sync)
+
+
+@pytest.mark.parametrize("manifest_input", [False, True])
+@pytest.mark.parametrize("sync", [False, True])
+@pytest.mark.pcc_gate(
+    probe=lambda: sys.platform == "darwin" and platform.machine().lower() == "arm64",
+)
+def test_profiled_packed_native_link_executes_without_a_host_interpreter(
+    tmp_path, monkeypatch, manifest_input, sync,
+):
+    """Retain real return-code verification on the matching execution host."""
+    import subprocess
+
+    final = _profiled_packed_native_image(tmp_path, monkeypatch, manifest_input, sync)
+    result = subprocess.run([str(final)], capture_output=True, timeout=10)
+    assert result.returncode == 42, result.stderr
 
 
 def test_explicit_repo_root_owns_self_link_driver_resolution(monkeypatch, tmp_path):
@@ -74,7 +113,7 @@ def test_explicit_repo_root_owns_self_link_driver_resolution(monkeypatch, tmp_pa
     frozen.mkdir()
     (frozen / "AGENTS.md").write_text("# frozen\n", encoding="utf-8")
     monkeypatch.setenv("PCC_REPO_ROOT", str(frozen))
-    monkeypatch.setattr(pipeline, "__file__", "/live/repo/pcc/py_frontend/pipeline.py")
+    monkeypatch.setattr(pipeline, "__file__", "/live/repo/pcc/frontends/python/pipeline.py")
     assert pipeline._repo_root_for_link() == str(frozen)
 
 
@@ -256,7 +295,6 @@ def test_semantic_layout_rejects_split_module_before_emission(
 
 
 def test_pcc_link_selection_fails_before_silent_cc_fallback(tmp_path, monkeypatch):
-    monkeypatch.setattr(self_link.sys, "platform", "darwin")
     monkeypatch.setattr(self_link.subprocess, "run", lambda *a, **k: pytest.fail("external fallback"))
     try:
         self_link.run_link_command(
@@ -266,6 +304,7 @@ def test_pcc_link_selection_fails_before_silent_cc_fallback(tmp_path, monkeypatc
             None,
             (),
             False,
+            target_triple="arm64-apple-darwin",
             resolve_self_link_mode=lambda **_kwargs: "pcc",
             validate_pcc_self_link_surface=lambda **_kwargs: None,
             repo_root_for_link=lambda: str(tmp_path),
@@ -329,10 +368,12 @@ def test_linux_pcc_link_route_uses_owned_elf_driver_and_internal_assembly(
 
 
 def test_parallel_codegen_container_does_not_retain_prepass_ir(monkeypatch, tmp_path):
+    """IR lifetime only; runtime admission, codegen and final linking are mocked."""
     import weakref
     class TextBatch(list):
         pass
     references = []
+    calls = []
     def codegen(*_args, **_kwargs):
         batch = TextBatch([("entry", 'target triple = "arm64-apple-darwin23.6.0"\n' "define i32 @main() { ret i32 0 }")])
         references.append(weakref.ref(batch))
@@ -341,13 +382,28 @@ def test_parallel_codegen_container_does_not_retain_prepass_ir(monkeypatch, tmp_
         assert references[0]() is None, "parallel result still owns pre-pass IR"
         assert len(texts) == 1
         assert kwargs["consume_ir_texts"] is True
+        calls.append("link")
     source = tmp_path / "entry.py"
     source.write_text("print(1)\n")
     runtime = tmp_path / "runtime.a"
     runtime.touch()
+
+    def admit_runtime(path, **_options):
+        assert path == str(runtime)
+        calls.append("runtime")
+        return path
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("IR lifetime control attempted runtime provisioning or an external tool")
+
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
+    monkeypatch.setenv("PCC_SELF_BACKEND_SKIP_LL_TEMP", "1")
+    monkeypatch.setattr(pipeline, "_explicit_runtime_archive", admit_runtime)
+    monkeypatch.setattr(pipeline, "_ensure_runtime", forbidden)
+    monkeypatch.setattr(pipeline.subprocess, "run", forbidden)
     monkeypatch.setattr(pipeline, "_compile_python_multi_codegen_parallel", codegen)
     monkeypatch.setattr(pipeline, "_link_with_self_backend_ir_texts", link)
     pipeline.compile_python_multi([str(source)], str(tmp_path / "output"),
         module_names=["entry"], backend="self", libpython_mode="off",
         ir_scaffold_mode="on", runtime_archive=str(runtime))
+    assert calls == ["runtime", "link"]

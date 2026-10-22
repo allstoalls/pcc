@@ -1,27 +1,11 @@
-"""pcc-Python ports of stdlib modules.
+"""pcc self-host stdlib replacements (P6C.4).
 
-When ``compile_python(..., recursive_stdlib=True)`` resolves an
-``import X`` statement and ``pcc/stdlib/X.py`` exists, it's used in
-preference to CPython's ``X.py``. This lets us provide pcc-Python
-implementations of stdlib modules whose CPython source has features
-pcc can't compile (C accelerators, decorators we don't yet support,
-etc.) — so user code can still ``import struct`` etc. without
-falling back to libpython.
+The modules here are standalone re-implementations of the stdlib
+surface pcc's own source uses. They exist so the self-hosted pcc
+binary has zero CPython dependency at runtime — when pcc reads its
+own source, it parses these files and compiles them like any other
+user Python.
 
-The public spelling is always the CPython spelling: ``import os``,
-``import gc``, ``import struct``. ``pcc/stdlib/<name>.py`` is an
-implementation location selected by pcc's resolver, not a user-facing
-``std.<name>`` namespace. A pcc-specific namespace would make programs
-less Python-compatible and should be reserved for non-stdlib extension
-APIs only.
-
-Adding a port:
-1. Create ``pcc/stdlib/<name>.py`` containing a pcc-compilable
-   implementation that exposes the same public API as the CPython
-   ``<name>`` module.
-2. Cover the actual usage with tests so future drift can't regress
-   silently.
-
-Current ports:
-- ``struct`` and helper modules used by it.
+See :mod:`pcc.stdlib.README` (the ``README.md`` next to this
+file) for the module inventory + implementation status.
 """

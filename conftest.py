@@ -1,7 +1,6 @@
 import os
 import subprocess
 import tempfile
-import fcntl
 
 import run as pcc_run
 
@@ -41,6 +40,8 @@ def _auto_clean_lock_path():
 
 
 def _acquire_session_shared_lock(config):
+    import fcntl
+
     lock_path = _auto_clean_lock_path()
     lockfile = open(lock_path, "w")
     fcntl.flock(lockfile, fcntl.LOCK_SH)
@@ -48,6 +49,8 @@ def _acquire_session_shared_lock(config):
 
 
 def _upgrade_to_session_clean_lock(config):
+    import fcntl
+
     lockfile = getattr(config, "_pcc_auto_clean_lockfile", None)
     if lockfile is None:
         return None
@@ -118,13 +121,16 @@ def pytest_configure(config):
     if not hasattr(config, "workerinput"):
         config._pcc_auto_clean_enabled = _auto_clean_enabled()
     if getattr(config, "_pcc_auto_clean_enabled", False):
+        if os.name == "nt":
+            config._pcc_auto_clean_enabled = False
+            raise RuntimeError("PCC_PYTEST_AUTO_CLEAN requires POSIX shared file locks")
         _acquire_session_shared_lock(config)
         config._pcc_initial_status_paths = _status_paths(_repo_root())
 
     # Cache warming exists only to make xdist worker collection consistent.
     # Nested/focused ``-n0`` pytest processes must not repeat this startup work.
     if _xdist_controller_enabled(config):
-        from pcc.parse.c_parser import CParser
+        from pcc.frontends.c.parse.c_parser import CParser
 
         CParser()
 
@@ -132,7 +138,11 @@ def pytest_configure(config):
         # same parametrized test set.
         nginx_dir = os.path.join(_repo_root(), "projects", "nginx-1.28.3")
         nginx_makefile = os.path.join(nginx_dir, "objs", "Makefile")
-        if os.path.isdir(nginx_dir) and not os.path.isfile(nginx_makefile):
+        if (
+            os.name == "posix"
+            and os.path.isdir(nginx_dir)
+            and not os.path.isfile(nginx_makefile)
+        ):
             from tests.integration.test_nginx import _ensure_nginx_configured
 
             _ensure_nginx_configured()
@@ -157,5 +167,7 @@ def pytest_sessionfinish(session, exitstatus):
         pcc_run.clean(targets, repo_root=_repo_root())
     finally:
         if lockfile is not None:
+            import fcntl
+
             fcntl.flock(lockfile, fcntl.LOCK_UN)
             lockfile.close()

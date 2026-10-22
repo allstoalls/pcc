@@ -27,7 +27,7 @@ def _compile_to_ll(
     mode: str,
     libpython_mode: str = "off",
 ) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"

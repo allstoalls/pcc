@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from pcc.pass_profile import PassEvent, PassProfile
+from pcc.diagnostics.pass_profile import PassEvent, PassProfile
 
 
 def test_pass_profile_explains_slow_and_skipped_passes():

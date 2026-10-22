@@ -1,4 +1,4 @@
-from pcc.adt_exhaustive import SealedADT, Variant, check_exhaustive, missing_patterns
+from pcc.library.adt_exhaustive import SealedADT, Variant, check_exhaustive, missing_patterns
 
 
 def test_missing_patterns():

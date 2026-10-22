@@ -25,9 +25,11 @@ options, runtime/compiler identity and prerequisites with the current path.
 Do not repeat an applicable failed experiment without new evidence; do not
 reject a changed implementation merely because an older one failed.
 
-Dated handoffs and assessments are snapshots. Their HEAD, uncommitted state,
-blockers, temporary paths and instructions must be rechecked. They do not
-replace the current user's direction or `git status`. The
+[Current status](../status.md) is the single maintained progress page. Historical
+handoffs are preserved outside the working repository with checksums and restore
+instructions; see its evidence and recovery section. Dated assessments remain
+snapshots: their source, blockers and commands must be rechecked against current
+code and the user's direction. The
 [optimizer pipeline audit](2026-09-08-optimizer-pipeline-audit.md) records one
 example of failing to turn a documented limitation into a source/effect check.
 

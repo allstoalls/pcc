@@ -6,7 +6,7 @@ import textwrap
 from pathlib import Path
 
 
-def test_module_attr_side_table_runtime(tmp_path, pcc_py_runtime_archive):
+def test_module_attr_side_table_runtime(tmp_path, pcc_runtime_archive):
     src = tmp_path / "module_attrs_probe.c"
     exe = tmp_path / "module_attrs_probe"
     src.write_text(
@@ -34,9 +34,9 @@ def test_module_attr_side_table_runtime(tmp_path, pcc_py_runtime_archive):
         [
             os.environ.get("CC", "cc"),
             "-I",
-            str(pcc_py_runtime_archive.parent / "include"),
+            str(pcc_runtime_archive.parent / "include"),
             str(src),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(exe),
@@ -48,9 +48,9 @@ def test_module_attr_side_table_runtime(tmp_path, pcc_py_runtime_archive):
 
 
 def test_call_splat_and_module_attrs_are_built_and_exposed():
-    makefile = Path("pcc/py_runtime/Makefile").read_text(encoding="utf-8")
-    header = Path("pcc/py_runtime/include/py_runtime.h").read_text(encoding="utf-8")
-    abi = Path("pcc/py_frontend/codegen/runtime_abi.py").read_text(encoding="utf-8")
+    makefile = Path("pcc/runtime/Makefile").read_text(encoding="utf-8")
+    header = Path("pcc/runtime/include/py_runtime.h").read_text(encoding="utf-8")
+    abi = Path("pcc/frontends/python/codegen/runtime_abi.py").read_text(encoding="utf-8")
 
     assert "py_call_splat_runtime" in makefile
     assert "py_module_attrs_runtime" in makefile

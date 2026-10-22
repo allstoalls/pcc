@@ -4,9 +4,9 @@ from pathlib import Path
 
 
 def test_d2_generator_runtime_wiring_stays_intact():
-    header = Path("pcc/py_runtime/include/py_runtime.h").read_text(encoding="utf-8")
-    abi = Path("pcc/py_frontend/codegen/runtime_abi.py").read_text(encoding="utf-8")
-    py_src = Path("pcc/py_runtime/py/py_gen.py").read_text(encoding="utf-8")
+    header = Path("pcc/runtime/include/py_runtime.h").read_text(encoding="utf-8")
+    abi = Path("pcc/frontends/python/codegen/runtime_abi.py").read_text(encoding="utf-8")
+    py_src = Path("pcc/runtime/py/py_gen.py").read_text(encoding="utf-8")
 
     for sym in ["py_gen_finish", "py_gen_is_done", "py_gen_send", "py_gen_throw", "py_gen_close"]:
         assert sym in header
@@ -15,9 +15,9 @@ def test_d2_generator_runtime_wiring_stays_intact():
 
 
 def test_d3_async_runtime_wiring_stays_intact():
-    header = Path("pcc/py_runtime/include/py_runtime.h").read_text(encoding="utf-8")
-    abi = Path("pcc/py_frontend/codegen/runtime_abi.py").read_text(encoding="utf-8")
-    py_src = Path("pcc/py_runtime/py/py_coroutine.py").read_text(encoding="utf-8")
+    header = Path("pcc/runtime/include/py_runtime.h").read_text(encoding="utf-8")
+    abi = Path("pcc/frontends/python/codegen/runtime_abi.py").read_text(encoding="utf-8")
+    py_src = Path("pcc/runtime/py/py_coroutine.py").read_text(encoding="utf-8")
 
     for sym in [
         "py_coroutine_new_native",
@@ -32,11 +32,11 @@ def test_d3_async_runtime_wiring_stays_intact():
 
 
 def test_d4_d5_d6_runtime_wiring_stays_intact():
-    header = Path("pcc/py_runtime/include/py_runtime.h").read_text(encoding="utf-8")
-    abi = Path("pcc/py_frontend/codegen/runtime_abi.py").read_text(encoding="utf-8")
-    makefile = Path("pcc/py_runtime/Makefile").read_text(encoding="utf-8")
-    context = Path("pcc/py_runtime/py/py_context_runtime.py").read_text(encoding="utf-8")
-    protocol = Path("pcc/py_runtime/py/py_protocol_runtime.py").read_text(encoding="utf-8")
+    header = Path("pcc/runtime/include/py_runtime.h").read_text(encoding="utf-8")
+    abi = Path("pcc/frontends/python/codegen/runtime_abi.py").read_text(encoding="utf-8")
+    makefile = Path("pcc/runtime/Makefile").read_text(encoding="utf-8")
+    context = Path("pcc/runtime/py/py_context_runtime.py").read_text(encoding="utf-8")
+    protocol = Path("pcc/runtime/py/py_protocol_runtime.py").read_text(encoding="utf-8")
 
     # D4 context manager
     for sym in ["py_context_enter", "py_context_exit"]:

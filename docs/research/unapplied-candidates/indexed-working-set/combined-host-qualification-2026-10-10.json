@@ -1,0 +1,241 @@
+{
+  "CI_runner_import_origin": "PASS",
+  "base_and_postimage_origins_after": "PASS",
+  "base_commit": "db1830cf83174428c48607819ae98e84f887c9b9",
+  "by_selector": {
+    "tests/python/test_host_indexed_process_split.py": 20,
+    "tests/python/test_native_float_protocol.py::test_float_index_overflow_preserves_owned_error": 24,
+    "tests/python/test_native_float_protocol.py::test_float_protocol_result_ownership": 12,
+    "tests/python/test_pipeline_indexed_handoff.py": 29,
+    "tests/python/test_self_backend_indexed_codec_host_packing.py": 26,
+    "tests/python/test_x86_64_windows_packed_stackmaps.py": 17,
+    "tests/test_ci_macos_regression_gate.py": 39
+  },
+  "candidate_pcc_tree": "e0fe5ee61793cc74d4b1564d4cb6787c13d884a4",
+  "changes": [
+    {
+      "bytes": 16523,
+      "mode": "100644",
+      "path": ".github/workflows/pcc1-package-parity.yml",
+      "post_sha256": "1b95873dc67e87925f31df95a6d0a8e45f55e9ea9adde7d19fef9e1de874b133",
+      "pre_sha256": "58be154ce677eaea2b9f2f0bbd272e7cbb516ee58ce6890079b36ee9f9513c36"
+    },
+    {
+      "bytes": 15228,
+      "mode": "100644",
+      "path": "pcc/backend/coff_x86_64.py",
+      "post_sha256": "6a2aa9678c79e4df0d34fbb42bb16f4954c214c1ee753c087fad6cfa2f8f5e67",
+      "pre_sha256": "15939bf25b6b8cffd853ac82cd99fbbe1708a3e8d3c8b7bf6599578a8bc440f5"
+    },
+    {
+      "bytes": 28242,
+      "mode": "100644",
+      "path": "pcc/backend/self_backend_indexed_codec.py",
+      "post_sha256": "8b860c79e2d5a00f95a9d53f45b33d10c725c9607395377fefddc4f9c70b096c",
+      "pre_sha256": "87bc72cbbab7029a1e7029b0831b54384d25803a6370f599714d99ca8b4a566c"
+    },
+    {
+      "bytes": 7588,
+      "mode": "100644",
+      "path": "pcc/backend/self_backend_indexed_emit.py",
+      "post_sha256": "de3d9c409616020b0d2b0d85dbf3284186f742cdc8b93aec189a0d779070241e",
+      "pre_sha256": "9747b3ed978590cb8189caea1a34aff2c45548416419126572d372d881a95ed5"
+    },
+    {
+      "bytes": 134284,
+      "mode": "100644",
+      "path": "pcc/backend/self_backend_x86_64_linux.py",
+      "post_sha256": "72e4a95da0b0a5163a3d1d795f3d21255733488cf6fa89c62b395d30aeb9cfb5",
+      "pre_sha256": "4d866d533c945debc79ca793eb1273999054b083ad7a84e48f2a04617d4c894e"
+    },
+    {
+      "bytes": 4029,
+      "mode": "100644",
+      "path": "pcc/backend/target_objects.py",
+      "post_sha256": "09e8ea6c9df872f5e31a1382e8be9c4cd6621f571dd0dea4fb0ceb6eed3ff9eb",
+      "pre_sha256": "5ea98a6c8b37ff5b0555865164df73ea14a4b58e50e2e3abdc4833cb0a57e4a8"
+    },
+    {
+      "bytes": 35266,
+      "mode": "100644",
+      "path": "pcc/backend/x86_64_asm_driver.py",
+      "post_sha256": "e99b858802690ebb21698fd26ff91756922e07e3109132b1d94b378c447e02c7",
+      "pre_sha256": "a85b7b1fcfa7cb6fec61e08b1cb8a95096cb03b9ebe38778d2d0de1472fc88b4"
+    },
+    {
+      "bytes": 169313,
+      "mode": "100644",
+      "path": "pcc/frontends/python/pipeline.py",
+      "post_sha256": "3fe1b8ce03333ceff5eeccefd89184ea3bf2c4203ab0bf939a5767df1388e67c",
+      "pre_sha256": "8fe68eeee47d158d63a7955fdb896d0e4652a7ef9faea45fc5eb618326572fed"
+    },
+    {
+      "bytes": 8310,
+      "mode": "100644",
+      "path": "pcc/frontends/python/pipeline_frontend_indexed_stage.py",
+      "post_sha256": "3322891f7857e64c262f5cda2e1aa0460be2c1cd9eafee6074ca12dc4c712c40",
+      "pre_sha256": null
+    },
+    {
+      "bytes": 73694,
+      "mode": "100644",
+      "path": "pcc/frontends/python/pipeline_frontend_parallel.py",
+      "post_sha256": "71e387b924ae14570f9271e2f61e9a1bdc5866c03d99c4ab270cb21d795636a7",
+      "pre_sha256": "e4166c66f66418c62b94914f4afb0835ec45188b4d643a900ee1ee8530662207"
+    },
+    {
+      "bytes": 57555,
+      "mode": "100644",
+      "path": "pcc/frontends/python/pipeline_frontend_worker_execution.py",
+      "post_sha256": "72bc54658602f69b17b37ed7ae23207f91046aa22553854c222e91001fde4da1",
+      "pre_sha256": "699cf16413e750d9c50c2ebff63332a393f412f94d208a1e77fd472ab75a0f18"
+    },
+    {
+      "bytes": 22018,
+      "mode": "100644",
+      "path": "pcc/frontends/python/pipeline_indexed_handoff.py",
+      "post_sha256": "cbf7443ca0296a88d9f553e5f4c81742f0422e504068572793c46dcf30f49af4",
+      "pre_sha256": null
+    },
+    {
+      "bytes": 35081,
+      "mode": "100644",
+      "path": "pcc/frontends/python/worker_process_pool.py",
+      "post_sha256": "4d94844cfc920a9dd98d1e4bf435780e64404370008def8dd571f858636b8524",
+      "pre_sha256": "070eca7616c96f3cb8aecf688cf2649a8b848a57795ac0855dc4f8aed9ff30b6"
+    },
+    {
+      "bytes": 93267,
+      "mode": "100644",
+      "path": "pcc/runtime/py/py_protocol_runtime.py",
+      "post_sha256": "760f5d2c6469223d58dcce60b8f3e927c6fe069e1c8e8bd11a62ed1757f794f4",
+      "pre_sha256": "65770540a5c983dd8ec3f9ecb62f9e45cb3a016b4428afa56d7135358dec80ec"
+    },
+    {
+      "bytes": 14427,
+      "mode": "100644",
+      "path": "scripts/ci_macos_regression_gate.py",
+      "post_sha256": "440936e23482c012200b19fa0aef2fb508e4c1da9a95fae93bfaeb22b88cf7ae",
+      "pre_sha256": "5d3587a735add8a754a69fec70ec455e840640acd9332ad9ba38d0cc9a9fffef"
+    },
+    {
+      "bytes": 19067,
+      "mode": "100644",
+      "path": "tests/python/test_host_indexed_process_split.py",
+      "post_sha256": "5094c460524058c9426053bae1f643c6b2465eebdfb779fbeeb82162147d70e0",
+      "pre_sha256": null
+    },
+    {
+      "bytes": 10014,
+      "mode": "100644",
+      "path": "tests/python/test_indexed_handoff_closed_world.py",
+      "post_sha256": "1c3a2d496b00cb34abfd47aa62e8387f9f64e4f40b9e5a3f72a896718330def4",
+      "pre_sha256": null
+    },
+    {
+      "bytes": 12719,
+      "mode": "100644",
+      "path": "tests/python/test_indexed_process_split_real.py",
+      "post_sha256": "4bd4ece121b95e2ed4d292bd94907d1078f0a6e006be247edfcffdf70d6ee3c0",
+      "pre_sha256": null
+    },
+    {
+      "bytes": 10102,
+      "mode": "100644",
+      "path": "tests/python/test_native_float_protocol.py",
+      "post_sha256": "bce4fbf2d9ed1709e3e9197004b8e1f558eccbbcbe1e5f6dd4c6060489409bf1",
+      "pre_sha256": "65b102016b23f0f7613426c68542e9d13b9e4170c85c1b5196bdee698d384d1f"
+    },
+    {
+      "bytes": 24972,
+      "mode": "100644",
+      "path": "tests/python/test_pipeline_indexed_handoff.py",
+      "post_sha256": "fab5615628d8aca181a268a1a48e3c3e803d187abe422c2a8519bc24ea818c14",
+      "pre_sha256": null
+    },
+    {
+      "bytes": 3585,
+      "mode": "100644",
+      "path": "tests/python/test_self_backend_indexed_codec_host_packing.py",
+      "post_sha256": "dab886521fe29d8d9f6da208361a3f3d1dcbe7359c8dd432e128d36e834f3dc2",
+      "pre_sha256": null
+    },
+    {
+      "bytes": 12213,
+      "mode": "100644",
+      "path": "tests/python/test_x86_64_windows_packed_stackmaps.py",
+      "post_sha256": "b3ba46e56065d556ac19088811d2c6cb25d36d4ae8e7705986a7b3b9a9665895",
+      "pre_sha256": null
+    },
+    {
+      "bytes": 25381,
+      "mode": "100644",
+      "path": "tests/test_ci_macos_regression_gate.py",
+      "post_sha256": "7638dbb8ce85e0e1e5ee994e4364bd08646e7b381af6e79cb57ddc77baa4ce1f",
+      "pre_sha256": "dfdc1384641f6f4a41268c0ee5e4926d2162f6e1bca3284b54ce3110b5fa8ac0"
+    }
+  ],
+  "codegen_checksum": "eaf3d122bd46674030f43784c75d60bb500e14987e55d34ce71b89fa4c1c7ae8",
+  "counts": {
+    "collected": 167,
+    "errors": 0,
+    "failed": 0,
+    "passed": 167,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  },
+  "deselected": [],
+  "execution_count": 1,
+  "external_postseal_sha256": "fb9901474b4d2b074baf17d6091504e0e2c1c5040931bfb2a86a3ecb351346e9",
+  "guard": {
+    "cleanup": "CLEAN",
+    "denied_events": 0,
+    "echild": true,
+    "elapsed_s": 5.609492951996799,
+    "free_floor_bytes": 4294967296,
+    "growth_limit_bytes": 536870912,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "lock_released": true,
+    "peak_sampled_root_rss_bytes": 103940096,
+    "returncode": 0,
+    "root_reaped": true,
+    "status": "COMPLETE",
+    "timeout_s": 300
+  },
+  "import_roots": "PASS",
+  "native_program_sha256": "fa615ddddedced81966d7479c6504c6c3b2691b005d11e6003961582ede99924",
+  "original_native_program_unchanged": true,
+  "payload_sha256": "8fae05d50cf78a54eb6c8b2671863fa24c9e66bc4f635c3bb8799eaf01ec5d27",
+  "prior_gate": {
+    "guard_returncode": 1,
+    "main_test_readback": "75 PASS with 44 subtest passes established from original retained output; original gate FAIL retained",
+    "preserved": true,
+    "qualification_sha256": "246c945c3d3eb04da731aa2c95947908cad7208590f331830b60d050f539a527",
+    "status": "HARNESS_ACCOUNTING_FAILURE"
+  },
+  "qualification_limits": [
+    "75 bridge/codec cases use pure host/filesystem or fake-process contracts and do not establish real FE/BE child lifetimes.",
+    "17 Windows host cases include small owned-object parity and in-process dispatch; no Windows executable or native compiler is run.",
+    "39 CI runner cases mock child commands and validate selection/receipt behavior; the two new real compiler tests are not selected locally.",
+    "36 float cases supply raw doubles to ownership/error models; corrected native bigint-to-float behavior and matched runtime remain unverified.",
+    "No real split/unsplit object gate, provider closed-world CI gate, emitted helper, full async/gateway, pcc1, all-GC relocation or Stage1 completion is claimed.",
+    "No speed or working-set improvement is inferred from these focused results."
+  ],
+  "qualification_sha256": "c64c8636943b1b62f944e160c3fd45610032d7ee9d21983af742f4abff35d266",
+  "schema": "pcc.stage-windows-float.combined-host-qualification.v1",
+  "scope": "167 exact main host cases: 75 indexed-handoff/codec contracts, 17 Windows owned-object/dispatch cases, 39 mocked CI runner cases, and 36 supplied-double float models; 44 unittest subreports accounted separately. No real child, runtime build, emitted execution, real split parity or closed-world gate is selected.",
+  "source_before_after": "PASS",
+  "source_manifest_sha256": "50fd850acc1d26fd7a02506427ef85e7a2634b6765d865cdd19a553a53d3f21b",
+  "status": "PASS",
+  "subtest_counts": {
+    "collected": 44,
+    "errors": 0,
+    "failed": 0,
+    "passed": 44,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  }
+}

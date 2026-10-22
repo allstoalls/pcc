@@ -2,8 +2,8 @@ import os
 
 import pytest
 
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.project import (
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.driver.project import (
     collect_cpp_args,
     collect_translation_units,
     translation_unit_include_dirs,

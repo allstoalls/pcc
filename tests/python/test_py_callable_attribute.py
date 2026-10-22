@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import textwrap
 import subprocess
+import sys
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def test_instance_field_callable_call_compiles_to_dynamic_attribute_call(tmp_path):
@@ -30,7 +31,7 @@ def test_instance_field_callable_call_compiles_to_dynamic_attribute_call(tmp_pat
     compile_python(
         str(src),
         str(exe),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )
@@ -58,7 +59,7 @@ def test_local_callable_shadows_same_named_function_for_codegen(tmp_path):
     compile_python(
         str(src),
         str(exe),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )
@@ -86,7 +87,7 @@ def test_unhinted_module_global_dunder_new_does_not_bind_unrelated_class(tmp_pat
     compile_python(
         str(src),
         str(exe),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )
@@ -318,6 +319,7 @@ def test_native_module_alias_call_does_not_bind_unrelated_class_method(tmp_path)
                     return x
 
             print(N.sqrt(4.0))
+            print(N.sqrt(9.0) + 1.0, N.floor(2.5) * 2)
             """).lstrip(),
         encoding="utf-8",
     )
@@ -331,3 +333,8 @@ def test_native_module_alias_call_does_not_bind_unrelated_class_method(tmp_path)
         ir_scaffold_mode="on",
     )
     assert exe.exists()
+    # The alias call goes through the module object and returns an object;
+    # its inferred type is float, so the value must reach print unboxed.
+    expected = subprocess.run([sys.executable, str(src)], capture_output=True, text=True, timeout=60)
+    ran = subprocess.run([str(exe)], capture_output=True, text=True, timeout=60)
+    assert (ran.returncode, ran.stdout) == (0, expected.stdout), ran.stderr

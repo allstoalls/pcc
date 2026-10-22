@@ -1,0 +1,202 @@
+{
+  "assembly_bytes": 39735304,
+  "assembly_sha256": "f1492bf30b0c8b3dcd41985cb7e0edd7dfd00a45467ee4934bdb670fc9d1eb2e",
+  "cfg": {
+    "blocks": 48161,
+    "functions": 231,
+    "instructions": 219614
+  },
+  "cfg_rows_sha256": "c7c4fde62e18fe75110acda85fb74784afd25cf3155630f5d282acc10b72e2ac",
+  "codegen_checksums": {
+    "baseline": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+    "candidate": "610f289ab84407149dbe231ac35e1b190079366bf852ccbafd0bdcc5ec85ddab"
+  },
+  "complete_cross_arm_equality": "PASS: CFG rows, assembly bytes, object bytes, all decoded sections/symbols/relocations/stackmaps",
+  "decoded_contract_sha256": "311300b3a1c7e64b2de5a9fa5104e086b9c7217194283983c5b1d5d0fd3b77ee",
+  "driver_sha256": "23a9f5320f25c61b7b9e889d4e265f5886dacbd31bcd9affd9c34e6e3f145c69",
+  "fallback_capture_records": 0,
+  "final_source_seals": "PASS: complete baseline and candidate inventories independently verified after all stages",
+  "full_source_relation": "Retained cold-slot baseline has complete pcc tree equal to published02b9/d234174f; its full tree contains older unrelated test/docs/bootstrap bytes. Candidate adds only the three reviewed bridge paths, including the test-only V3 correction.",
+  "guard": {
+    "continuous_minimum_free_bytes": 4294967296,
+    "exclusive_shared_lock": true,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "max_disk_growth_bytes": 1073741824,
+    "memory_note": "RSS is sampled root RSS; AS is the hard kernel limit",
+    "seconds_per_stage": 300
+  },
+  "host_qualification_sha256": "87aa814515ee1ab1e38f58e928fc60a534994c8a5a2f00d4f28b4009477cc774",
+  "indexed_input": {
+    "bytes": 58153998,
+    "name": "input.pidx",
+    "sha256": "6bc6763aa8c44457aeb28f88b8aa8fbc49e8a3a0953bc504104eaa9950680741"
+  },
+  "input_source_sha256": "21eacf1370cec218ea7ff97092ee47a96752505067caad2699f20239c74f2b58",
+  "limits": [
+    "Observer-weighted elapsed times are diagnostic and establish no speedup",
+    "All instructions were emitted and encoded through the actual owned backend; the compiler itself ran on CPython",
+    "The changed emitter retains the documented multiply-invalid diagnostic-order caveat"
+  ],
+  "lock_released": true,
+  "mechanism_counts": {
+    "baseline": {
+      "arithmetic_flag_reads": 219614,
+      "diagnostic_instruction_calls": 219614,
+      "emitted_functions": 231,
+      "instruction_arena_projections": 48161,
+      "instruction_data_calls": 219614,
+      "operand_intern_calls": 219614
+    },
+    "candidate": {
+      "arithmetic_flag_reads": 219614,
+      "diagnostic_instruction_calls": 0,
+      "emitted_functions": 231,
+      "instruction_arena_projections": 0,
+      "instruction_data_calls": 219614,
+      "operand_intern_calls": 0
+    }
+  },
+  "object": {
+    "bytes": 12591320,
+    "name": "module.o",
+    "sha256": "10bed83db61678eb56bc36cf9bf5e2e243cf3b0503d994f2eb942bcc13823f7c"
+  },
+  "packet_manifest_sha256": "f0dfa438057cbec8144583c0b8aa26187c5b7abe4946177f882f89f2d0500c2d",
+  "performance_claim": false,
+  "preserved_driver_commit": "c1b0e93b7b7997da46dd6072d0a8430cd779612d",
+  "qualification_sha256": "d9b08b672bc35856b80a8b41e84da13defc6bc2204aca55dd556ad3bbb21ffcb",
+  "schema": "pcc.x86_bridge_public_real_linux_qualification.v1",
+  "scope": "Host preparation of unchanged c_ast source with genuine owned sys import, then Linux x86 baseline and candidate indexed emission/object encoding; no runtime, link or emitted execution",
+  "source_manifests": {
+    "baseline": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+    "candidate": "febc3d325420f81ee7d4510e372c7bde1ce9266d827d645027c9b059253114b0"
+  },
+  "stages": {
+    "baseline": {
+      "cleanup": "CLEAN/reaped/ECHILD",
+      "denied_audit_events": 0,
+      "elapsed_seconds": 39.145330723997176,
+      "guard_sha256": "3a475f52e5a4bcc7803d0b4813a0d2934713f280705fef26e754f7b648844a76",
+      "peak_sampled_root_rss_bytes": 528920576,
+      "result_sha256": "6b10e468b84454cddf85297f1415def6368b147bf488855a80940b718024f312",
+      "seal_sha256": "d283832481b5c570c90efbc79e73de723286ec99d408783d846ef24c826384bf",
+      "source_after": {
+        "baseline": {
+          "bytes": 390463117,
+          "files": 30024,
+          "manifest_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+          "status": "PASS"
+        },
+        "candidate": {
+          "bytes": 390480049,
+          "files": 30025,
+          "manifest_sha256": "febc3d325420f81ee7d4510e372c7bde1ce9266d827d645027c9b059253114b0",
+          "status": "PASS"
+        }
+      },
+      "source_before": {
+        "baseline": {
+          "bytes": 390463117,
+          "files": 30024,
+          "manifest_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+          "status": "PASS"
+        },
+        "candidate": {
+          "bytes": 390480049,
+          "files": 30025,
+          "manifest_sha256": "febc3d325420f81ee7d4510e372c7bde1ce9266d827d645027c9b059253114b0",
+          "status": "PASS"
+        }
+      },
+      "wrapper_sha256": "6f43841296d03569ec2a0b785c3389d6640ac45becf375457bb93fa93877253f"
+    },
+    "candidate": {
+      "cleanup": "CLEAN/reaped/ECHILD",
+      "denied_audit_events": 0,
+      "elapsed_seconds": 38.69734305200109,
+      "guard_sha256": "dd1cb3eb4caae6ce4b2a7efe7dd7fabf7ab527c10693fc198152c06228ab9a53",
+      "peak_sampled_root_rss_bytes": 596824064,
+      "result_sha256": "ca39d465667d53a6f87a3f2d0cd170657a028c90b5e77ccece827e17329bdc22",
+      "seal_sha256": "99064fb118a9a665898111edd037866c0805bddd3e106f02799c48cc20a67476",
+      "source_after": {
+        "baseline": {
+          "bytes": 390463117,
+          "files": 30024,
+          "manifest_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+          "status": "PASS"
+        },
+        "candidate": {
+          "bytes": 390480049,
+          "files": 30025,
+          "manifest_sha256": "febc3d325420f81ee7d4510e372c7bde1ce9266d827d645027c9b059253114b0",
+          "status": "PASS"
+        }
+      },
+      "source_before": {
+        "baseline": {
+          "bytes": 390463117,
+          "files": 30024,
+          "manifest_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+          "status": "PASS"
+        },
+        "candidate": {
+          "bytes": 390480049,
+          "files": 30025,
+          "manifest_sha256": "febc3d325420f81ee7d4510e372c7bde1ce9266d827d645027c9b059253114b0",
+          "status": "PASS"
+        }
+      },
+      "wrapper_sha256": "d90615d10141e9ebce50b5018041838302232da7bd0946c00f6089946f80de89"
+    },
+    "prepare": {
+      "cleanup": "CLEAN/reaped/ECHILD",
+      "denied_audit_events": 0,
+      "elapsed_seconds": 13.696057914999983,
+      "guard_sha256": "11dc7d2e7ea4026eb1147872ab821e2f61aa7596ca64e94a3d8c72427f147d0b",
+      "peak_sampled_root_rss_bytes": 388059136,
+      "result_sha256": "9371ed4bc7f10633840683b0f136f956de75c7a794fa6b181d9a4e2a2e0b7f3b",
+      "seal_sha256": "459af0899f9efe34af848a658678b45132614b0a2d0ec82011c8ba7ae05c74cb",
+      "source_after": {
+        "baseline": {
+          "bytes": 390463117,
+          "files": 30024,
+          "manifest_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+          "status": "PASS"
+        },
+        "candidate": {
+          "bytes": 390480049,
+          "files": 30025,
+          "manifest_sha256": "febc3d325420f81ee7d4510e372c7bde1ce9266d827d645027c9b059253114b0",
+          "status": "PASS"
+        }
+      },
+      "source_before": {
+        "baseline": {
+          "bytes": 390463117,
+          "files": 30024,
+          "manifest_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+          "status": "PASS"
+        },
+        "candidate": {
+          "bytes": 390480049,
+          "files": 30025,
+          "manifest_sha256": "febc3d325420f81ee7d4510e372c7bde1ce9266d827d645027c9b059253114b0",
+          "status": "PASS"
+        }
+      },
+      "wrapper_sha256": "b3a5a2bc364c873d9e9428e2c6587acce3aedc22d1b894b0a424c5001c519e5c"
+    }
+  },
+  "status": "PASS",
+  "supported_capture_records": 273629,
+  "target": "x86_64-unknown-linux-gnu",
+  "unrun": [
+    "Windows cross-object comparison",
+    "Native compiler ABI/callback execution",
+    "Native runtime/GC qualification",
+    "Full Stage1/Stage2",
+    "Performance qualification"
+  ],
+  "windows_and_native": "UNRUN"
+}

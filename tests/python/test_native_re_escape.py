@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 def _compile(monkeypatch, src: Path, exe: Path) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     compile_python(
         str(src), str(exe),

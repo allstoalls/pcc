@@ -4,10 +4,10 @@ from pathlib import Path
 import re
 import pytest
 
-from pcc.parse.py_lift import parse_and_lift
-from pcc.py_frontend.type_infer import infer_module
-from pcc.py_frontend.codegen.layer1 import L1CodeGen
-from pcc.py_frontend.codegen.layer1_support import _PCC_FRONTEND_STATIC_NATIVE_EXPORTS
+from pcc.frontends.python.py_lift import parse_and_lift
+from pcc.frontends.python.type_infer import infer_module
+from pcc.frontends.python.codegen.layer1 import L1CodeGen
+from pcc.frontends.python.codegen.layer1_support import _PCC_FRONTEND_STATIC_NATIVE_EXPORTS
 
 
 @pytest.mark.parametrize("module,method,callee", [
@@ -19,8 +19,8 @@ from pcc.py_frontend.codegen.layer1_support import _PCC_FRONTEND_STATIC_NATIVE_E
 def test_dynamic_container_guard_has_native_host_calls(module, method, callee):
     # These are the existing L1CodeGen forward declarations. An isolated
     # mixin has no sibling class schema and is not a self-host probe.
-    source = Path(__file__).resolve().parents[2] / "pcc/py_frontend/codegen" / (module + ".py")
-    name = "pcc.py_frontend.codegen." + module
+    source = Path(__file__).resolve().parents[2] / "pcc/frontends/python/codegen" / (module + ".py")
+    name = "pcc.frontends.python.codegen." + module
     typed = infer_module(
         parse_and_lift(source.read_text(), str(source), name),
         external_exports=_PCC_FRONTEND_STATIC_NATIVE_EXPORTS,
@@ -31,7 +31,7 @@ def test_dynamic_container_guard_has_native_host_calls(module, method, callee):
     codegen._native_module_exports = dict(_PCC_FRONTEND_STATIC_NATIVE_EXPORTS)
     text = str(codegen.generate(typed))
     body = re.search(
-        r"(?m)^define[^\n]*@user_pcc_py_frontend_codegen_" + module
+        r"(?m)^define[^\n]*@user_pcc_frontends_python_codegen_" + module
         + r"_[^ (]+_" + method + r"\([^\n]*\{\n([\s\S]*?)^\}",
         text,
     )

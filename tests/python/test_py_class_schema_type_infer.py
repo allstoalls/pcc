@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import textwrap
 
-from pcc.parse.py_lift import parse_and_lift
-from pcc.py_frontend import type_infer
-from pcc.py_frontend.export_meta import encode_type
-from pcc.py_frontend.pipeline import _contextual_host_params_for_module
-from pcc.py_frontend.py_ast import (
+import pytest
+
+from pcc.frontends.python.py_lift import parse_and_lift
+from pcc.frontends.python import type_infer
+from pcc.frontends.python.export_meta import encode_type
+from pcc.frontends.python.pipeline import _contextual_host_params_for_module
+from pcc.frontends.python.py_ast import (
     Assign,
     Attr,
     ClassDef,
@@ -16,10 +18,32 @@ from pcc.py_frontend.py_ast import (
     For,
     FuncDef,
     ListType,
+    Module,
+    Name,
     Return,
     StrType,
     TupleType,
 )
+
+
+@pytest.mark.parametrize("owner", ["pcc.frontends.python.py_parse", "other.parser"])
+def test_isinstance_underscore_name_uses_the_bound_class(owner):
+    ctx = type_infer._InferCtx(Module("pcc.frontends.python.py_lift", (), None))
+    parser_type = ClassType("_Call", owner, (), ())
+    ast_type = ClassType("Call", "pcc.frontends.python.py_ast", (), ())
+    ctx.class_types.update({"_Call": parser_type, "Call": ast_type})
+    expr = Name(span=None, ty=DynType("dyn"), ident="_Call")
+
+    assert type_infer._type_from_isinstance_arg(ctx, expr) is parser_type
+
+
+def test_isinstance_real_underscore_ast_alias_keeps_its_binding():
+    ctx = type_infer._InferCtx(Module("pcc.frontends.python.codegen.reader", (), None))
+    ast_type = ClassType("Call", "pcc.frontends.python.py_ast", (), ())
+    ctx.class_types["_Call"] = ast_type
+    expr = Name(span=None, ty=DynType("dyn"), ident="_Call")
+
+    assert type_infer._type_from_isinstance_arg(ctx, expr) is ast_type
 
 
 def _infer(
@@ -140,11 +164,11 @@ def test_contextual_l1_codegen_host_param_auto_detects_codegen_helpers():
             """
         ).lstrip(),
         "host_helper.py",
-        "pcc.py_frontend.codegen.host_helper",
+        "pcc.frontends.python.codegen.host_helper",
     )
     assert _contextual_host_params_for_module(
         mod,
-        "pcc.py_frontend.codegen.host_helper",
+        "pcc.frontends.python.codegen.host_helper",
     ) == {"helper": ("host",)}
     assert _contextual_host_params_for_module(mod, "user.host_helper") is None
 
@@ -324,14 +348,14 @@ def test_imported_class_schema_preserves_untyped_slot_order():
 
 
 def test_imported_tuple_string_annotation_resolves_loop_element_schema():
-    from pcc.py_frontend.pipeline import _normalise_export_annotation_text
+    from pcc.frontends.python.pipeline import _normalise_export_annotation_text
 
     args_ty = _normalise_export_annotation_text(
-        "tuple[pcc.py_frontend.py_ast.Arg, ...]"
+        "tuple[pcc.frontends.python.py_ast.Arg, ...]"
     )
     assert isinstance(args_ty, TupleType)
     external_exports = {
-        "pcc.py_frontend.py_ast": {
+        "pcc.frontends.python.py_ast": {
             "FuncDef": {
                 "kind": "class",
                 "class_name": "FuncDef",
@@ -343,7 +367,7 @@ def test_imported_tuple_string_annotation_resolves_loop_element_schema():
                         encode_type(
                             ClassType(
                                 name="Type",
-                                module="pcc.py_frontend.py_ast",
+                                module="pcc.frontends.python.py_ast",
                                 fields=(),
                                 bases=(),
                             )
@@ -361,7 +385,7 @@ def test_imported_tuple_string_annotation_resolves_loop_element_schema():
                         encode_type(
                             ClassType(
                                 name="Type",
-                                module="pcc.py_frontend.py_ast",
+                                module="pcc.frontends.python.py_ast",
                                 fields=(),
                                 bases=(),
                             )
@@ -379,7 +403,7 @@ def test_imported_tuple_string_annotation_resolves_loop_element_schema():
     }
     mod = _infer(
         """
-        from pcc.py_frontend.py_ast import FuncDef, Type
+        from pcc.frontends.python.py_ast import FuncDef, Type
 
         def first_arg_annotation(fn: FuncDef) -> Type:
             for a in fn.args:
@@ -401,7 +425,7 @@ def test_imported_tuple_string_annotation_resolves_loop_element_schema():
 
 def test_imported_py_ast_augassign_static_schema_resolves_target():
     external_exports = {
-        "pcc.py_frontend.py_ast": {
+        "pcc.frontends.python.py_ast": {
             "AugAssign": {
                 "kind": "class",
                 "class_name": "AugAssign",
@@ -427,7 +451,7 @@ def test_imported_py_ast_augassign_static_schema_resolves_target():
     }
     mod = _infer(
         """
-        from pcc.py_frontend.py_ast import AugAssign, Expr
+        from pcc.frontends.python.py_ast import AugAssign, Expr
 
         def aug_target(stmt: AugAssign) -> Expr:
             return stmt.target
@@ -442,7 +466,7 @@ def test_imported_py_ast_augassign_static_schema_resolves_target():
 
 def test_imported_py_ast_compare_static_schema_resolves_rhs_type():
     external_exports = {
-        "pcc.py_frontend.py_ast": {
+        "pcc.frontends.python.py_ast": {
             "Compare": {
                 "kind": "class",
                 "class_name": "Compare",
@@ -468,7 +492,7 @@ def test_imported_py_ast_compare_static_schema_resolves_rhs_type():
     }
     mod = _infer(
         """
-        from pcc.py_frontend.py_ast import Compare, Expr, Type
+        from pcc.frontends.python.py_ast import Compare, Expr, Type
 
         def compare_rhs_type(expr: Compare) -> Type:
             rhs = expr.rhs
@@ -489,7 +513,7 @@ def test_imported_py_ast_compare_static_schema_resolves_rhs_type():
 
 def test_imported_py_ast_static_base_resolves_positive_isinstance():
     external_exports = {
-        "pcc.py_frontend.py_ast": {
+        "pcc.frontends.python.py_ast": {
             "Module": {
                 "kind": "class",
                 "class_name": "Module",
@@ -515,7 +539,7 @@ def test_imported_py_ast_static_base_resolves_positive_isinstance():
     }
     mod = _infer(
         """
-        from pcc.py_frontend.py_ast import Import, Module
+        from pcc.frontends.python.py_ast import Import, Module
 
         def first_import_name(module: Module) -> str:
             for stmt in module.body:
@@ -540,7 +564,7 @@ def test_imported_py_ast_static_base_resolves_positive_isinstance():
 
 def test_ir_compat_alias_annotation_resolves_exported_schema_chain():
     external_exports = {
-        "pcc.llvm_capi.ir": {
+        "pcc.ir.ir": {
             "IRBuilder": {
                 "kind": "class",
                 "class_name": "IRBuilder",
@@ -573,7 +597,7 @@ def test_ir_compat_alias_annotation_resolves_exported_schema_chain():
     }
     mod = _infer(
         """
-        from pcc.llvm_capi.compat import ir
+        from pcc.ir.compat import ir
 
         def first_opname(builder: ir.IRBuilder) -> str:
             block = builder._block
@@ -608,7 +632,7 @@ def test_ir_compat_alias_annotation_resolves_exported_schema_chain():
 
 
 def test_bare_builtin_container_annotations_are_not_user_classes():
-    from pcc.py_frontend.pipeline import _normalise_export_annotation
+    from pcc.frontends.python.pipeline import _normalise_export_annotation
 
     assert isinstance(
         _normalise_export_annotation(

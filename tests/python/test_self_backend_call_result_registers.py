@@ -87,7 +87,9 @@ def _body(asm: str, symbol: str) -> list[str]:
 
 def _after_call(body: list[str], callee: str) -> list[str]:
     index = body.index(f"bl _{callee}")
-    return body[index + 1:]
+    # Labels are not instructions: a call safepoint's stack-map label marks
+    # the return address right after the call.
+    return [line for line in body[index + 1:] if not line.endswith(":")]
 
 
 _FRAME_STORE_X0 = re.compile(r"^st[u]?r\s+[wx]0,\s*\[x29")

@@ -9,7 +9,7 @@ import subprocess
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python_multi
+from pcc.frontends.python.pipeline import compile_python_multi
 
 
 def _source_modules(tmp_path):
@@ -47,10 +47,10 @@ def _source_modules(tmp_path):
     return entry, arena, state
 
 
+# native execution requires an explicit immutable runtime archive
+@pytest.mark.pcc_gate(env="PCC_RUNTIME_ARCHIVE")
 def test_guarded_optional_imported_class_global_method_runs_natively(tmp_path):
     archive_name = os.environ.get("PCC_RUNTIME_ARCHIVE")
-    if not archive_name:
-        pytest.skip("native execution requires an explicit immutable runtime archive")
     archive = Path(archive_name).resolve()
     assert archive.is_file()
     entry, arena, state = _source_modules(tmp_path)
@@ -79,9 +79,9 @@ def test_guarded_optional_imported_class_global_method_runs_natively(tmp_path):
 
 
 def test_none_typed_module_global_method_uses_native_dispatch(tmp_path):
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
-    from pcc.py_frontend.pipeline_context import build_closed_world_context
-    from pcc.py_frontend.py_ast import Attr, Call, ExprStmt, FuncDef, If, Name, NoneType
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.pipeline_context import build_closed_world_context
+    from pcc.frontends.python.py_ast import Attr, Call, ExprStmt, FuncDef, If, Name, NoneType
 
     _entry, arena, state = _source_modules(tmp_path)
     modules, exports, _classes = build_closed_world_context(

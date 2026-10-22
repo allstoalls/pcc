@@ -26,7 +26,7 @@ import pytest
 
 
 def _compile_and_run(tmp_path, source: str) -> subprocess.CompletedProcess[str]:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -64,7 +64,7 @@ def test_property_getter_basic(tmp_path):
 
 
 def test_property_fget_can_alias_an_instance_method(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "property_fget_alias.py"
     exe = tmp_path / "property_fget_alias.out"
@@ -358,3 +358,149 @@ def test_slots_no_dict(tmp_path):
         """)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "no_dict"
+
+
+def test_property_aliases_preserve_lexical_replacements(tmp_path):
+    result = _compile_and_run(tmp_path, """
+        import gc
+        events = []
+        def record(label):
+            events.append(label)
+            return label
+        class Box:
+            @property
+            def value(self, token=record('get')):
+                return 42
+            before = value
+            get_value = value.fget
+            marker = record('middle')
+            @value.setter
+            def value(self, new_value, token=record('set')):
+                self.saved = new_value
+            after_set = value
+            before_alias = before
+            @value.deleter
+            def value(self, token=record('del')):
+                self.saved = 0
+        def main():
+            assert events == ['get', 'middle', 'set', 'del']
+            assert Box.before is Box.before_alias
+            assert Box.before is not Box.after_set
+            assert Box.after_set is not Box.value
+            assert Box.before.fset is None and Box.before.fdel is None
+            assert Box.after_set.fset is Box.value.fset
+            assert Box.after_set.fdel is None
+            assert Box.get_value is Box.before.fget
+            assert Box.get_value is Box.value.fget
+            obj = Box()
+            saved = obj.get_value
+            gc.collect()
+            assert saved() == 42
+            obj.value = 9
+            assert obj.saved == 9
+            del obj.value
+            assert obj.saved == 0
+            print('property-alias-order-ok')
+        if __name__ == '__main__':
+            main()
+    """)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == 'property-alias-order-ok\n'
+
+
+def test_property_accessors_with_extra_parameters_bind_like_python(tmp_path):
+    # ``property`` passes only (obj) or (obj, value); defaults, *args and
+    # **kwargs of the accessor are bound as an ordinary call binds them.
+    result = _compile_and_run(tmp_path, """
+        class Box:
+            def __init__(self, v):
+                self.value = v
+            @property
+            def value(self, scale=1):
+                return self._v * scale
+            @value.setter
+            def value(self, new, offset=100):
+                self._v = new + offset
+            @value.deleter
+            def value(self, *extra, **named):
+                self._v = len(extra) + len(named)
+            def bump(self):
+                self.value = self.value + 1
+                return self.value
+            def clear(self):
+                del self.value
+                return self._v
+        class Spread:
+            @property
+            def items(self, *rest):
+                return rest
+            @items.setter
+            def items(self, *rest):
+                self.saved = rest
+        def main():
+            b = Box(1)
+            print(b.value)
+            b.value = 5
+            print(b.value)
+            print(b.bump())
+            del b.value
+            print(b._v)
+            b.value = 2
+            print(b.clear())
+            s = Spread()
+            print(s.items)
+            s.items = 7
+            print(s.saved)
+            print('accessor-arity-ok')
+        if __name__ == '__main__':
+            main()
+    """)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == '101\n105\n206\n0\n0\n()\n(7,)\naccessor-arity-ok\n'
+
+
+def test_metaclass_property_getter_default_binds_like_python(tmp_path):
+    result = _compile_and_run(tmp_path, """
+        class Meta(type):
+            @property
+            def label(cls, suffix='!'):
+                return cls.__name__ + suffix
+        class Thing(metaclass=Meta):
+            pass
+        def main():
+            print(Thing.label)
+            print('meta-accessor-ok')
+        if __name__ == '__main__':
+            main()
+    """)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == 'Thing!\nmeta-accessor-ok\n'
+
+
+def test_property_later_accessor_default_failure_preserves_exception(tmp_path):
+    result = _compile_and_run(tmp_path, """
+        events = []
+        def record(label):
+            events.append(label)
+            return label
+        def fail():
+            events.append('fail')
+            raise ValueError('later-property-default')
+        try:
+            class Box:
+                @property
+                def value(self, token=record('get')):
+                    return token
+                original = value
+                callback = value.fget
+                marker = record('middle')
+                @value.setter
+                def value(self, new_value, token=fail()):
+                    pass
+        except ValueError as error:
+            assert str(error) == 'later-property-default'
+            assert events == ['get', 'middle', 'fail']
+            print('property-default-error-ok')
+    """)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == 'property-default-error-ok\n'

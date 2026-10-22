@@ -79,6 +79,7 @@ from .self_backend_ir import (
     parsed_function_value_slot_offset,
 )
 from .self_backend_kernel import (
+    _scalar_window_is_complete,
     TYPE_KIND_ARRAY,
     TYPE_KIND_FP,
     TYPE_KIND_INT,
@@ -89,6 +90,7 @@ from .self_backend_kernel import (
     get_indexed_function_kernel,
 )
 from .self_backend_value_arena import CompilerInt4
+from .self_backend_dynamic_alloca import DYNAMIC_ALLOCA_INTRINSIC
 from .self_backend_module_symbols import PreparedModuleSymbols
 from .self_backend_parse import (
     aggregate_literal_to_bytes,
@@ -481,7 +483,7 @@ def _emit_vector_minmax_lane_value(
     if value == "zeroinitializer":
         return emit_const_to_reg(lane_type, reg_name(lane_type, dest_reg_index), 0)
     if is_aggregate_literal_value(value):
-        literal_bytes = aggregate_literal_to_bytes(vector_type, value)
+        literal_bytes = aggregate_literal_to_bytes(vector_type, value, type_context=module_symbols.type_context)
         stride = _align_to(lane_type.slot_size, lane_type.align)
         lane_bytes = literal_bytes[
             lane_index * stride : lane_index * stride + lane_type.slot_size
@@ -1107,14 +1109,18 @@ def emit_umul_overflow_intrinsic_call(
     return lines
 
 
-def emit_uadd_overflow_intrinsic_call(
+def emit_unsigned_addsub_overflow_intrinsic_call(
     func: ParsedFunction,
     dest: str | None,
     ret_type: TypeDesc,
     callee: str,
     args: tuple[tuple[TypeDesc, str], ...],
     module_symbols: PreparedModuleSymbols,
+    *,
+    mnemonic: str,
+    condition: str,
 ) -> list[str]:
+    """Use carry for addition and borrow (inverted carry) for subtraction."""
     if dest is None or not parsed_function_has_value_slot(func, dest):
         return []
     if len(args) != 2:
@@ -1147,14 +1153,42 @@ def emit_uadd_overflow_intrinsic_call(
     lines = materialize_value(func, lhs, lhs_type, 9, module_symbols)
     lines.extend(materialize_value(func, rhs, rhs_type, 10, module_symbols))
     if lhs_type.width == 64:
-        lines.append("  adds x11, x9, x10")
-        lines.append(emitted_cset_line("w12", "hs"))
+        lines.append(f"  {mnemonic} x11, x9, x10")
+        lines.append(emitted_cset_line("w12", condition))
     else:
-        lines.append("  adds w11, w9, w10")
-        lines.append(emitted_cset_line("w12", "hs"))
+        lines.append(f"  {mnemonic} w11, w9, w10")
+        lines.append(emitted_cset_line("w12", condition))
         lines.append("  orr x11, x11, x12, lsl #32")
     lines.extend(store_value_regs_to_value_slot(func, dest, 11))
     return lines
+
+
+def emit_uadd_overflow_intrinsic_call(
+    func: ParsedFunction,
+    dest: str | None,
+    ret_type: TypeDesc,
+    callee: str,
+    args: tuple[tuple[TypeDesc, str], ...],
+    module_symbols: PreparedModuleSymbols,
+) -> list[str]:
+    return emit_unsigned_addsub_overflow_intrinsic_call(
+        func, dest, ret_type, callee, args, module_symbols,
+        mnemonic="adds", condition="hs",
+    )
+
+
+def emit_usub_overflow_intrinsic_call(
+    func: ParsedFunction,
+    dest: str | None,
+    ret_type: TypeDesc,
+    callee: str,
+    args: tuple[tuple[TypeDesc, str], ...],
+    module_symbols: PreparedModuleSymbols,
+) -> list[str]:
+    return emit_unsigned_addsub_overflow_intrinsic_call(
+        func, dest, ret_type, callee, args, module_symbols,
+        mnemonic="subs", condition="lo",
+    )
 
 
 def emit_signed_addsub_overflow_intrinsic_call(
@@ -1530,6 +1564,44 @@ def emit_fshr_intrinsic_call(
     lines.append(f"  lslv {width_reg}13, {lhs_reg}, {width_reg}12")
     lines.append(f"  orr {dst_reg}, {dst_reg}, {width_reg}13")
     lines.extend(store_value_regs_to_value_slot(func, dest, 14))
+    return lines
+
+
+def emit_dynamic_alloca_call(
+    func: ParsedFunction,
+    dest: str | None,
+    args: tuple[tuple[TypeDesc, str], ...],
+    module_symbols: PreparedModuleSymbols,
+) -> list[str]:
+    """Carve ``bytes`` (16-byte rounded) below SP and return the new SP.
+
+    Calls pass stack arguments with their own SP adjustment, so the area is
+    never reused before the epilogue resets SP from x29.
+    """
+    if len(args) != 2 or not args[1][1].isdigit():
+        raise BackendUnavailable(
+            f"self backend {DYNAMIC_ALLOCA_INTRINSIC} expects (i64 bytes, i64 align) in {func.name!r}"
+        )
+    if not func.aarch64_dynamic_stack:
+        raise BackendUnavailable(
+            f"self backend dynamic alloca outside a dynamic-stack frame in {func.name!r}"
+        )
+    size_type, size_value = args[0]
+    align = int(args[1][1])
+    if align & (align - 1):
+        raise BackendUnavailable(
+            f"self backend dynamic alloca alignment must be a power of two in {func.name!r}"
+        )
+    lines = materialize_value(func, size_value, size_type, 9, module_symbols)
+    lines.append("  add x9, x9, #15")
+    lines.append("  and x9, x9, #0xfffffffffffffff0")
+    lines.append("  mov x10, sp")
+    lines.append("  sub x10, x10, x9")
+    if align > 16:
+        lines.append("  and x10, x10, #" + hex((1 << 64) - align))
+    lines.append("  mov sp, x10")
+    if dest is not None and parsed_function_has_value_slot(func, dest):
+        lines.extend(store_value_regs_to_value_slot(func, dest, 10))
     return lines
 
 
@@ -2013,7 +2085,11 @@ def emit_call_instruction_indexed(
             f"self backend saw malformed variadic call in {func.name!r}: fixed args exceed actual args"
         )
 
-    fixed_count = fixed_arg_count if is_vararg_call and not is_aarch64_linux_triple(module_symbols.target_triple) else arg_count
+    # Reuse one immutable target decision per call. Keep the zero-query
+    # path for nonvariadic calls with no arguments or only FP registers.
+    linux_known = is_vararg_call
+    linux = linux_known and is_aarch64_linux_triple(module_symbols.target_triple)
+    fixed_count = fixed_arg_count if is_vararg_call and not linux else arg_count
     stack_arg_entries: list[tuple[int, int]] = []
     indirect_stack_ptr_entries: list[tuple[int, int]] = []
     pending_indirect_stack_literals: list[tuple[int, int]] = []
@@ -2060,17 +2136,25 @@ def emit_call_instruction_indexed(
                 first_register_index = fpr_index
                 fpr_index += register_count
         elif register_class == 1:
-            if is_aarch64_linux_triple(module_symbols.target_triple) and not arg_is_indirect and kernel.type_span(arg_type_id).fourth >= 16:
-                gpr_index = _align_to(gpr_index, 2)
+            if not linux_known:
+                linux = is_aarch64_linux_triple(module_symbols.target_triple)
+                linux_known = True
+            if linux and not arg_is_indirect:
+                argument_span: CompilerInt4 = kernel.type_span(arg_type_id)
+                if argument_span.fourth >= 16:
+                    gpr_index = _align_to(gpr_index, 2)
             if gpr_index + register_count > 8:
                 register_count = 0
-                if is_aarch64_linux_triple(module_symbols.target_triple):
+                if linux:
                     gpr_index = 8
             else:
                 first_register_index = gpr_index
                 gpr_index += register_count
         if register_count == 0:
-            if is_aarch64_linux_triple(module_symbols.target_triple):
+            if not linux_known:
+                linux = is_aarch64_linux_triple(module_symbols.target_triple)
+                linux_known = True
+            if linux:
                 stack_offset = _align_to(stack_offset, stack_arg_alignment_indexed(kernel, arg_type_id))
             if arg_is_indirect:
                 ptr_offset = stack_offset
@@ -2310,10 +2394,23 @@ def emit_call_instruction_indexed(
                 f"indexed call result slot is missing for {dest!r}"
             )
         slot_type_id = kernel.slot_type_id(slot_id)
-        slot_header: CompilerInt4 = kernel.type_header(slot_type_id)
+        slot_header_is_scalar = False
+        if type(kernel) is IndexedFunctionKernel:
+            slot_header_scalar_id = slot_type_id
+            slot_header_is_scalar = _scalar_window_is_complete(
+                kernel.type_scalars, slot_header_scalar_id, 12, 0
+            )
+            if slot_header_is_scalar:
+                slot_header_scalar = kernel.type_scalars.get_unchecked(
+                    slot_header_scalar_id * 12 + 0
+                )
+            else:
+                slot_header: CompilerInt4 = kernel.type_header(slot_header_scalar_id)
+        else:
+            slot_header: CompilerInt4 = kernel.type_header(slot_type_id)
         if (
-            slot_header.first == TYPE_KIND_ARRAY
-            or slot_header.first == TYPE_KIND_STRUCT
+            (slot_header_scalar if slot_header_is_scalar else slot_header.first) == TYPE_KIND_ARRAY
+            or (slot_header_scalar if slot_header_is_scalar else slot_header.first) == TYPE_KIND_STRUCT
         ):
             lines.extend(
                 store_value_regs_to_slot_parts(
@@ -2388,12 +2485,26 @@ def emit_call_instruction(
         return emit_bit_count_intrinsic_call(
             func, dest, ret_type, callee, args, module_symbols
         )
+    if not is_indirect and callee == DYNAMIC_ALLOCA_INTRINSIC:
+        return emit_dynamic_alloca_call(func, dest, args, module_symbols)
     if not is_indirect and callee.startswith("llvm.trap"):
         if args:
             raise BackendUnavailable(
                 f"self backend llvm.trap expects 0 args in {func.name!r}"
             )
         return ["  brk #0"]
+    if not is_indirect and callee.startswith("llvm.frameaddress."):
+        # Every prologue saves the caller's x29/x30 and points x29 at them; a
+        # call keeps even a leaf off the frameless path, so x29 is this frame.
+        if len(args) != 1 or args[0][1] != "0":
+            raise BackendUnavailable(
+                f"self backend {callee} supports only depth 0 in {func.name!r}"
+            )
+        if dest is None or not parsed_function_has_value_slot(func, dest):
+            return []
+        lines = ["  mov x10, x29"]
+        lines.extend(store_value_regs_to_value_slot(func, dest, 10))
+        return lines
     if not is_indirect and callee.startswith("llvm.bswap."):
         return emit_bswap_intrinsic_call(
             func, dest, ret_type, callee, args, module_symbols
@@ -2436,6 +2547,10 @@ def emit_call_instruction(
         )
     if not is_indirect and callee.startswith("llvm.uadd.with.overflow."):
         return emit_uadd_overflow_intrinsic_call(
+            func, dest, ret_type, callee, args, module_symbols
+        )
+    if not is_indirect and callee.startswith("llvm.usub.with.overflow."):
+        return emit_usub_overflow_intrinsic_call(
             func, dest, ret_type, callee, args, module_symbols
         )
     if not is_indirect and callee.startswith("llvm.sadd.with.overflow."):

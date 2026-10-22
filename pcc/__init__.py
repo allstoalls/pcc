@@ -1,7 +1,7 @@
 """Top-level ``pcc`` package exports.
 
 Keep package import side effects minimal so subpackages such as
-``pcc.py_frontend`` can be imported without pulling the full C
+``pcc.frontends.python`` can be imported without pulling the full C
 evaluator / llvmlite stack into the process.
 """
 
@@ -28,11 +28,11 @@ __all__ = [
 
 def __getattr__(name: str):
     if name == "inspect_artifact":
-        from .artifact_inspect import inspect_artifact
+        from pcc.diagnostics.artifact_inspect import inspect_artifact
 
         return inspect_artifact
     if name == "generate_bindings":
-        from .bindgen import generate_bindings
+        from pcc.frontends.c.bindgen import generate_bindings
 
         return generate_bindings
     if name == "i64" or name == "u64":
@@ -74,12 +74,12 @@ def __dir__() -> list[str]:
 
 
 # Roadmap real-wire hooks are intentionally installed from the package root so
-# both `python -m pcc` and `from pcc.py_frontend.pipeline import compile_python`
+# both `python -m pcc` and `from pcc.frontends.python.pipeline import compile_python`
 # see the same observability/pass/cache wiring. Disable with
 # PCC_DISABLE_ROADMAP_DEEPWIRE=1 when bisecting bootstrap regressions.
 try:
-    from .roadmap_deepwire import install as _pcc_roadmap_deepwire_install
+    from pcc.diagnostics.wiring import install as _pcc_diagnostics_wiring_install
 
-    _pcc_roadmap_deepwire_install()
+    _pcc_diagnostics_wiring_install()
 except Exception:
     pass

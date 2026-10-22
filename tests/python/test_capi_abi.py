@@ -1,4 +1,4 @@
-from pcc.capi_abi import extension_import_blockers, symbols_by_category
+from pcc.frontends.c.capi_abi import extension_import_blockers, symbols_by_category
 
 
 def test_refcount_symbols_grouped():

@@ -12,11 +12,8 @@ import pytest
 from scripts.pcc_inprocess_profile import report
 
 
-@pytest.mark.skipif(
-    sys.platform != "darwin" or platform.machine() != "arm64"
-    or shutil.which("clang") is None,
-    reason="diagnostic sampler requires macOS ARM64 and host clang",
-)
+# diagnostic sampler requires macOS ARM64 and host clang
+@pytest.mark.pcc_gate(probe=lambda: not (sys.platform != "darwin" or platform.machine() != "arm64" or shutil.which("clang") is None))
 def test_inprocess_sampler_attributes_busy_loop_to_main(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[2]
     dylib = tmp_path / "sampler.dylib"

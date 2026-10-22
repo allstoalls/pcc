@@ -25,7 +25,7 @@ from pathlib import Path
 
 
 def _compile(monkeypatch, src: Path, exe: Path) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     compile_python(
         str(src), str(exe),
@@ -370,7 +370,7 @@ def test_generator_for_over_cpython_iterable_compiles_and_runs(tmp_path):
     # loop target from frame saves (raw libpython pointers must never
     # enter the frame py_list), so this shape COMPILES AND RUNS — the
     # loop variable is never read after a yield suspension here.
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "gen_cpy_iter.py"
     exe = tmp_path / "gen_cpy_iter"
@@ -403,7 +403,7 @@ def test_generator_cpy_loop_var_read_across_yield_runs(tmp_path):
     # (frame-safe pcc object; the central name-load helper unboxes), so
     # reading it AFTER a yield suspension now compiles and runs with
     # CPython-equal output — this exact shape was J1's guarded boundary.
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "gen_cpy_cross.py"
     exe = tmp_path / "gen_cpy_cross"
@@ -437,7 +437,7 @@ def test_generator_cpy_flat_unpack_across_yield_runs(tmp_path):
     # dirpath/dirnames/filenames shape) are extracted via the cpy
     # bridge and boxed like the single-name target, so reading them
     # after a yield suspension compiles and runs CPython-equal.
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "gen_cpy_unpack.py"
     exe = tmp_path / "gen_cpy_unpack"
@@ -471,7 +471,7 @@ def test_generator_cpy_nested_unpack_across_yield_still_guarded(tmp_path):
     # skip-save + precise cross-yield guard naming the variable —
     # never a verifier crash or a heap-corrupting binary.
     import pytest
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "gen_cpy_nested.py"
     exe = tmp_path / "gen_cpy_nested"
@@ -576,7 +576,7 @@ def test_generator_cpy_flat_unpack_arity_mismatch_raises(tmp_path):
     # names raises ValueError like CPython (py_cpy_len-based; unsized
     # items conservatively skip the check). The DYN-protocol unpack
     # path's missing arity check is a separate pre-existing behavior.
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "gen_cpy_arity.py"
     exe = tmp_path / "gen_cpy_arity"
@@ -615,7 +615,7 @@ def test_generator_throw_close_exception_routing(tmp_path):
     # the generator body didn't catch it (CPython: close() swallows
     # that, it IS the normal close path; both tiers now compare the
     # pending exception against the injected object by identity).
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "gen_throw_close.py"
     exe = tmp_path / "gen_throw_close"
@@ -661,7 +661,7 @@ def test_contextmanager_swallow_and_propagate(tmp_path):
     # routing — a handler that catches the thrown-in exception SWALLOWS
     # it (the with-statement completes), an unhandled one PROPAGATES to
     # the enclosing except. Matches CPython line for line.
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "ctxmgr_probe.py"
     exe = tmp_path / "ctxmgr_probe"

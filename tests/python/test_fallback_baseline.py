@@ -184,7 +184,7 @@ def test_standalone_action_ratchet_defers_codegen_failures_to_pass_count():
 
 
 def _contextual_policy_modules(module_names) -> set[str]:
-    from pcc.py_frontend.pipeline import contextual_per_module_modules
+    from pcc.frontends.python.pipeline import contextual_per_module_modules
 
     out: set[str] = set()
     for mod in contextual_per_module_modules(module_names):
@@ -201,7 +201,7 @@ def _check_contextual_per_module(
     enforce_ratchet: bool,
     require_zero: bool,
 ) -> None:
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         PROBE_POLICY_CONTEXTUAL_MIXIN,
         contextual_host_for_module,
         per_module_probe_policy,
@@ -261,7 +261,7 @@ def _check_contextual_per_module(
 
 
 def _contextual_per_module_counts(srcs, mods, *, ir_scaffold_mode: str):
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         compile_contextual_per_module_fallback_counts,
     )
 
@@ -286,27 +286,27 @@ def test_pipeline_and_codegen_host_contract_do_not_drift():
     that lacks the accessed ``L1CodeGen`` member. That turns cross-module
     static host references back into ``py_cpy_getattr``/``py_cpy_call``.
     """
-    from pcc.py_frontend import pipeline
-    from pcc.py_frontend.codegen import host_contract
+    from pcc.frontends.python import pipeline
+    from pcc.frontends.python.codegen import host_contract
 
     assert (
         pipeline.l1_codegen_lowering_host_contract()
         == host_contract.l1_codegen_lowering_host_contract()
     )
     assert (
-        pipeline.per_module_probe_policy("pcc.py_frontend.codegen.layer1_init")
+        pipeline.per_module_probe_policy("pcc.frontends.python.codegen.layer1_init")
         == host_contract.PROBE_POLICY_CONTEXTUAL_MIXIN
     )
 
-    from pcc.py_frontend.codegen.layer1_support import (
+    from pcc.frontends.python.codegen.layer1_support import (
         _default_native_module_exports,
     )
 
     for module_name in (
-        "pcc.py_frontend.pipeline",
-        "pcc.py_frontend.codegen.layer1_entrypoints",
-        "pcc.cli_bootstrap",
-        "pcc.cli_contract",
+        "pcc.frontends.python.pipeline",
+        "pcc.frontends.python.codegen.layer1_entrypoints",
+        "pcc.driver.cli_bootstrap",
+        "pcc.driver.cli_contract",
         "unrelated.module",
     ):
         assert pipeline._module_uses_default_native_exports(module_name) == (
@@ -314,7 +314,7 @@ def test_pipeline_and_codegen_host_contract_do_not_drift():
         )
 
     exports = _default_native_module_exports(
-        "pcc.py_frontend.codegen.layer1_entrypoints"
+        "pcc.frontends.python.codegen.layer1_entrypoints"
     )
     assert exports is not None
     assert exports["pcc.diagnostics"]["DiagnosticSpan"]["field_names"] == (
@@ -328,8 +328,8 @@ def test_pipeline_and_codegen_host_contract_do_not_drift():
 
 def test_self_backend_data_plane_uses_closed_world_probe_policy():
     """Self-backend siblings need exports, never an L1CodeGen host binding."""
-    from pcc.py_frontend import pipeline
-    from pcc.py_frontend.codegen import host_contract
+    from pcc.frontends.python import pipeline
+    from pcc.frontends.python.codegen import host_contract
 
     modules = (
         "pcc.backend.self_backend_kernel",
@@ -352,7 +352,7 @@ def test_self_backend_native_data_plane_closed_world_fallback_zero():
     """The migrated kernel consumers are native with their real schemas."""
     import importlib.util as _imputil
 
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         compile_contextual_per_module_fallback_counts,
     )
 
@@ -391,7 +391,7 @@ def test_self_backend_native_data_plane_closed_world_fallback_zero():
 def test_native_object_encoding_closed_world_fallback_zero(tmp_path):
     """Owned encoding siblings consume actual arena/relocation export schemas."""
     from scripts.probe_stage1_closure import _tightened_closure
-    from pcc.py_frontend.pipeline import compile_contextual_per_module_fallback_counts
+    from pcc.frontends.python.pipeline import compile_contextual_per_module_fallback_counts
 
     srcs, mods = _tightened_closure(str(_REPO_ROOT / "pcc" / "__main__.py"))
     targets = {
@@ -411,13 +411,13 @@ def test_native_object_encoding_closed_world_fallback_zero(tmp_path):
 def test_pipeline_feature_surfaces_remain_native_in_real_context(tmp_path):
     """Standalone import artifacts must have real native feature bodies."""
     from scripts.probe_stage1_closure import _tightened_closure
-    from pcc.py_frontend.pipeline import compile_contextual_per_module_fallback_counts
+    from pcc.frontends.python.pipeline import compile_contextual_per_module_fallback_counts
 
     owners = {
-        "pcc.py_frontend.pipeline_context": "build_closed_world_context",
-        "pcc.py_frontend.pipeline_closed_world": "_closed_world_module_dependencies",
-        "pcc.py_frontend.pipeline_frontend_parallel": "_load_noop_action_result",
-        "pcc.py_frontend.pipeline_frontend_worker_execution": "run_codegen_worker",
+        "pcc.frontends.python.pipeline_context": "build_closed_world_context",
+        "pcc.frontends.python.pipeline_closed_world": "_closed_world_module_dependencies",
+        "pcc.frontends.python.pipeline_frontend_parallel": "_load_noop_action_result",
+        "pcc.frontends.python.pipeline_frontend_worker_execution": "run_codegen_worker",
     }
     srcs, mods = _tightened_closure(str(_REPO_ROOT / "pcc" / "__main__.py"))
     counts = compile_contextual_per_module_fallback_counts(
@@ -439,8 +439,8 @@ def test_pipeline_feature_surfaces_remain_native_in_real_context(tmp_path):
 
 def test_l1_codegen_host_contract_covers_constructor_state_fields():
     """Keep L1CodeGen's constructor fields in the contextual host schema."""
-    from pcc.py_frontend.codegen.host_contract import L1_CODEGEN_HOST_ATTRS
-    from pcc.py_frontend.codegen.layer1_init import Layer1InitMixin
+    from pcc.frontends.python.codegen.host_contract import L1_CODEGEN_HOST_ATTRS
+    from pcc.frontends.python.codegen.layer1_init import Layer1InitMixin
 
     source = textwrap.dedent(inspect.getsource(Layer1InitMixin._init_l1_state))
     tree = ast.parse(source)
@@ -469,7 +469,7 @@ def _l1_codegen_mixin_classes():
     Walks L1CodeGen's bases and the mixin stack's bases transitively so a new
     direct base (not only stack members) is covered.
     """
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
     seen = []
     pending = list(L1CodeGen.__bases__)
@@ -493,7 +493,7 @@ def test_l1_codegen_host_contract_covers_every_mixin_self_state():
     ``_di_subprograms`` landed on host slots 0-3 and turned
     ``_active_handler_excs`` into a 401-entry dict inside pcc1.
     """
-    from pcc.py_frontend.codegen.host_contract import L1_CODEGEN_HOST_ATTRS
+    from pcc.frontends.python.codegen.host_contract import L1_CODEGEN_HOST_ATTRS
 
     missing: dict[str, set[str]] = {}
     for cls in _l1_codegen_mixin_classes():
@@ -529,8 +529,8 @@ def test_l1_codegen_host_contract_covers_every_mixin_self_state():
 
 def test_l1_codegen_lambda_counters_are_initialized():
     """Fixed-layout pcc1 instances must not expose NULL lazy counters."""
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
-    from pcc.py_frontend.py_ast import Module
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_ast import Module
 
     codegen = L1CodeGen(Module(name="lambda_counter_probe", body=[]))
 
@@ -541,8 +541,8 @@ def test_l1_codegen_lambda_counters_are_initialized():
 
 def test_l1_codegen_static_literal_counters_are_initialized():
     """Fixed-layout pcc1 instances cannot rely on missing-attribute defaults."""
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
-    from pcc.py_frontend.py_ast import Module
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_ast import Module
 
     codegen = L1CodeGen(Module(name="static_literal_counter_probe", body=[]))
 
@@ -553,8 +553,8 @@ def test_l1_codegen_static_literal_counters_are_initialized():
 
 def test_l1_codegen_scaffold_binding_tables_are_initialized():
     """Self-hosted fixed-layout scaffold slots must start as containers."""
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
-    from pcc.py_frontend.py_ast import Module
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_ast import Module
 
     codegen = L1CodeGen(Module(name="scaffold_binding_probe", body=[]))
 
@@ -565,8 +565,8 @@ def test_l1_codegen_scaffold_binding_tables_are_initialized():
 
 def test_l1_codegen_class_attr_mutation_state_is_initialized():
     """pcc1 fixed-layout codegen must retain class-attr invalidation state."""
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
-    from pcc.py_frontend.py_ast import Module
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_ast import Module
 
     codegen = L1CodeGen(Module(name="class_attr_state_probe", body=[]))
 
@@ -576,8 +576,8 @@ def test_l1_codegen_class_attr_mutation_state_is_initialized():
 
 def test_l1_codegen_active_handler_stack_is_initialized():
     """pcc1 fixed-layout codegen must observe handler-stack push/pop state."""
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
-    from pcc.py_frontend.py_ast import Module
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_ast import Module
 
     codegen = L1CodeGen(Module(name="active_handler_stack_probe", body=[]))
 
@@ -595,7 +595,7 @@ def test_pipeline_contextual_cross_module_exports_stay_clean():
     """
     import importlib.util as _imputil
 
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         compile_contextual_per_module_fallback_counts,
     )
 
@@ -608,7 +608,7 @@ def test_pipeline_contextual_cross_module_exports_stay_clean():
     srcs, mods = probe_mod._tightened_closure(
         str(_REPO_ROOT / "pcc" / "__main__.py")
     )
-    target = "pcc.py_frontend.pipeline"
+    target = "pcc.frontends.python.pipeline"
     counts = compile_contextual_per_module_fallback_counts(
         srcs,
         mods,
@@ -630,9 +630,9 @@ def test_pipeline_subprocess_run_kwargs_resolve_without_cpython_bridge():
     ``CompletedProcess``; they must lower through ``py_subprocess_run*`` and
     never materialize ``py_cpy_import/getattr/call_kw``.
     """
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.type_infer import infer_module
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.type_infer import infer_module
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
     source = textwrap.dedent(
         """
@@ -647,7 +647,7 @@ def test_pipeline_subprocess_run_kwargs_resolve_without_cpython_bridge():
             process.run(make_cmd, check=True, timeout=seconds)
         """
     )
-    module_name = "pcc.py_frontend.pipeline"
+    module_name = "pcc.frontends.python.pipeline"
     typed = infer_module(parse_and_lift(source, "subprocess_probe.py", module_name))
     ir_text = str(
         L1CodeGen(
@@ -667,7 +667,7 @@ def test_capi_export_anchor_nm_fallback_keeps_native_stdout_contract(
     monkeypatch,
 ):
     """The nm fallback must capture output without ``CompletedProcess``."""
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     archive = tmp_path / "libpy_runtime_pcc_py_libpython.a"
     observed = {}
@@ -704,19 +704,19 @@ def test_capi_export_anchor_nm_fallback_keeps_native_stdout_contract(
 def test_cli_bootstrap_package_schema_static_imports_stay_native():
     """Keep the standalone bootstrap CLI independent of libpython bridges.
 
-    Package behavior helpers live in ``pcc.package_schema`` and are compiled
+    Package behavior helpers live in ``pcc.package.schema`` and are compiled
     into the closed-world bootstrap normally.  The independent per-module
     ratchet still needs their static signatures; otherwise the imported calls
     and every operation on their results regress to ``py_cpy_*``.
     """
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.type_infer import infer_module
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.type_infer import infer_module
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
-    src = _REPO_ROOT / "pcc" / "cli_bootstrap.py"
+    src = _REPO_ROOT / "pcc" / "driver" / "cli_bootstrap.py"
     with open(src, "r", encoding="utf-8") as f:
         source = f.read()
-    ast_mod = parse_and_lift(source, str(src), "pcc.cli_bootstrap")
+    ast_mod = parse_and_lift(source, str(src), "pcc.driver.cli_bootstrap")
     typed = infer_module(ast_mod)
     codegen = L1CodeGen(
         typed,
@@ -728,13 +728,13 @@ def test_cli_bootstrap_package_schema_static_imports_stay_native():
 
 
 def test_cli_worker_static_exports_match_owned_provider_signatures():
-    from pcc.py_frontend.codegen.layer1_support import (
+    from pcc.frontends.python.codegen.layer1_support import (
         _PCC_FRONTEND_STATIC_NATIVE_EXPORTS,
     )
 
     for module_name in (
-        "pcc.py_frontend.native_deferred",
-        "pcc.py_frontend.preload_delta_worker",
+        "pcc.frontends.python.native_deferred",
+        "pcc.frontends.python.preload_delta_worker",
     ):
         source = _REPO_ROOT.joinpath(*module_name.split(".")).with_suffix(".py")
         definition = next(
@@ -765,17 +765,17 @@ def test_layer1_constants_cross_module_static_imports_stay_native():
     native module-global slots; otherwise the split silently reintroduces
     ``py_cpy_import`` / ``py_cpy_getattr`` for static tables.
     """
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.type_infer import infer_module
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.type_infer import infer_module
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
-    src = _REPO_ROOT / "pcc" / "py_frontend" / "codegen" / "layer1.py"
+    src = _REPO_ROOT / "pcc" / "frontends" / "python" / "codegen" / "layer1.py"
     with open(src, "r", encoding="utf-8") as f:
         source = f.read()
     ast_mod = parse_and_lift(
         source,
         str(src),
-        "pcc.py_frontend.codegen.layer1",
+        "pcc.frontends.python.codegen.layer1",
     )
     typed = infer_module(ast_mod)
     codegen = L1CodeGen(
@@ -792,7 +792,7 @@ def test_layer1_constants_cross_module_static_imports_stay_native():
     assert layer1_constant_fallbacks == []
     assert re.search(
         r"store ptr @\.pystr\.obj\.\d+, ptr "
-        r"@\.classattr\.pcc_py_frontend_codegen_layer1\.L1CodeGen\."
+        r"@\.classattr\.pcc_frontends_python_codegen_layer1\.L1CodeGen\."
         r"_IR_RUNTIME_COMPAT_MODULE",
         ir_text,
     )
@@ -806,8 +806,8 @@ def test_native_module_constant_bindings_are_contextual_host_state():
     closed-world host contract, compiled-stage ``setattr`` can bind the table
     to an unrelated field and module-top class assignments observe ``None``.
     """
-    from pcc.py_frontend.codegen.host_contract import L1_CODEGEN_HOST_ATTRS
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.codegen.host_contract import L1_CODEGEN_HOST_ATTRS
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
     assert "_native_module_constant_bindings" in L1_CODEGEN_HOST_ATTRS
     assert hasattr(L1CodeGen, "_init_l1_state")
@@ -815,9 +815,9 @@ def test_native_module_constant_bindings_are_contextual_host_state():
 
 def _per_module_counts(srcs, mods, *, ir_scaffold_mode: str):
     """Compile only the independent modules, preserving action classification."""
-    from pcc.py_frontend import type_infer as _type_infer
-    from pcc.py_frontend.codegen import layer1 as _layer1
-    from pcc.parse.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer as _type_infer
+    from pcc.frontends.python.codegen import layer1 as _layer1
+    from pcc.frontends.python.py_lift import parse_and_lift
 
     per_module: dict[str, int] = {}
     per_module_actions: dict[str, int] = {}
@@ -1071,7 +1071,7 @@ def test_contextual_for_target_domain_join_cleanup_names_compile():
     """
     import importlib.util as _imputil
 
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         compile_contextual_per_module_fallback_counts,
     )
 
@@ -1085,10 +1085,10 @@ def test_contextual_for_target_domain_join_cleanup_names_compile():
         str(_REPO_ROOT / "pcc" / "__main__.py")
     )
     targets = {
-        "pcc.py_frontend.codegen.lambda_callback_lowering",
-        "pcc.py_frontend.codegen.lambda_helpers_lowering",
-        "pcc.py_frontend.codegen.native_virtual_thread",
-        "pcc.py_frontend.codegen.numeric_builtin_lowering",
+        "pcc.frontends.python.codegen.lambda_callback_lowering",
+        "pcc.frontends.python.codegen.lambda_helpers_lowering",
+        "pcc.frontends.python.codegen.native_virtual_thread",
+        "pcc.frontends.python.codegen.numeric_builtin_lowering",
     }
 
     off_counts = compile_contextual_per_module_fallback_counts(
@@ -1115,7 +1115,7 @@ def test_contextual_valueclass_arity_projection_remains_native():
     """The dynamic struct-arity path must stay inside the strict closure."""
     import importlib.util as _imputil
 
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         compile_contextual_per_module_fallback_counts,
     )
 
@@ -1129,8 +1129,8 @@ def test_contextual_valueclass_arity_projection_remains_native():
         str(_REPO_ROOT / "pcc" / "__main__.py")
     )
     targets = {
-        "pcc.py_frontend.codegen.class_gen",
-        "pcc.py_frontend.codegen.type_abi_lowering",
+        "pcc.frontends.python.codegen.class_gen",
+        "pcc.frontends.python.codegen.type_abi_lowering",
     }
 
     counts = compile_contextual_per_module_fallback_counts(
@@ -1148,7 +1148,7 @@ def test_contextual_frontend_type_tag_aliases_remain_native():
     """Generated compiler tag aliases must not add contextual fallbacks."""
     import importlib.util as _imputil
 
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         compile_contextual_per_module_fallback_counts,
     )
 
@@ -1162,19 +1162,19 @@ def test_contextual_frontend_type_tag_aliases_remain_native():
         str(_REPO_ROOT / "pcc" / "__main__.py")
     )
     targets = {
-        "pcc.py_frontend.codegen.compare_membership_lowering",
-        "pcc.py_frontend.codegen.dict_lowering",
-        "pcc.py_frontend.codegen.guarded_loop_lowering",
-        "pcc.py_frontend.codegen.isinstance_lowering",
-        "pcc.py_frontend.codegen.list_method_lowering",
-        "pcc.py_frontend.codegen.method_call_expression_lowering",
-        "pcc.py_frontend.codegen.method_call_lowering",
-        "pcc.py_frontend.codegen.name_lowering",
-        "pcc.py_frontend.codegen.native_virtual_thread",
-        "pcc.py_frontend.codegen.numeric_builtin_lowering",
-        "pcc.py_frontend.codegen.set_lowering",
-        "pcc.py_frontend.codegen.stmt_misc_lowering",
-        "pcc.py_frontend.codegen.string_method_lowering",
+        "pcc.frontends.python.codegen.compare_membership_lowering",
+        "pcc.frontends.python.codegen.dict_lowering",
+        "pcc.frontends.python.codegen.guarded_loop_lowering",
+        "pcc.frontends.python.codegen.isinstance_lowering",
+        "pcc.frontends.python.codegen.list_method_lowering",
+        "pcc.frontends.python.codegen.method_call_expression_lowering",
+        "pcc.frontends.python.codegen.method_call_lowering",
+        "pcc.frontends.python.codegen.name_lowering",
+        "pcc.frontends.python.codegen.native_virtual_thread",
+        "pcc.frontends.python.codegen.numeric_builtin_lowering",
+        "pcc.frontends.python.codegen.set_lowering",
+        "pcc.frontends.python.codegen.stmt_misc_lowering",
+        "pcc.frontends.python.codegen.string_method_lowering",
     }
 
     counts = compile_contextual_per_module_fallback_counts(
@@ -1282,7 +1282,7 @@ def test_on_mode_isinstance_helper_contextual_fallback_zero(
     ``host.class_lowering`` dispatch native.
     """
     actual = closure_compile_on["contextual_per_module"].get(
-        "pcc.py_frontend.codegen.isinstance_lowering"
+        "pcc.frontends.python.codegen.isinstance_lowering"
     )
     assert actual == 0
 
@@ -1296,7 +1296,7 @@ def test_on_mode_assignment_statement_contextual_fallback_zero():
     """
     import importlib.util as _imputil
 
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         compile_contextual_per_module_fallback_counts,
     )
 
@@ -1308,7 +1308,7 @@ def test_on_mode_assignment_statement_contextual_fallback_zero():
     spec.loader.exec_module(probe_mod)
     entry = str(_REPO_ROOT / "pcc" / "__main__.py")
     srcs, mods = probe_mod._tightened_closure(entry)
-    target = "pcc.py_frontend.codegen.assignment_statement_lowering"
+    target = "pcc.frontends.python.codegen.assignment_statement_lowering"
 
     counts = compile_contextual_per_module_fallback_counts(
         srcs,
@@ -1322,12 +1322,12 @@ def test_on_mode_assignment_statement_contextual_fallback_zero():
 
 def test_marshal_raw_per_module_fallbacks_stay_under_ratchet():
     """Keep the legacy scaffold-off marshal helper under its hard ratchet."""
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.type_infer import infer_module
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.type_infer import infer_module
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
-    target = "pcc.py_frontend.codegen.marshal"
-    src = _REPO_ROOT / "pcc" / "py_frontend" / "codegen" / "marshal.py"
+    target = "pcc.frontends.python.codegen.marshal"
+    src = _REPO_ROOT / "pcc" / "frontends" / "python" / "codegen" / "marshal.py"
     source = src.read_text(encoding="utf-8")
     typed = infer_module(parse_and_lift(source, str(src), target))
     codegen = L1CodeGen(
@@ -1354,6 +1354,6 @@ def test_on_mode_user_function_low_ir_helpers_contextual_fallback_zero(
     into pcc1's strict no-libpython closure.
     """
     actual = closure_compile_on["contextual_per_module"].get(
-        "pcc.py_frontend.codegen.user_function_lowering"
+        "pcc.frontends.python.codegen.user_function_lowering"
     )
     assert actual == 0

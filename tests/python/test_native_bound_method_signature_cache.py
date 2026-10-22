@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import subprocess
 import textwrap
+import re
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def _bound_method_source() -> str:
@@ -36,7 +37,7 @@ def test_bound_method_signature_cache_preserves_call_semantics(tmp_path):
     compile_python(
         str(src),
         str(exe),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )
@@ -53,7 +54,7 @@ def test_bound_method_signature_cache_is_emitted_for_default_free_method(tmp_pat
     compile_python(
         str(src),
         str(ll),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
         emit_llvm_only=True,
@@ -86,14 +87,19 @@ def test_native_function_adapter_uses_known_tuple_arg_getter(tmp_path):
     compile_python(
         str(src),
         str(ll),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
         emit_llvm_only=True,
     )
     ir_text = ll.read_text(encoding="utf-8")
     assert "define ptr @user_native_adapter_tuple_get_add_native_adapter" in ir_text
-    assert "call ptr @py_tuple_get_known" in ir_text
+    adapter = ir_text.split("define ptr @user_native_adapter_tuple_get_add_native_adapter(", 1)[1].split("\n}", 1)[0]
+    assert re.search(
+        r"call ptr(?: \(ptr, i64\))? @py_tuple_get_known\(ptr [^,]+, i64 0\)",
+        adapter,
+    ), adapter
+    assert "@py_tuple_get(" not in adapter
 
 
 def test_bound_method_varargs_no_kwargs_fast_call_preserves_semantics(tmp_path):
@@ -120,7 +126,7 @@ def test_bound_method_varargs_no_kwargs_fast_call_preserves_semantics(tmp_path):
     compile_python(
         str(src),
         str(exe),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )

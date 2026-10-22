@@ -35,7 +35,7 @@ PROGRAM = textwrap.dedent("""
 
 @pytest.mark.parametrize("runtime_cc", [None], ids=["port"])
 def test_bytes_split_matches_cpython(tmp_path, monkeypatch, runtime_cc):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "bs.py"
     exe = tmp_path / "bs.out"

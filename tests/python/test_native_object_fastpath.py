@@ -65,7 +65,7 @@ def test_string_table_preserves_encoded_offsets_and_padding(names):
 
 
 def test_large_string_table_executes_natively(
-    tmp_path, monkeypatch, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, monkeypatch, pcc_runtime_archive, python_program_compiler,
 ):
     import inspect
     import os
@@ -90,7 +90,7 @@ main()
 ''')
     binary = tmp_path / "strings"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     expected = str(len(_build_string_table(["_symbol_" + str(i) for i in range(40000)])[1]))
     for backend in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=20,
@@ -127,7 +127,9 @@ def test_merge_rebases_each_relocation_without_an_intermediate_copy(tmp_path, mo
         constructed.append(result)
         return result
 
+    # The link builds records directly and through macho_obj.new_relocation.
     monkeypatch.setattr(macho_link, "Relocation", relocation)
+    monkeypatch.setattr(macho_link, "new_relocation", relocation)
     merged = link_relocatable_native(objects)
     assert len(constructed) == 1
     assert constructed[0].offset == 8
@@ -405,13 +407,78 @@ def test_owned_source_view_unordered_indices_keep_iterator_contract():
     iterator.close()
 
 
-def test_private_final_link_order_accepts_23_bit_indices_without_widening_public_objects():
+def test_private_final_link_order_uses_section_count_without_widening_public_objects():
     assert native_object_module._MAX_COUNT == 8_000_000
-    for count in (0, 8_000_000, 8_120_563, 8_388_608):
+    for count in (0, 1, 8_000_000, 8_388_608, 8_388_609, 0xFFFFFFFF):
         native_object_module._validate_final_link_relocation_count(count)
-    for count in (-1, 8_388_609):
-        with pytest.raises(NativeObjectError, match="23 bits"):
+    for count in (-1, 0x100000000):
+        with pytest.raises(NativeObjectError, match="u32 nreloc"):
             native_object_module._validate_final_link_relocation_count(count)
+
+
+@pytest.mark.parametrize("count,expected", [(0, 1), (1, 1), (2, 2), (3, 4),
+                                           (1 << 23, 1 << 23),
+                                           ((1 << 23) + 1, 1 << 24),
+                                           (0xFFFFFFFF, 1 << 32)])
+def test_private_final_link_radix_roundtrips_boundary_indices(count, expected):
+    base = native_object_module._final_link_order_index_base(count)
+    assert base == expected
+    mask = base - 1
+    if count == 0:
+        return
+    indices = {0, count - 1}
+    if count > 1 << 23:
+        indices.update(((1 << 23) - 1, 1 << 23))
+    for offset in (0, 1, 0x7FFFFFFE, 0x7FFFFFFF):
+        for index in indices:
+            key = (0x7FFFFFFF - offset) * base + index
+            assert 0 <= key <= 0x7FFFFFFFFFFFFFFF
+            assert key & mask == index
+            assert key // base == 0x7FFFFFFF - offset
+    # An index never spills into the neighboring address's sort range.
+    assert (0x7FFFFFFF - 1) * base + count - 1 < 0x7FFFFFFF * base
+
+
+def test_private_final_link_large_indices_keep_descending_order_and_stable_ties():
+    count = (1 << 23) + 2
+    base = native_object_module._final_link_order_index_base(count)
+    entries = [(16, (1 << 23) + 1), (4, 0), (16, (1 << 23) - 1),
+               (0x7FFFFFFF, 1 << 23)]
+    order = CompilerIntArena(len(entries))
+    try:
+        for offset, index in entries:
+            order.append((0x7FFFFFFF - offset) * base + index)
+        order.sort_nonnegative_radix()
+        decoded = [order.get_unchecked(i) & (base - 1) for i in range(len(entries))]
+        assert decoded == [1 << 23, (1 << 23) - 1, (1 << 23) + 1, 0]
+    finally:
+        order.close()
+
+
+def test_private_final_link_unordered_rows_allocate_no_sort_arena(monkeypatch):
+    import struct
+    rows = struct.pack("<IIBBBB", 4, 0, 0, 3, 1, spec.ARM64_RELOC_UNSIGNED)
+    rows += struct.pack("<IIBBBB", 0, 0, 0, 3, 1, spec.ARM64_RELOC_UNSIGNED)
+    def unexpected_arena(*_args, **_kwargs):
+        raise AssertionError("unordered final-link traversal allocated a sort arena")
+    monkeypatch.setattr(native_object_module, "CompilerIntArena", unexpected_arena)
+    view = object.__new__(native_object_module.OwnedMergedSourceView)
+    assert list(view._iter_section_relocation_indices(rows, False)) == [0, 1]
+
+
+@pytest.mark.parametrize("ordered", [False, True])
+def test_private_final_link_iterator_rejects_truncated_rows(ordered):
+    view = object.__new__(native_object_module.OwnedMergedSourceView)
+    with pytest.raises(NativeObjectError, match="truncated"):
+        list(view._iter_section_relocation_indices(b"x" * 13, ordered))
+
+
+def test_private_final_link_order_rejects_unsigned_address_beyond_macho_range():
+    import struct
+    rows = struct.pack("<IIBBBB", 0x80000000, 0, 0, 3, 1, spec.ARM64_RELOC_UNSIGNED)
+    view = object.__new__(native_object_module.OwnedMergedSourceView)
+    with pytest.raises(NativeObjectError, match="signed r_address"):
+        list(view._iter_section_relocation_indices(rows, True))
 
 
 def test_owned_merged_source_view_rebases_section_target_and_runs(tmp_path):
@@ -520,7 +587,7 @@ def test_signing_releases_output_region_owners(monkeypatch):
 
 
 def test_private_link_plan_retires_graph_before_image_allocation_natively(
-    tmp_path, monkeypatch, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, monkeypatch, pcc_runtime_archive, python_program_compiler,
 ):
     import inspect
     import os
@@ -539,9 +606,9 @@ class Graph:
 def _validate_minos(value):
     return value
 def prepare_executable_object(objects, *, archives, semantic_manifest, _consume_inputs,
-                              _source_view=False):
+                              _source_view=False, archive_selections=None):
     return Graph()
-def _prepare_executable_image(merged, *, entry, minos, identifier):
+def _prepare_executable_image(merged, *, entry, minos, identifier, link_receipt=None):
     return (b"prepared", identifier)
 def _finish_executable_image(plan, identifier, phase_callback):
     gc.collect()
@@ -557,7 +624,7 @@ main()
 ''')
     binary = tmp_path / "link_lifetime"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)))
@@ -652,7 +719,7 @@ def test_packed_relocation_order_preserves_all_fields(monkeypatch, offsets, nati
 
 
 def test_fixed_relocation_reads_execute_natively_under_all_collectors(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive,
 ):
     import inspect
     import os
@@ -698,7 +765,7 @@ main()
 ''')
     binary = tmp_path / "fixed_pco_reads"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run(
             [str(binary)], capture_output=True, text=True, timeout=30,
@@ -710,7 +777,7 @@ main()
 
 @pytest.mark.integration
 def test_packed_relocation_native_link_executes_under_all_collectors(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive,
 ):
     import os
     from pcc.backend import owned_link_driver
@@ -719,7 +786,7 @@ def test_packed_relocation_native_link_executes_under_all_collectors(
     linker = tmp_path / "native-linker"
     python_program_compiler(
         str(Path(owned_link_driver.__file__)), str(linker), backend="self",
-        libpython_mode="off", runtime_archive=str(pcc_py_runtime_archive),
+        libpython_mode="off", runtime_archive=str(pcc_runtime_archive),
     )
     caller = tmp_path / "caller.pco"
     helper = tmp_path / "helper.pco"

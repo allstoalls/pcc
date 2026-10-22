@@ -63,7 +63,7 @@ def _configure(monkeypatch, runtime=None):
 
 
 def _compile(tmp_path, split, scaffold, *, ir_only, runtime=None):
-    from pcc.py_frontend.pipeline import compile_python, compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python, compile_python_multi
 
     output = tmp_path / ("method.ll" if ir_only else "method")
     entry = tmp_path / "method_entry.py"
@@ -102,7 +102,7 @@ def test_unannotated_method_real_ir_keeps_pointer_formal(tmp_path, monkeypatch, 
 
 
 def test_pointer_object_shape_hint_survives_abi_guard(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     _configure(monkeypatch)
     source = tmp_path / "object_hint.py"
@@ -126,7 +126,7 @@ def explicit_runtime():
     requested = os.environ.get("PCC_RUNTIME_ARCHIVE", "")
     assert requested, "set an explicit prebuilt matching runtime; no automatic build"
     archive = Path(requested).resolve(strict=True)
-    verify_runtime_archive_manifest(archive, runtime_root=_ROOT / "pcc/py_runtime")
+    verify_runtime_archive_manifest(archive, runtime_root=_ROOT / "pcc/runtime")
     return archive
 
 

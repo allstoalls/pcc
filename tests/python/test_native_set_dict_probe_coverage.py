@@ -110,7 +110,7 @@ _PROGRAMS = {"set": _SET_PROGRAM, "dict": _DICT_PROGRAM}
 
 @pytest.mark.parametrize("kind", ["set", "dict"])
 def test_negative_aligned_keys_are_never_dropped(tmp_path, kind):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -120,7 +120,7 @@ def test_negative_aligned_keys_are_never_dropped(tmp_path, kind):
         str(exe),
         ir_scaffold_mode="on",
         libpython_mode="off",
-        backend="llvm",
+        backend="self",
     )
     native = subprocess.run(
         [str(exe)], capture_output=True, text=True, timeout=120,
@@ -140,7 +140,7 @@ def test_negative_aligned_keys_are_never_dropped(tmp_path, kind):
         )
 
 
-_PROBE_SOURCES = ("pcc/py_runtime/py/py_set.py", "pcc/py_runtime/py/py_dict.py")
+_PROBE_SOURCES = ("pcc/runtime/py/py_set.py", "pcc/runtime/py/py_dict.py")
 
 # ceil(64 / 5): shifts for a 64-bit perturb to reach zero.  Only once it IS
 # zero is `j = (j * 5 + 1) & mask` full-period, so a budget below
@@ -202,7 +202,7 @@ def test_negative_aligned_keys_survive_the_c_mirror(tmp_path, monkeypatch, kind)
     Marked integration because selecting it rebuilds the runtime archive; it
     is deselectable, never skipped.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -212,7 +212,7 @@ def test_negative_aligned_keys_survive_the_c_mirror(tmp_path, monkeypatch, kind)
         str(exe),
         ir_scaffold_mode="on",
         libpython_mode="off",
-        backend="llvm",
+        backend="self",
     )
     native = subprocess.run(
         [str(exe)], capture_output=True, text=True, timeout=300,

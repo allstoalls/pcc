@@ -1,0 +1,77 @@
+{
+  "base_production_commit": "818187ba7dfff54df589b93bc10594f87786fe22",
+  "base_snapshot_commit": "fe054fd02931c1e616a9c287b6d32362290b5e1d",
+  "counts": {
+    "collected": 370,
+    "errors": 0,
+    "failed": 0,
+    "passed": 369,
+    "skipped": 0,
+    "xfailed": 1,
+    "xpassed": 0
+  },
+  "date_utc": "2026-10-09",
+  "execution_boundary": {
+    "audit_denials": 0,
+    "cleanup": "CLEAN; root reaped; ECHILD; no admitted handles remain",
+    "guard_elapsed_s": 82.51850948199899,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "minimum_free_bytes": 4294967296,
+    "peak_sampled_root_rss_bytes": 92278784,
+    "wall_limit_s": 300.0
+  },
+  "limitations": [
+    "The unchanged strict expected failure records missing BlockingIOError.characters_written and is not counted as a pass.",
+    "No first-class/keyword dispatch, ABI/header or emitted collector correctness follows from these model passes.",
+    "Candidate patches remain isolated artifacts and are not applied to active repository production sources."
+  ],
+  "model_subgroups": {
+    "constructors": 344,
+    "fdopen": 12,
+    "open_errno": 14
+  },
+  "native_execution": "UNRUN",
+  "nodes": [
+    "tests/python/test_native_open_errno.py::test_open_errno_keeps_original_filename_and_args",
+    "tests/python/test_native_open_errno.py::test_open_errno_metadata_failure_keeps_allocation_exception",
+    "tests/python/test_native_open_errno.py::test_fopen_restores_seek_errno_after_close",
+    "tests/python/test_native_open_errno.py::test_fopen_allocation_failure_publishes_enomem_after_close",
+    "tests/python/test_owned_fdopen_provider.py::test_fdopen_adopts_without_truncation_and_closes_once",
+    "tests/python/test_owned_fdopen_provider.py::test_fdopen_borrowed_descriptor_and_append",
+    "tests/python/test_owned_fdopen_provider.py::test_fdopen_invalid_descriptor_preserves_errno",
+    "tests/python/test_owned_fdopen_provider.py::test_errno_metadata_failure_preserves_allocation_exception",
+    "tests/python/test_owned_fdopen_provider.py::test_fdopen_invalid_mode_does_not_take_descriptor",
+    "tests/python/test_owned_fdopen_provider.py::test_fdopen_signature_is_canonical_and_contains_forwarded_options",
+    "tests/python/test_owned_fdopen_provider.py::test_dynamic_file_methods_publish_before_releasing_captures",
+    "tests/python/test_owned_fdopen_provider.py::test_fdopen_reordered_binary_mode_and_context_identity",
+    "tests/python/test_os_error_constructors.py::test_os_error_constructor_payload_matches_cpython",
+    "tests/python/test_os_error_constructors.py::test_os_error_null_argument_tuple_means_no_arguments",
+    "tests/python/test_os_error_constructors.py::test_blocking_numeric_third_argument_known_unqualified_field",
+    "tests/python/test_os_error_constructors.py::test_os_error_constructor_allocation_error_does_not_leak_arguments"
+  ],
+  "patches": {
+    "packet-01-open-errno-v2": "e8a6c82c0fe089ee700f9c5381e64c825e2639bd58246c681cc780662659b23c",
+    "packet-02-oserror-constructors": "3a1489db9eb213e6519ab9918e380870086384e1e95e817f7b663c1b434e7052"
+  },
+  "payload_result_sha256": "551787377c2bd7caac26f3d578879a3a520d2a37bce271e528323aca350089f3",
+  "qualification_sha256": "c711e4491b0f43af2df28fa4574ae1398614cc8a14ddbe85379262c1ac851daa",
+  "remaining_unrun": [
+    "Subprocess reference programs",
+    "Six frontend IR cases",
+    "Native emitted programs/five GC",
+    "Actual Mac/Darwin execution",
+    "ABI/header compatibility",
+    "Full async/gateway/bootstrap"
+  ],
+  "schema": "pcc.oserror_host_model_public_result.v1",
+  "scope": "AST-extracted production-body host models and temporary-file descriptor operations. Constructor allocation/relocation and Darwin syscall failure shapes are modeled, not emitted/native collector or on-device execution.",
+  "source_manifest_sha256": "cf5ca3283055c2cc3b3d9fca5dbcaa2583bb2e40e640fd554e0c631e71fee599",
+  "source_seals": "Complete candidate and canonical inventories PASS after execution",
+  "status": "369_PASS_1_STRICT_XFAIL",
+  "strict_xfail": {
+    "name": "test_blocking_numeric_third_argument_known_unqualified_field",
+    "reason": "BlockingIOError.characters_written is outside this constructor slice",
+    "type": "pytest.xfail"
+  }
+}

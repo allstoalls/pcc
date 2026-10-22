@@ -48,8 +48,8 @@ C_TEST_CASES = collect_c_tests()
     ids=[t[0] for t in C_TEST_CASES],
 )
 def test_c_file(name, path, expected, is_project):
-    from pcc.evaluater.c_evaluator import CEvaluator
-    from pcc.project import collect_project
+    from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+    from pcc.driver.project import collect_project
     source, base_dir = collect_project(path)
     pcc = CEvaluator()
     ret = pcc.evaluate(source, optimize=False, base_dir=base_dir)

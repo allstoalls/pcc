@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python, count_py_cpy_fallback_calls
+from pcc.frontends.python.pipeline import compile_python, count_py_cpy_fallback_calls
 
 
 def test_path_metadata_calls_stay_native_and_check_errors(tmp_path):

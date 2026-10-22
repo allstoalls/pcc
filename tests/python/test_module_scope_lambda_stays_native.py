@@ -8,12 +8,12 @@ under ``--python-libpython=off``, where a native function object
 (``_maybe_emit_native_lambda_func``) was already available and was simply
 tried second.
 
-``pcc/passes/base.py`` builds a module-scope dict of ten
+``pcc/frontends/c/passes/base.py`` builds a module-scope dict of ten
 ``lambda pm: pm.add_<x>_pass()`` values.  Each became a
 ``py_cpy_import``/``py_cpy_getattr``/``py_cpy_from_pccstr``/``py_cpy_call1``
 sequence in that module's top-level code, and module-level code is outside the
 strict no-libpython stub projection -- so the self-host compile failed with
-"module pcc.passes.base generated IR still calls py_cpy_* helpers".
+"module pcc.frontends.c.passes.base generated IR still calls py_cpy_* helpers".
 
 The native path is now tried first whenever native callables are preferred.
 """
@@ -54,7 +54,7 @@ main()
 
 
 def test_module_scope_lambdas_run_and_match_cpython(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "module_lambdas.py"
     exe = tmp_path / "module_lambdas.out"
@@ -71,7 +71,7 @@ def test_module_scope_lambdas_run_and_match_cpython(tmp_path):
 
 
 def test_module_scope_lambdas_emit_no_cpython_operator(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "module_lambdas.py"
     out = tmp_path / "module_lambdas.ll"
@@ -93,13 +93,13 @@ def test_passes_base_lowers_with_no_fallbacks():
     import os
     from pathlib import Path
 
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
-    path = Path(__file__).resolve().parents[2] / "pcc/passes/base.py"
+    path = Path(__file__).resolve().parents[2] / "pcc/frontends/c/passes/base.py"
     typed = type_infer.infer_module(
-        parse_and_lift(path.read_text(encoding="utf-8"), str(path), "pcc.passes.base")
+        parse_and_lift(path.read_text(encoding="utf-8"), str(path), "pcc.frontends.c.passes.base")
     )
     codegen = L1CodeGen(typed, False, "on")
     codegen._strict_no_libpython = True
@@ -115,7 +115,7 @@ def test_passes_base_lowers_with_no_fallbacks():
 @pytest.mark.parametrize("mode", ["auto", "on"])
 def test_operator_shortcut_is_kept_when_cpython_callables_are_wanted(tmp_path, mode):
     """The shortcut still applies where a CPython callable is the point."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "sort_key.py"
     out = tmp_path / "sort_key.ll"

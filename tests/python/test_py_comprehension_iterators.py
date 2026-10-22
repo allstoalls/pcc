@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def test_comprehension_over_user_iterable_uses_native_iterator_protocol(tmp_path):
@@ -28,7 +28,7 @@ def test_comprehension_over_user_iterable_uses_native_iterator_protocol(tmp_path
     compile_python(
         str(src),
         str(exe),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )

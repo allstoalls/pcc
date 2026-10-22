@@ -15,8 +15,8 @@ REPO = Path(__file__).absolute().parents[2]
 
 
 def test_parser_mirrors_match_python_binary64_conversion():
-    from pcc.parse.py_lift import _parse_float_literal_lift
-    from pcc.parse.py_parse import _parse_float_literal
+    from pcc.frontends.python.py_lift import _parse_float_literal_lift
+    from pcc.frontends.python.py_parse import _parse_float_literal
 
     for text in (
         "1e100",
@@ -32,7 +32,7 @@ def test_parser_mirrors_match_python_binary64_conversion():
 
 
 def test_float_unary_minus_uses_ieee_fneg_and_preserves_negative_zero(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "float_unary_minus.py"
     llvm_ir = tmp_path / "float_unary_minus.ll"
@@ -54,7 +54,7 @@ def test_float_unary_minus_uses_ieee_fneg_and_preserves_negative_zero(tmp_path):
 
 
 def test_float_literal_precision_matches_cpython(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "fl.py"
     exe = tmp_path / "fl.out"

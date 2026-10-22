@@ -1,4 +1,4 @@
-from pcc.gc_leak_finder import analyze_gc_events, analyze_gc_log_text
+from pcc.diagnostics.gc_leak_finder import analyze_gc_events, analyze_gc_log_text
 
 
 def test_gc_leak_finder_detects_growth():

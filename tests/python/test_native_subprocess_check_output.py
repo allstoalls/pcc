@@ -19,7 +19,7 @@ def _compile_to_ll(
     mode: str,
     recursive_stdlib: bool = False,
 ) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -136,7 +136,10 @@ def test_run_check_true_expr_statement_dispatches_native():
     body = _function_body(ir_text, "f")
 
     assert body is not None
-    assert "@py_subprocess_run" in body, body
+    # Captured output belongs to the CalledProcessError, so the call goes to
+    # the owned provider's run(), never to the output-less status lane.
+    assert "import.method.run" in body, body
+    assert "@py_subprocess_run(" not in body, body
     assert "cpy.fn.run" not in body, body
 
 
@@ -187,13 +190,14 @@ def test_run_capture_output_bool_expression_dispatches_native():
     body = _function_body(ir_text, "f")
 
     assert body is not None
-    assert "@py_subprocess_run" in body, body
-    assert "subprocess.capture" in body, body
+    # A capture decided at run time also needs the provider's run().
+    assert "import.method.run" in body, body
+    assert "@py_subprocess_run(" not in body, body
     assert "cpy.fn.run" not in body, body
 
 
 def test_native_check_output_runtime(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -226,7 +230,7 @@ def test_native_check_output_runtime(tmp_path):
 
 
 def test_native_run_runtime(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"

@@ -5,7 +5,7 @@ import subprocess
 
 
 def test_computed_int_global_reexport(tmp_path: Path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     (tmp_path / "provider.py").write_text(
         "from pcc.unsafe import null\nFIRST = 1\nSECOND = 2\nLIMIT = FIRST | SECOND\n"

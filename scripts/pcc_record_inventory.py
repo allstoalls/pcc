@@ -71,6 +71,13 @@ SCHEMA = "pcc.compiler-record-inventory.v1"
 # a lazy diagnostic projection, or target/control machinery.  Otherwise the
 # source-shape gate fails instead of silently reporting another false zero.
 DATA_PLANE_CLASS_CONTRACT = {
+    # Owned ELF linker source identities and validated layout metadata remain
+    # resident; payloads belong to one explicitly bounded input-store cache.
+    "owned_elf_inputs.py:_ClassificationProof": "semantic_record",
+    "owned_elf_inputs.py:_InputSource": "semantic_record",
+    "owned_elf_inputs.py:_InputSection": "phase_shell",
+    "owned_elf_inputs.py:_InputObject": "phase_shell",
+    "owned_elf_inputs.py:ElfInputStore": "phase_shell",
     "arm64_encode.py:EncodeError": "target_control",
     "arm64_encode.py:AssembledText": "phase_shell",
     # Packed instruction/relocation columns; names, inline data and the
@@ -88,10 +95,30 @@ DATA_PLANE_CLASS_CONTRACT = {
     "self_backend_aarch64_fragments.py:AArch64EmissionFragments": "native_arena",
     "self_backend_module_symbols.py:PreparedModuleSymbols": "phase_shell",
     "self_backend_prepare.py:PreparedSelfBackendModule": "phase_shell",
+    # Text legalization owners: one module scope for lines/type/helper tables
+    # and one function scope for temporary names and its rewrite buffer.
+    "self_backend_half.py:_HalfModule": "phase_shell",
+    "self_backend_half.py:_HalfFunction": "phase_shell",
+    "self_backend_wide_int.py:_WideModule": "phase_shell",
+    "self_backend_wide_int.py:_WideFunction": "phase_shell",
     "self_backend_parse.py:_FunctionBlockPlane": "native_arena",
+    # Original source metadata is a retained semantic sidecar, not a lazy
+    # instruction projection or packed native storage. Module/function/block
+    # owners retain its ordinary Python records and coordinate collections.
+    "self_backend_debug.py:DebugNode": "semantic_record",
+    "self_backend_debug.py:DebugSource": "semantic_record",
+    "self_backend_debug.py:DebugLocation": "semantic_record",
+    "self_backend_debug.py:DebugBlock": "phase_shell",
+    "self_backend_debug.py:FunctionDebugInfo": "phase_shell",
+    "self_backend_debug.py:DebugMetadata": "phase_shell",
+    # One emission plan per function owns the actual machine-label/source
+    # rows, borrowing the semantic sidecar until DWARF sections are written.
+    "self_backend_dwarf.py:DebugFunctionPlan": "phase_shell",
     "self_backend_targets.py:SelfBackendPlatformVerdict": "target_control",
     "self_backend_targets.py:SelfBackendTargetSpec": "target_control",
     "self_backend_ir.py:TypeDesc": "semantic_record",
+    # Per-module lazy declarations and canonicalization ownership.
+    "self_backend_ir.py:TypeParseContext": "phase_shell",
     "self_backend_ir.py:ArgInfo": "semantic_record",
     "self_backend_ir.py:PhiIncoming": "diagnostic_projection",
     "self_backend_ir.py:PhiInstr": "diagnostic_projection",
@@ -273,6 +300,12 @@ DIAGNOSTIC_PROJECTION_SITE_CONTRACT: dict[str, tuple[int, str]] = {
         3,
         "legacy_or_unsupported",
     ),
+    # The legacy x86_64 planner tracks local registry-frame lifetimes here;
+    # the normal AArch64 path uses the packed native root-state plane.
+    "self_backend_precise_stackmaps.py:_frame_protocol_enter_group:_RootGroup": (
+        1,
+        "legacy_or_unsupported",
+    ),
     "self_backend_precise_stackmaps.py:build_function_stack_map_plan.add_record:PlannedSafepoint": (
         1,
         "host_oracle",
@@ -310,7 +343,7 @@ def _discover_self_backend_classes(backend_dir: Path | None = None) -> set[str]:
     if backend_dir is None:
         backend_dir = _SCRIPT_DIR.parent / "pcc" / "backend"
     discovered: set[str] = set()
-    for path in sorted(set(backend_dir.glob("self_backend*.py")) | set(backend_dir.glob("arm64_*.py"))):
+    for path in sorted(set(backend_dir.glob("self_backend*.py")) | set(backend_dir.glob("arm64_*.py")) | set(backend_dir.glob("owned_elf_inputs.py"))):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in tree.body:
             if isinstance(node, ast.ClassDef):
@@ -384,7 +417,7 @@ def _discover_diagnostic_projection_sites(
         if classification == "diagnostic_projection"
     }
     sites: Counter = Counter()
-    for path in sorted(set(backend_dir.glob("self_backend*.py")) | set(backend_dir.glob("arm64_*.py"))):
+    for path in sorted(set(backend_dir.glob("self_backend*.py")) | set(backend_dir.glob("arm64_*.py")) | set(backend_dir.glob("owned_elf_inputs.py"))):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         visitor = _DiagnosticProjectionSiteVisitor(path.name, diagnostic_names)
         visitor.visit(tree)

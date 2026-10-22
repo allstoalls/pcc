@@ -1,7 +1,7 @@
 """Preload aliases share serialization without changing structural type IDs."""
 
-from pcc.py_frontend import type_infer
-from pcc.py_frontend.py_ast import ClassType
+from pcc.frontends.python import type_infer
+from pcc.frontends.python.py_ast import ClassType
 
 
 def test_real_preload_serializes_local_and_qualified_alias_once(monkeypatch):
@@ -19,7 +19,8 @@ def test_real_preload_serializes_local_and_qualified_alias_once(monkeypatch):
 
     monkeypatch.setattr(type_infer, "encode_type_memo", observe)
     result = type_infer.build_unique_external_class_preload(exports)
-    assert result["keys"] == (("Record", 0), ("provider.Record", 0))
+    # Each alias once, sharing one descriptor; their order follows insertion.
+    assert sorted(result["keys"]) == [("Record", 0), ("provider.Record", 0)]
     assert len(result["types"]) == 1
     assert len(calls) == 1
 

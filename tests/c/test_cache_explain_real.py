@@ -1,4 +1,4 @@
-from pcc.cache_explain import CacheDecision, CacheInput, build_cache_key, format_cache_decision
+from pcc.diagnostics.cache_explain import CacheDecision, CacheInput, build_cache_key, format_cache_decision
 
 
 def test_cache_key_changes_with_content(tmp_path):

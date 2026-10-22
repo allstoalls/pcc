@@ -1,0 +1,72 @@
+--- a/tests/python/test_x86_64_indexed_instruction_bridge.py
++++ b/tests/python/test_x86_64_indexed_instruction_bridge.py
+@@ -166,9 +166,18 @@
+ 
+     direct = _indexed_module(tmp_path, source)
+     kernels = [get_indexed_function_kernel(function) for function in direct.functions]
+-    original_states = [(function.blocks, function.block_map) for function in direct.functions]
++    original_states = []
+     seen_shells = []
+     emit_blocks = emitter.emit_function_blocks
++    emit_function = emitter._emit_function
++
++    def checked_function(function, plan):
++        # Public preparation replaces block_map before this owner begins.
++        # The emitter must restore the exact objects it receives, as in the
++        # existing emission-lifetime regression, not a pre-preparation map.
++        assert not function.blocks and not function.block_map
++        original_states.append((function, function.blocks, function.block_map))
++        return emit_function(function, plan)
+ 
+     def checked_blocks(function, **kwargs):
+         assert kwargs["emit_indexed_instruction"] is emitter._emit_indexed_instruction
+@@ -183,13 +192,16 @@
+ 
+     # Install after input construction. The protected scope is real emission,
+     # including preparation and stack-map planning, not codec construction.
++    monkeypatch.setattr(emitter, "_emit_function", checked_function)
+     monkeypatch.setattr(emitter, "emit_function_blocks", checked_blocks)
+     monkeypatch.setattr(IndexedFunctionKernel, "diagnostic_instruction", forbidden)
+     monkeypatch.setattr(parsed_ir, "_interned_operands", forbidden)
+     actual = _emit(direct, target, packed)
+     assert seen_shells
+     assert all(kernel.instruction_arena_diagnostic_projections == 0 for kernel in kernels)
+-    for function, (blocks, block_map) in zip(direct.functions, original_states):
++    assert len(original_states) == len(direct.functions)
++    assert all(row[0] is function for row, function in zip(original_states, direct.functions))
++    for function, blocks, block_map in original_states:
+         assert function.blocks is blocks and not blocks
+         assert function.block_map is block_map and not block_map
+     assert actual == expected
+@@ -317,19 +329,30 @@
+         instruction_id = next(iter(kernel.instruction_arithmetic_flag_values))
+         assert kernel.instruction_metadata.get_unchecked(instruction_id * 4 + 3)
+         del kernel.instruction_arithmetic_flag_values[instruction_id]
+-        blocks, block_map = function.blocks, function.block_map
++        original_states = []
++        emit_function = emitter._emit_function
++
++        def checked_function(current, plan):
++            assert current is function
++            original_states.append((current.blocks, current.block_map))
++            return emit_function(current, plan)
++
+         try:
+             with monkeypatch.context() as guard:
+                 def forbidden(*args, **kwargs):
+                     raise AssertionError("corrupt flag metadata reached a selector")
++                guard.setattr(emitter, "_emit_function", checked_function)
+                 guard.setattr(emitter, "_emit_memory_instruction", forbidden)
+                 guard.setattr(emitter, "_emit_compute_instruction", forbidden)
+                 with pytest.raises(KeyError) as caught:
+                     if eager:
++                        original_states.append((function.blocks, function.block_map))
+                         kernel.materialize_legacy_blocks(function)
+                     else:
+                         emit_indexed_assembly(module)
+                 outcomes.append((type(caught.value), str(caught.value)))
++            assert len(original_states) == 1
++            blocks, block_map = original_states[0]
+             assert function.blocks is blocks and not blocks
+             assert function.block_map is block_map and not block_map
+             assert not emitter._X86_EMISSION_ACTIVE and not emitter._WINDOWS_ABI

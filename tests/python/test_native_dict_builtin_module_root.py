@@ -8,7 +8,7 @@ check therefore branched to the OUTER cleanup block, which does not leave the
 just-entered dict root. The self backend's precise stack-map analysis then
 rejected the whole module with "managed root state disagrees at block join
 'err.exit'" — this is what broke stage1 on
-``pcc.py_frontend.codegen.layer1_support`` (its module-level
+``pcc.frontends.python.codegen.layer1_support`` (its module-level
 ``dict([("name", export), ...])`` static tables). Function-local ``dict([...])``
 did not reproduce; module top is the failing shape.
 
@@ -23,10 +23,10 @@ from pathlib import Path
 import pytest
 
 
-def _run_pcc_program(tmp_path: Path, source: str, backend: str) -> str:
+def _run_pcc_program(tmp_path: Path, source: str, backend: str | None) -> str:
     src = tmp_path / "prog.py"
     src.write_text(source, encoding="utf-8")
-    exe = tmp_path / ("prog_" + backend)
+    exe = tmp_path / ("prog_" + (backend or "default"))
     env = os.environ.copy()
     env.pop("LC_ALL", None)
     build = subprocess.run(
@@ -60,7 +60,7 @@ _PROG = (
 )
 
 
-@pytest.mark.parametrize("backend", ["self", "llvm"])
+@pytest.mark.parametrize("backend", [pytest.param(None, id="default-self"), pytest.param("self", id="explicit-self")])
 def test_module_level_dict_builtin_list_source(tmp_path, backend):
     out = _run_pcc_program(tmp_path, _PROG, backend)
     assert out.splitlines() == ["4", "2"]

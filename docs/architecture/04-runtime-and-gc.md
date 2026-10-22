@@ -1,6 +1,6 @@
 # 04 · Runtime Object Model & GC
 
-The runtime is what pcc-compiled Python links against. It lives twice: a C implementation under `pcc/py_runtime/src/*.c`, and a **pcc-Python mirror** under `pcc/py_runtime/py/*.py` that pcc compiles itself (this is what makes the runtime part of the self-host story). The two must stay in sync.
+The runtime is what pcc-compiled Python links against. It lives twice: a C implementation under `pcc/runtime/src/*.c`, and a **pcc-Python mirror** under `pcc/runtime/py/*.py` that pcc compiles itself (this is what makes the runtime part of the self-host story). The two must stay in sync.
 
 ## Object header (every heap object)
 
@@ -95,7 +95,7 @@ Implementation: `py_obj.c:256` dispatches stores on `pcc_gc_backend()`; backend 
 
 ## Threading
 
-Built with `PCC_WITH_THREADS=1`, refcounts use `__atomic_*` (`ldaddal` on aarch64) instead of a GIL, so compiled Python runs on multiple cores. Lock/Event/Condition/Thread back onto `pthread_*` (`py_threading.c`). A behavior-oriented-concurrency helper (`pcc/py_stdlib/boc.py`) provides cowns + canonical lock ordering (deadlock-free by construction).
+Built with `PCC_WITH_THREADS=1`, refcounts use `__atomic_*` (`ldaddal` on aarch64) instead of a GIL, so compiled Python runs on multiple cores. Lock/Event/Condition/Thread back onto `pthread_*` (`py_threading.c`). A behavior-oriented-concurrency helper (`pcc/stdlib/boc.py`) provides cowns + canonical lock ordering (deadlock-free by construction).
 
 ## C ⇄ pcc-Python mirror & the runtime archives
 
@@ -115,13 +115,13 @@ flowchart TD
 
 | Path | Role |
 |---|---|
-| `pcc/py_runtime/include/py_runtime.h` | public header: object header, type tags, GC ABI, refcount/GC kinds |
-| `pcc/py_runtime/src/py_internal.h` | internal layouts (`PyClassObject`, `PyExceptionObject`, flag macros) |
-| `pcc/py_runtime/src/py_obj.c` | refcount, store-barrier dispatch, dealloc trigger |
-| `pcc/py_runtime/src/py_obj_gc.c` | refcount + cycle collector (backend #0) |
-| `pcc/py_runtime/src/py_gc_backend.c` | backend selector + backends #1–#4 |
-| `pcc/py_runtime/src/py_exc_tls.c` | `py_raise` / `py_err_occurred` / TLS |
-| `pcc/py_runtime/src/py_class.c` | class object, C3 MRO, method/field lookup |
-| `pcc/py_runtime/py/*.py` | pcc-Python mirror (must match the C layouts) |
-| `pcc/py_runtime/Makefile` | builds the 4–5 archive variants |
+| `pcc/runtime/include/py_runtime.h` | public header: object header, type tags, GC ABI, refcount/GC kinds |
+| `pcc/runtime/src/py_internal.h` | internal layouts (`PyClassObject`, `PyExceptionObject`, flag macros) |
+| `pcc/runtime/src/py_obj.c` | refcount, store-barrier dispatch, dealloc trigger |
+| `pcc/runtime/src/py_obj_gc.c` | refcount + cycle collector (backend #0) |
+| `pcc/runtime/src/py_gc_backend.c` | backend selector + backends #1–#4 |
+| `pcc/runtime/src/py_exc_tls.c` | `py_raise` / `py_err_occurred` / TLS |
+| `pcc/runtime/src/py_class.c` | class object, C3 MRO, method/field lookup |
+| `pcc/runtime/py/*.py` | pcc-Python mirror (must match the C layouts) |
+| `pcc/runtime/Makefile` | builds the 4–5 archive variants |
 | `docs/refs_docs/gc-research/<lang>/` | upstream reference impls for each GC backend |

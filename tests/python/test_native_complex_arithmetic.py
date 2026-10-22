@@ -18,7 +18,7 @@ import pytest
 
 
 def _run(tmp_path: Path, source: str, *, runtime_cc: bool, monkeypatch) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "cx.py"
     exe = tmp_path / "cx.out"

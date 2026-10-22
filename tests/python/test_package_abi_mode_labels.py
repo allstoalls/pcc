@@ -17,9 +17,9 @@ import json
 import zipfile
 from pathlib import Path
 
-import pcc.cli_bootstrap as cb
+import pcc.driver.cli_bootstrap as cb
 from pcc.package.linkage import linkage_report
-from pcc.package_schema import capability_profile, wheel_tag_fields
+from pcc.package.schema import capability_profile, wheel_tag_fields
 
 
 def _repo_root() -> Path:
@@ -125,7 +125,7 @@ def test_host_and_pcc1_share_wheel_tag_and_capability_contract():
     metadata_source = (REPO_ROOT / "pcc" / "package" / "metadata.py").read_text(
         encoding="utf-8"
     )
-    bootstrap_source = (REPO_ROOT / "pcc" / "cli_bootstrap.py").read_text(
+    bootstrap_source = (REPO_ROOT / "pcc" / "driver" / "cli_bootstrap.py").read_text(
         encoding="utf-8"
     )
     assert "fields = wheel_tag_fields(name)" in install_source

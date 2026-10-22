@@ -8,7 +8,7 @@ Extraction can include hypotheses, test status and superseded conclusions.
 Check the original experiment, revision and later updates against current
 code and matching execution before adopting a cause. Read only relevant hits.
 
-1627 confirmations across 481 investigations.
+1640 confirmations across 484 investigations.
 
 ## [Investigation: direct AArch64 instruction capture order and lifetime](../investigations/aarch64-direct-instruction-capture-order.md)
 
@@ -174,11 +174,13 @@ code and matching execution before adopting a cause. Read only relevant hits.
 - CONFIRMED — The focused contextual count is zero after the change. Literal self-method
 - CONFIRMED — `PROBE_POLICY_CLOSED_WORLD` now selects the real sibling export context for
 
-## [Investigation: migrate pcc's default host to CPython 3.15.0rc1](../investigations/cpython-315rc1-host-migration.md)
+## [Investigation: migrate pcc's default host to CPython 3.15 (rc1, then 3.15.0)](../investigations/cpython-315rc1-host-migration.md)
 
 - Test [CONFIRMED] — The version mismatch above is directly observed. Dependency and compiler
 - No.1 Install 3.15.0rc1 and atomically replace the project environment [CONFIRMED]
+- No.2 Move the host and oracle from 3.15.0rc1 to 3.15.0 [CONFIRMED]
 - CONFIRMED — uv run python -VV
+- CONFIRMED — uv lock --check / uv sync --locked --dev clean; sync installs nothing
 
 ## [Investigation: `type(cpy).__name__` routed via native getattr instead of libpython](../investigations/cpython-type-name-not-routed-via-libpython.md)
 
@@ -214,6 +216,12 @@ code and matching execution before adopting a cause. Read only relevant hits.
 
 - active — gap CONFIRMED + a fix ATTEMPTED and REVERTED 2026-05-30 (it works for
 - Root cause (CONFIRMED) — `py_obj_eq` (py_obj_ops_compare.c + the pcc-Python port) handles
+
+## [Investigation: dataclass factory defaults corrupt section data](../investigations/dataclass-factory-default-capture-corrupts-section-data.md)
+
+- Test [CONFIRMED] — A two-`ret` assembly control has text size 8, symbols at 0/4, zero embedded
+- New-source correction [CONFIRMED] — Source12 identity is
+- Remaining source12 failures [CONFIRMED] — `custom.py` fails at the Child definition with
 
 ## [Investigation: function decorators silently return null under --python-libpython=off (first-class-function limitation)](../investigations/decorator-first-class-fn-silent-null-no-libpython.md)
 
@@ -919,6 +927,7 @@ code and matching execution before adopting a cause. Read only relevant hits.
 ## [Investigation: backend 4 forwarding entries never retire once the relocation set keeps a residue](../investigations/gc-backend4-forwarding-retirement-starvation.md)
 
 - Test [CONFIRMED] — Measured 2026-09-08 with standalone C probes against the C runtime.
+- [CONFIRMED] explicit collect never retired forwarding entries — Telemetry (`pcc_gc_telemetry` 15/24/25) on the 4096-byte variant under GC4:
 
 ## [Investigation: Backend #4 forwarding table must be read under graph lock](../investigations/gc-backend4-forwarding-table-concurrency.md)
 
@@ -995,6 +1004,12 @@ code and matching execution before adopting a cause. Read only relevant hits.
 - CONFIRMED Proposal No.23 — C and strict dict set now share `py_dict_rooted_op` / `_dict_rooted_op` with
 - CONFIRMED Proposal No.24 — C `py_dict_del_rooted_slot` and strict `_dict_del_rooted_slot` publish the
 - Test [CONFIRMED] — Two halves, both green on 2026-09-08.
+
+## [Investigation: GC4 frees walk the whole relocation set](../investigations/gc-backend4-relocation-set-free-walk.md)
+
+- Test [CONFIRMED] — Churn time at `ca703ae0`: GC0 0.6 s, GC3 1.6 s, GC4 186 s. With depth 7
+- No.1 skip the relocation-set walk for a non-member free [CONFIRMED]
+- No.1 skip the relocation-set walk for a non-member free [CONFIRMED] — `pcc_gc_note_object_freeing` calls `_relocation_set_remove(o)` for every
 
 ## [Investigation: Backend #4 needs a relocation set](../investigations/gc-backend4-relocation-set.md)
 
@@ -1914,6 +1929,13 @@ code and matching execution before adopting a cause. Read only relevant hits.
 - CONFIRMED — The SOCKS5 greeting path failed when the client waited for the server's
 - CONFIRMED — After No.9, SOCKS5 handshake and connect succeeded, but payload forwarding
 - CONFIRMED — Host pcc now emits the correct IR for the minimized shape:
+
+## [Investigation: pcc1 misses the 300 s prior-gate compile on ARM CI](../investigations/pcc1-prior-gate-compile-time.md)
+
+- Test [CONFIRMED] — pcc1 built from 0272b8f4f (424,850,744 bytes): 251.5 s and, re-measured later
+- Admission serializes pcc1's own frontend workers [CONFIRMED] — Under a tree budget, `resource_tasks_for_commands` gave the export/summary/
+- Direct-indexed route is not the CLI default [CONFIRMED] — Bootstrap sets `PCC_DIRECT_INDEXED_KERNEL_CAPTURE=1` and `..._EMIT=1`, so
+- Code size: common tails [CONFIRMED estimate] — Scanning the 0272b8f4f pcc1 AArch64 code (PC-relative operands normalized to
 
 ## [Investigation: pcc1 qualification misses effective cache and discovery selection](../investigations/pcc1-qualification-cache-and-project-selection.md)
 

@@ -20,7 +20,7 @@ _REPO_ROOT = Path(__file__).absolute().parents[2]
 
 
 def _run_native(tmp_path: Path, source: str) -> subprocess.CompletedProcess:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -30,7 +30,7 @@ def _run_native(tmp_path: Path, source: str) -> subprocess.CompletedProcess:
         str(exe),
         ir_scaffold_mode="on",
         libpython_mode="off",
-        backend="llvm",
+        backend="self",
     )
     return subprocess.run(
         [str(exe)], capture_output=True, text=True, timeout=60
@@ -70,7 +70,7 @@ def test_over_lane_literals_evaluate_to_their_value(tmp_path):
 
 
 def test_raw_scaffold_module_global_promotes_over_i64_expression(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     src = tmp_path / "bigint_global_probe.py"
     exe = tmp_path / "bigint_global_probe.out"

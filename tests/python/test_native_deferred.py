@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import native_deferred as driver
+from pcc.frontends.python import native_deferred as driver
 
 
 def test_native_entry_rejects_host_python():
@@ -15,7 +15,7 @@ def test_native_entry_rejects_host_python():
 
 def test_cli_dispatch_checks_native_owner_and_forwards_plan(monkeypatch, capsys):
     from types import SimpleNamespace
-    from pcc import cli_bootstrap as cli
+    from pcc.driver import cli_bootstrap as cli
 
     calls = []
     monkeypatch.setattr(driver, "run", calls.append)
@@ -30,16 +30,29 @@ def test_cli_dispatch_checks_native_owner_and_forwards_plan(monkeypatch, capsys)
     assert calls == ["/plan with spaces"]
 
 
-def test_shell_rejects_old_compiler_before_starting_compile(tmp_path):
-    compiler = tmp_path / "old compiler"
-    compiler.write_text("#!/bin/sh\nexit 2\n")
-    compiler.chmod(0o755)
+def test_wrapper_rejects_old_compiler_before_starting_compile(tmp_path):
     touched = tmp_path / "started"
-    script = Path(driver.__file__).parents[2] / "scripts/run_pcc_native_deferred.sh"
+    script = (
+        Path(driver.__file__).parents[2] / "scripts" / "run_pcc_native_deferred.py"
+    )
+    # ``sys.executable`` answers ``--pcc-native-deferred-worker --check`` with
+    # exit 2 ("Unknown option"), which is exactly an old compiler that cannot
+    # run the continuation.
     result = subprocess.run(
-        ["/bin/bash", str(script), str(compiler), "codegen", "link", "--",
-         "/usr/bin/touch", str(touched)],
-        capture_output=True, text=True, timeout=10,
+        [
+            sys.executable,
+            str(script),
+            sys.executable,
+            "codegen",
+            "link",
+            "--",
+            sys.executable,
+            "-c",
+            f"open({str(touched)!r}, 'w').close()",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     assert result.returncode == 2
     assert "host Python fallback is forbidden" in result.stderr
@@ -47,72 +60,86 @@ def test_shell_rejects_old_compiler_before_starting_compile(tmp_path):
 
 
 def test_bootstrap_rejects_missing_deferred_runtime_before_compilation(tmp_path):
-    compiler = tmp_path / "pcc1"
-    started = tmp_path / "compiler-started"
-    compiler.write_text('#!/bin/sh\n/usr/bin/touch "' + str(started) + '"\n')
-    compiler.chmod(0o755)
-    environment = dict(os.environ,
+    environment = dict(
+        os.environ,
         PCC_RUNTIME_ARCHIVE=str(tmp_path / "absent-runtime.a"),
-        PCC_PY_FRONTEND_IR_CACHE_IDENTITY="test", PCC_SELF_BACKEND_OBJECT_CACHE_IDENTITY="test",
-        PCC_BOOTSTRAP_DEFER_FRONTEND_CODEGEN="1", PCC_BOOTSTRAP_DEFER_SELF_LINK="1",
+        PCC_PY_FRONTEND_IR_CACHE_IDENTITY="test",
+        PCC_SELF_BACKEND_OBJECT_CACHE_IDENTITY="test",
+        PCC_BOOTSTRAP_DEFER_FRONTEND_CODEGEN="1",
+        PCC_BOOTSTRAP_DEFER_SELF_LINK="1",
     )
     environment.pop("LC_ALL", None)
-    script = Path(driver.__file__).parents[2] / "scripts/bootstrap.sh"
+    script = Path(driver.__file__).parents[2] / "scripts" / "bootstrap.py"
     result = subprocess.run(
-        ["/bin/bash", str(script), "--backend", "self", "--from-stage", "2", "--stage", "2",
-         "--out-dir", str(tmp_path)],
-        env=environment, capture_output=True, text=True, timeout=10,
+        [
+            sys.executable,
+            str(script),
+            "--backend",
+            "self",
+            "--from-stage",
+            "2",
+            "--stage",
+            "2",
+            "--out-dir",
+            str(tmp_path / "out"),
+        ],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=120,
     )
     assert result.returncode == 2
     assert "requires a runtime archive before compilation" in result.stderr
-    assert not started.exists()
+    assert not (tmp_path / "out" / "pcc2").exists()
 
 
-def test_bootstrap_continuation_inherits_effective_stage_environment(tmp_path):
-    import shlex
+def test_stage_continuation_inherits_effective_stage_environment(tmp_path, monkeypatch):
+    """The deferred continuation sees the coordinator's effective settings.
 
-    root = Path(driver.__file__).parents[2]
-    bootstrap = (root / "scripts/bootstrap.sh").read_text()
-    body = bootstrap[bootstrap.index("run_stage() {"):bootstrap.index("# stage 1: CPython-hosted")]
-    compiler = tmp_path / "compiler"
-    compiler.write_text('''#!/bin/bash
-set -eu
-printf '%s|%s|%s|%s|%s|%s\\n' "$1" "$PCC_PYTHON_IR_PASSES" "$PCC_SELF_BACKEND_JOBS" "$PCC_RUNTIME_ARCHIVE" "$PCC_DIRECT_INDEXED_KERNEL_CAPTURE" "$PCC_DIRECT_INDEXED_KERNEL_EMIT" >> "$TEST_LOG"
-if [[ "$1" == --pcc-native-deferred-worker ]]; then
-    if [[ "$2" == --check ]]; then exit 0; fi
-    printf '#!/bin/sh\\nexit 0\\n' > "$PCC_DEFER_FRONTEND_OUTPUT"
-    chmod +x "$PCC_DEFER_FRONTEND_OUTPUT"
-else
-    : > "$PCC_DEFER_FRONTEND_CODEGEN_PLAN"
-fi
-''')
-    compiler.chmod(0o755)
+    The shell version of this test sliced ``run_stage()`` out of
+    ``bootstrap.sh``; the driver exposes the same contract as a function, so
+    this drives it directly and inspects the environment handed to the
+    wrapper process.
+    """
+
+    from scripts import bootstrap
+
     runtime = tmp_path / "runtime.a"
     runtime.touch()
-    config = {
-        "REPO_ROOT": str(root), "OUT_DIR": str(tmp_path), "MAIN_PY": "input.py",
-        "BACKEND": "self", "BACKEND_EXPLICIT": "1", "BOOTSTRAP_PROFILE_DIR": "",
-        "BOOTSTRAP_RUNTIME_CC": "pcc", "BOOTSTRAP_RUNTIME_HIGH": "py",
-        "BOOTSTRAP_PYTHON_LIBPYTHON": "off", "BOOTSTRAP_PYTHON_IR_PASSES": "off",
-        "BOOTSTRAP_PY_FRONTEND_JOBS": "auto", "BOOTSTRAP_SELF_BACKEND_JOBS": "2",
-        "BOOTSTRAP_MACHO_LINK_JOBS": "2", "BOOTSTRAP_MAX_TREE_RSS_BYTES": "8589934592",
-        "BOOTSTRAP_IN_PROCESS_CODEGEN": "0", "BOOTSTRAP_DEFER_FRONTEND_CODEGEN": "1",
-        "BOOTSTRAP_DEFER_SELF_LINK": "1", "BOOTSTRAP_EXTERNAL_MEMORY_GUARD": "1",
-        "PCC_RUNTIME_ARCHIVE": str(runtime),
-    }
-    source = "set -eu\n" + "\n".join(k + "=" + shlex.quote(v) for k, v in config.items())
-    source += "\nbanner() { :; }; now_ms() { echo 0; }; stage_exec_barrier() { :; }; write_stage_result_json() { :; };\n"
-    source += body + "\nrun_stage 2 " + shlex.quote(str(tmp_path / "output")) + " " + shlex.quote(str(compiler))
-    log = tmp_path / "calls"
-    env = dict(os.environ, TEST_LOG=str(log), PCC_PYTHON_IR_PASSES="default", PCC_SELF_BACKEND_JOBS="1")
-    env.pop("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", None)
-    env.pop("PCC_DIRECT_INDEXED_KERNEL_EMIT", None)
-    result = subprocess.run(["/bin/bash", "-c", source], env=env, capture_output=True, text=True, timeout=10)
-    assert result.returncode == 0, result.stderr
-    rows = log.read_text().splitlines()
-    assert len(rows) == 3
-    assert [row.split("|")[0] for row in rows] == ["--pcc-native-deferred-worker", "--backend", "--pcc-native-deferred-worker"]
-    assert all(row.split("|")[1:] == ["off", "2", str(runtime), "1", "1"] for row in rows)
+    options = bootstrap.validate_settings(
+        bootstrap.Options(
+            {
+                "PCC_BOOTSTRAP_OUT_DIR": str(tmp_path / "out"),
+                "PCC_BOOTSTRAP_PYTHON_IR_PASSES": "off",
+                "PCC_PYTHON_IR_PASSES": "default",
+                "PCC_BOOTSTRAP_SELF_BACKEND_JOBS": "2",
+                "PCC_SELF_BACKEND_JOBS": "1",
+                "PCC_RUNTIME_ARCHIVE": str(runtime),
+                "PCC_BOOTSTRAP_EXTERNAL_MEMORY_GUARD": "1",
+            }
+        )
+    )
+    options.out_dir.mkdir(parents=True, exist_ok=True)
+    captured: dict[str, object] = {}
+
+    def fake_guarded(target, opts, stage, environment):
+        captured["target"] = list(target)
+        captured["environment"] = dict(environment)
+        return 127, None
+
+    monkeypatch.setattr(bootstrap, "_run_guarded", fake_guarded)
+    with pytest.raises(bootstrap.BootstrapError):
+        bootstrap.run_stage(2, options.stage_output(2), ["compiler"], options)
+
+    environment = captured["environment"]
+    assert environment["PCC_PYTHON_IR_PASSES"] == "off"
+    assert environment["PCC_SELF_BACKEND_JOBS"] == "2"
+    assert environment["PCC_RUNTIME_ARCHIVE"] == str(runtime)
+    assert environment["PCC_DIRECT_INDEXED_KERNEL_CAPTURE"] == "1"
+    assert environment["PCC_DIRECT_INDEXED_KERNEL_EMIT"] == "1"
+    target = captured["target"]
+    assert target[0] == sys.executable
+    assert str(target[1]).endswith("run_pcc_native_deferred.py")
 
 
 @pytest.mark.parametrize("auto_pco", [False, True])
@@ -122,7 +149,7 @@ def test_native_codegen_orders_results_and_rejects_stale_artifacts(tmp_path, mon
         manifest = tmp_path / ("worker" + str(index))
         result = tmp_path / ("result" + str(index))
         manifest.write_text("\n".join([
-            "pcc.py_frontend.codegen_worker.v4", str(result),
+            "pcc.frontends.python.codegen_worker.v4", str(result),
             str(tmp_path), "", "", "", "", "", "", "", "1", str(index),
         ]) + "\n")
         result.write_text("stale result")
@@ -171,7 +198,7 @@ def test_native_codegen_orders_results_and_rejects_stale_artifacts(tmp_path, mon
 
     linked = []
     monkeypatch.setattr(driver, "_native_worker", lambda _path: None)
-    from pcc.py_frontend import deferred_frontend_schedule
+    from pcc.frontends.python import deferred_frontend_schedule
     monkeypatch.setattr(deferred_frontend_schedule, "run_worker_processes", run_commands)
     monkeypatch.setattr(deferred_frontend_schedule, "run_chained_worker_processes", run_chained)
     monkeypatch.setattr(
@@ -196,7 +223,7 @@ def test_native_codegen_rejects_a_sidecar_other_than_the_scheduled_one(tmp_path,
     manifest = tmp_path / "worker0"
     result = tmp_path / "result0"
     manifest.write_text("\n".join([
-        "pcc.py_frontend.codegen_worker.v4", str(result),
+        "pcc.frontends.python.codegen_worker.v4", str(result),
         str(tmp_path), "", "", "", "", "", "", "", "1", "0",
     ]) + "\n")
     runtime = tmp_path / "runtime.a"
@@ -220,7 +247,7 @@ def test_native_codegen_rejects_a_sidecar_other_than_the_scheduled_one(tmp_path,
                 Path(arguments[-2]).write_bytes(b"packed")
 
     monkeypatch.setattr(driver, "_native_worker", lambda _path: None)
-    from pcc.py_frontend import deferred_frontend_schedule
+    from pcc.frontends.python import deferred_frontend_schedule
     monkeypatch.setattr(deferred_frontend_schedule, "run_worker_processes", run_commands)
     monkeypatch.setenv("PCC_PY_FRONTEND_JOBS", "1")
     monkeypatch.setattr(driver, "_link", lambda *args: None)
@@ -238,7 +265,7 @@ def test_native_codegen_refuses_script_worker(tmp_path):
 
 def test_native_unsupported_link_surface_never_resolves_host_python(monkeypatch):
     from types import SimpleNamespace
-    from pcc.py_frontend import pipeline_self_backend_link as linker
+    from pcc.frontends.python import pipeline_self_backend_link as linker
 
     monkeypatch.setattr(linker, "sys", SimpleNamespace(
         platform="linux", implementation=SimpleNamespace(name="pcc"),
@@ -262,7 +289,7 @@ def test_native_unsupported_link_surface_never_resolves_host_python(monkeypatch)
 
 @pytest.mark.integration
 def test_native_deferred_link_plan_executes_under_all_collectors(
-    tmp_path, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, python_program_compiler, pcc_runtime_archive,
 ):
     from pcc.backend.arm64_asm_driver import assemble_file
     from pcc.backend.native_object import NativeObject, encode_native_object
@@ -270,7 +297,7 @@ def test_native_deferred_link_plan_executes_under_all_collectors(
     helper = tmp_path / "native-deferred"
     python_program_compiler(
         str(Path(driver.__file__)), str(helper), backend="self",
-        libpython_mode="off", runtime_archive=str(pcc_py_runtime_archive),
+        libpython_mode="off", runtime_archive=str(pcc_runtime_archive),
     )
     sections, undefined = assemble_file(
         ".section __TEXT,__text,regular,pure_instructions\n"
@@ -299,7 +326,7 @@ def test_native_deferred_link_plan_executes_under_all_collectors(
 
 @pytest.mark.integration
 def test_pcc1_native_deferred_cli_compiles_and_executes_two_modules(
-    tmp_path, native_pcc1_compiler, pcc_py_runtime_archive,
+    tmp_path, native_pcc1_compiler, pcc_runtime_archive,
 ):
     from tests.python.process_timeout import run_process_group_timeout
 
@@ -317,7 +344,7 @@ def test_pcc1_native_deferred_cli_compiles_and_executes_two_modules(
     codegen = tmp_path / "codegen plan"
     link = tmp_path / "link plan"
     env = dict(os.environ, PATH=str(tools), PYTHONPATH=str(tmp_path),
-               PCC_RUNTIME_ARCHIVE=str(pcc_py_runtime_archive),
+               PCC_RUNTIME_ARCHIVE=str(pcc_runtime_archive),
                PCC_RUNTIME_CC="/usr/bin/false", PCC_HOST_PYTHON="/usr/bin/false",
                PCC_HOST_PCC="/usr/bin/false", PCC_PY_FRONTEND_JOBS="auto",
                PCC_WORKER_TREE_BUDGET_BYTES="4294967296",
@@ -330,9 +357,11 @@ def test_pcc1_native_deferred_cli_compiles_and_executes_two_modules(
                PCC_DEFER_FRONTEND_CODEGEN_PLAN=str(codegen),
                PCC_DEFER_FRONTEND_OUTPUT=str(output), PCC_DEFER_SELF_LINK_PLAN=str(link))
     env.pop("LC_ALL", None)
-    script = Path(driver.__file__).parents[2] / "scripts/run_pcc_native_deferred.sh"
+    script = (
+        Path(driver.__file__).parents[2] / "scripts" / "run_pcc_native_deferred.py"
+    )
     result = run_process_group_timeout(
-        ["/bin/bash", str(script), str(native_pcc1_compiler), str(codegen), str(link), "--",
+        [sys.executable, str(script), str(native_pcc1_compiler), str(codegen), str(link), "--",
          str(native_pcc1_compiler), "--backend", "self", "--python-libpython", "off",
          str(source), "-o", str(output)],
         env=env, timeout=120,

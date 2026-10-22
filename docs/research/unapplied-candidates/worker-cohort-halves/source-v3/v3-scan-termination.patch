@@ -1,0 +1,46 @@
+--- a/pcc/frontends/python/worker_resource_plan.py
++++ b/pcc/frontends/python/worker_resource_plan.py
+@@ -138,15 +138,17 @@
+                 or task.get("input_path", "")):
+             return pending, []
+         size = inputs[0] + inputs[2]
++        size_total = size
+         band = 0
+         upper = 1
+-        while upper <= size:
++        while size > 0:
++            size //= 2
+             upper *= 2
+             band += 1
+-        if size > 0:
+-            # [2**k, 2**(k+1)) splits at 3*2**(k-1). Integer
+-            # comparison also handles the smallest intervals exactly.
+-            band = 2 * band + (1 if 4 * size >= 3 * upper else 0)
++        if size == 0 and size_total > 0:
++            # [2**k, 2**(k+1)) splits at 3*2**(k-1). Keep the
++            # original quotient loop and skip this split if it ends in NaN.
++            band = 2 * band + (1 if 4 * size_total >= 3 * upper else 0)
+         bands.append(band)
+     pending = sorted(pending, key=lambda index: (
+         bands[index], -sum(tasks[index]["inputs"]), index,
+--- a/tests/python/test_worker_codegen_cohorts.py
++++ b/tests/python/test_worker_codegen_cohorts.py
+@@ -294,3 +294,18 @@
+     assert 'mapping_offset=0' in lines[0] and 'mapping_offset=16' in lines[1]
+     assert 'indices=[16, 17]' in lines[1] and "modules=['module16', 'module17']" in lines[1]
+     assert all('cohort=-1' in line for line in lines)
++
++
++def test_original_quotient_scan_handles_nonfinite_and_subunit_sizes():
++    # Real source/AST byte counts are integers. Retain the old recognizer
++    # and quotient-loop behavior for its previously accepted numeric inputs.
++    for axis in (0, 2):
++        for value, expected in (
++            (float('inf'), [1]),
++            (float('nan'), []),
++            (float('-inf'), []),
++            (0.25, [2]),
++        ):
++            item = task(0)
++            item['inputs'][axis:axis + 2] = [value, value]
++            assert policy.resource_task_order([item]) == ([0], expected)

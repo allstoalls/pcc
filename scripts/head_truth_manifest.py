@@ -16,7 +16,7 @@ import tempfile
 import time
 from typing import Callable, Sequence
 
-from pcc.macho_normalize import normalize_macho_metadata
+from pcc.diagnostics.macho_normalize import normalize_macho_metadata
 from pcc.tools.runtime_archive_provenance import (
     MANIFEST_SCHEMA as RUNTIME_ARCHIVE_PROVENANCE_SCHEMA,
     PRODUCTION_POLICY as RUNTIME_ARCHIVE_PRODUCTION_POLICY,
@@ -37,7 +37,6 @@ REQUIRED_GATE_IDS = (
     "runtime-archive-preflight",
     "fallback-ratchet",
     "gc-production-contract",
-    "llvm-bootstrap",
     "self-five-gc-bootstrap",
     "numpy-core-head",
 )
@@ -60,11 +59,14 @@ _FIVE_GC_TEST_NODEIDS = {
     )
     for gc_backend in range(5)
 }
-_RUNTIME_ARCHIVE = Path("pcc/py_runtime/libpy_runtime_pcc_py.a")
-_RUNTIME_ARCHIVE_BACKEND = "llvm"
+_RUNTIME_ARCHIVE = Path("pcc/runtime/libpy_runtime_pcc_py.a")
+# The archive is produced by the owned self backend's object writer; the
+# llvmlite route was removed with the dependency, and these labels had drifted
+# out of agreement with the archive's own provenance.
+_RUNTIME_ARCHIVE_BACKEND = "self"
 _RUNTIME_ARCHIVE_PRODUCER = "pcc-python-library-ir-to-obj"
 _RUNTIME_ARCHIVE_SOURCE_KIND = "pcc-python"
-_RUNTIME_ARCHIVE_OBJECT_EMITTER = "llvmlite-target-machine"
+_RUNTIME_ARCHIVE_OBJECT_EMITTER = "pcc-self-backend-object-writer"
 
 
 @dataclass(frozen=True)
@@ -109,7 +111,7 @@ def gate_specs(repo_root: Path) -> tuple[GateSpec, ...]:
                 "make",
                 "-B",
                 "-C",
-                "pcc/py_runtime",
+                "pcc/runtime",
                 "libpy_runtime_pcc_py.a",
                 "PCC=../../.venv/bin/pcc",
                 "PYTHON=../../.venv/bin/python3",
@@ -173,23 +175,6 @@ def gate_specs(repo_root: Path) -> tuple[GateSpec, ...]:
             kind="pytest",
             backend="self",
             gc_backend="0..4",
-        ),
-        GateSpec(
-            gate_id="llvm-bootstrap",
-            suite="heavy",
-            command=(
-                "bash",
-                "scripts/bootstrap.sh",
-                "--backend",
-                "llvm",
-                "--stage",
-                "3",
-                "--out-dir",
-                "build/head-truth/bootstrap-llvm",
-            ),
-            timeout_seconds=900,
-            kind="bootstrap",
-            backend="llvm",
         ),
         GateSpec(
             gate_id="self-five-gc-bootstrap",
@@ -384,15 +369,6 @@ def _bootstrap_observation(
 def inspect_bootstrap_artifacts(
     repo_root: Path, gate_id: str
 ) -> list[dict[str, object]]:
-    if gate_id == "llvm-bootstrap":
-        return [
-            _bootstrap_observation(
-                repo_root,
-                backend="llvm",
-                gc_backend=None,
-                out_dir=repo_root / "build" / "head-truth" / "bootstrap-llvm",
-            )
-        ]
     if gate_id != "self-five-gc-bootstrap":
         return []
     observations: list[dict[str, object]] = []
@@ -532,9 +508,9 @@ def _runtime_archive_provenance_errors(
     prefix = "runtime-archive-preflight: PASS provenance "
     errors: list[str] = []
     if gate.get("backend") != _RUNTIME_ARCHIVE_BACKEND:
-        errors.append(prefix + "backend must be llvm")
+        errors.append(prefix + "backend must be self")
     if observation.get("backend") != _RUNTIME_ARCHIVE_BACKEND:
-        errors.append(prefix + "observation backend must be llvm")
+        errors.append(prefix + "observation backend must be self")
     if observation.get("schema") != RUNTIME_ARCHIVE_PROVENANCE_SCHEMA:
         errors.append(prefix + "schema is invalid")
     if observation.get("policy") != RUNTIME_ARCHIVE_PRODUCTION_POLICY:
@@ -800,26 +776,14 @@ def run_gate(
                 "valid artifact observation for each GC backend 0..4"
             )
     elif observations:
-        if spec.gate_id == "llvm-bootstrap":
-            observation_failure = next(
-                (
-                    str(observation.get("failure"))
-                    for observation in observations
-                    if observation.get("failure")
-                    or observation.get("links_libpython") is not False
-                    or observation.get("pcc2_pcc3_equal") is not True
-                ),
-                None,
-            )
-        else:
-            observation_failure = next(
-                (
-                    str(observation.get("failure"))
-                    for observation in observations
-                    if observation.get("failure")
-                ),
-                None,
-            )
+        observation_failure = next(
+            (
+                str(observation.get("failure"))
+                for observation in observations
+                if observation.get("failure")
+            ),
+            None,
+        )
     # Artifact inspection is the second half of a successful gate.  It may
     # demote an otherwise-green command, but it must not hide the earlier,
     # causal process/pytest failure (timeout, non-zero exit, partial summary,
@@ -839,7 +803,7 @@ def run_gate(
     )
     pcc2_pcc3_equal = (
         all(observation["pcc2_pcc3_equal"] is True for observation in observations)
-        if observations and spec.gate_id in {"llvm-bootstrap", "self-five-gc-bootstrap"}
+        if observations and spec.gate_id == "self-five-gc-bootstrap"
         else None
     )
     return GateResult(
@@ -978,7 +942,7 @@ def validate_manifest(
                             "self-five-gc-bootstrap: PASS requires at least five "
                             "passed tests"
                         )
-            if gate_id in {"llvm-bootstrap", "self-five-gc-bootstrap"}:
+            if gate_id == "self-five-gc-bootstrap":
                 if gate.get("links_libpython") is not False:
                     errors.append(f"{gate_id}: PASS requires links_libpython=false")
                 if gate.get("pcc2_pcc3_equal") is not True:

@@ -84,9 +84,9 @@ def pcc_wheel(tmp_path_factory: pytest.TempPathFactory) -> Path:
     with zipfile.ZipFile(wheels[0]) as archive:
         names = archive.namelist()
     assert "pcc/package/uv_lock_sync.py" in names
-    assert "pcc/py_runtime/libpy_runtime_pcc_py.a" in names
-    assert "pcc/py_runtime/libpy_runtime_pcc_py.a.target" in names
-    assert "pcc/py_runtime/libpy_runtime_pcc_py.a.wheel" in names
+    assert "pcc/runtime/libpy_runtime_pcc_py.a" in names
+    assert "pcc/runtime/libpy_runtime_pcc_py.a.target" in names
+    assert "pcc/runtime/libpy_runtime_pcc_py.a.wheel" in names
     assert any(name.endswith(".data/scripts/pcc1") for name in names)
     return wheels[0]
 

@@ -98,8 +98,7 @@ def test_list_sort_custom_lt_detects_callback_mutation(tmp_path):
 def test_list_sort_custom_lt_uses_hidden_copy_and_atomic_publication():
     source = (
         Path(__file__).absolute().parents[2]
-        / "pcc"
-        / "py_frontend"
+        / "pcc" / "frontends" / "python"
         / "codegen"
         / "list_method_lowering.py"
     ).read_text(encoding="utf-8")

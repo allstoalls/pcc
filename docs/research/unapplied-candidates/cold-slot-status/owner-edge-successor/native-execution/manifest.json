@@ -1,0 +1,44 @@
+{
+  "arms": {
+    "candidate": {
+      "compile_result_sha256": "25387a5009289eb3d5bca7c58b0ede260e361e3b80db933c9c9238a82ac74d22",
+      "executable_bytes": 26302840,
+      "executable_sha256": "912aea9c4a76f91efb839856c978b13384d4e0341d4b3d92b5b1c37aaa196cb6",
+      "generated_ir_sha256": "92d6e84015e2c47084e6dfb692364e8713e6770920679c294a583e14884affba"
+    },
+    "inline-reference": {
+      "compile_result_sha256": "7119669a5b8ad2df1ae8429f5ea544ce8cb176db0d240b44b03feca633ace55f",
+      "executable_bytes": 26367032,
+      "executable_sha256": "84aa5f918b6137ff4a89b41d374c53d3b9f84242ab0e20b1e94d63ee1dfdb607",
+      "generated_ir_sha256": "16eff8ae773792145b5ddbea4ca041c6d634198940feed24675db4bbe225e0db"
+    }
+  },
+  "candidate_source_manifest_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "codegen_checksum": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+  "compile_pair_sha256": "bbf55599af5599eb302ad7d5fca0fe18d5870f99a65dd887012897ae5b664e3d",
+  "execution": "UNRUN",
+  "expected_stdout": "slot-status-owned-callsite-ok\n",
+  "files": {
+    "README.md": {
+      "bytes": 3315,
+      "sha256": "7cb3f9feef32de4e2addad8bc33bdec62db3815a5cfed0ceb1988338c276340c"
+    },
+    "launch_elf.py": {
+      "bytes": 7758,
+      "sha256": "415b1232903327cbad59c058aa2fc374708980386be1860cc975ab83d776e563"
+    },
+    "validate_native.py": {
+      "bytes": 5397,
+      "sha256": "d6bfd29f255344fd2a2ec88d829607da951a9b114cf5845218b618efc4c73367"
+    }
+  },
+  "host_interpreter_sha256": "56045822d9c10027323c6f24ac5876901915b1c3ff8bfc6591d363c280246c82",
+  "program_sha256": "1f9407b70ea3b765c4bba302dea9ecca7d363f5ddeef7b5af4b301f657e8adc6",
+  "review_at_freeze": "PENDING",
+  "runtime_sha256": "a6645f903e03f6766ecc7466b76f2993318582d287a393831aa5522158421915",
+  "schema": "pcc.cold_slot_native_execution_packet.v2",
+  "source_patch_sha256": "4dd5955455944d3b905fd7f5998ac874fd0b815c22d45af13092f9c582259136",
+  "supersedes_unexecuted_v1_manifest_sha256": "bd2ac07b39de0370128bc14e8cf8881312ac359cd7d00484953df4928c7b9f88",
+  "supervisor_sha256": "b1067df943a4cd992ecf10efbe9132fd7bc7d4f087a7b324b2fcc006f3de092a",
+  "test_successor_delta_sha256": "43e74045c8305a16caa0c88f4404476f3ce752a5cd8039250534b274212fd4ac"
+}

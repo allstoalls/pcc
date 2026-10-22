@@ -8,7 +8,7 @@ undefined ``_py_type_of`` far away from the cause (and only on a full
 archive rebuild; incremental stamps hid it).
 
 This test statically closes the class: collect every ``extern("<name>")``
-binding in pcc/py_runtime/py/*.py whose name starts with ``py_`` or
+binding in pcc/runtime/py/*.py whose name starts with ``py_`` or
 ``pcc_`` (runtime-owned namespaces), and assert each name is an exported
 text symbol in the C runtime archive or the pcc-Python port archive.
 """
@@ -19,7 +19,7 @@ import subprocess
 from pathlib import Path
 
 REPO = Path(__file__).absolute().parents[2]
-PORT_DIR = REPO / "pcc" / "py_runtime" / "py"
+PORT_DIR = REPO / "pcc" / "runtime" / "py"
 
 _EXTERN_RE = re.compile(r'extern\(\s*"((?:py_|pcc_)[A-Za-z0-9_]+)"')
 
@@ -41,14 +41,14 @@ def _archive_defined_symbols(archive: Path) -> set[str]:
     return syms
 
 
-def test_port_extern_names_resolve_in_runtime_archive(pcc_py_runtime_archive):
+def test_port_extern_names_resolve_in_runtime_archive(pcc_runtime_archive):
     externed: dict[str, list[str]] = {}
     for src in sorted(PORT_DIR.glob("*.py")):
         for name in _EXTERN_RE.findall(src.read_text()):
             externed.setdefault(name, []).append(src.name)
     assert externed, "no extern() bindings found — regex or layout drift"
 
-    defined = _archive_defined_symbols(Path(pcc_py_runtime_archive))
+    defined = _archive_defined_symbols(Path(pcc_runtime_archive))
 
     missing = {
         name: files for name, files in externed.items() if name not in defined

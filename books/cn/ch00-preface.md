@@ -77,7 +77,7 @@ SSA、引用计数和三色标记;本书不再从头定义它们,而是讲它们
 
 本书对应 2026 年 6 月的 pcc 仓库状态(0.1.3 之后、五 GC 自举闸已全部通过的主线)。
 代码会继续演化,因此本书引用源码一律用**文件路径加标识符名**
-(如 [pcc/py_runtime/src/py_gc_backend.c](../../pcc/py_runtime/src/py_gc_backend.c) 中的 `pcc_gc_store_ptr()`),
+(如 [pcc/runtime/src/py_gc_backend.c](../../pcc/runtime/src/py_gc_backend.c) 中的 `pcc_gc_store_ptr()`),
 不用行号。当书与代码冲突时,以代码为准——这也正是本书想教的阅读习惯。
 
 代码标识符、CLI 旗标、环境变量(`PCC_GC_BACKEND`、`--python-libpython=off`)

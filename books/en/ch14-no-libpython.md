@@ -11,7 +11,7 @@ This book uses four claim levels:
 | Claim | Exact meaning | Does not imply |
 |---|---|---|
 | no-libpython | The artifact neither links nor loads CPython, and strict lowering has no `py_cpy_*` escape | No libc or hand-written C |
-| pcc-Python-owned runtime | Production archive members are objects compiled by pcc from `pcc/py_runtime/py/*.py` | No platform dynamic dependency in the final executable |
+| pcc-Python-owned runtime | Production archive members are objects compiled by pcc from `pcc/runtime/py/*.py` | No platform dynamic dependency in the final executable |
 | Linux zero-libc tracer | The named Linux x86_64 tracer is static, with no interpreter, dynamic dependency, or undefined symbol | The full Python runtime is zero-libc |
 | Linux production zero-libc | The supported complete static closure has no production C/libc object, `PT_INTERP`, `DT_NEEDED`, or undefined symbol | The same boundary applies to Darwin |
 
@@ -61,10 +61,10 @@ C and vendored-libc sources: differential oracle only; not production input
 
 “Freestanding” does not merely mean “C rewritten with Python syntax.” These modules are implementing the heap, error substrate, threads, or collector; they cannot call back into ordinary Python objects, boxing, allocating exception paths, or the collector they are bootstrapping. `__pcc_freestanding__ = True` marks the closure for the build and validator. `pcc.unsafe` supplies raw pointers, fixed-width loads and stores, atomics, and system calls. Export decorators from `pcc.extern` assign stable C ABI names to the generated object.
 
-The `memcpy` implementation in `pcc/py_runtime/py/freestanding_mem_str.py` shows the subset. It creates no `bytes` object and does not call the host `memcpy`:
+The `memcpy` implementation in `pcc/runtime/py/freestanding_mem_str.py` shows the subset. It creates no `bytes` object and does not call the host `memcpy`:
 
 ```python
-# pcc/py_runtime/py/freestanding_mem_str.py
+# pcc/runtime/py/freestanding_mem_str.py
 @c_abi_export("memcpy")
 def pcc_memcpy(dst, src, size: int) -> c_ptr:
     i: int = 0
@@ -81,7 +81,7 @@ The compiler-intrinsic boundary is drawn by knowledge, not by how inconvenient a
 The `libpy_runtime_pcc_py.a` production target takes two sets of Python-born objects: semantic `PY_MODULES` and strict `FREESTANDING_PY_MODULES`. The current Makefile archives only `PCC_PY_OBJECTS` and preserves a provenance receipt for each member. C rules remain for the host-C oracle, differential testing, and other explicitly labeled modes; they are not member sources for this production archive.
 
 ```makefile
-# pcc/py_runtime/Makefile
+# pcc/runtime/Makefile
 $(LIB_PCC_PY): $(PCC_PY_OBJECTS) $(PCC_PY_RECEIPTS)
 	@set -eu; \
 	rm -f "$@.tmp"; \
@@ -92,12 +92,12 @@ $(LIB_PCC_PY): $(PCC_PY_OBJECTS) $(PCC_PY_RECEIPTS)
 	$(RANLIB) "$@.tmp"; \
 ```
 
-This rule is stronger than “a same-named `.py` file exists.” Source ownership, archive membership, and provenance must close together. Renaming `py_capi_shim.o` to `py_capi_compat.o` cannot turn a C object into Python output. The archive-source ratchet asks whether every member maps to `pcc/py_runtime/py/<stem>.py`, rather than maintaining a blacklist that an object rename can evade.
+This rule is stronger than “a same-named `.py` file exists.” Source ownership, archive membership, and provenance must close together. Renaming `py_capi_shim.o` to `py_capi_compat.o` cannot turn a C object into Python output. The archive-source ratchet asks whether every member maps to `pcc/runtime/py/<stem>.py`, rather than maintaining a blacklist that an object rename can evade.
 
 The five collectors are the migration's most consequential test. Production collector policy is now split across `freestanding_gc_*` modules: root and frame registration, object-slot access, common marking, incremental and concurrent scheduling, promotion, forwarding indexes, and ZPage lifecycle each have named owners. Even hash indexes once treated as permanent C-kernel material have moved into `freestanding_gc_index_table.py`; its module documentation identifies `src/py_gc_index_table.c` as a differential oracle.
 
 ```python
-# pcc/py_runtime/py/freestanding_gc_index_table.py
+# pcc/runtime/py/freestanding_gc_index_table.py
 @c_abi_export("pcc_gc_index_py_next_pow2")
 def pcc_gc_index_py_next_pow2(value: int) -> int:
     if value < 8:
@@ -117,7 +117,7 @@ Zero-libc must name a target. The Linux x86_64 self backend can lower supported 
 `freestanding_platform_io.py` keeps one pcc-Python API across both targets:
 
 ```python
-# pcc/py_runtime/py/freestanding_platform_io.py
+# pcc/runtime/py/freestanding_platform_io.py
 @c_abi_export("pcc_platform_read")
 def pcc_platform_read(fd: int, buffer, size: int) -> int:
     return read(fd, buffer, size)
@@ -133,7 +133,7 @@ Here `read` and `write` are compiler-recognized machine boundaries. Linux loweri
 The Linux tracer connects this route to process entry. `freestanding_linux_start.py` decodes the initial stack supplied to `_start`, writes a fixed message, and terminates via `exit_group`, with no C or assembly startup object:
 
 ```python
-# pcc/py_runtime/py/freestanding_linux_start.py
+# pcc/runtime/py/freestanding_linux_start.py
 @c_abi_export("_start")
 def pcc_linux_start(initial_stack: c_ptr) -> None:
     argc: int = load_i64(initial_stack, 0)
@@ -197,7 +197,7 @@ The rule left at the time was “update both mirrors.” The present migration a
 
 The terminal no-C ratchet once asserted only that no archive member was named `py_capi_shim.o`. After the object was renamed to `py_capi_compat.o`, the assertion passed even though production still contained hand-written C. The supposed closed symbol set had also drifted to nineteen globals. Expanding the allowlist would have “completed” the task without changing ownership.
 
-The investigation rejected that route and changed the predicate to source ownership: every production member must correspond to `pcc/py_runtime/py/<stem>.py`. The C-API families were subsequently split among `py_capi_*_runtime.py` owners, and the current production recipe no longer adds a compat object. The invariant is general: **a terminal test must assert the desired property, not a historical filename.** A zero-libc gate likewise cannot merely search for the string `libc.so`; it must inspect the interpreter segment, dynamic dependencies, undefined symbols, and complete link map.
+The investigation rejected that route and changed the predicate to source ownership: every production member must correspond to `pcc/runtime/py/<stem>.py`. The C-API families were subsequently split among `py_capi_*_runtime.py` owners, and the current production recipe no longer adds a compat object. The invariant is general: **a terminal test must assert the desired property, not a historical filename.** A zero-libc gate likewise cannot merely search for the string `libc.so`; it must inspect the interpreter segment, dynamic dependencies, undefined symbols, and complete link map.
 
 ## 14.8 Summary
 
@@ -205,8 +205,8 @@ pcc's runtime direction has moved from “retain and minimize a permanent C kern
 
 ## Exercises
 
-1. Read [pcc/py_runtime/Makefile](../../pcc/py_runtime/Makefile) and trace `PCC_PY_OBJECTS`, `PY_MODULES`, `FREESTANDING_PY_MODULES`, and `LIB_PCC_PY` into an archive-membership diagram. Explain why retained `src/*.c` rules do not imply membership in the production archive.
-2. Read [freestanding_linux_start.py](../../pcc/py_runtime/py/freestanding_linux_start.py) and the [Linux tracer evidence](../../docs/goal/evidence/2026-08-03-linux-zero-libc-python-start.md). Build a checklist of everything a complete-runtime zero-libc claim needs beyond the tracer.
-3. Compare [freestanding_allocator.py](../../pcc/py_runtime/py/freestanding_allocator.py) with `pcc.unsafe.page_alloc/page_free`. Argue why size-class policy belongs to the freestanding runtime while page mapping belongs to the machine boundary.
+1. Read [pcc/runtime/Makefile](../../pcc/runtime/Makefile) and trace `PCC_PY_OBJECTS`, `PY_MODULES`, `FREESTANDING_PY_MODULES`, and `LIB_PCC_PY` into an archive-membership diagram. Explain why retained `src/*.c` rules do not imply membership in the production archive.
+2. Read [freestanding_linux_start.py](../../pcc/runtime/py/freestanding_linux_start.py) and the [Linux tracer evidence](../../docs/goal/evidence/2026-08-03-linux-zero-libc-python-start.md). Build a checklist of everything a complete-runtime zero-libc claim needs beyond the tracer.
+3. Compare [freestanding_allocator.py](../../pcc/runtime/py/freestanding_allocator.py) with `pcc.unsafe.page_alloc/page_free`. Argue why size-class policy belongs to the freestanding runtime while page mapping belongs to the machine boundary.
 4. Design an archive-provenance ratchet that an object rename cannot evade. Include source ownership, member order, the C-API inventory, and atomic publication.
 5. Write a mode-labeled Darwin release claim that enumerates its allowed libSystem boundary, and explain why calling it zero-libc would weaken the later Linux acceptance.

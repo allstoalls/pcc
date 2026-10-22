@@ -1,0 +1,314 @@
+{
+  "additional_runs": 0,
+  "arms_executed": 4,
+  "comparison": {
+    "decision": "HOLD_NO_MATERIAL_PIPELINE_BENEFIT_ESTABLISHED",
+    "limits": [
+      "two samples per arm, not a statistical confidence bound",
+      "Linux-host c_ast backend/object pipeline only; no full Stage1, native compiler or Windows timing claim",
+      "process-lifetime and sampled guard RSS are separate non-additive observations",
+      "no automatic publication or additional performance runs"
+    ],
+    "manifest_sha256": "5363117cdbaf78328565386bf39b5e663a3df4dc3b0a83445a91349c91827545",
+    "mean_through_pipeline_high_water_growth_percent": -4.423786054393353,
+    "metrics": {
+      "combined_cpu": {
+        "baseline_mean_ns": 18876183931.0,
+        "baseline_spread_percent": 1.6685396431359873,
+        "baseline_values_ns": [
+          18718705625,
+          19033662237
+        ],
+        "candidate_mean_ns": 18091536299.5,
+        "candidate_values_ns": [
+          18227001360,
+          17956071239
+        ],
+        "forward_reduction_percent": 2.626806975068288,
+        "mean_reduction_percent": 4.1568128090306855,
+        "reverse_reduction_percent": 5.661501105684457
+      },
+      "combined_wall": {
+        "baseline_mean_ns": 18882653222.0,
+        "baseline_spread_percent": 1.6670104899943705,
+        "baseline_values_ns": [
+          18725265317,
+          19040041127
+        ],
+        "candidate_mean_ns": 18096714725.5,
+        "candidate_values_ns": [
+          18232275671,
+          17961153780
+        ],
+        "forward_reduction_percent": 2.6327511928625773,
+        "mean_reduction_percent": 4.162224912250735,
+        "reverse_reduction_percent": 5.66641290217629
+      },
+      "emission_cpu": {
+        "baseline_mean_ns": 10659560874.0,
+        "baseline_spread_percent": 2.8874554743689154,
+        "baseline_values_ns": [
+          10505665837,
+          10813455911
+        ],
+        "candidate_mean_ns": 9934215555.0,
+        "candidate_values_ns": [
+          9986247280,
+          9882183830
+        ],
+        "forward_reduction_percent": 4.944175505474913,
+        "mean_reduction_percent": 6.804645403069162,
+        "reverse_reduction_percent": 8.612159596939424
+      },
+      "emission_wall": {
+        "baseline_mean_ns": 10662561376.5,
+        "baseline_spread_percent": 2.875642410610418,
+        "baseline_values_ns": [
+          10509252808,
+          10815869945
+        ],
+        "candidate_mean_ns": 9937253888.5,
+        "candidate_values_ns": [
+          9990854463,
+          9883653314
+        ],
+        "forward_reduction_percent": 4.932780231581997,
+        "mean_reduction_percent": 6.8023757368333495,
+        "reverse_reduction_percent": 8.618970417917687
+      },
+      "encoding_cpu": {
+        "baseline_mean_ns": 8216623057.0,
+        "baseline_spread_percent": 0.08721999232877795,
+        "baseline_values_ns": [
+          8213039788,
+          8220206326
+        ],
+        "candidate_mean_ns": 8157320744.5,
+        "candidate_values_ns": [
+          8240754080,
+          8073887409
+        ],
+        "forward_reduction_percent": -0.3374425634768397,
+        "mean_reduction_percent": 0.7217358285588931,
+        "reverse_reduction_percent": 1.7799908079825488
+      },
+      "encoding_wall": {
+        "baseline_mean_ns": 8220091845.5,
+        "baseline_spread_percent": 0.09925282044708998,
+        "baseline_values_ns": [
+          8216012509,
+          8224171182
+        ],
+        "candidate_mean_ns": 8159460837.0,
+        "candidate_values_ns": [
+          8241421208,
+          8077500466
+        ],
+        "forward_reduction_percent": -0.3092582803661357,
+        "mean_reduction_percent": 0.7375952682717504,
+        "reverse_reduction_percent": 1.7834103006150195
+      }
+    },
+    "receipts": [
+      {
+        "guard_sha256": "4b7668e8a6fa2ad16bec39c35ad1edab54dbfccca992c901ae8449c2d9614190",
+        "result_sha256": "a3d0018c4210a6e063bef27790663e8ad28db58f30eded23193cebddeae7df98",
+        "slot": 1,
+        "wrapper_sha256": "327c199b23bfa7ad3789f09d20539e89f64213ec33a4351cc3387ac14f3ff327"
+      },
+      {
+        "guard_sha256": "55ae23836dd082ed2fc27d5a87e869da387c9582c99ef70c24b1ad1d8fe0c9fe",
+        "result_sha256": "8afefe599ecdf7ee5ec2fcbdce58ec1c00d46a81c4214d3c3440acf02c4f2a71",
+        "slot": 2,
+        "wrapper_sha256": "309ceea54488900558ccafa4048d1d7bac0299cd03355357032b17fa9f1a1478"
+      },
+      {
+        "guard_sha256": "14dfdc19d6bd84bc8340d3056ced65dcc0fa93dfdca0de6ada83b8d1604885c8",
+        "result_sha256": "98d4ada79a6463d5d4b6d6e1e6132ed6744847a8621a0781676734e9f2c9449f",
+        "slot": 3,
+        "wrapper_sha256": "1e9dc2d03910aae84df00b22225188fe951b8a19eb23ec89932ea85138c72cad"
+      },
+      {
+        "guard_sha256": "8a0788db0f1a914bb5cd725f8d1050a224422e72616940791515e4c09883ece3",
+        "result_sha256": "c589eb7aa225dac590f230a52fa9d34b784ec8d167288470550092ba0b051e71",
+        "slot": 4,
+        "wrapper_sha256": "62ddac802385ec4163290633f2273857af065dbf3bab6b59302b7d2509f767c5"
+      }
+    ],
+    "required_mean_wall_gain_percent": 5,
+    "rss": {
+      "baseline_through_pipeline": [
+        341872640,
+        344592384
+      ],
+      "candidate_through_pipeline": [
+        328003584,
+        328093696
+      ],
+      "whole_guard_peak_sampled_rss_bytes_in_order": [
+        543498240,
+        549265408,
+        549355520,
+        553496576
+      ]
+    },
+    "schema": "pcc.x86-bridge-uncounted-comparison.v1",
+    "status": "FOUR_ARMS_CORRECT_AND_CLEAN"
+  },
+  "comparison_sha256": "817fbc949d677d13c6ec930ff11e6e1fb371c4d2147f01ef9b490045021e648b",
+  "full_source_postchecks": "PASS: complete baseline and candidate inventories independently verified after all four arms",
+  "guard": {
+    "exclusive_shared_lock": true,
+    "free_reserve_bytes": 4294967296,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "max_disk_growth_bytes": 1073741824,
+    "seconds": 300
+  },
+  "input": {
+    "bytes": 58153998,
+    "sha256": "6bc6763aa8c44457aeb28f88b8aa8fbc49e8a3a0953bc504104eaa9950680741"
+  },
+  "interpretation": "Hold the candidate under the predeclared rule: mean combined wall reduction 4.1622% is below the required 5%. Both order pairs improve, but this does not meet the selected materiality threshold. No additional measurement rounds or automatic activation.",
+  "lock_released": true,
+  "manifest_sha256": "5363117cdbaf78328565386bf39b5e663a3df4dc3b0a83445a91349c91827545",
+  "preservation_commit": "a10b282b59718aa096cdedc4b3b8083adc495721",
+  "production_application": "UNAPPLIED",
+  "qualification_sha256": "8227cd4c5685584cb32f7c6f29879961ec1ff72eaf3a8a598658d6e6aee3d01e",
+  "reference_assembly": {
+    "bytes": 39735304,
+    "sha256": "f1492bf30b0c8b3dcd41985cb7e0edd7dfd00a45467ee4934bdb670fc9d1eb2e"
+  },
+  "reference_decoded_contract": {
+    "bytes": 219989781,
+    "sha256": "311300b3a1c7e64b2de5a9fa5104e086b9c7217194283983c5b1d5d0fd3b77ee"
+  },
+  "reference_object": {
+    "bytes": 12591320,
+    "name": "module.o",
+    "sha256": "10bed83db61678eb56bc36cf9bf5e2e243cf3b0503d994f2eb942bcc13823f7c"
+  },
+  "retention": "Each arm retains its exact assembly/object/result. Every normalized decoded-contract byte was hashed and matched the sealed 219989781-byte reference; four redundant contract copies were not written.",
+  "retries": 0,
+  "rss_observation": "The two-sample mean through-pipeline high-water was 4.4238% lower; whole-guard sampled RSS is separately recorded for every arm. Neither is a general memory improvement claim.",
+  "rss_scope": "Process-lifetime high-water before/through timed pipeline includes imports/input/preflight; whole-guard sampled root RSS includes later validation. These are separate non-additive observations.",
+  "schema": "pcc.x86_bridge_public_uncounted_qualification.v1",
+  "scope": "Four fresh Linux-host c_ast backend/object processes, fixed B-C-C-B order. Timed region is contiguous ordinary indexed assembly emission and object encoding, excluding frontend/input decoding/source checks/output persistence/complete-contract validation. No observation hooks or forced collection inside timing.",
+  "source_and_reference_postchecks": "PASS",
+  "source_manifests": {
+    "baseline": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+    "candidate": "febc3d325420f81ee7d4510e372c7bde1ce9266d827d645027c9b059253114b0"
+  },
+  "source_relation": "Baseline complete pcc tree equals published02b9/d234174f, while its full snapshot retains previously disclosed older unrelated test/docs/bootstrap. Candidate is the exact V2 production plus V3 test-only successor, with no OSError changes.",
+  "stages": [
+    {
+      "arm": "baseline",
+      "cleanup": "CLEAN/reaped/ECHILD",
+      "denied_audit_events": 0,
+      "guard_elapsed_seconds": 41.34038568899996,
+      "guard_sha256": "4b7668e8a6fa2ad16bec39c35ad1edab54dbfccca992c901ae8449c2d9614190",
+      "name": "b1",
+      "result_sha256": "a3d0018c4210a6e063bef27790663e8ad28db58f30eded23193cebddeae7df98",
+      "rss_high_water_bytes": {
+        "before_timed_pipeline": 195178496,
+        "through_timed_pipeline": 341872640
+      },
+      "seal_sha256": "9362ff2fff4e63a01e7e595fe4ea1f81db61f9c52021e10d9c0c56c578f2fa3c",
+      "slot": 1,
+      "timing_ns": {
+        "combined_cpu": 18718705625,
+        "combined_wall": 18725265317,
+        "emission_cpu": 10505665837,
+        "emission_wall": 10509252808,
+        "encoding_cpu": 8213039788,
+        "encoding_wall": 8216012509
+      },
+      "whole_guard_peak_sampled_root_rss_bytes": 543498240,
+      "wrapper_sha256": "327c199b23bfa7ad3789f09d20539e89f64213ec33a4351cc3387ac14f3ff327"
+    },
+    {
+      "arm": "candidate",
+      "cleanup": "CLEAN/reaped/ECHILD",
+      "denied_audit_events": 0,
+      "guard_elapsed_seconds": 39.71041134299958,
+      "guard_sha256": "55ae23836dd082ed2fc27d5a87e869da387c9582c99ef70c24b1ad1d8fe0c9fe",
+      "name": "c1",
+      "result_sha256": "8afefe599ecdf7ee5ec2fcbdce58ec1c00d46a81c4214d3c3440acf02c4f2a71",
+      "rss_high_water_bytes": {
+        "before_timed_pipeline": 195506176,
+        "through_timed_pipeline": 328003584
+      },
+      "seal_sha256": "0dc7f17a142971bccbfb6c4f51f7e56ad37becda3a8037f1e46881641ba8a112",
+      "slot": 2,
+      "timing_ns": {
+        "combined_cpu": 18227001360,
+        "combined_wall": 18232275671,
+        "emission_cpu": 9986247280,
+        "emission_wall": 9990854463,
+        "encoding_cpu": 8240754080,
+        "encoding_wall": 8241421208
+      },
+      "whole_guard_peak_sampled_root_rss_bytes": 549265408,
+      "wrapper_sha256": "309ceea54488900558ccafa4048d1d7bac0299cd03355357032b17fa9f1a1478"
+    },
+    {
+      "arm": "candidate",
+      "cleanup": "CLEAN/reaped/ECHILD",
+      "denied_audit_events": 0,
+      "guard_elapsed_seconds": 38.87136874800126,
+      "guard_sha256": "14dfdc19d6bd84bc8340d3056ced65dcc0fa93dfdca0de6ada83b8d1604885c8",
+      "name": "c2",
+      "result_sha256": "98d4ada79a6463d5d4b6d6e1e6132ed6744847a8621a0781676734e9f2c9449f",
+      "rss_high_water_bytes": {
+        "before_timed_pipeline": 195330048,
+        "through_timed_pipeline": 328093696
+      },
+      "seal_sha256": "2f440d9fdb3c8c7749846d8403f38b8a0f934d1b9c559baf7524282f0ce06dbb",
+      "slot": 3,
+      "timing_ns": {
+        "combined_cpu": 17956071239,
+        "combined_wall": 17961153780,
+        "emission_cpu": 9882183830,
+        "emission_wall": 9883653314,
+        "encoding_cpu": 8073887409,
+        "encoding_wall": 8077500466
+      },
+      "whole_guard_peak_sampled_root_rss_bytes": 549355520,
+      "wrapper_sha256": "1e9dc2d03910aae84df00b22225188fe951b8a19eb23ec89932ea85138c72cad"
+    },
+    {
+      "arm": "baseline",
+      "cleanup": "CLEAN/reaped/ECHILD",
+      "denied_audit_events": 0,
+      "guard_elapsed_seconds": 40.13782866600013,
+      "guard_sha256": "8a0788db0f1a914bb5cd725f8d1050a224422e72616940791515e4c09883ece3",
+      "name": "b2",
+      "result_sha256": "c589eb7aa225dac590f230a52fa9d34b784ec8d167288470550092ba0b051e71",
+      "rss_high_water_bytes": {
+        "before_timed_pipeline": 195223552,
+        "through_timed_pipeline": 344592384
+      },
+      "seal_sha256": "4d4ffd5cb46eb3ec64dd70584e117882497ab9ef8e7583d8584e585f68fd9d41",
+      "slot": 4,
+      "timing_ns": {
+        "combined_cpu": 19033662237,
+        "combined_wall": 19040041127,
+        "emission_cpu": 10813455911,
+        "emission_wall": 10815869945,
+        "encoding_cpu": 8220206326,
+        "encoding_wall": 8224171182
+      },
+      "whole_guard_peak_sampled_root_rss_bytes": 553496576,
+      "wrapper_sha256": "62ddac802385ec4163290633f2273857af065dbf3bab6b59302b7d2509f767c5"
+    }
+  ],
+  "status": "CORRECTNESS_PASS_PERFORMANCE_HOLD",
+  "stop_loss_check_sha256": "43900721e6da836e71172c817ad0ebf6e05f0acebfe056b768828c009f73fbb9",
+  "stop_loss_triggered": false,
+  "unrun": [
+    "Native compiler ABI/callback and GC qualification",
+    "Full Stage1/Stage2",
+    "Frontend-inclusive or full-worker benchmark",
+    "Windows performance or device execution"
+  ]
+}

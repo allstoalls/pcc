@@ -4,7 +4,7 @@ import subprocess
 import textwrap
 import os
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def test_list_slice_assignment_and_delete_stay_native(tmp_path):

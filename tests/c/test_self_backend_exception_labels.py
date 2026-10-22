@@ -48,6 +48,8 @@ entry:
 '''
 
 
+# AArch64 Darwin execution
+@pytest.mark.pcc_gate(probe=lambda: not (sys.platform != "darwin" or platform.machine() != "arm64"))
 def test_optimized_exception_successor_retains_metadata_anchor(tmp_path):
     assembly = emit_aarch64_darwin_asm(_SOURCE, optimize=True)
     assert "L_check_exception:" in assembly
@@ -56,8 +58,6 @@ def test_optimized_exception_successor_retains_metadata_anchor(tmp_path):
     image = link_executable([NativeObject.from_sections(sections, undefined=undefined)])
     if transport.encoded_line_records is not None:
         transport.encoded_line_records.close()
-    if sys.platform != "darwin" or platform.machine() != "arm64":
-        pytest.skip("AArch64 Darwin execution")
     executable = tmp_path / "exceptions"
     executable.write_bytes(image)
     executable.chmod(0o755)

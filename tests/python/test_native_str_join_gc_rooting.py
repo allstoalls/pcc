@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def test_str_join_pins_sequence_across_allocating_runtime_call(tmp_path):

@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from pcc.heap_snapshot import HeapSnapshot
+from pcc.diagnostics.heap_snapshot import HeapSnapshot
 
 
 def test_heap_snapshot_reachability_and_cycle_leak_detection():

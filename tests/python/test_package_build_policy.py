@@ -4,7 +4,7 @@ import tomllib
 
 import pytest
 
-from pcc.package_schema import declarative_python_source_build, source_build_policy
+from pcc.package.schema import declarative_python_source_build, source_build_policy
 
 BACKEND = '[build-system]\nrequires=["hatchling"]\nbuild-backend="hatchling.build"\n'
 

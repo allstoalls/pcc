@@ -229,16 +229,16 @@ def test_scientific_package_support_has_no_runtime_or_codegen_special_case():
         "pcc-" + "numpy-l5",
     )
     deleted_paths = (
-        REPO / "pcc" / "py_runtime" / "src" / ("py_" + "numpy.c"),
+        REPO / "pcc" / "runtime" / "src" / ("py_" + "numpy.c"),
         REPO / "pcc" / ("numpy_" + "compat.py"),
         REPO / "pcc" / ("numpy_" + "smoke_plan.py"),
     )
     for path in deleted_paths:
         assert not path.exists(), str(path)
     checked_roots = (
-        REPO / "pcc" / "py_frontend",
-        REPO / "pcc" / "py_runtime" / "src",
-        REPO / "pcc" / "py_runtime" / "py",
+        REPO / "pcc" / "frontends" / "python",
+        REPO / "pcc" / "runtime" / "src",
+        REPO / "pcc" / "runtime" / "py",
     )
     for root in checked_roots:
         for path in root.rglob("*"):
@@ -342,9 +342,12 @@ def test_pcc1_pip_dry_run_does_not_need_host_python():
         env=env,
     )
     plan = json.loads(proc.stdout)
-    assert plan["ok"] is True
-    assert plan["packages"] == ["requests"]
-    assert plan["inspections"][0]["package_level"] == "nolibpython_python"
+    assert plan["ok"] is True, proc.stdout
+    assert plan["packages"] == ["requests"], proc.stdout
+    inspection = plan["inspections"][0]
+    assert inspection["name"] == "requests", proc.stdout
+    assert inspection["artifact_metadata"]["name"] == "requests", proc.stdout
+    assert inspection["package_level"] == "nolibpython_python", proc.stdout
 
 
 def test_pcc1_package_inspect_reports_mlx_without_host_python():

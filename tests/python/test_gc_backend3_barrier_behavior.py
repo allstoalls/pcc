@@ -16,7 +16,7 @@ def _repo_root() -> Path:
 
 
 REPO_ROOT = _repo_root()
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 
 
 def _cc() -> str:

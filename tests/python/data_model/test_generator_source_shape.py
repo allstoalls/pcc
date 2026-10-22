@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pcc.py_frontend import parser
-from pcc.py_frontend.py_ast import FuncDef, Return, Name
+from pcc.frontends.python import parser
+from pcc.frontends.python.py_ast import FuncDef, Return, Name
 
 
 def test_generator_function_source_shape_is_visible_to_frontend():

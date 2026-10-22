@@ -1,0 +1,121 @@
+from __future__ import annotations
+
+import struct
+
+import pytest
+
+from pcc.backend import self_backend_indexed_codec as indexed_codec
+
+
+_CHUNK = indexed_codec._HOST_ARENA_CHUNK_SCALARS
+
+
+class _RecordingWriter:
+    def __init__(self):
+        self.writes = []
+
+    def write(self, data):
+        assert isinstance(data, bytes)
+        self.writes.append(data)
+        return len(data)
+
+
+def _arena(values):
+    arena = indexed_codec.CompilerIntArena(len(values))
+    assert not arena.uses_native_storage
+    for value in values:
+        arena.append(value)
+    return arena
+
+
+@pytest.mark.parametrize(
+    "count",
+    [0, 1, _CHUNK - 1, _CHUNK, _CHUNK + 1, 2 * _CHUNK, 2 * _CHUNK + 3],
+)
+def test_host_arena_chunks_preserve_wire_bytes_and_write_bound(count):
+    extrema = [-(1 << 63), -1, 0, 1, (1 << 63) - 1, True, False]
+    values = [extrema[index % len(extrema)] for index in range(count)]
+    stream = _RecordingWriter()
+
+    indexed_codec._write_host_arena(stream, _arena(values))
+
+    assert b"".join(stream.writes) == b"".join(
+        struct.pack("<q", value) for value in values
+    )
+    expected_sizes = [8 * _CHUNK] * (count // _CHUNK)
+    if count % _CHUNK or count == 0:
+        expected_sizes.append(8 * (count % _CHUNK))
+    assert [len(data) for data in stream.writes] == expected_sizes
+    assert max(map(len, stream.writes)) <= 64 * 1024
+
+
+def test_host_arena_writes_each_chunk_before_reading_the_next():
+    class ObservedArena:
+        next_index = 0
+
+        def __len__(self):
+            return 2 * _CHUNK + 1
+
+        def get_unchecked(self, index):
+            assert index == self.next_index
+            self.next_index += 1
+            return index
+
+    arena = ObservedArena()
+    reads_at_write = []
+
+    class ObservedWriter(_RecordingWriter):
+        def write(self, data):
+            reads_at_write.append(arena.next_index)
+            return super().write(data)
+
+    indexed_codec._write_host_arena(ObservedWriter(), arena)
+
+    assert reads_at_write == [_CHUNK, 2 * _CHUNK, 2 * _CHUNK + 1]
+
+
+@pytest.mark.parametrize("invalid", [1 << 63, -(1 << 63) - 1, 1.5, None])
+@pytest.mark.parametrize("offset", [0, _CHUNK - 1, _CHUNK, _CHUNK + 1])
+def test_host_arena_retains_pack_errors_and_only_completed_chunk_prefix(
+    invalid, offset,
+):
+    with pytest.raises(struct.error) as original_error:
+        struct.pack("<q", invalid)
+    stream = _RecordingWriter()
+    values = [7] * offset + [invalid]
+
+    with pytest.raises(type(original_error.value)) as chunked_error:
+        indexed_codec._write_host_arena(stream, _arena(values))
+
+    assert str(chunked_error.value) == str(original_error.value)
+    assert stream.writes == [struct.pack("<q", 7) * _CHUNK] * (
+        offset // _CHUNK
+    )
+
+
+def test_host_arena_preserves_integer_index_coercion():
+    class IndexValue:
+        def __index__(self):
+            return -19
+
+    stream = _RecordingWriter()
+    indexed_codec._write_host_arena(stream, _arena([IndexValue()]))
+    assert stream.writes == [struct.pack("<q", -19)]
+
+
+def test_host_arena_propagates_writer_failure_without_retry():
+    failure = OSError("host arena write failed")
+
+    class FailingWriter(_RecordingWriter):
+        def write(self, data):
+            super().write(data)
+            if len(self.writes) == 2:
+                raise failure
+            return len(data)
+
+    stream = FailingWriter()
+    with pytest.raises(OSError) as error:
+        indexed_codec._write_host_arena(stream, _arena([7] * (2 * _CHUNK + 1)))
+
+    assert error.value is failure
+    assert stream.writes == [struct.pack("<q", 7) * _CHUNK] * 2

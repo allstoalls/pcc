@@ -5,7 +5,7 @@ import textwrap
 
 
 def test_delete_attribute_statement_compiles_no_libpython_self_backend(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "delete_attr.py"
     src.write_text(textwrap.dedent(

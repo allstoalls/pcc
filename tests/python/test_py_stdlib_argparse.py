@@ -5,7 +5,7 @@ import subprocess
 import textwrap
 from pathlib import Path
 
-from pcc.py_stdlib import argparse
+from pcc.stdlib import argparse
 
 
 def _run_pcc_program(tmp_path: Path, source: str, args: list[str] | None = None) -> str:

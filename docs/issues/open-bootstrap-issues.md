@@ -41,10 +41,10 @@ to `--python-libpython=auto` and silently pulled CPython fallback.
 
 | File | `py_cpy_*` calls (independent codegen) |
 |---|---:|
-| `pcc/py_frontend/codegen/layer1.py` | **22,992** |
-| `pcc/py_frontend/codegen/runtime_abi.py` | 6,023 |
-| `pcc/py_frontend/pipeline.py` | 1,583 |
-| `pcc/py_frontend/codegen/class_gen.py` | 1,349 |
+| `pcc/frontends/python/codegen/layer1.py` | **22,992** |
+| `pcc/frontends/python/codegen/runtime_abi.py` | 6,023 |
+| `pcc/frontends/python/pipeline.py` | 1,583 |
+| `pcc/frontends/python/codegen/class_gen.py` | 1,349 |
 | total tight closure (16 files) | 27,853 |
 
 **Top action types** (categorized in same probe):
@@ -82,8 +82,8 @@ what shipped is a 15-minute negative diagnostic.
 3. Step 3 — measure: if fallback count drops 40-50% in two weeks,
    continue; if 10-20%, stop.
 
-**What I did:** changed `from pcc.llvm_capi.compat import ir` to
-`from pcc.llvm_capi import ir` in 4 files, ran the probe, hit
+**What I did:** changed `from pcc.ir.compat import ir` to
+`from pcc.ir import ir` in 4 files, ran the probe, hit
 `unbound name 'ir'`, reverted, declared closure convergence
 "impossible" and routed it to `hybrid by design`. Step 2 was never
 written. Step 3 measurement therefore never ran.
@@ -95,7 +95,7 @@ whole approach is dead.
 
 **What it would take to actually finish step 2:** write a Python
 AST transformer (~500 lines) that recognizes 2 specific source-level
-idioms in `pcc.py_frontend.codegen.layer1` and rewrites them at
+idioms in `pcc.frontends.python.codegen.layer1` and rewrites them at
 build time. Estimated: 1-2 weeks. Not done.
 
 ---
@@ -110,7 +110,7 @@ scaffold-lowering rules in codegen — when codegen sees
 `extern("getpid", (), c_int)` or `pcc.unsafe.malloc(n)`, it lowers
 to native IR.
 
-**What's missing:** the same treatment for `pcc.llvm_capi.ir`:
+**What's missing:** the same treatment for `pcc.ir.ir`:
 
 - ~10 `ir.X` types referenced from layer1 / runtime_abi / class_gen
   / marshal: `IRBuilder`, `IntType`, `PointerType`, `VoidType`,
@@ -141,7 +141,7 @@ study. Currently nothing in flight.
 
 **State:** open. Local fix, but blocked behind Issue 4.
 
-**Evidence:** `pcc/py_frontend/codegen/layer1.py:2813` and similar:
+**Evidence:** `pcc/frontends/python/codegen/layer1.py:2813` and similar:
 
 ```python
 self.builder = None
@@ -219,7 +219,7 @@ asserts `total fallback ≤ 27853 + 5%`, blocking regressions.
 
 **State:** open, low-priority.
 
-**Evidence:** `pcc/py_frontend/codegen/layer1.py:812` —
+**Evidence:** `pcc/frontends/python/codegen/layer1.py:812` —
 `call ... @py_cpy_main_exitcode` is emitted whenever
 `emit_cpy_main_exitcode=True` (which is whenever
 `libpython_mode in {"on", "auto"}` and AST has any import).
@@ -237,7 +237,7 @@ bootstrap, and contributes to Issue 1.
 | 1 — libpython linkage | bootstrap binary | open |
 | 2 — 22992 layer1 fallbacks | frontend codegen | open (Path A: 64% reduced via IRBuilder/runtime[]/ir.X scaffold) |
 | 3 — closed-world spike not finished | desugar transformers | partial (Path A's scaffold is the spike) |
-| 4 — `ir`-as-scaffold subsystem | codegen | done in spirit (scaffold dispatch routes to user_pcc_llvm_capi_ir_*) |
+| 4 — `ir`-as-scaffold subsystem | codegen | done in spirit (scaffold dispatch routes to user_pcc_ir_ir_*) |
 | 5 — `self.builder = None` | codegen local | open (blocked by full Issue 4 / type tracking) |
 | 6 — AArch64 not source-anchored | self backend | open |
 | 7 — x86_64 Linux coverage | self backend | open |

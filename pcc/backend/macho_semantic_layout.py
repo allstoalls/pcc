@@ -41,8 +41,10 @@ from .native_object import (
 )
 from .precise_stackmap import (
     ARCH_AARCH64,
+    RUNTIME_TABLE_VERSION,
     PreciseStackMap,
     PreciseStackMapError,
+    _payload_version,
     decode_stack_map,
     encode_stack_map,
     function_address_offsets,
@@ -603,6 +605,10 @@ def _stackmap_bindings(
     for section_index, section in enumerate(obj.sections, start=1):
         if (section.segname, section.sectname) != ("__DATA", "__pcc_stackmaps"):
             continue
+        if _payload_version(section.data) == RUNTIME_TABLE_VERSION:
+            raise SemanticLayoutError(
+                "semantic layout cannot rebuild a version 3 runtime stack-map table"
+            )
         try:
             decoded = decode_stack_map(
                 section.data,

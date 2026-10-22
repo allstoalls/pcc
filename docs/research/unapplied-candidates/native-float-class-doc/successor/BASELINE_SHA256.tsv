@@ -1,0 +1,5 @@
+path	sha256
+pcc/frontends/python/codegen/class_gen.py	9fe7e0fbf904e35f3521632ad575d48558cca4abdb84f60b09d0c6c0cb49a2cf
+pcc/runtime/py/py_obj_ops_dispatch.py	893e1bf8f9566d6d4e13dd96895d1003ae66911438b244f76825c2010d880929
+tests/python/test_native_class_docstrings.py	7dca5cda735e2719ac24be43d4e7b1bc5a902e11e4ed2099ca7d608c38e4f451
+tests/python/test_native_float_callback_movement.py	ABSENT

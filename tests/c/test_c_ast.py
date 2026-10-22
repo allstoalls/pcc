@@ -8,9 +8,9 @@ sys.path.insert(0, '..')
 sys.path.insert(0, '../pcc')
 
 
-from pcc.ast import c_ast
-from pcc.parse.c_parser import CParser, Coord, ParseError
-from pcc.parse import plyparser
+from pcc.frontends.c.ast import c_ast
+from pcc.frontends.c.parse.c_parser import CParser, Coord, ParseError
+from pcc.frontends.c.parse import plyparser
 
 class Test_c_ast(unittest.TestCase):
     def test_BinaryOp(self):

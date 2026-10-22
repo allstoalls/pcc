@@ -1,0 +1,104 @@
+{
+  "artifacts": [
+    {
+      "bytes": 44662,
+      "mode": "100644",
+      "path": "candidate.patch",
+      "sha256": "4cdd3b646dae606c0a58c3d35fb6c03533dea0714406b93eee0d9a1dacd5d124"
+    },
+    {
+      "bytes": 6932,
+      "mode": "100644",
+      "path": "README.md",
+      "sha256": "5255df460235f9ded4d1dcfd3552e8361b626a4ea0a7a16070762e9ccd2c45dc"
+    },
+    {
+      "bytes": 51970,
+      "mode": "100644",
+      "path": "CI-READBACK.json",
+      "sha256": "22fa0e23f8e22bf447c335264fe5a8fc9af67e5e325356688139bef5a2a23f06"
+    }
+  ],
+  "base_commit": "b68d422cf134357a16ea79be004c1174c7e39fac",
+  "base_pcc_tree": "dc63c2a946f533f7b31ce63db2f759a044fdc37f",
+  "changed_paths": [
+    {
+      "base_bytes": 13995,
+      "base_sha256": "f564767a154adae848e53f1286833c08b618c9b6311a688096bfdd5548be1aeb",
+      "mode": "100644",
+      "path": "pcc/backend/coff_x86_64.py",
+      "post_bytes": 14262,
+      "post_sha256": "15939bf25b6b8cffd853ac82cd99fbbe1708a3e8d3c8b7bf6599578a8bc440f5"
+    },
+    {
+      "base_bytes": 0,
+      "base_sha256": null,
+      "mode": "100644",
+      "path": "pcc/backend/indexed_phase_timing.py",
+      "post_bytes": 3161,
+      "post_sha256": "b2123e4546245e39d0dc937bc7da2e22d3fa3d57e6f351946b1912663714b7ca"
+    },
+    {
+      "base_bytes": 101726,
+      "base_sha256": "16054b9b562f3e5e4adf70fb459e2e1b5fe58f5eeb6af9f8d9fa6ad8f8b801d8",
+      "mode": "100644",
+      "path": "pcc/backend/self_backend_aarch64_darwin.py",
+      "post_bytes": 103437,
+      "post_sha256": "fe3c14c169ab9b1af2852c7a0753c2d956826dd27d827eb1a96649ec5a759233"
+    },
+    {
+      "base_bytes": 2779,
+      "base_sha256": "1b042b1297c67713513a764f8f47dea08b6afaed6b83f0f963034a90cca77837",
+      "mode": "100644",
+      "path": "pcc/backend/self_backend_prepare.py",
+      "post_bytes": 3151,
+      "post_sha256": "bf2a466eef5af72406fcb902e215c607b1c3f4665c0cada8ad1dd677899d4f1e"
+    },
+    {
+      "base_bytes": 133440,
+      "base_sha256": "9c515249d01aa01a0baa6913f7e51c28d80555c90685160b9e5590a755677ec5",
+      "mode": "100644",
+      "path": "pcc/backend/self_backend_x86_64_linux.py",
+      "post_bytes": 134423,
+      "post_sha256": "4d866d533c945debc79ca793eb1273999054b083ad7a84e48f2a04617d4c894e"
+    },
+    {
+      "base_bytes": 2472,
+      "base_sha256": "43328564860270186bd597549c39a70d891715d388613353c1667f1f2265aba6",
+      "mode": "100644",
+      "path": "pcc/backend/target_objects.py",
+      "post_bytes": 3710,
+      "post_sha256": "5ea98a6c8b37ff5b0555865164df73ea14a4b58e50e2e3abdc4833cb0a57e4a8"
+    },
+    {
+      "base_bytes": 51742,
+      "base_sha256": "a2109b4670c369de7ac28bca5af991a6dbf93e9ea070d918a4eecabe6f4314e2",
+      "mode": "100644",
+      "path": "pcc/frontends/python/pipeline_frontend_worker_execution.py",
+      "post_bytes": 55067,
+      "post_sha256": "699cf16413e750d9c50c2ebff63332a393f412f94d208a1e77fd472ab75a0f18"
+    },
+    {
+      "base_bytes": 0,
+      "base_sha256": null,
+      "mode": "100644",
+      "path": "tests/python/test_indexed_phase_timing.py",
+      "post_bytes": 11407,
+      "post_sha256": "e076cc00c629b3ba1bf187e5c130b9d7eaadb2148f01d92a9c25e81a61b6d9ab"
+    }
+  ],
+  "focused_host_expected_cases": 36,
+  "public_files": [
+    "candidate.patch",
+    "README.md",
+    "CI-READBACK.json",
+    "manifest.json"
+  ],
+  "restrictions": [
+    "No production application or Git write by author.",
+    "No compiler/test/native/profile execution by author.",
+    "No cap/algorithm/GC/ownership changes."
+  ],
+  "schema": "pcc-indexed-phase-timing-unapplied-v1",
+  "status": "independent source review clear; all tests and execution UNRUN"
+}

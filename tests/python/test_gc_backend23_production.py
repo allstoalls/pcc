@@ -9,7 +9,7 @@ from tests.runtime_build_cache import cached_pcc_python_runtime
 
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 
 
 def _cc() -> str:
@@ -137,7 +137,7 @@ def test_backend3_minor_productivity_and_remembered_update_score(tmp_path):
 def test_backend23_public_symbols_are_wired():
     header = (RUNTIME_DIR / "include" / "py_runtime.h").read_text(encoding="utf-8")
     py_src = (RUNTIME_DIR / "py" / "py_gc_telemetry.py").read_text(encoding="utf-8")
-    abi = (REPO_ROOT / "pcc" / "py_frontend" / "codegen" / "runtime_abi.py").read_text(encoding="utf-8")
+    abi = (REPO_ROOT / "pcc" / "frontends" / "python" / "codegen" / "runtime_abi.py").read_text(encoding="utf-8")
 
     assert "PCC_GC_COUNTER_CMS_PRODUCTION_SCORE" in header
     assert "PCC_GC_COUNTER_GEN_MINOR_PRODUCTIVITY_SCORE" in header

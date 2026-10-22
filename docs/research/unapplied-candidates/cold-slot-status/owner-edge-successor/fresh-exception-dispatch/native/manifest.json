@@ -1,0 +1,82 @@
+{
+  "arms": {
+    "combined-probes": {
+      "compile_result_sha256": "828a82efdae2307a9285b044519b49470040df84e4165982382c3f2a4c451be5",
+      "executable_bytes": 25676384,
+      "executable_sha256": "e5d2bb22f948e48ab91ddc4eb5e32ad1bb09b36cfcd2e7a20db7b25bfd97e3fa"
+    }
+  },
+  "candidate_source_manifest_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "codegen_checksum": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+  "collection_calls": [
+    {
+      "abi": "i64(i32)",
+      "callee": "pcc_gc_collect",
+      "owner": "main",
+      "reason_ir": "negtmp.178"
+    },
+    {
+      "abi": "i64(i32)",
+      "callee": "pcc_gc_collect",
+      "owner": "main",
+      "reason_ir": "negtmp.336"
+    }
+  ],
+  "compile_packet_manifest_sha256": "1f088792d2be243b2ea382316410937a7791e7b9b79f0ba9972edb2d0bd7fcee",
+  "compile_qualification_sha256": "300c910626989fca921b9907335d84b6a81215f5275a68b96a583d1b8d7f7b76",
+  "execution": "UNRUN",
+  "expected_stdout": "slot-status-runtime-equal\n",
+  "files": {
+    "README.md": {
+      "bytes": 2910,
+      "sha256": "b36201464d947ba21d4ebf822c7c986bffb9d0bc04c9b6a64641ea0975f05cd1"
+    },
+    "launch_elf.py": {
+      "bytes": 7730,
+      "sha256": "810133973514cd66197887a048d7fe7ba3fbbf50d5879baa9e5685a7f07f3812"
+    },
+    "validate_native.py": {
+      "bytes": 5394,
+      "sha256": "9b42e178188d2ab9626e08bfac5da5398cdefe5a3fd8089f9935ff72a403b8c4"
+    }
+  },
+  "fixed_argv": "exactly one decimal argument: selected gc 0 or 1",
+  "generated_probes": [
+    {
+      "ir_bytes": 62023,
+      "ir_sha256": "e482c135acd2824dd9caf83a93774c21a9e27da967d18593fe7c62e62585bc01",
+      "owned_verification": "PASS",
+      "reporter": null,
+      "status_sites": 2,
+      "symbol": "baseline_probe"
+    },
+    {
+      "ir_bytes": 61981,
+      "ir_sha256": "7276380482f6217ea0e30e524f97613b645cd73944d5425884f999de25d4d5df",
+      "owned_verification": "PASS",
+      "reporter": "pcc_slot_call_status_report.3",
+      "status_sites": 2,
+      "symbol": "candidate_probe"
+    }
+  ],
+  "harness_sha256": "932863cbaee473488ef775e833b4256b384b24d5797236162d444d16f327033c",
+  "host_interpreter_sha256": "56045822d9c10027323c6f24ac5876901915b1c3ff8bfc6591d363c280246c82",
+  "predecessor_fresh_c_native_manifest_sha256": "98383cdcd7ad2e72f253532200a5cb49b80ce2052d3a9ea3e2276ebbe3fdf525",
+  "predecessor_python_launcher_manifest_sha256": "c2f6ba10e39ffa3dc406e649bdfdb6358c952fae3d4d166cb3b16e62df3d427d",
+  "preserved_failed_native_qualification_sha256": "5d050a32eef1d2ea2ed47e8783d86829830502285c70338d91347de80e4f8182",
+  "review_at_freeze": "PENDING",
+  "runtime_sha256": "a6645f903e03f6766ecc7466b76f2993318582d287a393831aa5522158421915",
+  "schema": "pcc.cold_slot_dispatch_native_packet.v1",
+  "source_patch_sha256": "4dd5955455944d3b905fd7f5998ac874fd0b815c22d45af13092f9c582259136",
+  "supervisor_sha256": "b1067df943a4cd992ecf10efbe9132fd7bc7d4f087a7b324b2fcc006f3de092a",
+  "test_only_dispatch_successor": {
+    "compiler_inventory_relation": "unchanged old full compiler source inventory; external test-only postimage is separately bound, not substituted into it",
+    "patch_sha256": "1cee8adeb4bb544330b6aa2e30b2d585396519914cf75fad40c61156354004a3",
+    "path": "tests/python/test_slot_call_status_reporting_native.py",
+    "postimage_sha256": "8348c58193351f4d025e3824d596d0a7c38500ca0ce8abf188e3d8382029ab90",
+    "preimage_sha256": "f3915510ed44ed2c5e5f8a73f88b22c004ec11a439bd1c5705b3f6ece420fe65",
+    "public_collection_reason": -1,
+    "replacements": 2
+  },
+  "test_successor_delta_sha256": "43e74045c8305a16caa0c88f4404476f3ce752a5cd8039250534b274212fd4ac"
+}

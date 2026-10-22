@@ -66,7 +66,7 @@ def _time_run(cmd: list[str], runs: int) -> list[float]:
 def _compile_with_pcc(src: Path, out: Path) -> bool:
     """Compile a scenario with pcc-static. Returns True on success."""
     cmd = [
-        sys.executable, "-m", "pcc.cli_core",
+        sys.executable, "-m", "pcc.driver.cli_core",
         str(src), "-o", str(out),
         "--ir-scaffold=on",
         "--python-libpython=off",

@@ -44,11 +44,11 @@ def test_pcc1_value_arguments_and_nested_fields_execute(tmp_path):
     stage1, receipt_environment = _compiler_receipt(compiler)
     manifest = json.loads((stage1 / "source-manifest.json").read_text())
     for relative in (
-        "pcc/py_frontend/codegen/method_call_lowering.py",
-        "pcc/py_frontend/pipeline_context.py",
-        "pcc/py_frontend/pipeline_exports.py",
-        "pcc/py_frontend/type_infer.py",
-        "pcc/py_frontend/codegen/class_gen.py",
+        "pcc/frontends/python/codegen/method_call_lowering.py",
+        "pcc/frontends/python/pipeline_context.py",
+        "pcc/frontends/python/pipeline_exports.py",
+        "pcc/frontends/python/type_infer.py",
+        "pcc/frontends/python/codegen/class_gen.py",
     ):
         assert manifest["files"][relative] == hashlib.sha256(
             (repo / relative).read_bytes()

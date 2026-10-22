@@ -36,7 +36,7 @@ This is a **CPU-only research oracle**. It does **not**:
 * implement a *moving* / relocating collector — every "evacuation" here is a
   metadata transition in a model, not a real object copy;
 * integrate with pcc's five production GC backends
-  (``PCC_GC_KIND_*`` 0..4 in ``pcc/py_runtime``); it only *borrows their
+  (``PCC_GC_KIND_*`` 0..4 in ``pcc/runtime``); it only *borrows their
   vocabulary* so a later integration has a shared state model to target;
 * claim MLX / vLLM / vLLM-Metal / Mooncake interoperability;
 * claim whole-Python-on-GPU execution.

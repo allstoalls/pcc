@@ -9,7 +9,7 @@ while nothing else answers to the name, and user classes routinely define
 Without a runtime type-tag test the call reached `py_set_update` /
 `py_dict_get` with a user instance, which those helpers ignore: the method
 body never ran and nothing was raised, so the call silently evaporated.
-`pcc/py_stdlib/hashlib.py` is the worked example -- `clone.update(...)` in
+`pcc/stdlib/hashlib.py` is the worked example -- `clone.update(...)` in
 `_SHA256.digest` did nothing and the `while len(clone._buf) != 56` padding
 loop spun forever, so `hashlib.sha256(x).hexdigest()` never returned.
 

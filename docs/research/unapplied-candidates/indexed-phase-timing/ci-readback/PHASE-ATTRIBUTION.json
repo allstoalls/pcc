@@ -1,0 +1,1405 @@
+{
+  "codegen_checksum": "e0145952375a080377be0084bcb6b91ce825102c213b5453473c3896d2fac36c",
+  "instrumentation_manifest_sha256": "a844845996dc7ec68a33a6c2975fa8ea1c2e1abe32e2f58bed9df7ebb073d552",
+  "interpretation": [
+    "Largest late assembly shares: Windows 41.02%, Linux x86 29.97%, Linux ARM 20.74%; object container serialization is below 1.73% and object writes at most 0.025% in these completed-worker scopes.",
+    "Mac native structured route assembles incrementally within function emission and finalization. Its body/projection/native-encoding residual is 32.88%; not a leaf function attribution and not comparable directly to text-route body share.",
+    "ARM function setup is 12.89\u201313.63% of completed codegen. X86 same-named setup excludes its earlier stack-slot assignment and is nearly zero. Do not compare this as identical register allocation work.",
+    "Stackmap planning spans 12.49\u201316.90% across all four targets. This proves a substantial owner, not that all analyses inside it are duplicate.",
+    "No sum includes both backend_call and its children or function_emit and its setup child. Disjoint body is inclusive function_emit minus setup; backend residual is separately bounded.",
+    "Final section/metadata work in backend_finalize is outside body. optimize=False skips the AArch64 CFG peepholes in this CI route. Linux x86 packed stackmaps defer metadata to assembler; Windows finalizer still renders symbolic metadata, so finalization work moves across boundaries."
+  ],
+  "limits": [
+    "All four Stage1 builds timed out; no pcc1 output/fixed point/native helper execution is certified.",
+    "Worker times overlap under concurrency; shares use sum of completed-worker codegen, not job wall or CPU time.",
+    "All 1709 summaries are read from raw artifact members only; console replay is not added.",
+    "Real cancelled attempts remain listed and are excluded from completed sums when no completed summary exists.",
+    "All recorded summaries have codegen_complete=1/clock_ok=1, but incomplete/timed-out workers have no final phase report; their work and not-started modules are censored.",
+    "No controlled comparison with prior run: different completion sets and runner/resource/admission behavior. Diagnostic overhead was not benchmarked.",
+    "Read-only analysis only. No new compiler, test, native process, profile or source change."
+  ],
+  "pcc_tree": "ee02ba6bf0d79e9706c1791aa650093f5f91c338",
+  "platforms": [
+    {
+      "archive": "macos-arm64.zip",
+      "archive_sha256": "8e3dc0b7965cee992085ad75482216528b438ffe5a8eec3d1b355cdabf351fb3",
+      "cancelled_and_retry_attempts": [
+        {
+          "event": "start",
+          "line": 7297,
+          "modules": [
+            "pcc.frontends.c.codegen.c_declaration_lowering"
+          ],
+          "monotonic_s": 899.896122708,
+          "peak_bytes": 0,
+          "phase": "codegen",
+          "pid": 20481,
+          "reservation_bytes": 748597248
+        },
+        {
+          "event": "cancel",
+          "line": 7315,
+          "modules": [
+            "pcc.frontends.c.codegen.c_declaration_lowering"
+          ],
+          "monotonic_s": 908.644866833,
+          "peak_bytes": 328122368,
+          "phase": "codegen",
+          "pid": 20481,
+          "reservation_bytes": 748597248
+        },
+        {
+          "event": "start",
+          "line": 7326,
+          "modules": [
+            "pcc.frontends.c.codegen.c_declaration_lowering"
+          ],
+          "monotonic_s": 922.1265975,
+          "peak_bytes": 0,
+          "phase": "codegen",
+          "pid": 21050,
+          "reservation_bytes": 2334703616
+        },
+        {
+          "event": "retire",
+          "line": 7338,
+          "modules": [
+            "pcc.frontends.c.codegen.c_declaration_lowering"
+          ],
+          "monotonic_s": 934.477714333,
+          "peak_bytes": 334413824,
+          "phase": "codegen",
+          "pid": 21050,
+          "reservation_bytes": 2334703616
+        },
+        {
+          "event": "start",
+          "line": 10639,
+          "modules": [
+            "pcc.frontends.python.pipeline_frontend_parallel"
+          ],
+          "monotonic_s": 1456.4034935,
+          "peak_bytes": 0,
+          "phase": "codegen",
+          "pid": 35188,
+          "reservation_bytes": 1350770688
+        },
+        {
+          "event": "cancel",
+          "line": 10675,
+          "modules": [
+            "pcc.frontends.python.pipeline_frontend_parallel"
+          ],
+          "monotonic_s": 1465.118642875,
+          "peak_bytes": 459816960,
+          "phase": "codegen",
+          "pid": 35188,
+          "reservation_bytes": 1350770688
+        },
+        {
+          "event": "start",
+          "line": 10681,
+          "modules": [
+            "pcc.frontends.python.pipeline_frontend_parallel"
+          ],
+          "monotonic_s": 1501.43171375,
+          "peak_bytes": 0,
+          "phase": "codegen",
+          "pid": 36250,
+          "reservation_bytes": 2334703616
+        },
+        {
+          "event": "retire",
+          "line": 10721,
+          "modules": [
+            "pcc.frontends.python.pipeline_frontend_parallel"
+          ],
+          "monotonic_s": 1547.925547958,
+          "peak_bytes": 781090816,
+          "phase": "codegen",
+          "pid": 36250,
+          "reservation_bytes": 2334703616
+        }
+      ],
+      "changed_module_codegen_status": {
+        "pcc.backend.coff_x86_64": {
+          "codegen_ms": 11288,
+          "index": 113,
+          "infer_ms": 11,
+          "line": 8753
+        },
+        "pcc.backend.indexed_phase_timing": {
+          "codegen_ms": 620,
+          "index": 133,
+          "infer_ms": 11,
+          "line": 1708
+        },
+        "pcc.backend.self_backend_aarch64_darwin": {
+          "status": "not_completed"
+        },
+        "pcc.backend.self_backend_prepare": {
+          "codegen_ms": 1591,
+          "index": 102,
+          "infer_ms": 6,
+          "line": 1026
+        },
+        "pcc.backend.self_backend_x86_64_linux": {
+          "status": "not_completed"
+        },
+        "pcc.backend.target_objects": {
+          "codegen_ms": 1564,
+          "index": 114,
+          "infer_ms": 5,
+          "line": 1545
+        },
+        "pcc.frontends.python.pipeline_frontend_worker_execution": {
+          "codegen_ms": 21333,
+          "index": 39,
+          "infer_ms": 38,
+          "line": 12574
+        }
+      },
+      "completed_worker_codegen_ms": 3037856,
+      "completed_worker_infer_ms": 8809,
+      "counts": {
+        "admission_events": {
+          "calibrate": 36,
+          "cancel": 2,
+          "retire": 405,
+          "start": 372
+        },
+        "clock_invalid_summaries": 0,
+        "duplicate_summary_modules": 0,
+        "incomplete": 1,
+        "not_started": 51,
+        "partial_summaries": 0,
+        "roots": 457,
+        "valid_complete_summaries": 405,
+        "worker_completed_unique": 405,
+        "worker_started_unique": 406
+      },
+      "disjoint_codegen_partition_ns": {
+        "backend_finalize": 192368041409,
+        "backend_other": 16112487244,
+        "frontend_generate": 459361572393,
+        "frontend_release_post": 50170686301,
+        "frontend_release_pre": 23161303748,
+        "function_body_projection_and_route_encoding": 998872078647,
+        "function_setup": 391542344161,
+        "object_assemble": 4006034,
+        "object_encode": 52256230841,
+        "object_write": 727008671,
+        "prepare_layout": 77991915283,
+        "prepare_verify": 268010718701,
+        "stackmap_plan": 485180056010,
+        "worker_other": 22097550557
+      },
+      "disjoint_share_of_completed_codegen_percent": {
+        "backend_finalize": 6.332362080658201,
+        "backend_other": 0.530390092354608,
+        "frontend_generate": 15.121242494476368,
+        "frontend_release_post": 1.651516276643791,
+        "frontend_release_pre": 0.7624227003518271,
+        "function_body_projection_and_route_encoding": 32.880823799646855,
+        "function_setup": 12.888772350006057,
+        "object_assemble": 0.00013187043757176113,
+        "object_encode": 1.7201681330846492,
+        "object_write": 0.02393163701636944,
+        "prepare_layout": 2.567334175253863,
+        "prepare_verify": 8.82236415093408,
+        "stackmap_plan": 15.971134115968631,
+        "worker_other": 0.7274061231671284
+      },
+      "failure": null,
+      "guard": {
+        "elapsed_s": 2400.171466292,
+        "max_tree_rss_bytes": 2796290048,
+        "peak_tree_rss_bytes": 1710751744,
+        "returncode": 143,
+        "status": "TIMEOUT",
+        "timeout_s": 2400.0
+      },
+      "inclusive_and_leaf_sums_ns": {
+        "backend_call_inclusive_ns": 2430077641455,
+        "backend_finalize_ns": 192368041409,
+        "frontend_generate_ns": 459361572393,
+        "frontend_release_post_ns": 50170686301,
+        "frontend_release_pre_ns": 23161303748,
+        "function_emit_inclusive_ns": 1390414422808,
+        "function_setup_ns": 391542344161,
+        "object_assemble_ns": 4006034,
+        "object_encode_ns": 52256230841,
+        "object_write_ns": 727008671,
+        "prepare_layout_ns": 77991915283,
+        "prepare_verify_ns": 268010718701,
+        "stackmap_plan_ns": 485180056010
+      },
+      "member": "stage1.process.tqzo2m17/target.stderr",
+      "member_bytes": 1722259,
+      "member_sha256": "a17a1b4d90ad6218a172722ce5780e87c36fe9b25943afd3f9e04425517e6d59",
+      "not_started_modules": [
+        "datetime",
+        "pcc.backend.arm64_encode",
+        "pcc.backend.native_object",
+        "pcc.backend.self_backend_aarch64_darwin",
+        "pcc.backend.self_backend_aarch64_darwin_calls",
+        "pcc.backend.self_backend_aarch64_darwin_compute",
+        "pcc.backend.self_backend_kernel",
+        "pcc.backend.self_backend_parse",
+        "pcc.backend.self_backend_precise_stackmaps",
+        "pcc.backend.self_backend_x86_64_linux",
+        "pcc.driver.cli_bootstrap",
+        "pcc.driver.cli_bootstrap_array_core",
+        "pcc.frontends.c.codegen.c_codegen",
+        "pcc.frontends.c.evaluator.c_evaluator",
+        "pcc.frontends.c.parse.c_parsetab",
+        "pcc.frontends.c.passes.llvm_explicit",
+        "pcc.frontends.c.ply.yacc",
+        "pcc.frontends.c.ssa.builder",
+        "pcc.frontends.python.codegen._l1_codegen_static_methods",
+        "pcc.frontends.python.codegen.assignment_statement_lowering",
+        "pcc.frontends.python.codegen.attr_load_lowering",
+        "pcc.frontends.python.codegen.call_expression_lowering",
+        "pcc.frontends.python.codegen.call_object_lowering",
+        "pcc.frontends.python.codegen.class_gen",
+        "pcc.frontends.python.codegen.compare_membership_lowering",
+        "pcc.frontends.python.codegen.exception_lowering",
+        "pcc.frontends.python.codegen.for_loop_lowering",
+        "pcc.frontends.python.codegen.generator_lowering",
+        "pcc.frontends.python.codegen.hoist_lowering",
+        "pcc.frontends.python.codegen.ir_scaffold_lowering",
+        "pcc.frontends.python.codegen.list_method_lowering",
+        "pcc.frontends.python.codegen.literal_lowering",
+        "pcc.frontends.python.codegen.method_call_expression_lowering",
+        "pcc.frontends.python.codegen.native_modules",
+        "pcc.frontends.python.codegen.native_virtual_thread",
+        "pcc.frontends.python.codegen.numeric_builtin_lowering",
+        "pcc.frontends.python.codegen.runtime_abi",
+        "pcc.frontends.python.codegen.string_method_lowering",
+        "pcc.frontends.python.codegen.unsafe_lowering",
+        "pcc.frontends.python.codegen.user_function_lowering",
+        "pcc.frontends.python.codegen.vthread_effect_analysis",
+        "pcc.frontends.python.pipeline",
+        "pcc.frontends.python.pipeline_exports",
+        "pcc.frontends.python.py_parse",
+        "pcc.frontends.python.type_infer",
+        "pcc.ir.direct_indexed_kernel",
+        "pcc.ir.ir",
+        "pcc.ir.optimization.instcombine",
+        "pcc.ir.optimization.mem2reg",
+        "pcc.ir.optimization.simplifycfg",
+        "pcc.package.build_exec"
+      ],
+      "platform": "macos-arm64",
+      "routes": {
+        "indexed-native-sections": 405
+      },
+      "scope_nesting_validation": "PASS for every recorded module, not just aggregate",
+      "started_incomplete": [
+        {
+          "capture": {
+            "elapsed_ms": 797,
+            "fallback_records": 0,
+            "line": 13368,
+            "supported_records": 148263
+          },
+          "emit": null,
+          "module": "pcc.backend.self_backend_target_passes",
+          "phase_summary_present": false,
+          "start": {
+            "index": 104,
+            "line": 13280
+          }
+        }
+      ],
+      "top_input_modules_by_phase": {
+        "function_emit_inclusive_ns": [
+          {
+            "codegen_ms": 60458,
+            "module": "pcc.frontends.python.py_ast",
+            "phase_ns": 28798367879,
+            "summary_line": 6107,
+            "supported_records": 500493,
+            "worker_done_line": 6108
+          },
+          {
+            "codegen_ms": 58849,
+            "module": "pcc.backend.macho_exec",
+            "phase_ns": 26524408793,
+            "summary_line": 10636,
+            "supported_records": 323879,
+            "worker_done_line": 10637
+          },
+          {
+            "codegen_ms": 57858,
+            "module": "pcc.frontends.c.parse.c_parser",
+            "phase_ns": 26270747501,
+            "summary_line": 10678,
+            "supported_records": 482388,
+            "worker_done_line": 10679
+          }
+        ],
+        "function_setup_ns": [
+          {
+            "codegen_ms": 44411,
+            "module": "pcc.frontends.python.pipeline_context",
+            "phase_ns": 13807024998,
+            "summary_line": 11688,
+            "supported_records": 288470,
+            "worker_done_line": 11689
+          },
+          {
+            "codegen_ms": 58849,
+            "module": "pcc.backend.macho_exec",
+            "phase_ns": 12177656166,
+            "summary_line": 10636,
+            "supported_records": 323879,
+            "worker_done_line": 10637
+          },
+          {
+            "codegen_ms": 60458,
+            "module": "pcc.frontends.python.py_ast",
+            "phase_ns": 10533688334,
+            "summary_line": 6107,
+            "supported_records": 500493,
+            "worker_done_line": 6108
+          }
+        ],
+        "object_assemble_ns": [
+          {
+            "codegen_ms": 7746,
+            "module": "pcc.frontends.c.passes.control_flow",
+            "phase_ns": 64542,
+            "summary_line": 4770,
+            "supported_records": 53127,
+            "worker_done_line": 4771
+          },
+          {
+            "codegen_ms": 3815,
+            "module": "io",
+            "phase_ns": 36542,
+            "summary_line": 3745,
+            "supported_records": 30530,
+            "worker_done_line": 3746
+          },
+          {
+            "codegen_ms": 5312,
+            "module": "pcc.frontends.c.codegen.c_switch_flow",
+            "phase_ns": 36458,
+            "summary_line": 5055,
+            "supported_records": 50444,
+            "worker_done_line": 5056
+          }
+        ],
+        "stackmap_plan_ns": [
+          {
+            "codegen_ms": 58849,
+            "module": "pcc.backend.macho_exec",
+            "phase_ns": 13841316959,
+            "summary_line": 10636,
+            "supported_records": 323879,
+            "worker_done_line": 10637
+          },
+          {
+            "codegen_ms": 60458,
+            "module": "pcc.frontends.python.py_ast",
+            "phase_ns": 10914362958,
+            "summary_line": 6107,
+            "supported_records": 500493,
+            "worker_done_line": 6108
+          },
+          {
+            "codegen_ms": 57858,
+            "module": "pcc.frontends.c.parse.c_parser",
+            "phase_ns": 10234916833,
+            "summary_line": 10678,
+            "supported_records": 482388,
+            "worker_done_line": 10679
+          }
+        ]
+      }
+    },
+    {
+      "archive": "linux-aarch64.zip",
+      "archive_sha256": "f3f025a60a63bf9804b3348db09e8e71b4b33d6ea4165b088956d4caad2bd782",
+      "cancelled_and_retry_attempts": [],
+      "changed_module_codegen_status": {
+        "pcc.backend.coff_x86_64": {
+          "codegen_ms": 18769,
+          "index": 113,
+          "infer_ms": 18,
+          "line": 8486
+        },
+        "pcc.backend.indexed_phase_timing": {
+          "codegen_ms": 1142,
+          "index": 133,
+          "infer_ms": 7,
+          "line": 1629
+        },
+        "pcc.backend.self_backend_aarch64_darwin": {
+          "codegen_ms": 49732,
+          "index": 15,
+          "infer_ms": 83,
+          "line": 14800
+        },
+        "pcc.backend.self_backend_prepare": {
+          "codegen_ms": 2630,
+          "index": 102,
+          "infer_ms": 10,
+          "line": 992
+        },
+        "pcc.backend.self_backend_x86_64_linux": {
+          "status": "not_completed"
+        },
+        "pcc.backend.target_objects": {
+          "codegen_ms": 2487,
+          "index": 114,
+          "infer_ms": 10,
+          "line": 1479
+        },
+        "pcc.frontends.python.pipeline_frontend_worker_execution": {
+          "codegen_ms": 33562,
+          "index": 39,
+          "infer_ms": 48,
+          "line": 12340
+        }
+      },
+      "completed_worker_codegen_ms": 6478148,
+      "completed_worker_infer_ms": 17018,
+      "counts": {
+        "admission_events": {
+          "calibrate": 36,
+          "retire": 441,
+          "start": 407
+        },
+        "clock_invalid_summaries": 0,
+        "duplicate_summary_modules": 0,
+        "incomplete": 2,
+        "not_started": 14,
+        "partial_summaries": 0,
+        "roots": 457,
+        "valid_complete_summaries": 441,
+        "worker_completed_unique": 441,
+        "worker_started_unique": 443
+      },
+      "disjoint_codegen_partition_ns": {
+        "backend_finalize": 303046913794,
+        "backend_other": 19624904688,
+        "frontend_generate": 941034806717,
+        "frontend_release_post": 0,
+        "frontend_release_pre": 0,
+        "function_body_projection_and_route_encoding": 1016046716594,
+        "function_setup": 883152809596,
+        "object_assemble": 1343387063154,
+        "object_encode": 69470472105,
+        "object_write": 476297339,
+        "prepare_layout": 163754910643,
+        "prepare_verify": 600360964916,
+        "stackmap_plan": 1087562969831,
+        "worker_other": 50229170623
+      },
+      "disjoint_share_of_completed_codegen_percent": {
+        "backend_finalize": 4.67798688443055,
+        "backend_other": 0.30294004842124633,
+        "frontend_generate": 14.526293729581356,
+        "frontend_release_post": 0.0,
+        "frontend_release_pre": 0.0,
+        "function_body_projection_and_route_encoding": 15.68421586839325,
+        "function_setup": 13.632797669889603,
+        "object_assemble": 20.73720858421265,
+        "object_encode": 1.0723816761364513,
+        "object_write": 0.007352368902346782,
+        "prepare_layout": 2.5278044071083277,
+        "prepare_verify": 9.267478373695692,
+        "stackmap_plan": 16.78817726657372,
+        "worker_other": 0.7753631226548081
+      },
+      "failure": {
+        "error": "stage deadline exceeded",
+        "source": {
+          "clean_commit": true,
+          "commit": "d2334624197b5fc14aaca93bb916683fb1afcb79",
+          "source_file_count": 1126,
+          "source_scope": "compiler-runtime-headers-build-harness-v1",
+          "source_sha256": "6d262b29f0f883c2fd7357e0fcc2ba9964ea6be31e39ca7539eec5c9b00e7a86"
+        },
+        "stages": []
+      },
+      "guard": null,
+      "inclusive_and_leaf_sums_ns": {
+        "backend_call_inclusive_ns": 4073550190062,
+        "backend_finalize_ns": 303046913794,
+        "frontend_generate_ns": 941034806717,
+        "frontend_release_post_ns": 0,
+        "frontend_release_pre_ns": 0,
+        "function_emit_inclusive_ns": 1899199526190,
+        "function_setup_ns": 883152809596,
+        "object_assemble_ns": 1343387063154,
+        "object_encode_ns": 69470472105,
+        "object_write_ns": 476297339,
+        "prepare_layout_ns": 163754910643,
+        "prepare_verify_ns": 600360964916,
+        "stackmap_plan_ns": 1087562969831
+      },
+      "member": "shared/stage1.log",
+      "member_bytes": 1984235,
+      "member_sha256": "5f796c0ead860904ab053ee54389d72df850b23a9ab051b9095efce9b1771e9a",
+      "not_started_modules": [
+        "pcc.backend.arm64_encode",
+        "pcc.backend.self_backend_parse",
+        "pcc.backend.self_backend_precise_stackmaps",
+        "pcc.backend.self_backend_x86_64_linux",
+        "pcc.driver.cli_bootstrap",
+        "pcc.driver.cli_bootstrap_array_core",
+        "pcc.frontends.c.codegen.c_codegen",
+        "pcc.frontends.c.parse.c_parsetab",
+        "pcc.frontends.c.ssa.builder",
+        "pcc.frontends.python.codegen.class_gen",
+        "pcc.frontends.python.codegen.unsafe_lowering",
+        "pcc.frontends.python.codegen.user_function_lowering",
+        "pcc.frontends.python.pipeline",
+        "pcc.frontends.python.type_infer"
+      ],
+      "platform": "linux-aarch64",
+      "routes": {
+        "indexed-assembly": 441
+      },
+      "scope_nesting_validation": "PASS for every recorded module, not just aggregate",
+      "started_incomplete": [
+        {
+          "capture": {
+            "elapsed_ms": 6328,
+            "fallback_records": 0,
+            "line": 15745,
+            "supported_records": 545469
+          },
+          "emit": null,
+          "module": "pcc.backend.self_backend_aarch64_darwin_compute",
+          "phase_summary_present": false,
+          "start": {
+            "index": 86,
+            "line": 15611
+          }
+        },
+        {
+          "capture": {
+            "elapsed_ms": 5124,
+            "fallback_records": 0,
+            "line": 15742,
+            "supported_records": 445583
+          },
+          "emit": {
+            "elapsed_ms": 53538,
+            "line": 15748
+          },
+          "module": "pcc.frontends.python.codegen.hoist_lowering",
+          "phase_summary_present": false,
+          "start": {
+            "index": 381,
+            "line": 15609
+          }
+        }
+      ],
+      "top_input_modules_by_phase": {
+        "function_emit_inclusive_ns": [
+          {
+            "codegen_ms": 183372,
+            "module": "pcc.frontends.python.codegen.call_expression_lowering",
+            "phase_ns": 53189695271,
+            "summary_line": 13905,
+            "supported_records": 687461,
+            "worker_done_line": 13906
+          },
+          {
+            "codegen_ms": 96012,
+            "module": "pcc.ir.optimization.instcombine",
+            "phase_ns": 47422497607,
+            "summary_line": 15600,
+            "supported_records": 327685,
+            "worker_done_line": 15601
+          },
+          {
+            "codegen_ms": 143890,
+            "module": "pcc.backend.self_backend_aarch64_darwin_calls",
+            "phase_ns": 42719469334,
+            "summary_line": 13685,
+            "supported_records": 859212,
+            "worker_done_line": 13686
+          }
+        ],
+        "function_setup_ns": [
+          {
+            "codegen_ms": 96012,
+            "module": "pcc.ir.optimization.instcombine",
+            "phase_ns": 38918258353,
+            "summary_line": 15600,
+            "supported_records": 327685,
+            "worker_done_line": 15601
+          },
+          {
+            "codegen_ms": 183372,
+            "module": "pcc.frontends.python.codegen.call_expression_lowering",
+            "phase_ns": 34289071987,
+            "summary_line": 13905,
+            "supported_records": 687461,
+            "worker_done_line": 13906
+          },
+          {
+            "codegen_ms": 78075,
+            "module": "pcc.frontends.python.pipeline_context",
+            "phase_ns": 21160111497,
+            "summary_line": 11652,
+            "supported_records": 288470,
+            "worker_done_line": 11653
+          }
+        ],
+        "object_assemble_ns": [
+          {
+            "codegen_ms": 183372,
+            "module": "pcc.frontends.python.codegen.call_expression_lowering",
+            "phase_ns": 31167170461,
+            "summary_line": 13905,
+            "supported_records": 687461,
+            "worker_done_line": 13906
+          },
+          {
+            "codegen_ms": 143890,
+            "module": "pcc.backend.self_backend_aarch64_darwin_calls",
+            "phase_ns": 30672526826,
+            "summary_line": 13685,
+            "supported_records": 859212,
+            "worker_done_line": 13686
+          },
+          {
+            "codegen_ms": 123091,
+            "module": "pcc.frontends.python.py_parse",
+            "phase_ns": 25451196611,
+            "summary_line": 14251,
+            "supported_records": 734151,
+            "worker_done_line": 14252
+          }
+        ],
+        "stackmap_plan_ns": [
+          {
+            "codegen_ms": 183372,
+            "module": "pcc.frontends.python.codegen.call_expression_lowering",
+            "phase_ns": 51114033361,
+            "summary_line": 13905,
+            "supported_records": 687461,
+            "worker_done_line": 13906
+          },
+          {
+            "codegen_ms": 106686,
+            "module": "pcc.ir.optimization.simplifycfg",
+            "phase_ns": 34950583764,
+            "summary_line": 14484,
+            "supported_records": 399316,
+            "worker_done_line": 14485
+          },
+          {
+            "codegen_ms": 94238,
+            "module": "pcc.frontends.python.codegen.method_call_expression_lowering",
+            "phase_ns": 23716922787,
+            "summary_line": 13883,
+            "supported_records": 437465,
+            "worker_done_line": 13884
+          }
+        ]
+      }
+    },
+    {
+      "archive": "linux-x86_64.zip",
+      "archive_sha256": "a3be2a8b9e76b9803aa5515bd5c7625f47eb3f69ee7027d70f5abd4670a76581",
+      "cancelled_and_retry_attempts": [],
+      "changed_module_codegen_status": {
+        "pcc.backend.coff_x86_64": {
+          "codegen_ms": 17777,
+          "index": 113,
+          "infer_ms": 22,
+          "line": 8490
+        },
+        "pcc.backend.indexed_phase_timing": {
+          "codegen_ms": 1123,
+          "index": 133,
+          "infer_ms": 8,
+          "line": 1642
+        },
+        "pcc.backend.self_backend_aarch64_darwin": {
+          "codegen_ms": 50449,
+          "index": 15,
+          "infer_ms": 111,
+          "line": 14799
+        },
+        "pcc.backend.self_backend_prepare": {
+          "codegen_ms": 1517,
+          "index": 102,
+          "infer_ms": 8,
+          "line": 992
+        },
+        "pcc.backend.self_backend_x86_64_linux": {
+          "codegen_ms": 133855,
+          "index": 112,
+          "infer_ms": 131,
+          "line": 16889
+        },
+        "pcc.backend.target_objects": {
+          "codegen_ms": 2503,
+          "index": 114,
+          "infer_ms": 13,
+          "line": 1483
+        },
+        "pcc.frontends.python.pipeline_frontend_worker_execution": {
+          "codegen_ms": 25099,
+          "index": 39,
+          "infer_ms": 59,
+          "line": 12228
+        }
+      },
+      "completed_worker_codegen_ms": 6718752,
+      "completed_worker_infer_ms": 21077,
+      "counts": {
+        "admission_events": {
+          "calibrate": 39,
+          "retire": 452,
+          "start": 414
+        },
+        "clock_invalid_summaries": 0,
+        "duplicate_summary_modules": 0,
+        "incomplete": 1,
+        "not_started": 4,
+        "partial_summaries": 0,
+        "roots": 457,
+        "valid_complete_summaries": 452,
+        "worker_completed_unique": 452,
+        "worker_started_unique": 453
+      },
+      "disjoint_codegen_partition_ns": {
+        "backend_finalize": 1944584285,
+        "backend_other": 14709383039,
+        "frontend_generate": 1314990587167,
+        "frontend_release_post": 0,
+        "frontend_release_pre": 0,
+        "function_body_projection_and_route_encoding": 1008788370086,
+        "function_setup": 376929988,
+        "object_assemble": 2013502025924,
+        "object_encode": 64974861469,
+        "object_write": 687643739,
+        "prepare_layout": 329716870668,
+        "prepare_verify": 766658940749,
+        "stackmap_plan": 1135667045024,
+        "worker_other": 66734757862
+      },
+      "disjoint_share_of_completed_codegen_percent": {
+        "backend_finalize": 0.02894264120777192,
+        "backend_other": 0.21893028703842618,
+        "frontend_generate": 19.571947099208305,
+        "frontend_release_post": 0.0,
+        "frontend_release_pre": 0.0,
+        "function_body_projection_and_route_encoding": 15.014520108585643,
+        "function_setup": 0.005610119081638971,
+        "object_assemble": 29.968393325486637,
+        "object_encode": 0.9670674177138849,
+        "object_write": 0.01023469446409095,
+        "prepare_layout": 4.907412428200952,
+        "prepare_verify": 11.410734326092108,
+        "stackmap_plan": 16.902946336224346,
+        "worker_other": 0.9932612166961959
+      },
+      "failure": {
+        "error": "stage deadline exceeded",
+        "source": {
+          "clean_commit": true,
+          "commit": "d2334624197b5fc14aaca93bb916683fb1afcb79",
+          "source_file_count": 1126,
+          "source_scope": "compiler-runtime-headers-build-harness-v1",
+          "source_sha256": "6d262b29f0f883c2fd7357e0fcc2ba9964ea6be31e39ca7539eec5c9b00e7a86"
+        },
+        "stages": []
+      },
+      "guard": null,
+      "inclusive_and_leaf_sums_ns": {
+        "backend_call_inclusive_ns": 3257862123839,
+        "backend_finalize_ns": 1944584285,
+        "frontend_generate_ns": 1314990587167,
+        "frontend_release_post_ns": 0,
+        "frontend_release_pre_ns": 0,
+        "function_emit_inclusive_ns": 1009165300074,
+        "function_setup_ns": 376929988,
+        "object_assemble_ns": 2013502025924,
+        "object_encode_ns": 64974861469,
+        "object_write_ns": 687643739,
+        "prepare_layout_ns": 329716870668,
+        "prepare_verify_ns": 766658940749,
+        "stackmap_plan_ns": 1135667045024
+      },
+      "member": "shared/stage1.log",
+      "member_bytes": 2166261,
+      "member_sha256": "b29cb137e417fef5eed7d1d590f4fbb1ffeb5c8210539dd216cc7f46e8c217f4",
+      "not_started_modules": [
+        "pcc.driver.cli_bootstrap",
+        "pcc.frontends.c.codegen.c_codegen",
+        "pcc.frontends.c.parse.c_parsetab",
+        "pcc.frontends.python.codegen.class_gen"
+      ],
+      "platform": "linux-x86_64",
+      "routes": {
+        "indexed-assembly": 452
+      },
+      "scope_nesting_validation": "PASS for every recorded module, not just aggregate",
+      "started_incomplete": [
+        {
+          "capture": {
+            "elapsed_ms": 5865,
+            "fallback_records": 0,
+            "line": 17427,
+            "supported_records": 809969
+          },
+          "emit": null,
+          "module": "pcc.frontends.python.type_infer",
+          "phase_summary_present": false,
+          "start": {
+            "index": 60,
+            "line": 17114
+          }
+        }
+      ],
+      "top_input_modules_by_phase": {
+        "function_emit_inclusive_ns": [
+          {
+            "codegen_ms": 162692,
+            "module": "pcc.backend.self_backend_parse",
+            "phase_ns": 27883441038,
+            "summary_line": 17098,
+            "supported_records": 1009747,
+            "worker_done_line": 17099
+          },
+          {
+            "codegen_ms": 133794,
+            "module": "pcc.frontends.c.ssa.builder",
+            "phase_ns": 22452089470,
+            "summary_line": 17110,
+            "supported_records": 894023,
+            "worker_done_line": 17111
+          },
+          {
+            "codegen_ms": 133855,
+            "module": "pcc.backend.self_backend_x86_64_linux",
+            "phase_ns": 21439664338,
+            "summary_line": 16888,
+            "supported_records": 840682,
+            "worker_done_line": 16889
+          }
+        ],
+        "function_setup_ns": [
+          {
+            "codegen_ms": 130624,
+            "module": "pcc.backend.self_backend_precise_stackmaps",
+            "phase_ns": 8592536,
+            "summary_line": 16884,
+            "supported_records": 783241,
+            "worker_done_line": 16885
+          },
+          {
+            "codegen_ms": 114833,
+            "module": "pcc.frontends.python.py_parse",
+            "phase_ns": 7457142,
+            "summary_line": 14487,
+            "supported_records": 734151,
+            "worker_done_line": 14488
+          },
+          {
+            "codegen_ms": 55047,
+            "module": "pcc.frontends.python.py_ast",
+            "phase_ns": 5990964,
+            "summary_line": 5857,
+            "supported_records": 500493,
+            "worker_done_line": 5858
+          }
+        ],
+        "object_assemble_ns": [
+          {
+            "codegen_ms": 162692,
+            "module": "pcc.backend.self_backend_parse",
+            "phase_ns": 48577581018,
+            "summary_line": 17098,
+            "supported_records": 1009747,
+            "worker_done_line": 17099
+          },
+          {
+            "codegen_ms": 130624,
+            "module": "pcc.backend.self_backend_precise_stackmaps",
+            "phase_ns": 41149339593,
+            "summary_line": 16884,
+            "supported_records": 783241,
+            "worker_done_line": 16885
+          },
+          {
+            "codegen_ms": 136357,
+            "module": "pcc.backend.self_backend_aarch64_darwin_calls",
+            "phase_ns": 40464350138,
+            "summary_line": 13843,
+            "supported_records": 859212,
+            "worker_done_line": 13844
+          }
+        ],
+        "stackmap_plan_ns": [
+          {
+            "codegen_ms": 162692,
+            "module": "pcc.backend.self_backend_parse",
+            "phase_ns": 26185756981,
+            "summary_line": 17098,
+            "supported_records": 1009747,
+            "worker_done_line": 17099
+          },
+          {
+            "codegen_ms": 136357,
+            "module": "pcc.backend.self_backend_aarch64_darwin_calls",
+            "phase_ns": 23665454182,
+            "summary_line": 13843,
+            "supported_records": 859212,
+            "worker_done_line": 13844
+          },
+          {
+            "codegen_ms": 133794,
+            "module": "pcc.frontends.c.ssa.builder",
+            "phase_ns": 23408277832,
+            "summary_line": 17110,
+            "supported_records": 894023,
+            "worker_done_line": 17111
+          }
+        ]
+      }
+    },
+    {
+      "archive": "windows-x86_64.zip",
+      "archive_sha256": "1f400da12e7d71a6e0645a65d98ceff47b31e4ece4e96221dacd444abd8e6e51",
+      "cancelled_and_retry_attempts": [],
+      "changed_module_codegen_status": {
+        "pcc.backend.coff_x86_64": {
+          "codegen_ms": 26939,
+          "index": 113,
+          "infer_ms": 23,
+          "line": 8595
+        },
+        "pcc.backend.indexed_phase_timing": {
+          "codegen_ms": 1570,
+          "index": 133,
+          "infer_ms": 9,
+          "line": 1715
+        },
+        "pcc.backend.self_backend_aarch64_darwin": {
+          "status": "not_completed"
+        },
+        "pcc.backend.self_backend_prepare": {
+          "codegen_ms": 2362,
+          "index": 102,
+          "infer_ms": 8,
+          "line": 1034
+        },
+        "pcc.backend.self_backend_x86_64_linux": {
+          "status": "not_completed"
+        },
+        "pcc.backend.target_objects": {
+          "codegen_ms": 3610,
+          "index": 114,
+          "infer_ms": 13,
+          "line": 1674
+        },
+        "pcc.frontends.python.pipeline_frontend_worker_execution": {
+          "codegen_ms": 44687,
+          "index": 39,
+          "infer_ms": 68,
+          "line": 12252
+        }
+      },
+      "completed_worker_codegen_ms": 6228158,
+      "completed_worker_infer_ms": 15562,
+      "counts": {
+        "admission_events": {
+          "calibrate": 36,
+          "retire": 411,
+          "start": 379
+        },
+        "clock_invalid_summaries": 0,
+        "duplicate_summary_modules": 0,
+        "incomplete": 4,
+        "not_started": 42,
+        "partial_summaries": 0,
+        "roots": 457,
+        "valid_complete_summaries": 411,
+        "worker_completed_unique": 411,
+        "worker_started_unique": 415
+      },
+      "disjoint_codegen_partition_ns": {
+        "backend_finalize": 305476570100,
+        "backend_other": 79446093500,
+        "frontend_generate": 934617869400,
+        "frontend_release_post": 0,
+        "frontend_release_pre": 0,
+        "function_body_projection_and_route_encoding": 738145754200,
+        "function_setup": 483458600,
+        "object_assemble": 2554885566800,
+        "object_encode": 12646704800,
+        "object_write": 937334100,
+        "prepare_layout": 226901804100,
+        "prepare_verify": 551149221700,
+        "stackmap_plan": 777730174400,
+        "worker_other": 45737448300
+      },
+      "disjoint_share_of_completed_codegen_percent": {
+        "backend_finalize": 4.9047659051038845,
+        "backend_other": 1.2755953445625496,
+        "frontend_generate": 15.006328827881374,
+        "frontend_release_post": 0.0,
+        "frontend_release_pre": 0.0,
+        "function_body_projection_and_route_encoding": 11.85175061711665,
+        "function_setup": 0.007762465242532383,
+        "object_assemble": 41.02152782251189,
+        "object_encode": 0.20305690382292807,
+        "object_write": 0.01504994092956537,
+        "prepare_layout": 3.6431606921340145,
+        "prepare_verify": 8.849313419794424,
+        "stackmap_plan": 12.487322486038408,
+        "worker_other": 0.734365574861781
+      },
+      "failure": {
+        "error": "stage deadline exceeded",
+        "source": {
+          "clean_commit": true,
+          "commit": "d2334624197b5fc14aaca93bb916683fb1afcb79",
+          "source_file_count": 1126,
+          "source_scope": "compiler-runtime-headers-build-harness-v1",
+          "source_sha256": "3e1dc6a178d212e24ab336c24c17284c288ed4fb0c67d059b33b53ff1dc2dce6"
+        },
+        "stages": []
+      },
+      "guard": null,
+      "inclusive_and_leaf_sums_ns": {
+        "backend_call_inclusive_ns": 2679333076600,
+        "backend_finalize_ns": 305476570100,
+        "frontend_generate_ns": 934617869400,
+        "frontend_release_post_ns": 0,
+        "frontend_release_pre_ns": 0,
+        "function_emit_inclusive_ns": 738629212800,
+        "function_setup_ns": 483458600,
+        "object_assemble_ns": 2554885566800,
+        "object_encode_ns": 12646704800,
+        "object_write_ns": 937334100,
+        "prepare_layout_ns": 226901804100,
+        "prepare_verify_ns": 551149221700,
+        "stackmap_plan_ns": 777730174400
+      },
+      "member": "shared/stage1.log",
+      "member_bytes": 1753772,
+      "member_sha256": "aa1eb91078d3f2b0b825b2477ca5ee25a7bb3b7d5ce38cc1b535b53df545c1a3",
+      "not_started_modules": [
+        "datetime",
+        "pcc.backend.arm64_encode",
+        "pcc.backend.native_object",
+        "pcc.backend.self_backend_aarch64_darwin",
+        "pcc.backend.self_backend_parse",
+        "pcc.backend.self_backend_precise_stackmaps",
+        "pcc.backend.self_backend_x86_64_linux",
+        "pcc.driver.cli_bootstrap",
+        "pcc.driver.cli_bootstrap_array_core",
+        "pcc.frontends.c.codegen.c_codegen",
+        "pcc.frontends.c.evaluator.c_evaluator",
+        "pcc.frontends.c.parse.c_parsetab",
+        "pcc.frontends.c.passes.llvm_explicit",
+        "pcc.frontends.c.ply.yacc",
+        "pcc.frontends.c.ssa.builder",
+        "pcc.frontends.python.codegen._l1_codegen_static_methods",
+        "pcc.frontends.python.codegen.assignment_statement_lowering",
+        "pcc.frontends.python.codegen.attr_load_lowering",
+        "pcc.frontends.python.codegen.call_object_lowering",
+        "pcc.frontends.python.codegen.class_gen",
+        "pcc.frontends.python.codegen.compare_membership_lowering",
+        "pcc.frontends.python.codegen.exception_lowering",
+        "pcc.frontends.python.codegen.generator_lowering",
+        "pcc.frontends.python.codegen.hoist_lowering",
+        "pcc.frontends.python.codegen.ir_scaffold_lowering",
+        "pcc.frontends.python.codegen.list_method_lowering",
+        "pcc.frontends.python.codegen.literal_lowering",
+        "pcc.frontends.python.codegen.native_virtual_thread",
+        "pcc.frontends.python.codegen.numeric_builtin_lowering",
+        "pcc.frontends.python.codegen.runtime_abi",
+        "pcc.frontends.python.codegen.string_method_lowering",
+        "pcc.frontends.python.codegen.unsafe_lowering",
+        "pcc.frontends.python.codegen.user_function_lowering",
+        "pcc.frontends.python.codegen.vthread_effect_analysis",
+        "pcc.frontends.python.pipeline",
+        "pcc.frontends.python.pipeline_exports",
+        "pcc.frontends.python.py_parse",
+        "pcc.frontends.python.type_infer",
+        "pcc.ir.direct_indexed_kernel",
+        "pcc.ir.optimization.instcombine",
+        "pcc.ir.optimization.simplifycfg",
+        "pcc.package.build_exec"
+      ],
+      "platform": "windows-x86_64",
+      "routes": {
+        "indexed-assembly": 411
+      },
+      "scope_nesting_validation": "PASS for every recorded module, not just aggregate",
+      "started_incomplete": [
+        {
+          "capture": {
+            "elapsed_ms": 13371,
+            "fallback_records": 0,
+            "line": 13589,
+            "supported_records": 859212
+          },
+          "emit": {
+            "elapsed_ms": 90017,
+            "line": 13651
+          },
+          "module": "pcc.backend.self_backend_aarch64_darwin_calls",
+          "phase_summary_present": false,
+          "start": {
+            "index": 198,
+            "line": 13365
+          }
+        },
+        {
+          "capture": {
+            "elapsed_ms": 11107,
+            "fallback_records": 0,
+            "line": 13586,
+            "supported_records": 687461
+          },
+          "emit": {
+            "elapsed_ms": 96560,
+            "line": 13655
+          },
+          "module": "pcc.frontends.python.codegen.call_expression_lowering",
+          "phase_summary_present": false,
+          "start": {
+            "index": 252,
+            "line": 13364
+          }
+        },
+        {
+          "capture": {
+            "elapsed_ms": 4021,
+            "fallback_records": 0,
+            "line": 13652,
+            "supported_records": 255476
+          },
+          "emit": {
+            "elapsed_ms": 25309,
+            "line": 13656
+          },
+          "module": "pcc.frontends.python.codegen.for_loop_lowering",
+          "phase_summary_present": false,
+          "start": {
+            "index": 274,
+            "line": 13616
+          }
+        },
+        {
+          "capture": {
+            "elapsed_ms": 6899,
+            "fallback_records": 0,
+            "line": 13648,
+            "supported_records": 437465
+          },
+          "emit": null,
+          "module": "pcc.frontends.python.codegen.method_call_expression_lowering",
+          "phase_summary_present": false,
+          "start": {
+            "index": 288,
+            "line": 13598
+          }
+        }
+      ],
+      "top_input_modules_by_phase": {
+        "function_emit_inclusive_ns": [
+          {
+            "codegen_ms": 113886,
+            "module": "pcc.frontends.c.parse.c_parser",
+            "phase_ns": 14923699800,
+            "summary_line": 10462,
+            "supported_records": 482388,
+            "worker_done_line": 10463
+          },
+          {
+            "codegen_ms": 106897,
+            "module": "pcc.backend.self_backend_kernel",
+            "phase_ns": 13294394400,
+            "summary_line": 13611,
+            "supported_records": 452244,
+            "worker_done_line": 13612
+          },
+          {
+            "codegen_ms": 110585,
+            "module": "pcc.frontends.c.parse.c_parser_actions",
+            "phase_ns": 13075927000,
+            "summary_line": 10765,
+            "supported_records": 464698,
+            "worker_done_line": 10766
+          }
+        ],
+        "function_setup_ns": [
+          {
+            "codegen_ms": 88323,
+            "module": "pcc.ir.ir",
+            "phase_ns": 11890800,
+            "summary_line": 13357,
+            "supported_records": 623968,
+            "worker_done_line": 13358
+          },
+          {
+            "codegen_ms": 106897,
+            "module": "pcc.backend.self_backend_kernel",
+            "phase_ns": 10990200,
+            "summary_line": 13611,
+            "supported_records": 452244,
+            "worker_done_line": 13612
+          },
+          {
+            "codegen_ms": 113886,
+            "module": "pcc.frontends.c.parse.c_parser",
+            "phase_ns": 10042200,
+            "summary_line": 10462,
+            "supported_records": 482388,
+            "worker_done_line": 10463
+          }
+        ],
+        "object_assemble_ns": [
+          {
+            "codegen_ms": 113886,
+            "module": "pcc.frontends.c.parse.c_parser",
+            "phase_ns": 47125191800,
+            "summary_line": 10462,
+            "supported_records": 482388,
+            "worker_done_line": 10463
+          },
+          {
+            "codegen_ms": 110585,
+            "module": "pcc.frontends.c.parse.c_parser_actions",
+            "phase_ns": 46376331000,
+            "summary_line": 10765,
+            "supported_records": 464698,
+            "worker_done_line": 10766
+          },
+          {
+            "codegen_ms": 106897,
+            "module": "pcc.backend.self_backend_kernel",
+            "phase_ns": 44232568600,
+            "summary_line": 13611,
+            "supported_records": 452244,
+            "worker_done_line": 13612
+          }
+        ],
+        "stackmap_plan_ns": [
+          {
+            "codegen_ms": 110585,
+            "module": "pcc.frontends.c.parse.c_parser_actions",
+            "phase_ns": 13693537500,
+            "summary_line": 10765,
+            "supported_records": 464698,
+            "worker_done_line": 10766
+          },
+          {
+            "codegen_ms": 113886,
+            "module": "pcc.frontends.c.parse.c_parser",
+            "phase_ns": 12985873400,
+            "summary_line": 10462,
+            "supported_records": 482388,
+            "worker_done_line": 10463
+          },
+          {
+            "codegen_ms": 106897,
+            "module": "pcc.backend.self_backend_kernel",
+            "phase_ns": 12280342600,
+            "summary_line": 13611,
+            "supported_records": 452244,
+            "worker_done_line": 13612
+          }
+        ]
+      }
+    }
+  ],
+  "run_id": 38014379032,
+  "run_url": "https://github.com/ikshengmin/pcc/actions/runs/38014379032",
+  "schema": "pcc-real-ci-indexed-phase-attribution-v1",
+  "source_commit": "d2334624197b5fc14aaca93bb916683fb1afcb79",
+  "source_evidence": {
+    "files": [
+      {
+        "bytes": 3161,
+        "path": "pcc/backend/indexed_phase_timing.py",
+        "sha256": "b2123e4546245e39d0dc937bc7da2e22d3fa3d57e6f351946b1912663714b7ca"
+      },
+      {
+        "bytes": 55067,
+        "path": "pcc/frontends/python/pipeline_frontend_worker_execution.py",
+        "sha256": "699cf16413e750d9c50c2ebff63332a393f412f94d208a1e77fd472ab75a0f18"
+      },
+      {
+        "bytes": 3710,
+        "path": "pcc/backend/target_objects.py",
+        "sha256": "5ea98a6c8b37ff5b0555865164df73ea14a4b58e50e2e3abdc4833cb0a57e4a8"
+      },
+      {
+        "bytes": 14262,
+        "path": "pcc/backend/coff_x86_64.py",
+        "sha256": "15939bf25b6b8cffd853ac82cd99fbbe1708a3e8d3c8b7bf6599578a8bc440f5"
+      },
+      {
+        "bytes": 3151,
+        "path": "pcc/backend/self_backend_prepare.py",
+        "sha256": "bf2a466eef5af72406fcb902e215c607b1c3f4665c0cada8ad1dd677899d4f1e"
+      },
+      {
+        "bytes": 103437,
+        "path": "pcc/backend/self_backend_aarch64_darwin.py",
+        "sha256": "fe3c14c169ab9b1af2852c7a0753c2d956826dd27d827eb1a96649ec5a759233"
+      },
+      {
+        "bytes": 7391,
+        "path": "pcc/backend/self_backend_aarch64_darwin_prologue.py",
+        "sha256": "3da82551b03fbbfe22933f95bda5c48780a324b816d06be68d6a6f23d693e98d"
+      },
+      {
+        "bytes": 71082,
+        "path": "pcc/backend/self_backend_aarch64_darwin_regalloc.py",
+        "sha256": "2c71d952927362c219c2539478fb477b7dfae51561076d27b7675b73f623d100"
+      },
+      {
+        "bytes": 134423,
+        "path": "pcc/backend/self_backend_x86_64_linux.py",
+        "sha256": "4d866d533c945debc79ca793eb1273999054b083ad7a84e48f2a04617d4c894e"
+      },
+      {
+        "bytes": 253415,
+        "path": "pcc/backend/self_backend_precise_stackmaps.py",
+        "sha256": "bfc3630f958d6c63a1c4f0677b2d55082dfb4d90960978df84cf2c83a72eaa64"
+      },
+      {
+        "bytes": 33123,
+        "path": "pcc/backend/x86_64_asm_driver.py",
+        "sha256": "cc71a7b5b5c5db56d665fc83afe670b021c20f76403fb5a381a085cdf37cf84d"
+      },
+      {
+        "bytes": 44159,
+        "path": "pcc/backend/x86_64_encode.py",
+        "sha256": "b5f50803d5fee0da05accbd0e331cdfe5a6a6a6505a50480b10aef570b363a82"
+      },
+      {
+        "bytes": 27443,
+        "path": "pcc/backend/arm64_asm_driver.py",
+        "sha256": "9c590fe91b796136c328a50b2598b6f469e53209ef1b54fbdc3358ea992b5671"
+      },
+      {
+        "bytes": 125009,
+        "path": "pcc/backend/arm64_encode.py",
+        "sha256": "4332f3eafb259cdcfd81fa74ba5609df0d2d5815e0d5c78f5ad4b8b19239b826"
+      }
+    ],
+    "relation": "The selected pcc production subtree is exactly the published d233 tree; unrelated retained tests, docs and bootstrap files are not asserted to match full current master.",
+    "selected_files_match_manifest": true,
+    "source_manifest_sha256": "568c44d837939cde5ab4da2c2f0115ab30f978716bc423a40e07d9cf2bdc0185"
+  },
+  "source_only_readback": true
+}

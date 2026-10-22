@@ -61,39 +61,37 @@ def _canonical_sha256(value: object) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _host_memory_budget_bytes(explicit: int) -> int:
-    if explicit > 0:
-        return int(explicit)
+def _host_memory_budget_selection(explicit: int) -> dict:
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from scripts.run_process_tree_sample import (
+        ProcessTreeSampleError,
+        configured_host_memory_reserve_bytes,
+        select_tree_memory_budget,
+    )
+
     try:
-        physical = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
-    except (AttributeError, OSError, ValueError):
-        return 0
-    # ponytail: half of physical RAM is the default host budget; pass
-    # --memory-budget-bytes when the machine is shared or the cap must match
-    # an external sampler limit.
-    return int(physical) // 2
+        return select_tree_memory_budget(
+            explicit, external_budget=os.environ.get("PCC_WORKER_TREE_BUDGET_BYTES"),
+            reserve_bytes=configured_host_memory_reserve_bytes(),
+        )
+    except ProcessTreeSampleError as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def _host_memory_budget_bytes(explicit: int) -> int:
+    return _host_memory_budget_selection(explicit)["max_tree_rss_bytes"]
 
 
 def _resolve_frontend_jobs(raw: str, memory_budget_bytes: int) -> int:
-    """One admission formula for every executor: min(cpu, cap, budget/peak).
-
-    Numeric values stay authoritative.  ``auto`` calls the same
-    ``budget_jobs`` the compiler uses, with the measured host CPython
-    frontend-worker peak, so the harness and the compiled stages share one
-    scheduler instead of per-stage hand tuning.
-    """
+    """Select only the CPU ceiling; the spawning compiler admits real tasks."""
     text = str(raw).strip().lower()
     if text != "auto":
         return int(text)
     sys.path.insert(0, str(REPO_ROOT))
-    from pcc.py_frontend import pipeline_frontend_workers as workers
+    from pcc.frontends.python import pipeline_frontend_workers as workers
 
-    return workers.budget_jobs(
-        os.cpu_count() or 1,
-        int(memory_budget_bytes),
-        workers.HOST_SOURCE_WORKER_PEAK_BYTES,
-        workers.HOST_SOURCE_WORKER_AUTO_CAP,
-    )
+    return workers.frontend_jobs(workers.HOST_SOURCE_WORKER_AUTO_CAP, "auto", os.cpu_count() or 1)
 
 
 def source_manifest(source_root: Path, ab) -> dict[str, Any]:
@@ -196,9 +194,10 @@ def _set_stage1_build_modes(
     direct_indexed_emit: bool = False,
     python_ir_passes: str = "default",
 ) -> None:
-    if with_threads not in (0, 1):
-        raise ValueError("stage1 thread mode must be 0 or 1")
-    env["PCC_WITH_THREADS"] = str(with_threads)
+    # Every runtime (and so pcc1 itself) is threaded.
+    if with_threads != 1:
+        raise ValueError("stage1 thread mode must be 1: the single-thread runtime was removed")
+    env["PCC_WITH_THREADS"] = "1"
     env["PCC_PYTHON_IR_PASSES"] = python_ir_passes
     if direct_indexed_emit:
         env.update(
@@ -357,6 +356,11 @@ def _run_build(args: argparse.Namespace, ab, *, run_token: str) -> dict[str, Any
         self_backend_jobs=args.self_backend_jobs,
     )
     env["PCC_BOOTSTRAP_STAGE1_PY_FRONTEND_JOBS"] = str(args.jobs)
+    env["PCC_WORKER_TREE_BUDGET_BYTES"] = str(args.memory_budget_bytes)
+    if os.environ.get("PCC_WORKER_TREE_STATE_PATH"):
+        env["PCC_WORKER_TREE_STATE_PATH"] = os.environ["PCC_WORKER_TREE_STATE_PATH"]
+        if "PCC_WORKER_TREE_RECOVERY" in os.environ:
+            env["PCC_WORKER_TREE_RECOVERY"] = os.environ["PCC_WORKER_TREE_RECOVERY"]
     _set_stage1_build_modes(
         env,
         with_threads=args.with_threads,
@@ -491,6 +495,9 @@ def _run_build(args: argparse.Namespace, ab, *, run_token: str) -> dict[str, Any
         "runtime_archive_sha256": ab.sha256_path(bundled_archive),
         "bootstrap_source_sha256": before["bootstrap_source_sha256"],
         "primary_source_sha256": before["files"][ab.PRIMARY_SOURCE],
+        "memory_budget_selection": getattr(args, "memory_budget_selection", {
+            "selection_kind": "caller", "max_tree_rss_bytes": args.memory_budget_bytes,
+        }),
         "origin_source_root": str(source_root),
         "logical_source_root": str(source_snapshot_root),
         "source_manifest": source_manifest_path.name,
@@ -519,7 +526,10 @@ def _run_build(args: argparse.Namespace, ab, *, run_token: str) -> dict[str, Any
             "status": "SUCCEEDED",
             "completed_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
             "runtime_bundle": runtime_bundle,
-            "origin_source_root": str(source_root),
+            "memory_budget_selection": getattr(args, "memory_budget_selection", {
+            "selection_kind": "caller", "max_tree_rss_bytes": args.memory_budget_bytes,
+        }),
+        "origin_source_root": str(source_root),
             "consumed_source_root": str(source_snapshot_root),
             "command": command,
             "environment": {key: env[key] for key in sorted(env)},
@@ -564,7 +574,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--memory-budget-bytes", type=int, default=0)
     parser.add_argument("--self-backend-jobs", type=int, default=8)
     parser.add_argument("--gc-backend", type=int, default=0, choices=range(5))
-    parser.add_argument("--with-threads", type=int, default=0, choices=(0, 1))
+    parser.add_argument("--with-threads", type=int, default=1, choices=(1,))
     parser.add_argument("--direct-indexed-emit", action="store_true")
     parser.add_argument(
         "--python-ir-passes", choices=("default", "off"), default="default",
@@ -591,9 +601,8 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGINT, ab._interrupt_handler)
     signal.signal(signal.SIGTERM, ab._interrupt_handler)
     try:
-        args.memory_budget_bytes = _host_memory_budget_bytes(
-            args.memory_budget_bytes
-        )
+        args.memory_budget_selection = _host_memory_budget_selection(args.memory_budget_bytes)
+        args.memory_budget_bytes = args.memory_budget_selection["max_tree_rss_bytes"]
         args.jobs = _resolve_frontend_jobs(args.jobs, args.memory_budget_bytes)
         if (
             args.timeout <= 0

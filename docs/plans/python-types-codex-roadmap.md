@@ -22,7 +22,7 @@ The phrase "implement Python types" in pcc context spans three layers and they
 have been tracked separately:
 
 1. **Built-in concrete types** (`int`, `float`, `str`, `bytes`, `list`, `dict`,
-   `set`, `tuple`, `bool`, `None`) — the `pcc/py_runtime/src/py_*.c` family.
+   `set`, `tuple`, `bool`, `None`) — the `pcc/runtime/src/py_*.c` family.
    Mostly there; gaps in `bytes` literal, `list.sort` method, untyped-bignum
    formatting (see `docs/python-limitations.md` §"Python runtime types").
 2. **Data-model protocols** (descriptor, generator, async, context-manager,
@@ -67,7 +67,7 @@ Codex needs one ordering across all three. This doc provides it.
 | Type-system | Metaclasses (`class C(metaclass=M)`) | ❌ pending | this doc, T1 |
 | Type-system | `weakref.ref` runtime | ❌ pending (depends GC-4) | `gc-semantics-gap.md` |
 | Type-system | `typing` runtime: `TypeVar`, `Generic`, `Protocol` | ⚠️ ignored at runtime; checked statically only | this doc, T2 |
-| Type-system | `dataclass(frozen=True)` semantics | ✅ used in pcc bootstrap | `pcc/py_stdlib/dataclasses.py` |
+| Type-system | `dataclass(frozen=True)` semantics | ✅ used in pcc bootstrap | `pcc/stdlib/dataclasses.py` |
 | Type-system | `dataclass(frozen=False)` setattr through `__init__` | ⚠️ default-None slot bug (memory: feedback_pcc_dataclass_default_none_setattr) | this doc, T3 |
 | Type-system | C-extension ABI (load `.so`) | ⚠️ via libpython only; no native ABI | `pcc_multi_year_roadmap.md` §5.1 |
 | Type-system | Concurrent mutation under user `Lock` | ❌ lost-update bug (Task #5) | tasks.md, this doc, T0 |
@@ -149,12 +149,12 @@ with no acquire ordering and high-contention reads return a stale or
 neighbouring value, so `py_threading_lock_acquire(NULL)` returns -1 and
 `Lock.acquire`'s `False` return is silently ignored.
 *Files:*
-- `pcc/py_runtime/src/py_class.c` (`py_instance_get_field`)
-- `pcc/py_runtime/src/py_threading.c` (`py_threading_lock_acquire`,
+- `pcc/runtime/src/py_class.c` (`py_instance_get_field`)
+- `pcc/runtime/src/py_threading.c` (`py_threading_lock_acquire`,
   `py_threading_lock_release` — add abort-on-NULL to validate hypothesis)
-- `pcc/py_stdlib/threading.py` (`Lock.acquire` — raise on `_lock_acquire == -1`
+- `pcc/stdlib/threading.py` (`Lock.acquire` — raise on `_lock_acquire == -1`
   rather than silently returning `False`)
-- `pcc/py_frontend/codegen/...` (emit a return-value check on
+- `pcc/frontends/python/codegen/...` (emit a return-value check on
   `Lock.acquire` that raises and aborts)
 *Acceptance:*
 - New `tests/test_threading_concurrent_mutation.py`:
@@ -176,11 +176,11 @@ not lower as latin-1 `str`. Wire codegen to emit a native `PyBytesObject`
 literal; thread through type-infer; add `bytes.__len__` / `bytes.__getitem__`
 basics that pcc already exposes for `str`.
 *Files:*
-- `pcc/py_frontend/py_ast.py` (add `BytesLit`)
-- `pcc/parse/py_*` (lex literal `b"..."` / `rb"..."`)
-- `pcc/py_frontend/type_infer.py` (`BytesType`)
-- `pcc/py_frontend/codegen/layer1.py` (emit literal)
-- `pcc/py_runtime/src/py_bytes.c` (already exists; verify the literal helper)
+- `pcc/frontends/python/py_ast.py` (add `BytesLit`)
+- `pcc/frontends/c/parse/py_*` (lex literal `b"..."` / `rb"..."`)
+- `pcc/frontends/python/type_infer.py` (`BytesType`)
+- `pcc/frontends/python/codegen/layer1.py` (emit literal)
+- `pcc/runtime/src/py_bytes.c` (already exists; verify the literal helper)
 *Acceptance:*
 - `tests/data_model/test_bytes_literal.py` covers ASCII, non-ASCII, mixed
   with str, indexing, slicing, `len()`.
@@ -196,10 +196,10 @@ basics that pcc already exposes for `str`.
 the source-declared name. Already wired for class objects internally; this
 exposes it as a user builtin.
 *Files:*
-- `pcc/py_frontend/codegen/layer1.py` (recognise the builtin call)
-- `pcc/py_runtime/src/py_class.c` (`py_type_of_object` already exists; add
+- `pcc/frontends/python/codegen/layer1.py` (recognise the builtin call)
+- `pcc/runtime/src/py_class.c` (`py_type_of_object` already exists; add
   user-facing entry)
-- `pcc/py_stdlib/builtins.py` (if present) or codegen-direct dispatch
+- `pcc/stdlib/builtins.py` (if present) or codegen-direct dispatch
 *Acceptance:*
 - `tests/data_model/test_type_builtin.py`: `type(1) is int`, `type([])` is
   `list`, `type(C())` is `C`, `type(C()).__name__ == "C"`.
@@ -214,8 +214,8 @@ exposes it as a user builtin.
 than failing or routing through libpython. `@classmethod` full support
 unblocks once this lands.
 *Files:*
-- `pcc/py_frontend/codegen/class_gen.py`
-- `pcc/py_runtime/src/py_class.c` (class-level field slots)
+- `pcc/frontends/python/codegen/class_gen.py`
+- `pcc/runtime/src/py_class.c` (class-level field slots)
 *Acceptance:*
 - `tests/data_model/test_classvar.py`: shared mutable counter across
   instances; subclass shadowing; `Cls.count = ...` mutates the slot
@@ -235,8 +235,8 @@ green in `tests/test_python_class_features_parity.py::test_class_user_iter`.
 `__hash__` / `__str__` protocol edge coverage remains part of the broader B4
 roadmap acceptance.
 *Files:*
-- `pcc/py_runtime/src/py_obj_ops_dispatch.c`
-- `pcc/py_frontend/codegen/layer1.py` (iter-protocol lowering for user types)
+- `pcc/runtime/src/py_obj_ops_dispatch.c`
+- `pcc/frontends/python/codegen/layer1.py` (iter-protocol lowering for user types)
 *Acceptance:*
 - `tests/data_model/test_user_dunders.py`: user iterator class with
   `__iter__` returning self and `__next__` raising `StopIteration`;
@@ -253,9 +253,9 @@ roadmap acceptance.
 chain when raising inside an `except` block, and codegen that calls the
 existing runtime helper `py_exc_append_frame` so tracebacks have frames.
 *Files:*
-- `pcc/py_frontend/codegen/layer1.py` (lower `raise from` / record frame)
-- `pcc/py_runtime/src/py_exc_objects.c`
-- `pcc/py_runtime/src/py_exc_traceback.c` (mostly there; codegen wiring)
+- `pcc/frontends/python/codegen/layer1.py` (lower `raise from` / record frame)
+- `pcc/runtime/src/py_exc_objects.c`
+- `pcc/runtime/src/py_exc_traceback.c` (mostly there; codegen wiring)
 *Acceptance:*
 - `tests/data_model/test_exception_chaining.py` covers both `__cause__` and
   `__context__` shapes.
@@ -276,8 +276,8 @@ already handles 4+ positional args.
 covered by `tests/test_python_module_imports_parity.py::test_module_attribute_write`.
 Call splat remains pending.
 *Files:*
-- `pcc/py_frontend/codegen/layer1.py`
-- `pcc/py_runtime/src/py_module.c` (or wherever module slots live; check)
+- `pcc/frontends/python/codegen/layer1.py`
+- `pcc/runtime/src/py_module.c` (or wherever module slots live; check)
 *Acceptance:*
 - `tests/data_model/test_module_assignment.py`: `mod.x = 1; assert mod.x == 1`.
 - `tests/data_model/test_call_splat.py`: `f(*args)`, `f(**kw)`, `f(*a, **k)`.
@@ -356,8 +356,8 @@ the class object; default metaclass for non-`type` bases follows CPython's
 is the same code path. ABCMeta and EnumMeta (the only metaclasses pcc's
 own corpus uses) work end-to-end.
 *Files:*
-- `pcc/py_frontend/codegen/class_gen.py` (metaclass argument lowering)
-- `pcc/py_runtime/src/py_class.c` (metaclass dispatch on class creation)
+- `pcc/frontends/python/codegen/class_gen.py` (metaclass argument lowering)
+- `pcc/runtime/src/py_class.c` (metaclass dispatch on class creation)
 *Acceptance:*
 - `tests/data_model/test_metaclass.py`: explicit `class C(metaclass=Trace):`;
   `Enum` subclass; `ABCMeta`-based abstract method.
@@ -375,8 +375,8 @@ ignored / falls back to libpython). `Protocol` runtime check via
 is unchanged — pcc already strips most `typing` annotations to types in
 `type_infer.py`; this is the runtime-side completion.
 *Files:*
-- `pcc/py_stdlib/typing.py` (currently absent or thin — verify)
-- `pcc/py_runtime/src/py_class.c` (Protocol structural-isinstance)
+- `pcc/stdlib/typing.py` (currently absent or thin — verify)
+- `pcc/runtime/src/py_class.c` (Protocol structural-isinstance)
 *Acceptance:*
 - `tests/data_model/test_typing_runtime.py`: `class L(list, Generic[T])` works;
   `@runtime_checkable Protocol` passes structural `isinstance`.
@@ -392,9 +392,9 @@ slot via `obj.field = ...` clobbers a neighbouring slot" (memory:
 `feedback_pcc_dataclass_default_none_setattr.md`). Investigate root cause
 in `py_instance_set_field` slot indexing and fix; add regression test.
 *Files:*
-- `pcc/py_runtime/src/py_class.c` (`py_instance_set_field` and slot-index
+- `pcc/runtime/src/py_class.c` (`py_instance_set_field` and slot-index
   derivation)
-- `pcc/py_stdlib/dataclasses.py`
+- `pcc/stdlib/dataclasses.py`
 *Acceptance:*
 - `tests/data_model/test_mutable_dataclass.py`: a dataclass with two
   default-`None` slots; assigning one does not corrupt the other; round-trip
@@ -410,9 +410,9 @@ in `py_instance_set_field` slot indexing and fix; add regression test.
 is collected, then yields `None`. Hooks into the runtime's per-object weakref
 slot list cleared during dealloc.
 *Files:*
-- `pcc/py_runtime/src/py_weakref.c` (new)
-- `pcc/py_runtime/src/py_obj.c` (extend dealloc to walk weakref list)
-- `pcc/py_stdlib/weakref.py` (thin shim)
+- `pcc/runtime/src/py_weakref.c` (new)
+- `pcc/runtime/src/py_obj.c` (extend dealloc to walk weakref list)
+- `pcc/stdlib/weakref.py` (thin shim)
 *Acceptance:*
 - `tests/data_model/test_weakref_basic.py`: bug example #4 from
   `gc-semantics-gap.md` returns `None` after `del obj`.
@@ -445,11 +445,11 @@ calls do not. Reproducer steps for Codex to verify before changing anything:
 
 ```bash
 # Build runtime threaded
-cd pcc/py_runtime && make -B PCC_WITH_THREADS=1 libpy_runtime.a && cd -
+cd pcc/runtime && make -B PCC_WITH_THREADS=1 libpy_runtime.a && cd -
 
 # Compile the reproducer
 PCC_RUNTIME_CC=cc PCC_RUNTIME_HIGH=c PCC_WITH_THREADS=1 \
-  uv run python -c "from pcc.py_frontend.pipeline import compile_python; compile_python('/tmp/incr_test.py', '/tmp/incr_test.out', ir_scaffold_mode='on', libpython_mode='off')"
+  uv run python -c "from pcc.frontends.python.pipeline import compile_python; compile_python('/tmp/incr_test.py', '/tmp/incr_test.out', ir_scaffold_mode='on', libpython_mode='off')"
 
 # Reproduce the bug — should be 4000, observed 1300–2000
 for i in 1 2 3; do /tmp/incr_test.out; done

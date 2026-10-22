@@ -1,5 +1,5 @@
 fred.txt
-pcc/py_runtime/libpy_runtime.a.target
+pcc/runtime/libpy_runtime.a.target
 .DS_Store
 *.out
 *.s
@@ -155,18 +155,18 @@ projects/nginx-1.28.3/objs/
 .claude/
 .pi
 
-pcc/py_runtime/libpy_runtime.a
-pcc/py_runtime/build_libpython/
-pcc/py_runtime/libpy_runtime_libpython.a
+pcc/runtime/libpy_runtime.a
+pcc/runtime/build_libpython/
+pcc/runtime/libpy_runtime_libpython.a
 $exe
 .tmp_00031_dbg2.c
 tmp_probe_*.py
-pcc/py_runtime/libpy_runtime_pcc.a
-pcc/py_runtime/libpy_runtime_pcc_py.a
-pcc/py_runtime/build_pcc/
-pcc/py_runtime/build_py/
-pcc/py_runtime/libpy_runtime_pcc_py_libpython.a
-pcc/py_runtime/libpy_runtime_pcc_py.a.target
+pcc/runtime/libpy_runtime_pcc.a
+pcc/runtime/libpy_runtime_pcc_py.a
+pcc/runtime/build_pcc/
+pcc/runtime/build_py/
+pcc/runtime/libpy_runtime_pcc_py_libpython.a
+pcc/runtime/libpy_runtime_pcc_py.a.target
 output/
 pcc1
 pcc2
@@ -184,7 +184,7 @@ docs/reports/*
 platform.info
 pcc1_auto
 pcc2_src
-pcc/py_runtime/libpy_runtime_pcc_py_libpython.a.target
+pcc/runtime/libpy_runtime_pcc_py_libpython.a.target
 .antigravitycli/
 
 # Local-only active docs (top-level indexes + plans in progress)
@@ -198,15 +198,17 @@ docs/plans/python-compat-specialization-strategy.md
 docs/plans/numpy_plan.md
 docs/plans/numpy_ecosystem_plan.md
 docs/plans/numpy-capi-provider-design.md
-pcc/py_runtime/libpy_runtime_libpython.a.target
+pcc/runtime/libpy_runtime_libpython.a.target
 todo.md
-pcc/py_runtime/build_asan/
-pcc/py_runtime/libpy_runtime_asan.a
+pcc/runtime/build_asan/
+pcc/runtime/libpy_runtime_asan.a
 .understand-anything/
-pcc/py_runtime/libpy_runtime_pcc.a.target
+pcc/runtime/libpy_runtime_pcc.a.target
 
 .playwright-mcp/
 .playwright-cli/
 projects/python-proxy/pproxy/diagnostic_log.py
 pcc-cpu-flamegraph.svg
-/pcc/py_runtime/build_owned/
+/pcc/runtime/build_owned/
+/pcc/runtime/.pcc-runtime-build.lock/
+pcc/runtime/libpy_runtime_pcc_py.a.provenance.json

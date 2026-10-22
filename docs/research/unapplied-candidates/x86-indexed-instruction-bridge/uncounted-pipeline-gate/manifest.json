@@ -1,0 +1,138 @@
+{
+  "application_status": "UNAPPLIED_EXTERNAL_HARNESS",
+  "codegen_checksum": {
+    "baseline": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+    "candidate": "610f289ab84407149dbe231ac35e1b190079366bf852ccbafd0bdcc5ec85ddab"
+  },
+  "comparison_driver_sha256": "4afa1a6d3461551fb051166f4ad380204aa8c9d1b63c0284595d5681a362f78d",
+  "driver_sha256": "73dedf6271af08dae9873775042125d8b6a9dc263d53123a48a7fa721dc677e0",
+  "effective_environment": {
+    "PCC_CODE_PROFILE": "",
+    "PCC_DIRECT_INDEXED_KERNEL_CAPTURE": "1",
+    "PCC_DIRECT_INDEXED_KERNEL_EMIT": "1",
+    "PCC_DIRECT_INDEXED_KERNEL_FUSE_USES": "1",
+    "PCC_DIRECT_INDEXED_KERNEL_RELEASE_FRONTEND": "0",
+    "PCC_DIRECT_INDEXED_KERNEL_REQUIRE_ZERO_FALLBACK": "1",
+    "PCC_DIRECT_INDEXED_KERNEL_VALIDATE": "0",
+    "PCC_DIRECT_INLINE_ERROR_EDGE_CAPTURE": "0",
+    "PCC_PYTHON_IR_PASSES": "off",
+    "PCC_SELF_TARGET_PASSES": "off",
+    "PCC_SELF_TARGET_PASS_TRANSPORT": "text",
+    "PCC_TEXT_INDEXED_KERNEL_EMIT": "0"
+  },
+  "emitter_sha256": {
+    "baseline": "9c515249d01aa01a0baa6913f7e51c28d80555c90685160b9e5590a755677ec5",
+    "candidate": "145713c125d1d4e4e72c8d499646cd5c85874f4b6a83d3fd3c23dde934cea1ca"
+  },
+  "execution_status": "UNRUN",
+  "input": {
+    "bytes": 58153998,
+    "sha256": "6bc6763aa8c44457aeb28f88b8aa8fbc49e8a3a0953bc504104eaa9950680741"
+  },
+  "interpretation": {
+    "maximum_mean_high_water_growth_percent": 10,
+    "minimum_mean_wall_gain_percent": 5,
+    "require_both_order_wall_improvement": true,
+    "require_mean_cpu_and_emission_wall_improvement": true,
+    "require_mean_gain_at_least_baseline_spread": true
+  },
+  "limits_per_arm": {
+    "exclusive_shared_lock": true,
+    "free_reserve_bytes": 4294967296,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "max_disk_growth_bytes": 1073741824,
+    "seconds": 300
+  },
+  "planned_total_output_reservation_bytes": 1073741824,
+  "prior_linux_qualification_sha256": "d9b08b672bc35856b80a8b41e84da13defc6bc2204aca55dd556ad3bbb21ffcb",
+  "production_candidate_manifest_sha256": "871eadf0bf54042154dc05e38c7a9564e8abf0f0a0e015cd4c812adada2bd723",
+  "readme_sha256": "96da9fd2b0db829baacc048570ae23d9e369c435ba7a367bd91bffef039f26f4",
+  "reference_assembly": {
+    "bytes": 39735304,
+    "sha256": "f1492bf30b0c8b3dcd41985cb7e0edd7dfd00a45467ee4934bdb670fc9d1eb2e"
+  },
+  "reference_decoded_contract": {
+    "bytes": 219989781,
+    "sha256": "311300b3a1c7e64b2de5a9fa5104e086b9c7217194283983c5b1d5d0fd3b77ee"
+  },
+  "reference_object": {
+    "bytes": 12591320,
+    "name": "module.o",
+    "sha256": "10bed83db61678eb56bc36cf9bf5e2e243cf3b0503d994f2eb942bcc13823f7c"
+  },
+  "reference_result_sha256": "6b10e468b84454cddf85297f1415def6368b147bf488855a80940b718024f312",
+  "rss_contract": "Process-lifetime Linux ru_maxrss before and through pipeline, plus separate whole-guard sampled RSS; no isolated-phase or additive RSS claim.",
+  "schedule": [
+    {
+      "arm": "baseline",
+      "name": "b1",
+      "slot": 1
+    },
+    {
+      "arm": "candidate",
+      "name": "c1",
+      "slot": 2
+    },
+    {
+      "arm": "candidate",
+      "name": "c2",
+      "slot": 3
+    },
+    {
+      "arm": "baseline",
+      "name": "b2",
+      "slot": 4
+    }
+  ],
+  "schema": "pcc.x86-bridge-uncounted.v1",
+  "scope_limits": [
+    "Linux host c_ast backend/object pipeline only",
+    "No frontend or context regeneration",
+    "No native runtime/compiler or Windows timing claim",
+    "No full Stage1 or automatic production activation",
+    "Two samples per arm, no statistical confidence claim"
+  ],
+  "shared_source_files": {
+    "pcc/backend/coff_x86_64.py": "f564767a154adae848e53f1286833c08b618c9b6311a688096bfdd5548be1aeb",
+    "pcc/backend/elf_x86_64.py": "79db187fd9c19106d9730627dad5cf171daafd0429afd8a537179eb6df319b0c",
+    "pcc/backend/self_backend_emit.py": "e7500836fcd1cf3bf65acf99f1ad7001cbcbecde0021347b616450aadc8b891c",
+    "pcc/backend/self_backend_indexed_codec.py": "87bc72cbbab7029a1e7029b0831b54384d25803a6370f599714d99ca8b4a566c",
+    "pcc/backend/self_backend_instruction_dispatch.py": "1d8388770690d4091a92d10b46c0b45c94633d6820761271e84e695a37d9111d",
+    "pcc/backend/self_backend_ir.py": "0018e1fb981ac01cf5b7aa75e1c36d7b68261023efb04a49406e771980a2f268",
+    "pcc/backend/self_backend_kernel.py": "021d6add950632188eefa65195338f9ab7ec6aef0b396a71b5cc170a67fc822d",
+    "pcc/backend/self_backend_precise_stackmaps.py": "bfc3630f958d6c63a1c4f0677b2d55082dfb4d90960978df84cf2c83a72eaa64",
+    "pcc/backend/self_backend_prepare.py": "1b042b1297c67713513a764f8f47dea08b6afaed6b83f0f963034a90cca77837",
+    "pcc/backend/self_backend_stackprep.py": "fae5e2c2384caf652da26aa7f6e1dfe0fc48a1011e80c1e981ddae060df714f9",
+    "pcc/backend/self_backend_verify.py": "91f63f7a876b6dbf41f33e3d6c4a6f1bd8f54fd8c8ebada7421cf6ed548b708a",
+    "pcc/backend/self_backend_win64_abi.py": "8e7527e1a601e9fefcfd07d10d6db5f64999d06a794b980bae51e517e5a506a0",
+    "pcc/backend/target_objects.py": "43328564860270186bd597549c39a70d891715d388613353c1667f1f2265aba6",
+    "pcc/backend/x86_64_asm_driver.py": "cc71a7b5b5c5db56d665fc83afe670b021c20f76403fb5a381a085cdf37cf84d",
+    "pcc/backend/x86_64_encode.py": "b5f50803d5fee0da05accbd0e331cdfe5a6a6a6505a50480b10aef570b363a82",
+    "pcc/frontends/c/ast/c_ast.py": "21eacf1370cec218ea7ff97092ee47a96752505067caad2699f20239c74f2b58",
+    "pcc/frontends/python/codegen/_l1_codegen_static_methods.py": "49d41a9aef23e7c3df10d10d97ef1d2e3d8267fe6a6def75f230a0520942c451",
+    "pcc/frontends/python/codegen/call_object_lowering.py": "162c0a78aae28546fd4326f870e68295bb7b4c8555fa27ce648e5e17fbcd1bde",
+    "pcc/frontends/python/codegen/generation_lowering.py": "0982b9b0209b8785552b75cd552c3e18837ff39f92c289cf53df373eaa140904",
+    "pcc/frontends/python/codegen/host_contract.py": "23c09a811bf9e82a5804d6296a8662b3250f2464268f65ea2445b394b2d18dae",
+    "pcc/frontends/python/codegen/layer1.py": "863a85f30b3da3f04002a2c248957cc7aa0d7858d77eb4f9397190097040dc11",
+    "pcc/frontends/python/pipeline_import_policy.py": "ad5938c11e4e3a6df52488f4ef1829ae0f8cfc9b5c248c1403a8fe50c74436ca",
+    "pcc/frontends/python/py_lift.py": "94ebd0bd0c90e0abc0f49652419a75c9e3c538f0727e7301784e7686c805e413",
+    "pcc/frontends/python/type_infer.py": "dd7ec0ec772d574ea5712fc4af2eb54707d0d6b4492ab6349ba53ab65a2fbe22",
+    "pcc/ir/direct_indexed_kernel.py": "c522df0dacc0afa61f6a38aad957b8deb918bdd21a78d36b543c4c5dff33883c",
+    "pcc/ir/ir.py": "821d3c0232a8daeae7c63d927586b80f6775f6aa03c3147aa7e6b462707ed39b"
+  },
+  "source_inventories": {
+    "baseline": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+    "candidate": "febc3d325420f81ee7d4510e372c7bde1ce9266d827d645027c9b059253114b0"
+  },
+  "source_inventory_contract": "Coordinator verifies both complete inventories before and after every arm; targeted source pins supplement those seals.",
+  "source_review_status": "PASS: independent exact-packet source review found no blocker. Execution remains UNRUN; separately reviewed coordinator wrapper must enforce prior clean receipts, pre-c2 stop-loss, approved guard/shared lock and full source inventories.",
+  "stop_loss": {
+    "action": "Stop remaining arms; retain incomplete regression outcome, no retry or performance claim",
+    "after_slot": 2,
+    "when_both_combined_wall_and_cpu_regression_at_least_percent": 10
+  },
+  "target": "x86_64-unknown-linux-gnu",
+  "test_successor_manifest_sha256": "ba6c06d542eade1fd7231c0567295c2a332bce32247a18955296552edda01489",
+  "timing_contract": "Contiguous ordinary indexed emission plus owned ELF encoding only; no observers, forced GC, hashes, serialization or persistence inside the timer."
+}

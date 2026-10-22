@@ -20,6 +20,7 @@ import subprocess
 import sys
 
 import run_pcc_stage_ab as stage_ab
+import run_process_tree_sample as memory_guard
 
 
 class Stage2ReceiptError(RuntimeError):
@@ -27,7 +28,7 @@ class Stage2ReceiptError(RuntimeError):
 
 
 _GIB = 1024 * 1024 * 1024
-_HOST_MEMORY_RESERVE_BYTES = 8 * _GIB
+_HOST_MEMORY_RESERVE_BYTES = memory_guard.DEFAULT_HOST_MEMORY_RESERVE_BYTES
 _MIN_PRESSURED_SWAP_FREE_BYTES = 4 * _GIB
 # See process-tree-guard-swap-false-positive-highram.md: waive the tiny-swap
 # refusal when reclaimable physical memory clears this multiple of the budget.
@@ -133,125 +134,49 @@ def _validate_stage2_prediction(
         )
 
 
-def _parse_scaled_bytes(raw: str) -> int:
-    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)([KMGT]?)", raw.strip())
-    if match is None:
-        raise Stage2ReceiptError("cannot parse resource size: " + raw)
-    scale = {
-        "": 1,
-        "K": 1024,
-        "M": 1024 * 1024,
-        "G": _GIB,
-        "T": 1024 * _GIB,
-    }[match.group(2)]
-    return int(float(match.group(1)) * scale)
+def _memory_call(function, *args, **kwargs):
+    try:
+        return function(*args, **kwargs)
+    except memory_guard.ProcessTreeSampleError as exc:
+        raise Stage2ReceiptError(str(exc)) from exc
 
 
-def _parse_vm_stat_reclaimable(raw: str) -> int:
-    header = re.search(r"page size of ([0-9]+) bytes", raw)
-    if header is None:
-        raise Stage2ReceiptError("vm_stat did not report its page size")
-    page_size = int(header.group(1))
-    pages: dict[str, int] = {}
-    for line in raw.splitlines():
-        name, separator, value = line.partition(":")
-        if separator != ":":
-            continue
-        digits = value.strip().rstrip(".")
-        if digits.isdigit():
-            pages[name.strip()] = int(digits)
-    reclaimable_names = (
-        "Pages free",
-        "Pages inactive",
-        "Pages speculative",
-        "Pages purgeable",
-    )
-    if not any(name in pages for name in reclaimable_names):
-        raise Stage2ReceiptError("vm_stat has no reclaimable-page counters")
-    return sum(pages.get(name, 0) for name in reclaimable_names) * page_size
+def _parse_scaled_bytes(raw):
+    return _memory_call(memory_guard._parse_scaled_bytes, raw)
 
 
-def _parse_swapusage(raw: str) -> tuple[int, int, int]:
-    values = {}
-    for name in ("total", "used", "free"):
-        match = re.search(r"\b" + name + r"\s*=\s*([0-9.]+[KMGT]?)", raw)
-        if match is None:
-            raise Stage2ReceiptError("vm.swapusage is missing " + name)
-        values[name] = _parse_scaled_bytes(match.group(1))
-    return values["total"], values["used"], values["free"]
+def _parse_vm_stat_reclaimable(raw):
+    return _memory_call(memory_guard._parse_vm_stat_reclaimable, raw)
 
 
-def _validate_resource_observation(
-    *,
-    max_tree_rss_bytes: int,
-    reclaimable_bytes: int,
-    disk_free_bytes: int,
-    swap_total_bytes: int,
-    swap_used_bytes: int,
-    swap_free_bytes: int,
-) -> dict[str, int]:
-    required = max_tree_rss_bytes + _HOST_MEMORY_RESERVE_BYTES
-    if reclaimable_bytes < required:
-        raise Stage2ReceiptError(
-            "insufficient reclaimable memory for Stage2 safety reserve"
-        )
-    if disk_free_bytes < required:
-        raise Stage2ReceiptError(
-            "insufficient disk space for Stage2 output/swap reserve"
-        )
-    ample_physical_headroom = (
-        reclaimable_bytes >= required * _SWAP_PRESSURE_RECLAIMABLE_MARGIN
-    )
-    if (
-        swap_total_bytes > 0
-        and swap_used_bytes * 2 > swap_total_bytes
-        and swap_free_bytes < _MIN_PRESSURED_SWAP_FREE_BYTES
-        and not ample_physical_headroom
-    ):
-        raise Stage2ReceiptError("swap is already pressured; refusing Stage2")
-    return {
-        "max_tree_rss_bytes": max_tree_rss_bytes,
-        "swap_pressure_waived_by_reclaimable": bool(ample_physical_headroom),
-        "required_reclaimable_and_disk_free_bytes": required,
-        "reclaimable_bytes": reclaimable_bytes,
-        "disk_free_bytes": disk_free_bytes,
-        "swap_total_bytes": swap_total_bytes,
-        "swap_used_bytes": swap_used_bytes,
-        "swap_free_bytes": swap_free_bytes,
-    }
+def _parse_swapusage(raw):
+    return _memory_call(memory_guard._parse_swapusage, raw)
 
 
-def _stage2_resource_preflight(max_tree_rss_bytes: int) -> dict[str, int]:
+def _validate_resource_observation(**observation):
+    return _memory_call(memory_guard._validate_darwin_resource_observation,
+                        reserve_bytes=_configured_host_memory_reserve_bytes(), **observation)
+
+
+def _configured_host_memory_reserve_bytes():
+    return _memory_call(memory_guard.configured_host_memory_reserve_bytes)
+
+
+def _stage2_resource_preflight(max_tree_rss_bytes: int) -> dict:
     if sys.platform != "darwin":
-        raise Stage2ReceiptError(
-            "Stage2 resource preflight is not implemented for " + sys.platform
-        )
-    vm_stat = subprocess.run(
-        ["/usr/bin/vm_stat"],
-        check=False,
-        text=True,
-        capture_output=True,
-        timeout=5,
-    )
-    if vm_stat.returncode != 0:
-        raise Stage2ReceiptError("vm_stat failed: " + vm_stat.stderr.strip())
-    swap = subprocess.run(
-        ["/usr/sbin/sysctl", "-n", "vm.swapusage"],
-        check=False,
-        text=True,
-        capture_output=True,
-        timeout=5,
-    )
-    if swap.returncode != 0:
-        raise Stage2ReceiptError("vm.swapusage failed: " + swap.stderr.strip())
-    swap_total, swap_used, swap_free = _parse_swapusage(swap.stdout)
-    return _validate_resource_observation(
-        max_tree_rss_bytes=max_tree_rss_bytes,
-        reclaimable_bytes=_parse_vm_stat_reclaimable(vm_stat.stdout),
-        disk_free_bytes=shutil.disk_usage("/").free,
-        swap_total_bytes=swap_total,
-        swap_used_bytes=swap_used,
-        swap_free_bytes=swap_free,
+        return {"platform": sys.platform, "max_tree_rss_bytes": max_tree_rss_bytes,
+                "darwin_preflight": "not_applicable"}
+    return _memory_call(memory_guard._darwin_resource_preflight,
+                        max_tree_rss_bytes=max_tree_rss_bytes,
+                        reserve_bytes=_configured_host_memory_reserve_bytes())
+
+
+def _select_stage2_memory_budget(args):
+    return _memory_call(
+        memory_guard.select_tree_memory_budget, args.max_tree_rss_bytes,
+        default_ceiling=stage_ab.DEFAULT_MAX_TREE_RSS_BYTES,
+        reserve_bytes=_configured_host_memory_reserve_bytes(),
+        external_budget=os.environ.get("PCC_WORKER_TREE_BUDGET_BYTES"),
     )
 
 
@@ -320,7 +245,7 @@ def _validate_limits(args: argparse.Namespace) -> None:
         or args.identity_index <= 0
         or args.self_backend_jobs <= 0
         or args.self_backend_jobs > 2
-        or args.max_tree_rss_bytes <= 0
+        or args.max_tree_rss_bytes < 0
         or args.max_tree_rss_bytes > stage_ab.MAX_ALLOWED_TREE_RSS_BYTES
     ):
         raise Stage2ReceiptError(
@@ -330,6 +255,9 @@ def _validate_limits(args: argparse.Namespace) -> None:
 
 
 def run(args: argparse.Namespace) -> dict[str, object]:
+    _validate_limits(args)
+    memory_selection = _select_stage2_memory_budget(args)
+    args.max_tree_rss_bytes = memory_selection["max_tree_rss_bytes"]
     _validate_limits(args)
     ab = stage_ab._load_module(
         stage_ab.COMPILE_AB_TOOL,
@@ -354,6 +282,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         "status": "RUNNING",
         "started_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
         "stage1_dir": str(stage1_dir),
+        "memory_budget_selection": memory_selection,
         "stage2_timeout_s": args.stage2_timeout,
         "smoke_timeout_s": args.smoke_timeout,
     }
@@ -415,7 +344,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--max-tree-rss-bytes",
         type=int,
-        default=stage_ab.DEFAULT_MAX_TREE_RSS_BYTES,
+        default=0,
+        help="0 selects an observed safe budget up to 8 GiB; positive values are explicit caps",
     )
     parser.add_argument("--identity-index", type=int, default=1)
     # Envelope bookkeeping only (the compiled stage derives its own width from

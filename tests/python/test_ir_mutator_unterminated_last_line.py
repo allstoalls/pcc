@@ -13,8 +13,8 @@ dyld at startup, with every stage in between reporting success.
 
 from __future__ import annotations
 
-from pcc.native_ir.ir_mutator import MutableModule
-from pcc.native_ir.mem2reg import mem2reg_text
+from pcc.ir.optimization.ir_mutator import MutableModule
+from pcc.ir.optimization.mem2reg import mem2reg_text
 
 
 _MODULE_WITH_UNTERMINATED_TAIL = (

@@ -4,7 +4,7 @@ import subprocess
 import sys
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def test_returned_typed_nested_def_uses_native_closure(tmp_path):
@@ -269,3 +269,51 @@ def test_native_closure_captures_starred_unpack_target(tmp_path):
     )
     assert run.returncode == 0, run.stderr
     assert run.stdout == "5\n"
+
+
+_STARRED_TARGETS = """
+def middle_star(values):
+    first, *mid, last = values
+
+    def show():
+        return (first, mid, last)
+
+    return show()
+
+
+class Holder:
+    pass
+
+
+def attr_star():
+    holder = Holder()
+    head, *holder.tail = [1, 2, 3, 4]
+    return head, holder.tail
+
+
+print(middle_star([1, 2, 3, 4, 5]), middle_star("ab"), attr_star())
+"""
+
+
+def test_native_starred_unpack_into_captured_and_attribute_targets(
+    tmp_path, pcc_runtime_archive, python_program_compiler,
+):
+    """A captured or attribute ``*target`` stores like the other unpack targets."""
+    import os
+
+    src = tmp_path / "starred_targets.py"
+    src.write_text(_STARRED_TARGETS, encoding="utf-8")
+    expected = subprocess.run([sys.executable, str(src)], capture_output=True, text=True, timeout=60)
+    assert expected.returncode == 0, expected.stderr
+    exe = tmp_path / "starred_targets.out"
+    python_program_compiler(
+        str(src), str(exe), backend="self", libpython_mode="off",
+        runtime_archive=str(pcc_runtime_archive),
+    )
+    for gc in range(5):
+        run = subprocess.run(
+            [str(exe)], capture_output=True, text=True, timeout=20,
+            env=dict(os.environ, PCC_GC_BACKEND=str(gc)),
+        )
+        assert run.returncode == 0, f"GC{gc}: {run.stderr}"
+        assert run.stdout == expected.stdout, f"GC{gc}: {run.stdout}"

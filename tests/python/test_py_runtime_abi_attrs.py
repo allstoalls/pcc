@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import llvmlite.binding as llvm
+from tests.owned_ir_validation import verify_ir_text
 
-from pcc.llvm_capi.compat import ir_py as ir
-from pcc.py_frontend.codegen.runtime_abi import declare_runtime
+
+from pcc.ir.compat import ir_py as ir
+from pcc.frontends.python.codegen.runtime_abi import declare_runtime
 
 
 def test_runtime_declarations_emit_optimization_attrs():
@@ -21,11 +22,11 @@ def test_runtime_declarations_emit_optimization_attrs():
         "declare external i64 @py_list_len(ptr) "
         "nounwind readonly willreturn"
     ) in text
-    llvm.parse_assembly(text).verify()
+    verify_ir_text(text)
 
 
 def test_dce_removes_unused_readonly_runtime_call():
-    from pcc.py_frontend.ir_pass_pipeline import run_python_ir_pass_pipeline
+    from pcc.frontends.python.ir_pass_pipeline import run_python_ir_pass_pipeline
 
     ir_text = """
 declare i64 @py_list_len(ptr) nounwind readonly willreturn
@@ -42,4 +43,4 @@ entry:
     )
 
     assert "call i64 @py_list_len" not in out
-    llvm.parse_assembly(out).verify()
+    verify_ir_text(out)

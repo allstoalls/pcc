@@ -1,0 +1,72 @@
+{
+  "base_code_commit": "818187ba7dfff54df589b93bc10594f87786fe22",
+  "base_code_tree": "603baabe2e9d6508b4af2d7e5c1f489d8f9b8562",
+  "candidate": "bootstrap guard diagnostic preservation and workflow-test alignment",
+  "checks": {
+    "exact_preimages": "MATCH",
+    "macos_execution": "UNRUN",
+    "native_execution": "UNRUN",
+    "syntax_parse": "PASS_STATIC_ONLY",
+    "tests": "UNRUN",
+    "whitespace": "PASS_STATIC_ONLY"
+  },
+  "constraints": [
+    "No changes to memory caps, admission policy, workflow timeouts or permissions.",
+    "No compiler, test, guard, or native process execution during candidate preparation.",
+    "Canonical source remains unchanged.",
+    "Preservation is not production qualification."
+  ],
+  "created_at_utc": "2026-10-09T16:10:00.937050+00:00",
+  "files": [
+    {
+      "base_bytes": 46341,
+      "base_git_blob": "94d54760983ab252d83031d342a123d038922f92",
+      "base_sha256": "642e8fd5f2758511decc49c37a7e7e5566646b4643fdd168f2ca27a6c47c74b0",
+      "candidate_bytes": 47907,
+      "candidate_git_blob": "b9fec627f6852ce2d3e89d61f473c2f131582197",
+      "candidate_sha256": "bc257e98b91382b34fdeb3ac30522451c49c119238042b75bdeee7c63f79c506",
+      "mode": "100644",
+      "path": "scripts/bootstrap.py"
+    },
+    {
+      "base_bytes": 20301,
+      "base_git_blob": "cdd1d72c76ab4aca76f7e4da3a409b59bdd392ef",
+      "base_sha256": "ec975ed3aa5908e4d95e11691519854f750019f7e322abde9f6987c3d10c41b7",
+      "candidate_bytes": 25185,
+      "candidate_git_blob": "6fef1cd9e280d28e69400170169254d40ba2eb2f",
+      "candidate_sha256": "814e58fae0b4a072697783f8c00fcd3e1ea25ea605b9a518b851b429741efed2",
+      "mode": "100644",
+      "path": "tests/python/test_worker_memory_budget_selection.py"
+    },
+    {
+      "base_bytes": 42604,
+      "base_git_blob": "82b4f89d133535ccc262d7ed3ffa74df8ed3cfec",
+      "base_sha256": "54b232eb8d358e215e94ec75dbdbb611fbce846f4e6e3790d3e4895caef3436c",
+      "candidate_bytes": 42595,
+      "candidate_git_blob": "0eec2adecdecbbea2814e4717b022ac1720d7c55",
+      "candidate_sha256": "147ae3277c3337a3f33b781bb171f9142adb7d75d7d55877332e26339ec2b04e",
+      "mode": "100644",
+      "path": "tests/python/test_worker_resource_plan.py"
+    }
+  ],
+  "focused_test_selectors": [
+    "tests/python/test_worker_memory_budget_selection.py::test_mac_ci_guard_receipt_failure_preserves_compiler_output",
+    "tests/python/test_worker_memory_budget_selection.py::test_mac_ci_terminal_guard_receipt_preserves_output_and_returncode",
+    "tests/python/test_worker_memory_budget_selection.py::test_mac_ci_final_guard_reselects_after_startup_and_records_final_observation",
+    "tests/python/test_worker_resource_plan.py::test_macos_failure_workflow_preserves_narrow_guard_evidence"
+  ],
+  "patch": {
+    "bytes": 10645,
+    "path": "candidate.patch",
+    "sha256": "623eadcaf5994e602011981fd6df7ab98107b6e5a59bac8de851dcb92a5adc98"
+  },
+  "schema": "pcc.source_candidate.v1",
+  "status": "SOURCE_ONLY_UNRUN",
+  "unchanged_workflow": {
+    "evidence_condition": "always()",
+    "evidence_path_count": 6,
+    "path": ".github/workflows/pcc1-package-parity.yml",
+    "sha256": "5e28d557eb5b7030158d709d20901970c59797769049da025a7e7c61a63a01af"
+  },
+  "verified_published_preimage_commit": "fe054fd02931c1e616a9c287b6d32362290b5e1d"
+}

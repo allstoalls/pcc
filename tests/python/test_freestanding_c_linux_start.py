@@ -5,15 +5,15 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SOURCE = REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_c_linux_start.py"
+SOURCE = REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_c_linux_start.py"
 LINUX_TRIPLE = "x86_64-unknown-linux-gnu"
 
 
 def _compile_linux_ir(tmp_path: Path, monkeypatch) -> str:
-    from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+    from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
     monkeypatch.setattr(
         UnsafeIntrinsicMixin, "_target_sys_platform_text", lambda self: "linux"

@@ -1,0 +1,80 @@
+{
+  "compatibility_requirement": "Verify listed preimages; preserve current unrelated test corrections.",
+  "compatible_current_commit": "cc5eaa9118399c3ef63e3c2423b7fbfb403dc651",
+  "execution": "No project imports, tests, compiler or native execution performed.",
+  "expected_main_nodes": 114,
+  "expected_subtests": 44,
+  "files": [
+    {
+      "added_lines": 99,
+      "mode": "100644",
+      "path": "pcc/backend/indexed_phase_timing.py",
+      "postimage_bytes": 6525,
+      "postimage_sha256": "7e675c79124c80c38153c90650a7b0ab9c3d815d43f405765c7f32f5c4341bbe",
+      "preimage_sha256": "b2123e4546245e39d0dc937bc7da2e22d3fa3d57e6f351946b1912663714b7ca",
+      "removed_lines": 0
+    },
+    {
+      "added_lines": 24,
+      "mode": "100644",
+      "path": "pcc/backend/self_backend_indexed_emit.py",
+      "postimage_bytes": 8361,
+      "postimage_sha256": "57c5f91684c24cc505fbd843618a1cf903b53d1e7d7e78dbffe540509dffc0d8",
+      "preimage_sha256": "de3d9c409616020b0d2b0d85dbf3284186f742cdc8b93aec189a0d779070241e",
+      "removed_lines": 5
+    },
+    {
+      "added_lines": 101,
+      "mode": "100644",
+      "path": "pcc/frontends/python/worker_process_pool.py",
+      "postimage_bytes": 40520,
+      "postimage_sha256": "19e23c768d23a054351460a479542fa98e1c597c434d146d9e5735f58c1ca97a",
+      "preimage_sha256": "4d94844cfc920a9dd98d1e4bf435780e64404370008def8dd571f858636b8524",
+      "removed_lines": 5
+    },
+    {
+      "added_lines": 402,
+      "mode": "100644",
+      "path": "tests/python/test_indexed_handoff_timing.py",
+      "postimage_bytes": 16217,
+      "postimage_sha256": "fb434e6806ad7b20ac4d36d3cebeda2f5803bf9406ad34c7571ad87ff952fb2a",
+      "preimage_sha256": null,
+      "removed_lines": 0
+    }
+  ],
+  "focused_selection": [
+    {
+      "expected_main_nodes": 39,
+      "path": "tests/python/test_indexed_handoff_timing.py"
+    },
+    {
+      "expected_main_nodes": 26,
+      "path": "tests/python/test_self_backend_indexed_codec_host_packing.py"
+    },
+    {
+      "expected_main_nodes": 29,
+      "expected_subtests": 44,
+      "path": "tests/python/test_pipeline_indexed_handoff.py"
+    },
+    {
+      "expected_main_nodes": 20,
+      "path": "tests/python/test_host_indexed_process_split.py"
+    }
+  ],
+  "patch_bytes": 30063,
+  "patch_sha256": "c6e7a347ac558764f5e47ee5dfed85c5109e98948d3f12cd80b0016c05ff0a2d",
+  "preimage_commit": "8aa2881c005d11dfeba05c0275386b954eeb312c",
+  "preimage_pcc_tree": "e0fe5ee61793cc74d4b1564d4cb6787c13d884a4",
+  "production_diff": {
+    "added": 224,
+    "removed": 10
+  },
+  "readme_sha256": "30ea1d24ae455a1f675a07c05c59e39736c81d8d1736df0c7ac368789950175c",
+  "schema": "pcc-indexed-handoff-timing-candidate-v2",
+  "state": "UNEXECUTED",
+  "test_diff": {
+    "added": 402,
+    "removed": 0
+  },
+  "unapplied_v1_patch_sha256": "706204a9f7a2f5595b584b700f6bda711f3ea636c354758272858579cc0609a7"
+}

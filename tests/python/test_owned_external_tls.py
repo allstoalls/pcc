@@ -9,6 +9,24 @@ TARGETS = ("x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu",
            "x86_64-pc-windows-msvc")
 
 
+@pytest.mark.parametrize("directive, expected_type", [(".globl unused", 0), (".type unused, @object", 1), (".type unused, @tls_object", 6)])
+def test_x86_external_declaration_without_relocation_retains_metadata(directive, expected_type):
+    from pcc.backend.x86_64_asm_driver import assemble_file
+
+    obj = assemble_file(".intel_syntax noprefix\n" + directive + "\n")
+    symbol = next(symbol for symbol in obj.symbols if symbol.name == "unused")
+    assert symbol.section_index == 0 and symbol.binding == 1
+    assert symbol.type == expected_type
+
+
+def test_x86_rejects_empty_type_declaration_symbol():
+    from pcc.backend.x86_64_asm_driver import assemble_file
+    from pcc.backend.x86_64_encode import X86EncodeError
+
+    with pytest.raises(X86EncodeError, match="bad .type directive"):
+        assemble_file(".intel_syntax noprefix\n.type , @tls_object\n")
+
+
 def _read_ir(target, name="shared_tls"):
     return f'''target triple = "{target}"
 @{name} = external thread_local global i64, align 8
@@ -77,9 +95,9 @@ def test_external_tls_definition_is_selected_from_owned_archive(target):
 
 
 def _c_ir(source, target):
-    from pcc.codegen.c_codegen import LLVMCodeGenerator
-    from pcc.parse.c_parser import CParser
-    generator = LLVMCodeGenerator()
+    from pcc.frontends.c.codegen.c_codegen import CCodeGenerator
+    from pcc.frontends.c.parse.c_parser import CParser
+    generator = CCodeGenerator()
     generator.module.triple = target
     generator.generate_code(CParser().parse(source))
     return str(generator.module)
@@ -114,7 +132,7 @@ long long read_tls(void) {
     "int read(void) { _Thread_local int value; return value; }",
 ])
 def test_c_rejects_conflicting_or_automatic_tls_declarations(source):
-    from pcc.codegen.c_codegen import SemanticError
-    from pcc.codegen.c_declaration_state import CodegenError
+    from pcc.frontends.c.codegen.c_codegen import SemanticError
+    from pcc.frontends.c.codegen.c_declaration_state import CodegenError
     with pytest.raises((SemanticError, CodegenError), match="thread-local"):
         _c_ir(source, TARGETS[0])

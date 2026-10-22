@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pcc.py_frontend.codegen.extern_func_info_lowering import (
+from pcc.frontends.python.codegen.extern_func_info_lowering import (
     ExternFuncInfoLoweringMixin,
 )
 

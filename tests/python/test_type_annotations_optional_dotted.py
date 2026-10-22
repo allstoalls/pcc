@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from pcc.py_frontend.py_ast import (
+from pcc.frontends.python.py_ast import (
     Attr,
     ClassType,
     DynType,
@@ -12,7 +12,7 @@ from pcc.py_frontend.py_ast import (
     Subscript,
     TupleExpr,
 )
-from pcc.py_frontend.types import parse_annotation
+from pcc.frontends.python.types import parse_annotation
 
 
 SPAN = SourceSpan("<test>", 1, 1, 1, 1)
@@ -76,21 +76,21 @@ def test_union_with_none_unwraps_single_payload():
 
 
 def test_class_type_from_dotted_has_no_libpython_fallback(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     out = tmp_path / "types.ll"
     compile_python_multi(
-        ["pcc/py_frontend/py_ast.py", "pcc/py_frontend/types.py"],
+        ["pcc/frontends/python/py_ast.py", "pcc/frontends/python/types.py"],
         str(out),
         emit_llvm_only=True,
-        module_names=["pcc.py_frontend.py_ast", "pcc.py_frontend.types"],
-        entry_module="pcc.py_frontend.types",
+        module_names=["pcc.frontends.python.py_ast", "pcc.frontends.python.types"],
+        entry_module="pcc.frontends.python.types",
         ir_scaffold_mode="on",
         libpython_mode="off",
     )
     ir_text = out.read_text(encoding="utf-8")
     match = re.search(
-        r"define\s+[^\n]*@user_pcc_py_frontend_types__class_type_from_dotted"
+        r"define\s+[^\n]*@user_pcc_frontends_python_types__class_type_from_dotted"
         r"\([^)]*\)[^{]*\{(?P<body>.+?)\n\}",
         ir_text,
         re.DOTALL,

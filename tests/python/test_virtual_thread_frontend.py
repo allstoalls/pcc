@@ -76,7 +76,11 @@ def _write_generator_case(path: Path) -> None:
             def main() -> None:
                 a = vt.spawn(first)
                 b = vt.spawn(second)
-                print(vt.run(2, 10))
+                # One carrier runs the FIFO in order, so second parks on the
+                # lock first holds across its yield (4 steps). Two carriers
+                # may finish second before first acquires (3 steps); the
+                # multi-carrier contention is test_virtual_thread_lock_mechanisms.
+                print(vt.run(1, 10))
                 print(vt.state(a))
                 print(vt.result(a))
                 print(vt.state(b))
@@ -363,7 +367,7 @@ def _write_sequential_io_case(path: Path) -> None:
                 return 11
 
             def write_one(fd: int) -> int:
-                print(os.write(fd, "x"))
+                print(os.write(fd, b"x"))
                 return 1
 
             def main() -> None:
@@ -400,7 +404,7 @@ def _write_sequential_io_case(path: Path) -> None:
 
 
 def test_virtual_thread_spawn_lowers_to_typed_resume_ir(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "vthread_frontend.py"
     ll = tmp_path / "vthread_frontend.ll"
@@ -425,7 +429,7 @@ def test_virtual_thread_generator_spawn_lowers_to_state_machine_resume_ir(
     tmp_path,
     monkeypatch,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "vthread_generator.py"
     ll = tmp_path / "vthread_generator.ll"
@@ -446,7 +450,7 @@ def test_virtual_thread_generator_spawn_lowers_to_state_machine_resume_ir(
 
 
 def test_virtual_thread_spawn_runs_direct_user_function(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "vthread_frontend.py"
     exe = tmp_path / "vthread_frontend.out"
@@ -470,7 +474,7 @@ def test_virtual_thread_spawn_runs_direct_user_function(tmp_path, monkeypatch):
 
 
 def test_virtual_thread_import_from_aliases_run(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "vthread_from_import.py"
     exe = tmp_path / "vthread_from_import.out"
@@ -497,7 +501,7 @@ def test_virtual_thread_generator_spawn_preserves_frame_and_parks_lock(
     tmp_path,
     monkeypatch,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "vthread_generator.py"
     exe = tmp_path / "vthread_generator.out"
@@ -524,7 +528,7 @@ def test_virtual_thread_generator_parks_threading_wait_primitives(
     tmp_path,
     monkeypatch,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "vthread_blocking.py"
     exe = tmp_path / "vthread_blocking.out"
@@ -550,7 +554,7 @@ def test_virtual_thread_generator_parks_threading_wait_primitives(
 
 
 def test_virtual_thread_uncaught_exception_is_task_local(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "vthread_task_failure.py"
     exe = tmp_path / "vthread_task_failure.out"
@@ -583,7 +587,7 @@ def test_virtual_thread_uncaught_exception_is_task_local(tmp_path, monkeypatch):
 
 
 def test_virtual_thread_join_parks_and_propagates_outcomes(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "vthread_join.py"
     exe = tmp_path / "vthread_join.out"
@@ -620,7 +624,7 @@ def test_virtual_thread_cancel_is_cooperative_and_runs_sync_cleanup(
     monkeypatch,
 ):
     monkeypatch.setenv("PCC_GC_BACKEND", "4")
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "vthread_cancel.py"
     exe = tmp_path / "vthread_cancel.out"
@@ -678,7 +682,7 @@ def test_virtual_thread_sequential_readable_writable_use_platform_reactor(
     tmp_path,
     monkeypatch,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "vthread_sequential_io.py"
     exe = tmp_path / "vthread_sequential_io.out"

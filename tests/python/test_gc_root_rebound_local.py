@@ -129,11 +129,17 @@ def test_rebound_owned_local_slots_have_balanced_frame_roots(tmp_path) -> None:
     cur_block = "entry"
     enters: dict[str, int] = {}
     leave_blocks: dict[str, set[str]] = {}
+    leave_lists: dict[str, list[str]] = {}
+    jumps: dict[str, str] = {}
     for ln in body:
         mbb = re.match(r'([A-Za-z0-9_."]+):\s*$', ln)
         if mbb:
             cur_block = mbb.group(1)
-        menter = re.search(r'@pcc_gc_frame_enter\(ptr %[\w."]+, ptr %([\w."]+)\)', ln)
+        mjump = re.match(r'\s*br label %([\w."]+)\s*$', ln)
+        if mjump:
+            jumps[cur_block] = mjump.group(1)
+        # The frame map is a global, passed directly or through an alias.
+        menter = re.search(r'@pcc_gc_frame_enter\(ptr [%@][\w."]+, ptr %([\w."]+)\)', ln)
         if menter:
             slot = bitcasts.get(menter.group(1), menter.group(1))
             enters[slot] = enters.get(slot, 0) + 1
@@ -141,6 +147,7 @@ def test_rebound_owned_local_slots_have_balanced_frame_roots(tmp_path) -> None:
         if mleave:
             slot = bitcasts.get(mleave.group(1), mleave.group(1))
             leave_blocks.setdefault(slot, set()).add(cur_block)
+            leave_lists.setdefault(cur_block, []).append(slot)
 
     # Invariant 1 (the regression): a slot with any frame_leave must have a
     # frame_enter. Pre-fix the rebound ``lhs`` alloca violated this.
@@ -156,12 +163,20 @@ def test_rebound_owned_local_slots_have_balanced_frame_roots(tmp_path) -> None:
     exit_blocks: set[str] = set()
     for slot in registered:
         exit_blocks.update(leave_blocks.get(slot, set()))
-    for block in exit_blocks:
-        left_here = {
-            slot for slot in registered if block in leave_blocks.get(slot, set())
-        }
-        assert left_here == registered, (
-            f"exit block {block} leaves {sorted(left_here)} but the function "
+    # An exit may leave its slots across a straight-line chain (the shared
+    # return exit leaves the frames, then the value's own slot after reading
+    # it); the chain is one exit path and must leave each slot exactly once.
+    continuations = {jumps[block] for block in exit_blocks if block in jumps}
+    for block in exit_blocks - continuations:
+        left_on_path: list[str] = []
+        step, seen = block, set()
+        while step is not None and step not in seen:
+            seen.add(step)
+            left_on_path.extend(leave_lists.get(step, []))
+            step = jumps.get(step)
+        assert len(left_on_path) == len(set(left_on_path)), (block, left_on_path)
+        assert set(left_on_path) == registered, (
+            f"exit path from {block} leaves {sorted(left_on_path)} but the function "
             f"registered {sorted(registered)}; unbalanced roots dangle into "
             "a dead frame under moving GC"
         )
@@ -196,14 +211,14 @@ def test_rebound_owned_local_slots_have_balanced_frame_roots(tmp_path) -> None:
 
 
 def _typed_module(source: str, name: str):
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
 
     return type_infer.infer_module(parse_and_lift(source, f"<{name}>", name))
 
 
 def test_module_override_resets_gc_root_slot_registries() -> None:
-    from pcc.py_frontend.codegen import layer1
+    from pcc.frontends.python.codegen import layer1
 
     first = _typed_module(
         """

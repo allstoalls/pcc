@@ -12,7 +12,7 @@ packed tuple/dict that has to be splatted back out for the same reason.
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 def _build_and_run(tmp_path, name, source):

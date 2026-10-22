@@ -20,8 +20,8 @@ backend #0 (refcount + STW cycle collector):
 | `gc.callbacks` | not wired | wired (Backend #1 traces pinned callback list via `pcc_gc_alloc`-routed `py_func_new`) |
 
 Pluggable GC backend slots (selected via `PCC_GC_BACKEND` env, enum in
-`pcc/py_runtime/include/py_obj.h::PCC_GC_KIND_*`) — current production-gated
-state matches `goal.md` and `pcc.runtime_report`:
+`pcc/runtime/include/py_obj.h::PCC_GC_KIND_*`) — current production-gated
+state matches `goal.md` and `pcc.diagnostics.runtime_report`:
 
 | Slot | Algorithm | Reference | Status |
 |---|---|---|---|
@@ -120,11 +120,11 @@ runs single-threaded. The frozen evidence is in
 
 ## Pointers
 
-- Code: `pcc/py_runtime/src/py_obj_gc.c`,
-  `pcc/py_runtime/src/py_class.c`, `pcc/py_runtime/src/py_dunder.c`,
-  `pcc/py_runtime/src/py_weakref.c`,
-  `pcc/py_runtime/src/py_gc_backend.c`,
-  `pcc/py_runtime/include/py_obj.h`.
+- Code: `pcc/runtime/src/py_obj_gc.c`,
+  `pcc/runtime/src/py_class.c`, `pcc/runtime/src/py_dunder.c`,
+  `pcc/runtime/src/py_weakref.c`,
+  `pcc/runtime/src/py_gc_backend.c`,
+  `pcc/runtime/include/py_obj.h`.
 - Reference implementations:
   [`docs/refs_docs/gc-research/`](../refs_docs/gc-research/).
 - Backend #0..#4 progress log: `goal.md` (running progress notes).

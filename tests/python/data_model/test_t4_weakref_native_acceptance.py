@@ -9,7 +9,7 @@ from tests.runtime_build_cache import cached_pcc_python_runtime
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 
 
 def test_t4_weakref_callable_and_dealloc_clear_native(tmp_path):

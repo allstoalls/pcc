@@ -2,13 +2,17 @@ from __future__ import annotations
 
 from pathlib import Path
 import importlib.util
+import json
 import os
 import subprocess
+import sys
 
 import pytest
 
+from scripts import bootstrap
 
-BOOTSTRAP = Path(__file__).absolute().parents[2] / "scripts" / "bootstrap.sh"
+
+BOOTSTRAP = Path(__file__).absolute().parents[2] / "scripts" / "bootstrap.py"
 STAGE_AB = Path(__file__).absolute().parents[2] / "scripts" / "run_pcc_stage_ab.py"
 
 
@@ -20,75 +24,108 @@ def _load_stage_ab():
     return module
 
 
-def test_bootstrap_stage_result_declares_metric_scope_and_pairing_contract() -> None:
-    source = BOOTSTRAP.read_text(encoding="utf-8")
+def test_bootstrap_stage_result_declares_metric_scope_and_pairing_contract(
+    tmp_path, monkeypatch
+) -> None:
+    # The fake stage writes stage_output(1); without an isolated out dir that
+    # is the checkout's real build/bootstrap/pcc1.
+    options = bootstrap.Options({
+        "PCC_BOOTSTRAP_PROFILE_DIR": str(tmp_path),
+        "PCC_BOOTSTRAP_OUT_DIR": str(tmp_path / "out"),
+    })
+    options.out_dir.mkdir(parents=True, exist_ok=True)
 
-    for marker in (
-        '"compile_user_ms": "timed_command_plus_waited_children_cpu"',
-        '"compile_sys_ms": "timed_command_plus_waited_children_cpu"',
-        '"wall_ms": "end_to_end_elapsed_including_publish_barrier"',
-        '"wall_metric_role": "paired_end_to_end_observation"',
-        '"required_comparison": "adjacent_alternating_same_environment_pairs"',
-        '"single_wall_verdict_allowed": False',
-    ):
-        assert marker in source
+    def fake_guarded(target, opts, stage, environment):
+        output = opts.stage_output(stage)
+        output.write_bytes(b"stage binary")
+        output.chmod(0o755)
+        return 0, None
+
+    monkeypatch.setattr(bootstrap, "_run_guarded", fake_guarded)
+    monkeypatch.setattr(bootstrap, "stage_exec_barrier", lambda *a, **k: 0)
+
+    bootstrap.run_stage(1, options.stage_output(1), ["python", "-m", "pcc"], options)
+
+    payload = json.loads((tmp_path / "stage1.result.json").read_text(encoding="utf-8"))
+    scopes = payload["metric_scopes"]
+    assert scopes["compile_user_ms"] == "timed_command_plus_waited_children_cpu"
+    assert scopes["compile_sys_ms"] == "timed_command_plus_waited_children_cpu"
+    assert scopes["wall_ms"] == "end_to_end_elapsed_including_publish_barrier"
+    contract = payload["comparison_contract"]
+    assert contract["wall_metric_role"] == "paired_end_to_end_observation"
+    assert contract["required_comparison"] == (
+        "adjacent_alternating_same_environment_pairs"
+    )
+    assert contract["single_wall_verdict_allowed"] is False
+    assert payload["schema"] == "pcc.bootstrap_stage_result.v1"
 
 
 def test_bootstrap_defaults_to_safe_auto_lanes_and_rejects_wide_override() -> None:
-    source = BOOTSTRAP.read_text(encoding="utf-8")
-    assert 'PCC_PY_FRONTEND_JOBS:-auto' in source
-    assert 'PCC_PY_FRONTEND_JOBS:-2' in source
-    assert 'PCC_SELF_BACKEND_JOBS:-2' in source
-    assert 'PCC_MACHO_LINK_JOBS:-8' in source
-    assert "_BOOTSTRAP_SAFE_MAX_JOBS=2" in source
-    assert "_BOOTSTRAP_SAFE_MAX_LINK_JOBS=8" in source
-    assert "_BOOTSTRAP_SAFE_MAX_TREE_RSS_BYTES=17179869184" in source
-    # The tree budget default now equals _BOOTSTRAP_SAFE_MAX_TREE_RSS_BYTES:
-    # measured stage1 peaks sat at 5.8 GiB of the old 8 GiB cap, so the cap
-    # was never the bound -- but four workers need the headroom the safe
-    # maximum already sanctioned.
-    assert 'BOOTSTRAP_MAX_TREE_RSS_BYTES="${PCC_BOOTSTRAP_MAX_TREE_RSS_BYTES:-17179869184}"' in source
-    assert 'BOOTSTRAP_STAGE_TIMEOUT="${PCC_BOOTSTRAP_STAGE_TIMEOUT:-600}"' in source
-    assert "_BOOTSTRAP_SAFE_MAX_STAGE_TIMEOUT=2400" in source
-    assert 'run_process_tree_sample.py' in source
-    assert 'PCC_BOOTSTRAP_EXTERNAL_MEMORY_GUARD' in source
-    assert '--darwin-preflight-reserve-bytes' in source
-    assert '--max-tree-rss-bytes' in source
-    assert 'PCC_BOOTSTRAP_IN_PROCESS_CODEGEN:-0' in source
-    assert 'PCC_BOOTSTRAP_DEFER_FRONTEND_CODEGEN:-1' in source
-    assert 'PCC_BOOTSTRAP_DEFER_SELF_LINK:-1' in source
-    assert 'PCC_WORKER_TREE_BUDGET_BYTES=${BOOTSTRAP_MAX_TREE_RSS_BYTES}' in source
-    assert 'PCC_PY_FRONTEND_IN_PROCESS_CODEGEN=1' in source
-    assert 'PCC_DEFER_SELF_LINK_PLAN=${deferred_plan}' in source
-    assert 'PCC_DEFER_FRONTEND_CODEGEN_PLAN=${codegen_plan}' in source
-    assert 'PCC_RUNTIME_ARCHIVE=${runtime_archive}' in source
-    assert 'run_pcc_deferred_link.py' not in source
-    assert 'run_pcc_native_deferred.sh' in source
+    options = bootstrap.Options({})
+    assert options.py_frontend_jobs == "auto"
+    assert options.stage1_py_frontend_jobs == "auto"
+    assert options.self_backend_jobs == "2"
+    assert options.macho_link_jobs == "8"
+    assert bootstrap.SAFE_MAX_JOBS == 2
+    assert bootstrap.SAFE_MAX_LINK_JOBS == 8
+    assert bootstrap.SAFE_MAX_TREE_RSS_BYTES == 17179869184
+    # The tree budget default equals the safe maximum: measured stage1 peaks
+    # sat at 5.8 GiB of the old 8 GiB cap, so the cap was never the bound --
+    # but four workers need the headroom the safe maximum already sanctioned.
+    assert options.max_tree_rss_bytes == 17179869184
+    # 600 s left under 20% margin over a healthy local Stage1 (518 s) and
+    # cannot fit a 3-core CI runner; the watchdog stops runaways only.
+    assert options.stage_timeout == 1800
+    # Raised for two-hour CI Stage1 builds (0198e2052).
+    assert bootstrap.SAFE_MAX_STAGE_TIMEOUT == 7200
+    assert options.external_memory_guard == "0"
+    assert options.in_process_codegen == "0"
+    assert options.defer_frontend_codegen == "1"
+    assert options.defer_self_link == "1"
+    assert options.runtime_cc == "pcc"
+    assert options.runtime_high == "py"
+    assert options.python_libpython == "off"
+
+    with pytest.raises(
+        bootstrap.BootstrapError, match="unsafe bootstrap worker budget"
+    ):
+        bootstrap.validate_settings(
+            bootstrap.Options({"PCC_BOOTSTRAP_PY_FRONTEND_JOBS": "4"})
+        )
+    explicit = bootstrap.validate_settings(
+        bootstrap.Options(
+            {
+                "PCC_BOOTSTRAP_PY_FRONTEND_JOBS": "4",
+                "PCC_BOOTSTRAP_UNSAFE_HIGH_MEMORY_JOBS": "1",
+            }
+        )
+    )
+    assert explicit.py_frontend_jobs == "4"
 
     environment = os.environ.copy()
     environment.pop("LC_ALL", None)
     environment["PCC_BOOTSTRAP_PY_FRONTEND_JOBS"] = "4"
     rejected = subprocess.run(
-        ["/bin/bash", str(BOOTSTRAP), "--help"],
+        [sys.executable, str(BOOTSTRAP), "--help"],
         cwd=BOOTSTRAP.parents[1],
         env=environment,
         text=True,
         capture_output=True,
-        timeout=10,
+        timeout=30,
     )
     assert rejected.returncode == 2
     assert "unsafe bootstrap worker budget" in rejected.stderr
 
     environment["PCC_BOOTSTRAP_UNSAFE_HIGH_MEMORY_JOBS"] = "1"
-    explicit = subprocess.run(
-        ["/bin/bash", str(BOOTSTRAP), "--help"],
+    explicit_run = subprocess.run(
+        [sys.executable, str(BOOTSTRAP), "--help"],
         cwd=BOOTSTRAP.parents[1],
         env=environment,
         text=True,
         capture_output=True,
-        timeout=10,
+        timeout=30,
     )
-    assert explicit.returncode == 0, explicit.stderr
+    assert explicit_run.returncode == 0, explicit_run.stderr
 
 
 def test_stage1_receipt_marks_local_hardware_counters_diagnostic_only() -> None:

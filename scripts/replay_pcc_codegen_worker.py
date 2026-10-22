@@ -11,7 +11,7 @@ from pathlib import Path
 import sys
 
 
-MANIFEST_SCHEMA = "pcc.py_frontend.codegen_worker.v4"
+MANIFEST_SCHEMA = "pcc.frontends.python.codegen_worker.v4"
 REPLAY_SCHEMA = "pcc.codegen-worker-replay.v1"
 
 
@@ -99,7 +99,7 @@ def prepare_replay(
     environment.update(receipt_environment)
     environment.pop("LC_ALL", None)
     # The Stage2 receipt records bootstrap's outer environment, while
-    # bootstrap.sh and native_deferred._command construct the actual worker
+    # bootstrap.py and native_deferred._command construct the actual worker
     # environment later. In particular, replaying with an ambient default
     # pass tier silently changes a PIDX-only worker into an LLVM-text worker.
     for child, bootstrap in (

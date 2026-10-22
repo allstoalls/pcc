@@ -2,14 +2,14 @@ import pytest
 import subprocess
 import sys
 
-from pcc.gpu_kernel import (
+from pcc.kernel_ir.entry import (
     GpuKernelError,
     lower_function_to_kernel_ir,
     lower_function_to_metal,
     prepare_gpu_kernels_for_source,
     strip_gpu_kernel_host_source,
 )
-from pcc.gpu_metal import (
+from pcc.backend.metal import (
     MetalCompileError,
     MetalToolchainUnavailable,
     compile_metal_source_to_air,

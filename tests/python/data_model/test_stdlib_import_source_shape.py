@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pcc.py_frontend import parser
-from pcc.py_frontend.py_ast import Import, ImportFrom, ClassDef
+from pcc.frontends.python import parser
+from pcc.frontends.python.py_ast import Import, ImportFrom, ClassDef
 
 
 def test_abc_enum_inspect_weakref_import_shapes():

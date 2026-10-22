@@ -12,7 +12,7 @@ import pytest
     "empty", "raising", "collect", "identity", "capture_return", "default",
 ])
 def test_native_sort_key_and_lambda_owners(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive, shape,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive, shape,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     bodies = {
@@ -88,7 +88,7 @@ main()
     binary = tmp_path / "key_owners"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         result = subprocess.run(

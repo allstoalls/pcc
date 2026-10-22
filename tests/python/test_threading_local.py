@@ -15,7 +15,7 @@ def test_threading_local_class_shape():
     storage. For now we lock the API surface so the patch cannot be
     silently regressed.
     """
-    from pcc.py_stdlib.threading import local
+    from pcc.stdlib.threading import local
 
     assert inspect.isclass(local)
     for method in ("get", "set", "delete", "_dict"):

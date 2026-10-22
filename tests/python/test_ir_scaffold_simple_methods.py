@@ -2,7 +2,7 @@
 implemented through ``_IR_SCAFFOLD_SIMPLE_METHODS`` (Phase 3 Tasks 9–14).
 
 Each method is verified for the same three properties:
-- ON mode emits ``call <ret> @user_pcc_llvm_capi_ir_IRBuilder_<method>(<receiver>, ...)``
+- ON mode emits ``call <ret> @user_pcc_ir_ir_IRBuilder_<method>(<receiver>, ...)``
   with the right number of pointer args.
 - ON mode function body has ZERO ``py_cpy_*`` calls.
 - OFF mode still routes through ``py_cpy_*`` (regression guard).
@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend.codegen.ir_scaffold_lowering import (
+from pcc.frontends.python.codegen.ir_scaffold_lowering import (
     _IR_SCAFFOLD_METHOD_OPTIONAL_PARAMS,
 )
 
@@ -30,7 +30,7 @@ _PTR = r"(?:ptr|i8\s*\*)"
 
 
 def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -61,7 +61,7 @@ def _gen_program(method: str, arg_count: int) -> str:
     if method == "add_incoming":
         return textwrap.dedent(
             f"""
-            from pcc.llvm_capi.compat import ir
+            from pcc.ir.compat import ir
 
             def use_method({params}):
                 builder = ir.IRBuilder()
@@ -71,7 +71,7 @@ def _gen_program(method: str, arg_count: int) -> str:
         )
     return textwrap.dedent(
         f"""
-        from pcc.llvm_capi.compat import ir
+        from pcc.ir.compat import ir
 
         def use_method({params}):
             builder = ir.IRBuilder()
@@ -164,7 +164,7 @@ def _expected_extern_argcount(method: str, arg_count: int) -> int:
 def test_simple_method_on_emits_extern(method, arg_count, ret):
     program = _gen_program(method, arg_count)
     ir_text = _compile_to_ll(program, f"sm_{method}_on", mode="on")
-    sym = f"@user_pcc_llvm_capi_ir_IRBuilder_{method}"
+    sym = f"@user_pcc_ir_ir_IRBuilder_{method}"
     assert sym in ir_text, (
         f"ON mode must emit {sym}; got:\n" + ir_text
     )
@@ -187,7 +187,7 @@ def test_simple_method_on_body_has_no_py_cpy(method, arg_count, _ret):
     ir_text = _compile_to_ll(program, f"sm_{method}_clean", mode="on")
     body = _function_body(ir_text, "use_method")
     assert body is not None, ir_text
-    assert f"@user_pcc_llvm_capi_ir_IRBuilder_{method}" in body, body
+    assert f"@user_pcc_ir_ir_IRBuilder_{method}" in body, body
     assert "py_cpy_" not in body, (
         f"ON mode use_method body for {method} must have ZERO "
         f"py_cpy_*; got:\n" + body
@@ -205,7 +205,7 @@ def test_simple_method_off_routes_dyn_dispatch(method, arg_count, _ret):
     """
     program = _gen_dynamic_program(method, arg_count)
     ir_text = _compile_to_ll(program, f"sm_{method}_off", mode="off")
-    assert f"@user_pcc_llvm_capi_ir_IRBuilder_{method}" not in ir_text, (
+    assert f"@user_pcc_ir_ir_IRBuilder_{method}" not in ir_text, (
         f"OFF mode must NOT emit scaffold extern for {method}"
     )
     body = _function_body(ir_text, "use_method")
@@ -228,7 +228,7 @@ def test_simple_method_off_routes_dyn_dispatch(method, arg_count, _ret):
 
 def test_extract_value_boxes_native_integer_index_for_python_callee():
     ir_text = _compile_to_ll(
-        "from pcc.llvm_capi.compat import ir\n"
+        "from pcc.ir.compat import ir\n"
         "def extract_lane(aggregate):\n"
         "    builder = ir.IRBuilder()\n"
         "    return builder.extract_value(aggregate, 0)\n",
@@ -240,7 +240,7 @@ def test_extract_value_boxes_native_integer_index_for_python_callee():
     assert body is not None, ir_text
     assert re.search(r"@py_int_from_i64\(i64 0\)", body), body
     assert re.search(
-        r"@user_pcc_llvm_capi_ir_IRBuilder_extract_value\("
+        r"@user_pcc_ir_ir_IRBuilder_extract_value\("
         rf"{_PTR} [^,]+, {_PTR} [^,]+, {_PTR} [^,]+, {_PTR} [^)]+\)",
         body,
     ), body
@@ -248,10 +248,10 @@ def test_extract_value_boxes_native_integer_index_for_python_callee():
 
 @pytest.mark.parametrize("method,args", [("resume", "a"), ("insert_value", "a, b, c")])
 def test_missing_provider_methods_fail_before_emitting_an_undefined_symbol(method, args):
-    from pcc.py_frontend.codegen.ir_scaffold_lowering import ScaffoldUnsupportedError
+    from pcc.frontends.python.codegen.ir_scaffold_lowering import ScaffoldUnsupportedError
 
     source = (
-        "from pcc.llvm_capi.compat import ir\n"
+        "from pcc.ir.compat import ir\n"
         "def f(a, b, c):\n"
         "    builder = ir.IRBuilder()\n"
         f"    return builder.{method}({args})\n"

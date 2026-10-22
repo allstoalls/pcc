@@ -256,6 +256,9 @@ def test_incremental_trace_cext_traverse_runs_outside_graph_lock(
                 int32_t frame_map[18] = {17};
                 PyObject *roots[17] = {0};
                 if (pcc_threads_enabled() != 1) return 2;
+                /* Only the explicit steps below advance the cycle: with
+                 * collection disabled the GC1 collector thread stays out. */
+                py_gc_disable();
                 if (pcc_gc_set_backend(
                         PCC_GC_KIND_INCREMENTAL_TRICOLOR
                     ) != 0) return 3;

@@ -5,7 +5,7 @@ import textwrap
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python, count_py_cpy_fallback_calls
+from pcc.frontends.python.pipeline import compile_python, count_py_cpy_fallback_calls
 
 
 def test_os_makedirs_emits_native_no_libpython_call(tmp_path):
@@ -38,11 +38,11 @@ def test_os_makedirs_emits_native_no_libpython_call(tmp_path):
 def test_os_makedirs_runtime_and_exist_ok(
     tmp_path,
     monkeypatch,
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
     runtime_kind,
 ):
     monkeypatch.setenv("PCC_RUNTIME_CC", "pcc")
-    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_py_runtime_archive))
+    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_runtime_archive))
 
     target = tmp_path / runtime_kind / "nested" / "leaf"
     src = tmp_path / f"makedirs_{runtime_kind}.py"

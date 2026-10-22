@@ -49,6 +49,7 @@ from .self_backend_aarch64_darwin_mem import (
     emitted_move_register_line,
 )
 from .self_backend_kernel import (
+    _scalar_window_is_complete,
     IndexedFunctionKernel,
     TYPE_KIND_ARRAY,
     TYPE_KIND_INT,
@@ -68,6 +69,7 @@ from .self_backend_ir import (
     PARSED_INSTRUCTION_KIND_GEP,
     PARSED_INSTRUCTION_KIND_ICMP,
     PARSED_INSTRUCTION_KIND_LOAD,
+    PARSED_INSTRUCTION_KIND_LOAD_ATOMIC,
     PARSED_INSTRUCTION_KIND_RET,
     PARSED_INSTRUCTION_KIND_RET_VOID,
     PARSED_INSTRUCTION_KIND_SELECT,
@@ -88,7 +90,7 @@ from .self_backend_target_passes import (
     AArch64MaddFusion,
     aarch64_madd_fusion_for_product,
 )
-from .self_backend_value_arena import CompilerInt3, CompilerInt4
+from .self_backend_value_arena import CompilerInt2, CompilerInt3, CompilerInt4
 
 
 _REGISTER_POOL = (1, 2, 3, 4, 5, 6, 7, 8)
@@ -190,37 +192,115 @@ def _candidate_indexed_definition_type_id(
 ) -> int:
     raw: CompilerInt4 = kernel.instruction_record(record_id)
     if kind_id == PARSED_INSTRUCTION_KIND_LOAD:
-        header: CompilerInt4 = kernel.type_header(raw.first)
+        header_is_scalar = False
+        if type(kernel) is IndexedFunctionKernel:
+            header_scalar_id = raw.first
+            header_is_scalar = _scalar_window_is_complete(
+                kernel.type_scalars, header_scalar_id, 12, 0
+            )
+            if header_is_scalar:
+                header_scalar = kernel.type_scalars.get_unchecked(
+                    header_scalar_id * 12 + 0
+                )
+            else:
+                header: CompilerInt4 = kernel.type_header(header_scalar_id)
+        else:
+            header: CompilerInt4 = kernel.type_header(raw.first)
         return (
             raw.first
-            if header.first == TYPE_KIND_INT or header.first == TYPE_KIND_PTR
+            if (header_scalar if header_is_scalar else header.first) == TYPE_KIND_INT or (header_scalar if header_is_scalar else header.first) == TYPE_KIND_PTR
             else -1
         )
     if kind_id == PARSED_INSTRUCTION_KIND_BINOP:
-        binop_type: CompilerInt4 = kernel.type_header(raw.second)
+        binop_type_is_scalar = False
+        if type(kernel) is IndexedFunctionKernel:
+            binop_type_scalar_id = raw.second
+            binop_type_is_scalar = _scalar_window_is_complete(
+                kernel.type_scalars, binop_type_scalar_id, 12, 0
+            )
+            if binop_type_is_scalar:
+                binop_type_scalar = kernel.type_scalars.get_unchecked(
+                    binop_type_scalar_id * 12 + 0
+                )
+            else:
+                binop_type: CompilerInt4 = kernel.type_header(binop_type_scalar_id)
+        else:
+            binop_type: CompilerInt4 = kernel.type_header(raw.second)
         return (
             raw.second
-            if binop_type.first == TYPE_KIND_INT
+            if (binop_type_scalar if binop_type_is_scalar else binop_type.first) == TYPE_KIND_INT
             else -1
         )
     if kind_id == PARSED_INSTRUCTION_KIND_ICMP:
-        compared: CompilerInt4 = kernel.type_header(raw.second)
-        if compared.first != TYPE_KIND_INT and compared.first != TYPE_KIND_PTR:
+        compared_is_scalar = False
+        if type(kernel) is IndexedFunctionKernel:
+            compared_scalar_id = raw.second
+            compared_is_scalar = _scalar_window_is_complete(
+                kernel.type_scalars, compared_scalar_id, 12, 0
+            )
+            if compared_is_scalar:
+                compared_scalar = kernel.type_scalars.get_unchecked(
+                    compared_scalar_id * 12 + 0
+                )
+            else:
+                compared: CompilerInt4 = kernel.type_header(compared_scalar_id)
+        else:
+            compared: CompilerInt4 = kernel.type_header(raw.second)
+        if (compared_scalar if compared_is_scalar else compared.first) != TYPE_KIND_INT and (compared_scalar if compared_is_scalar else compared.first) != TYPE_KIND_PTR:
             return -1
         return -1 if dest_id < 0 else kernel.value_type_id(dest_id)
     if kind_id == PARSED_INSTRUCTION_KIND_CAST:
-        src_header: CompilerInt4 = kernel.type_header(raw.second)
-        dst_header: CompilerInt4 = kernel.type_header(raw.fourth)
-        src_kind = src_header.first
-        dst_kind = dst_header.first
+        src_header_is_scalar = False
+        if type(kernel) is IndexedFunctionKernel:
+            src_header_scalar_id = raw.second
+            src_header_is_scalar = _scalar_window_is_complete(
+                kernel.type_scalars, src_header_scalar_id, 12, 0
+            )
+            if src_header_is_scalar:
+                src_header_scalar = kernel.type_scalars.get_unchecked(
+                    src_header_scalar_id * 12 + 0
+                )
+            else:
+                src_header: CompilerInt4 = kernel.type_header(src_header_scalar_id)
+        else:
+            src_header: CompilerInt4 = kernel.type_header(raw.second)
+        dst_header_is_scalar = False
+        if type(kernel) is IndexedFunctionKernel:
+            dst_header_scalar_id = raw.fourth
+            dst_header_is_scalar = _scalar_window_is_complete(
+                kernel.type_scalars, dst_header_scalar_id, 12, 0
+            )
+            if dst_header_is_scalar:
+                dst_header_scalar = kernel.type_scalars.get_unchecked(
+                    dst_header_scalar_id * 12 + 0
+                )
+            else:
+                dst_header: CompilerInt4 = kernel.type_header(dst_header_scalar_id)
+        else:
+            dst_header: CompilerInt4 = kernel.type_header(raw.fourth)
+        src_kind = (src_header_scalar if src_header_is_scalar else src_header.first)
+        dst_kind = (dst_header_scalar if dst_header_is_scalar else dst_header.first)
         if (
             (src_kind == TYPE_KIND_INT or src_kind == TYPE_KIND_PTR)
             and (dst_kind == TYPE_KIND_INT or dst_kind == TYPE_KIND_PTR)
         ):
             return raw.fourth
         return -1
-    result_header: CompilerInt4 = kernel.type_header(raw.first)
-    result_kind = result_header.first
+    result_header_is_scalar = False
+    if type(kernel) is IndexedFunctionKernel:
+        result_header_scalar_id = raw.first
+        result_header_is_scalar = _scalar_window_is_complete(
+            kernel.type_scalars, result_header_scalar_id, 12, 0
+        )
+        if result_header_is_scalar:
+            result_header_scalar = kernel.type_scalars.get_unchecked(
+                result_header_scalar_id * 12 + 0
+            )
+        else:
+            result_header: CompilerInt4 = kernel.type_header(result_header_scalar_id)
+    else:
+        result_header: CompilerInt4 = kernel.type_header(raw.first)
+    result_kind = (result_header_scalar if result_header_is_scalar else result_header.first)
     return (
         raw.first
         if result_kind == TYPE_KIND_INT or result_kind == TYPE_KIND_PTR
@@ -233,9 +313,35 @@ def _register_type_ids_match(
 ) -> bool:
     if left_id == right_id:
         return True
-    left: CompilerInt4 = kernel.type_header(left_id)
-    right: CompilerInt4 = kernel.type_header(right_id)
-    return left.first == TYPE_KIND_PTR and right.first == TYPE_KIND_PTR
+    left_is_scalar = False
+    if type(kernel) is IndexedFunctionKernel:
+        left_scalar_id = left_id
+        left_is_scalar = _scalar_window_is_complete(
+            kernel.type_scalars, left_scalar_id, 12, 0
+        )
+        if left_is_scalar:
+            left_scalar = kernel.type_scalars.get_unchecked(
+                left_scalar_id * 12 + 0
+            )
+        else:
+            left: CompilerInt4 = kernel.type_header(left_scalar_id)
+    else:
+        left: CompilerInt4 = kernel.type_header(left_id)
+    right_is_scalar = False
+    if type(kernel) is IndexedFunctionKernel:
+        right_scalar_id = right_id
+        right_is_scalar = _scalar_window_is_complete(
+            kernel.type_scalars, right_scalar_id, 12, 0
+        )
+        if right_is_scalar:
+            right_scalar = kernel.type_scalars.get_unchecked(
+                right_scalar_id * 12 + 0
+            )
+        else:
+            right: CompilerInt4 = kernel.type_header(right_scalar_id)
+    else:
+        right: CompilerInt4 = kernel.type_header(right_id)
+    return (left_scalar if left_is_scalar else left.first) == TYPE_KIND_PTR and (right_scalar if right_is_scalar else right.first) == TYPE_KIND_PTR
 
 
 def _text_list_contains(values: list[str], value: str) -> bool:
@@ -451,6 +557,13 @@ def _note_use_block(use_blocks: dict[int, list[int]], value_id: int, block_id: i
         blocks.append(block_id)
 
 
+# Host-only diagnostic seam. The adapter owns installation and restoration;
+# the standalone implementation guard is also the native pruning boundary.
+import sys
+if sys.implementation.name == "cpython":
+    _HOST_FACTS_STRUCTURE_OBSERVER = None
+
+
 def _function_level_facts(
     kernel,
 ) -> tuple[
@@ -502,31 +615,64 @@ def _function_level_facts(
         safe = True
         instruction_index = 0
         while instruction_index < block_fact.second:
-            metadata: CompilerInt4 = kernel.instruction_metadata_by_id(
-                block_fact.first + instruction_index
-            )
+            metadata_is_scalar = False
+            if type(kernel) is IndexedFunctionKernel:
+                metadata_scalar_id = block_fact.first + instruction_index
+                metadata_is_scalar = _scalar_window_is_complete(
+                    kernel.instruction_metadata, metadata_scalar_id, 4, 0
+                )
+                if metadata_is_scalar:
+                    metadata_scalar = kernel.instruction_metadata.get_unchecked(
+                        metadata_scalar_id * 4 + 0
+                    )
+                else:
+                    metadata: CompilerInt4 = kernel.instruction_metadata_by_id(metadata_scalar_id)
+            else:
+                metadata: CompilerInt4 = kernel.instruction_metadata_by_id(block_fact.first + instruction_index)
             if (
-                not 0 <= metadata.first < len(PARSED_INSTRUCTION_KINDS)
-                or metadata.first in _POOL_REJECTED_INSTRUCTION_KIND_IDS
+                not 0 <= (metadata_scalar if metadata_is_scalar else metadata.first) < len(PARSED_INSTRUCTION_KINDS)
+                or (metadata_scalar if metadata_is_scalar else metadata.first) in _POOL_REJECTED_INSTRUCTION_KIND_IDS
             ):
                 safe = False
             instruction_index += 1
         block_safe.append(safe)
         instruction_index = 0
         while instruction_index < block_fact.second:
-            metadata = kernel.instruction_metadata_by_id(
-                block_fact.first + instruction_index
-            )
-            if not safe or metadata.first == PARSED_INSTRUCTION_KIND_CALL:
+            metadata_is_scalar = False
+            if type(kernel) is IndexedFunctionKernel:
+                metadata_scalar_id = block_fact.first + instruction_index
+                metadata_is_scalar = _scalar_window_is_complete(
+                    kernel.instruction_metadata, metadata_scalar_id, 4, 0
+                )
+                if metadata_is_scalar:
+                    metadata_scalar = kernel.instruction_metadata.get_unchecked(
+                        metadata_scalar_id * 4 + 0
+                    )
+                else:
+                    metadata = kernel.instruction_metadata_by_id(metadata_scalar_id)
+            else:
+                metadata = kernel.instruction_metadata_by_id(block_fact.first + instruction_index)
+            if not safe or (metadata_scalar if metadata_is_scalar else metadata.first) == PARSED_INSTRUCTION_KIND_CALL:
                 barriers.append(position)
                 if not safe:
                     hard_barriers.append(position)
                 else:
                     call_positions.append(position)
-            instruction_fact: CompilerInt4 = kernel.instruction_fact_by_id(
-                block_fact.first + instruction_index
-            )
-            destination = instruction_fact.first
+            instruction_fact_is_scalar = False
+            if type(kernel) is IndexedFunctionKernel:
+                instruction_fact_scalar_id = block_fact.first + instruction_index
+                instruction_fact_is_scalar = _scalar_window_is_complete(
+                    kernel.instruction_facts, instruction_fact_scalar_id, 4, 0
+                )
+                if instruction_fact_is_scalar:
+                    instruction_fact_scalar = kernel.instruction_facts.get_unchecked(
+                        instruction_fact_scalar_id * 4 + 0
+                    )
+                else:
+                    instruction_fact: CompilerInt4 = kernel.instruction_fact_by_id(instruction_fact_scalar_id)
+            else:
+                instruction_fact: CompilerInt4 = kernel.instruction_fact_by_id(block_fact.first + instruction_index)
+            destination = (instruction_fact_scalar if instruction_fact_is_scalar else instruction_fact.first)
             if destination >= 0:
                 def_block[destination] = block_id
             use_index = 0
@@ -626,17 +772,309 @@ def _function_level_facts(
     # the back edge); a value live into a block is live from its first
     # position -- layout order need not follow dominance, so such a block may
     # precede the definition.
+    # The -1 value ID aliases the unvisited stamp and depends on previous
+    # values' walks.  Custom IDs/seeds can expose hash, equality or indexing
+    # calls.  In either case retain the original traversal for every value.
+    cache_enabled = len(use_blocks) > 1
+    if cache_enabled:
+        for value_id in def_block:
+            if type(value_id) is not int:
+                cache_enabled = False
+                break
+        for value_id in use_blocks:
+            if type(value_id) is not int or value_id == -1:
+                cache_enabled = False
+                break
+    if cache_enabled:
+        for value_id in use_blocks:
+            for seed in use_blocks[value_id]:
+                if type(seed) is not int:
+                    cache_enabled = False
+                    break
+    # Home is -1 or a block index, so this pair has a collision-free integer
+    # key: (home + 1) * block_count + seed.  Keep at most block_count entries;
+    # once full, new keys take the old walk without evicting useful summaries.
+    graph_low: dict[int, int] = {}
+    graph_high: dict[int, int] = {}
     first_live: dict[int, int] = {}
     visited: list[int] = [-1] * len(successors)
     pending: list[int] = []
+    facts_observe = False
+    summary_enabled = cache_enabled and type(kernel) is IndexedFunctionKernel
+    import sys
+    if sys.implementation.name == "cpython":
+        _facts_observer = _HOST_FACTS_STRUCTURE_OBSERVER
+        _facts_sample = None
+        if _facts_observer is not None:
+            # The observer counts the established value walks and memo drains.
+            # Keep that contract even when begin declines or observation fails.
+            summary_enabled = False
+            try:
+                _facts_sample = _facts_observer.begin(
+                    def_block, use_blocks, predecessors, block_base, block_end
+                )
+                facts_observe = _facts_sample is not None
+            except BaseException:
+                try:
+                    _facts_observer.fail()
+                except BaseException:
+                    pass
+    # Only exact production kernels with canonical, nonnegative values may
+    # reorder private graph work. Collection and every accessor above remain
+    # in their original order; custom/negative IDs and seeds retain that path.
+    if summary_enabled:
+        for value_id in use_blocks:
+            if value_id < 0:
+                summary_enabled = False
+                break
+            for seed in use_blocks[value_id]:
+                if not 0 <= seed < len(predecessors):
+                    summary_enabled = False
+                    break
+
+    summary_low: dict[int, int] = {}
+    summary_high: dict[int, int] = {}
+    if summary_enabled:
+        # Group only value IDs, never per-value reachability sets. Identical
+        # sole-seed queries keep the existing bounded memo. A shared home with
+        # differing/multiple seeds offers reuse, but need not have overlapping
+        # closures: in the zero-overlap case Tarjan adds bounded linear work.
+        home_values: dict[int, list[int]] = {}
+        home_seed: dict[int, int] = {}
+        summary_index: list[int] = []
+        summary_link: list[int] = []
+        summary_component: list[int] = []
+        summary_touched: list[int] = []
+        summary_active: list[int] = []
+        summary_nodes: list[int] = []
+        summary_edges: list[int] = []
+        summary_members: list[int] = []
+        component_low: list[int] = []
+        component_high: list[int] = []
+        group_values: list[int] = []
+        summary_complete = False
+        try:
+            for value_id in use_blocks:
+                home = def_block.get(value_id, -1)
+                query_seed = -1
+                query_multiple = False
+                for seed in use_blocks[value_id]:
+                    if seed != home:
+                        if query_seed < 0:
+                            query_seed = seed
+                        elif seed != query_seed:
+                            query_multiple = True
+                if query_seed >= 0:
+                    if home not in home_values:
+                        home_values[home] = []
+                        home_seed[home] = query_seed
+                    home_values[home].append(value_id)
+                    if query_multiple or query_seed != home_seed[home]:
+                        home_seed[home] = -2
+            for home in home_values:
+                group_values = home_values[home]
+                if len(group_values) < 2 or home_seed[home] != -2:
+                    continue
+                if not summary_index:
+                    summary_index = [-1] * len(predecessors)
+                    summary_link = [-1] * len(predecessors)
+                    summary_component = [-1] * len(predecessors)
+                # Iterative Tarjan on inverse CFG edges with home removed.
+                # Arrays are allocated once; only touched vertices are reset
+                # between homes. The active/DFS/member stacks total O(B).
+                for value_id in group_values:
+                    for seed in use_blocks[value_id]:
+                        if seed == home or summary_index[seed] >= 0:
+                            continue
+                        summary_index[seed] = len(summary_touched)
+                        summary_link[seed] = summary_index[seed]
+                        summary_touched.append(seed)
+                        summary_active.append(seed)
+                        summary_nodes.append(seed)
+                        summary_edges.append(0)
+                        while summary_nodes:
+                            node_id = summary_nodes[-1]
+                            edge_index = summary_edges[-1]
+                            if edge_index < len(predecessors[node_id]):
+                                predecessor = predecessors[node_id][edge_index]
+                                summary_edges[-1] = edge_index + 1
+                                if predecessor == home:
+                                    continue
+                                if summary_index[predecessor] < 0:
+                                    summary_index[predecessor] = len(summary_touched)
+                                    summary_link[predecessor] = summary_index[predecessor]
+                                    summary_touched.append(predecessor)
+                                    summary_active.append(predecessor)
+                                    summary_nodes.append(predecessor)
+                                    summary_edges.append(0)
+                                elif summary_component[predecessor] < 0:
+                                    if summary_index[predecessor] < summary_link[node_id]:
+                                        summary_link[node_id] = summary_index[predecessor]
+                                continue
+                            summary_nodes.pop()
+                            summary_edges.pop()
+                            if summary_link[node_id] == summary_index[node_id]:
+                                component_id = len(component_low)
+                                # Assign every member before folding edges,
+                                # so an internal cycle never reads an unfinished
+                                # component's extrema. Other targets are done.
+                                while True:
+                                    member_id = summary_active.pop()
+                                    summary_component[member_id] = component_id
+                                    summary_members.append(member_id)
+                                    if member_id == node_id:
+                                        break
+                                lowest = -1
+                                highest = -1
+                                for member_id in summary_members:
+                                    base = block_base[member_id]
+                                    if lowest < 0 or base < lowest:
+                                        lowest = base
+                                    for predecessor in predecessors[member_id]:
+                                        # Even an edge cut at home makes the
+                                        # value live through home's block_end.
+                                        end = block_end[predecessor]
+                                        if end > highest:
+                                            highest = end
+                                        if predecessor != home:
+                                            target_component = summary_component[predecessor]
+                                            if target_component != component_id:
+                                                low = component_low[target_component]
+                                                high = component_high[target_component]
+                                                if low < lowest:
+                                                    lowest = low
+                                                if high > highest:
+                                                    highest = high
+                                component_low.append(lowest)
+                                component_high.append(highest)
+                                summary_members.clear()
+                            if summary_nodes:
+                                parent_id = summary_nodes[-1]
+                                if summary_link[node_id] < summary_link[parent_id]:
+                                    summary_link[parent_id] = summary_link[node_id]
+                    lowest = -1
+                    highest = -1
+                    for seed in use_blocks[value_id]:
+                        if seed != home:
+                            component_id = summary_component[seed]
+                            low = component_low[component_id]
+                            high = component_high[component_id]
+                            if lowest < 0 or low < lowest:
+                                lowest = low
+                            if high > highest:
+                                highest = high
+                    summary_low[value_id] = lowest
+                    summary_high[value_id] = highest
+                for member_id in summary_touched:
+                    summary_index[member_id] = -1
+                    summary_link[member_id] = -1
+                    summary_component[member_id] = -1
+                summary_touched.clear()
+                component_low.clear()
+                component_high.clear()
+            summary_complete = True
+        finally:
+            # Release graph scratch on success and on failure, including a
+            # partially discovered SCC. Only O(V) scalar results survive to
+            # the original value-order publication below.
+            group_values.clear()
+            home_values.clear()
+            home_seed.clear()
+            summary_index.clear()
+            summary_link.clear()
+            summary_component.clear()
+            summary_touched.clear()
+            summary_active.clear()
+            summary_nodes.clear()
+            summary_edges.clear()
+            summary_members.clear()
+            component_low.clear()
+            component_high.clear()
+            if not summary_complete:
+                summary_low.clear()
+                summary_high.clear()
+
     for value_id in use_blocks:
         home = def_block.get(value_id, -1)
         lowest = -1
-        highest = last_use[value_id]
+        textual_highest = last_use[value_id]
+        if summary_enabled and value_id in summary_low:
+            # Publish all dictionaries in the original use/value order; a
+            # graph maximum must never absorb another value's textual use.
+            lowest = summary_low[value_id]
+            highest = summary_high[value_id]
+            if textual_highest > highest:
+                highest = textual_highest
+            last_use[value_id] = highest
+            if lowest >= 0:
+                first_live[value_id] = lowest
+            continue
+        highest = textual_highest
+        if cache_enabled:
+            highest = -1
         for block_id in use_blocks[value_id]:
             if block_id != home and visited[block_id] != value_id:
                 visited[block_id] = value_id
                 pending.append(block_id)
+        cache_key = -1
+        cache_miss = False
+        if cache_enabled and len(pending) == 1:
+            seed = pending[0]
+            cache_key = (home + 1) * len(successors) + seed
+            cached_low = graph_low.get(cache_key, -1)
+            if cached_low >= 0:
+                lowest = cached_low
+                highest = graph_high[cache_key]
+                pending.pop()
+            elif len(graph_low) < len(successors):
+                cache_miss = True
+        # Disabled observation pays only one local predicate per value.
+        # Enabled observation retains the explicit native pruning guard and
+        # executes the identical business body before recording a whole row.
+        if facts_observe:
+            import sys
+            if sys.implementation.name == "cpython":
+                if _facts_sample is not None:
+                    _facts_query = False
+                    try:
+                        _facts_query = _facts_observer.query(
+                            _facts_sample, home, bool(pending),
+                            cache_enabled and cache_key >= 0 and cached_low >= 0,
+                        )
+                    except BaseException:
+                        _facts_sample = None
+                        facts_observe = False
+                        try:
+                            _facts_observer.fail()
+                        except BaseException:
+                            pass
+                    if _facts_query:
+                        while pending:
+                            block_id = pending.pop()
+                            base = block_base[block_id]
+                            if lowest < 0 or base < lowest:
+                                lowest = base
+                            for predecessor in predecessors[block_id]:
+                                end = block_end[predecessor]
+                                if end > highest:
+                                    highest = end
+                                if predecessor != home and visited[predecessor] != value_id:
+                                    visited[predecessor] = value_id
+                                    pending.append(predecessor)
+                            try:
+                                _facts_more = _facts_observer.row(
+                                    _facts_sample, block_id, len(predecessors[block_id])
+                                )
+                            except BaseException:
+                                _facts_more = False
+                                _facts_sample = None
+                                try:
+                                    _facts_observer.fail()
+                                except BaseException:
+                                    pass
+                            if not _facts_more:
+                                facts_observe = False
+                                break
         while pending:
             block_id = pending.pop()
             base = block_base[block_id]
@@ -649,10 +1087,19 @@ def _function_level_facts(
                 if predecessor != home and visited[predecessor] != value_id:
                     visited[predecessor] = value_id
                     pending.append(predecessor)
+        if cache_miss:
+            # Cache only graph extrema: different values at this same seed
+            # can have different textual or PHI last-use positions.
+            graph_low[cache_key] = lowest
+            graph_high[cache_key] = highest
+        if cache_enabled and textual_highest > highest:
+            highest = textual_highest
         last_use[value_id] = highest
         if lowest >= 0:
             first_live[value_id] = lowest
-    return (
+    summary_low.clear()
+    summary_high.clear()
+    facts_result = (
         block_base,
         last_use,
         barriers,
@@ -661,6 +1108,17 @@ def _function_level_facts(
         hard_barriers,
         first_live,
     )
+    import sys
+    if sys.implementation.name == "cpython":
+        if _facts_sample is not None:
+            try:
+                _facts_observer.complete(_facts_sample)
+            except BaseException:
+                try:
+                    _facts_observer.fail()
+                except BaseException:
+                    pass
+    return facts_result
 
 
 def _linear_scan_assign(kernel, intervals: list[tuple[int, int, int]]) -> None:
@@ -904,7 +1362,7 @@ def _append_argument_intervals(
     global_last_use: dict[int, int],
     hard_barriers: list[int],
     call_barriers: list[int],
-    reload_offsets: list[int],
+    reload_offsets: set[int],
     intervals: list[tuple[int, int, int, bool]],
     fixed_registers: dict[int, int],
 ) -> None:
@@ -966,7 +1424,7 @@ def _append_phi_intervals(
     first_live: dict[int, int],
     hard_barriers: list[int],
     call_barriers: list[int],
-    reload_offsets: list[int],
+    reload_offsets: set[int],
     intervals: list[tuple[int, int, int, bool]],
 ) -> None:
     """Add a block's scalar phi results as candidates.
@@ -983,8 +1441,21 @@ def _append_phi_intervals(
     phi_index = 0
     while phi_index < phi_fact.second:
         phi: CompilerInt4 = kernel.phi_record(phi_fact.first + phi_index)
-        header: CompilerInt4 = kernel.type_header(phi.second)
-        if header.first == TYPE_KIND_ARRAY or header.first == TYPE_KIND_STRUCT:
+        header_is_scalar = False
+        if type(kernel) is IndexedFunctionKernel:
+            header_scalar_id = phi.second
+            header_is_scalar = _scalar_window_is_complete(
+                kernel.type_scalars, header_scalar_id, 12, 0
+            )
+            if header_is_scalar:
+                header_scalar = kernel.type_scalars.get_unchecked(
+                    header_scalar_id * 12 + 0
+                )
+            else:
+                header: CompilerInt4 = kernel.type_header(header_scalar_id)
+        else:
+            header: CompilerInt4 = kernel.type_header(phi.second)
+        if (header_scalar if header_is_scalar else header.first) == TYPE_KIND_ARRAY or (header_scalar if header_is_scalar else header.first) == TYPE_KIND_STRUCT:
             # An aggregate phi sends the whole edge down the slot-only path.
             return
         phi_index += 1
@@ -1181,7 +1652,8 @@ def _is_frameless_leaf(func: ParsedFunction, kernel) -> bool:
         header: CompilerInt4 = kernel.terminator_header(block_id)
         if header.first not in _FRAMELESS_TERMINATOR_KIND_IDS:
             return False
-        if kernel.inline_error_edge_span(block_id).second:
+        error_edge_span: CompilerInt2 = kernel.inline_error_edge_span(block_id)
+        if error_edge_span.second:
             return False
         phi_fact = kernel.block_phi_fact(block_id)
         phi_index = 0
@@ -1216,6 +1688,9 @@ def note_aarch64_reload_destinations(func: ParsedFunction, plan) -> None:
     """
 
     offsets: list[int] = []
+    # Keep the public first-seen order, but do not rescan every earlier slot
+    # for each safepoint's repeated reload. Only membership uses this set.
+    seen: set[int] = set()
     records = getattr(plan, "packed_records", None)
     if records is not None:
         index = 0
@@ -1224,14 +1699,16 @@ def note_aarch64_reload_destinations(func: ParsedFunction, plan) -> None:
             # One name per type: pcc types a local once per function.
             packed: CompilerInt3 = records.reload_scalars.get3_unchecked(index)
             offset = -packed.second
-            if offset not in offsets:
+            if offset not in seen:
+                seen.add(offset)
                 offsets.append(offset)
             index += 1
     else:
         for record in getattr(plan, "records", ()):
             for planned in record.reloads:
                 offset = -planned.destination_offset
-                if offset not in offsets:
+                if offset not in seen:
+                    seen.add(offset)
                     offsets.append(offset)
     func.aarch64_reload_slot_offsets = offsets
 
@@ -1268,9 +1745,13 @@ def allocate_aarch64_block_registers(func: ParsedFunction) -> None:
     # move between registers and slots); the block-local modes keep both in
     # their slots.
     phi_input_ids: set[int] = set()
-    reload_offsets: list[int] = (
-        func.aarch64_reload_slot_offsets if callee_saved else []
-    )
+    # The list remains the externally visible, deterministic first-seen
+    # projection. This function-local index is never used for iteration or
+    # allocation order and is not cached on a reused ParsedFunction.
+    reload_offsets: set[int] = set()
+    if callee_saved:
+        for reload_offset in func.aarch64_reload_slot_offsets:
+            reload_offsets.add(reload_offset)
     block_id = 0
     while not callee_saved and block_id < len(kernel.block_names):
         phi_fact = kernel.block_phi_fact(block_id)
@@ -1320,20 +1801,23 @@ def allocate_aarch64_block_registers(func: ParsedFunction) -> None:
     for block_id in range(len(kernel.block_names)):
         block_name = kernel.block_names[block_id]
         block_fact: CompilerInt4 = kernel.block_fact(block_id)
-        block_is_safe = True
-        instruction_index = 0
         instruction_count = block_fact.second
-        while instruction_index < instruction_count:
-            metadata: CompilerInt4 = kernel.instruction_metadata_by_id(
-                block_fact.first + instruction_index
-            )
-            if (
-                not 0 <= metadata.first < len(PARSED_INSTRUCTION_KINDS)
-                or metadata.first in _POOL_REJECTED_INSTRUCTION_KIND_IDS
-            ):
-                block_is_safe = False
-                break
-            instruction_index += 1
+        if function_level:
+            block_is_safe = block_safe[block_id]
+        else:
+            block_is_safe = True
+            instruction_index = 0
+            while instruction_index < instruction_count:
+                metadata: CompilerInt4 = kernel.instruction_metadata_by_id(
+                    block_fact.first + instruction_index
+                )
+                if (
+                    not 0 <= metadata.first < len(PARSED_INSTRUCTION_KINDS)
+                    or metadata.first in _POOL_REJECTED_INSTRUCTION_KIND_IDS
+                ):
+                    block_is_safe = False
+                    break
+                instruction_index += 1
         if not block_is_safe:
             continue
         if callee_saved:
@@ -1350,14 +1834,15 @@ def allocate_aarch64_block_registers(func: ParsedFunction) -> None:
             )
 
         call_positions: list[int] = []
-        instruction_index = 0
-        while instruction_index < instruction_count:
-            metadata: CompilerInt4 = kernel.instruction_metadata_by_id(
-                block_fact.first + instruction_index
-            )
-            if metadata.first == PARSED_INSTRUCTION_KIND_CALL:
-                call_positions.append(instruction_index)
-            instruction_index += 1
+        if not function_level:
+            instruction_index = 0
+            while instruction_index < instruction_count:
+                metadata: CompilerInt4 = kernel.instruction_metadata_by_id(
+                    block_fact.first + instruction_index
+                )
+                if metadata.first == PARSED_INSTRUCTION_KIND_CALL:
+                    call_positions.append(instruction_index)
+                instruction_index += 1
 
         last_use_override_ids: list[int] = []
         last_use_override_positions: list[int] = []
@@ -1424,6 +1909,10 @@ def allocate_aarch64_block_registers(func: ParsedFunction) -> None:
                 is_call_result = True
             if is_call_result:
                 pass
+            elif kind_id == PARSED_INSTRUCTION_KIND_LOAD_ATOMIC:
+                # Atomic loads remain outside this allocator's existing
+                # candidate set. Their fixed record needs no diagnostic row.
+                value_type_id = -1
             elif (
                 kind_id == PARSED_INSTRUCTION_KIND_LOAD
                 or kind_id == PARSED_INSTRUCTION_KIND_BINOP
@@ -1443,10 +1932,23 @@ def allocate_aarch64_block_registers(func: ParsedFunction) -> None:
                 gep_span: CompilerInt4 = kernel.gep_span(
                     kernel.instruction_payload_id_by_id(instruction_id)
                 )
-                gep_type: CompilerInt4 = kernel.type_header(gep_span.second)
+                gep_type_is_scalar = False
+                if type(kernel) is IndexedFunctionKernel:
+                    gep_type_scalar_id = gep_span.second
+                    gep_type_is_scalar = _scalar_window_is_complete(
+                        kernel.type_scalars, gep_type_scalar_id, 12, 0
+                    )
+                    if gep_type_is_scalar:
+                        gep_type_scalar = kernel.type_scalars.get_unchecked(
+                            gep_type_scalar_id * 12 + 0
+                        )
+                    else:
+                        gep_type: CompilerInt4 = kernel.type_header(gep_type_scalar_id)
+                else:
+                    gep_type: CompilerInt4 = kernel.type_header(gep_span.second)
                 value_type_id = (
                     gep_span.second
-                    if gep_type.first == TYPE_KIND_PTR
+                    if (gep_type_scalar if gep_type_is_scalar else gep_type.first) == TYPE_KIND_PTR
                     else -1
                 )
             else:
@@ -1570,6 +2072,8 @@ def allocate_aarch64_block_registers(func: ParsedFunction) -> None:
             func, kernel, phi_input_ids, global_last_use, hard_barriers,
             call_barriers, reload_offsets, pool_intervals, fixed_registers,
         )
+        # All reload membership consumers are finished before alias grouping.
+        reload_offsets.clear()
         group_intervals, group_members = _merge_alias_groups(
             pool_intervals, alias_pairs
         )

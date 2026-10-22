@@ -1,3 +1,4 @@
+from tests.owned_ir_validation import verify_ir_text
 """Lua compilation test suite.
 
 Tests each Lua .c file through pcc's full pipeline:
@@ -17,19 +18,16 @@ import fcntl
 import hashlib
 from pathlib import Path
 import pytest
-import llvmlite.ir as ir
-import llvmlite.binding as llvm
-import pcc.evaluater.c_evaluator as c_evaluator
-from pcc.codegen.c_codegen import postprocess_ir_text
-from pcc.project import collect_translation_units, translation_unit_include_dirs
+from pcc.ir import ir
+import pcc.frontends.c.evaluator.c_evaluator as c_evaluator
+from pcc.frontends.c.codegen.c_codegen import postprocess_ir_text
+from pcc.driver.project import collect_translation_units, translation_unit_include_dirs
 
 this_dir = os.path.dirname(os.path.abspath(__file__))
 project_dir = os.path.dirname(os.path.dirname(this_dir))
 lua_src_dir = os.path.join(project_dir, "projects", "lua-5.5.0")
 lua_tests_dir = os.path.join(project_dir, "projects", "lua-5.5.0", "testes")
 
-llvm.initialize_native_target()
-llvm.initialize_native_asmprinter()
 
 _TYPEDEF_CLEANUP = re.compile(
     r"typedef\s+(int|char|short|long|double|float|void)\s+\1\s*;"
@@ -187,9 +185,9 @@ def _compile_lua_file(fname):
 
     Stages: 'preprocess', 'parse', 'codegen', 'ir_serialize', 'llvm_verify', 'ok'
     """
-    from pcc.evaluater.c_evaluator import CEvaluator
-    from pcc.parse.c_parser import CParser
-    from pcc.codegen.c_codegen import LLVMCodeGenerator
+    from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+    from pcc.frontends.c.parse.c_parser import CParser
+    from pcc.frontends.c.codegen.c_codegen import CCodeGenerator
 
     fpath = os.path.join(lua_src_dir, fname)
     stage = "init"
@@ -208,7 +206,7 @@ def _compile_lua_file(fname):
         ast = CParser().parse(processed)
         stage = "parse"
 
-        cg = LLVMCodeGenerator()
+        cg = CCodeGenerator()
         cg.generate_code(ast)
         renames = getattr(cg, "_array_renames", {})
         stage = "codegen"
@@ -225,7 +223,7 @@ def _compile_lua_file(fname):
         funcs = [l for l in ir_text.splitlines() if l.startswith("define ")]
         stage = "ir_serialize"
 
-        llvmmod = llvm.parse_assembly(ir_text)
+        llvmmod = verify_ir_text(ir_text)
         stage = "llvm_verify"
 
         return "ok", len(funcs)
@@ -280,9 +278,9 @@ def _compile_onelua():
     Returns (stage, detail) where stage is one of:
       'preprocess', 'parse', 'codegen', 'ir_serialize', 'llvm_compile', 'link', 'ok'
     """
-    from pcc.evaluater.c_evaluator import CEvaluator
-    from pcc.parse.c_parser import CParser
-    from pcc.codegen.c_codegen import LLVMCodeGenerator
+    from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+    from pcc.frontends.c.parse.c_parser import CParser
+    from pcc.frontends.c.codegen.c_codegen import CCodeGenerator
 
     onelua_path = os.path.join(lua_src_dir, "onelua.c")
     if not os.path.isfile(onelua_path):
@@ -320,7 +318,7 @@ def _compile_onelua():
         ast = CParser().parse(processed)
         stage = "parse"
 
-        cg = LLVMCodeGenerator()
+        cg = CCodeGenerator()
         cg.generate_code(ast)
         renames = getattr(cg, "_array_renames", {})
         stage = "codegen"
@@ -442,7 +440,6 @@ def _compile_self_backend_onelua():
     stage = "compile"
     env = os.environ.copy()
     env.pop("LC_ALL", None)
-    env.setdefault("PCC_SELF_BACKEND_VECTORIZE", "off")
     try:
         if os.path.isfile(bin_path):
             return "ok", bin_path
@@ -454,7 +451,7 @@ def _compile_self_backend_onelua():
         compile_cmd = [
             sys.executable,
             "-c",
-            "from pcc.cli_core import cli_main_sys_argv_exit; cli_main_sys_argv_exit()",
+            "from pcc.driver.cli_core import cli_main_sys_argv_exit; cli_main_sys_argv_exit()",
             "--backend=self",
             "--emit-obj",
             obj_path,

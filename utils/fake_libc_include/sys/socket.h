@@ -3,7 +3,7 @@
 
 /* Minimal address-family / socket-type / function placeholders so pcc's
  * C parser can lower sources that use BSD socket APIs (e.g.
- * pcc/py_runtime/src/py_http.c). Values come from BSD/Darwin defaults
+ * pcc/runtime/src/py_http.c). Values come from BSD/Darwin defaults
  * and are wide enough for both glibc and macOS at the codegen layer;
  * the actual numeric values come from the system compiler's real
  * headers at link time. */

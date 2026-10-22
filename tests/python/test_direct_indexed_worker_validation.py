@@ -2,11 +2,13 @@
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.layer1 import L1CodeGen
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
 
-def _validation_worker(tmp_path, monkeypatch, target, text_control, validate=True):
+def _validation_worker(
+    tmp_path, monkeypatch, target, text_control, validate=True, *, observed_targets=None,
+):
     source = tmp_path / "probe.py"
     source.write_text(
         "def answer(value: int) -> int:\n"
@@ -14,17 +16,22 @@ def _validation_worker(tmp_path, monkeypatch, target, text_control, validate=Tru
         "print(answer(40))\n",
         encoding="utf-8",
     )
-    generate = L1CodeGen.generate
+    generate = L1CodeGen._generate_initial_module
 
-    def generate_for_target(self, module=None):
-        # A worker constructed this instance with the same inferred module.
-        # Use the public no-override entry so its selected target survives;
-        # this test concerns validation/object routing, not module replacement.
-        assert module is self.ast_module
+    def generate_for_target(self):
+        # Constructor declarations are target-independent. Set the target
+        # before the worker's fresh-instance entrypoint starts lowering.
+        assert self._initial_ir_available
         self._target_triple = target
-        return generate(self)
+        generated = generate(self)
+        assert self.module.triple == target
+        assert self._direct_indexed_module is not None
+        assert self._direct_indexed_module.triple == target
+        if observed_targets is not None:
+            observed_targets.append((self.module.triple, self._direct_indexed_module.triple))
+        return generated
 
-    monkeypatch.setattr(L1CodeGen, "generate", generate_for_target)
+    monkeypatch.setattr(L1CodeGen, "_generate_initial_module", generate_for_target)
     for key in (
         "PCC_DIRECT_INDEXED_KERNEL_CAPTURE",
         "PCC_DIRECT_INDEXED_KERNEL_EMIT",
@@ -60,9 +67,14 @@ def test_native_object_worker_keeps_assembly_until_validation(
 ):
     from pcc.backend.target_objects import encode_assembly_object
 
-    manifest, result = _validation_worker(tmp_path, monkeypatch, target, text_control, validate)
+    observed_targets = []
+    manifest, result = _validation_worker(
+        tmp_path, monkeypatch, target, text_control, validate,
+        observed_targets=observed_targets,
+    )
     status = pipeline.run_python_multi_codegen_worker(str(manifest))
     assert status == 0, result.read_text(encoding="utf-8")
+    assert observed_targets == [(target, target)]
     object_path = tmp_path / "module_0.direct.pco"
     assert object_path.stat().st_size > 0
     assert "\tPCO\t" + str(object_path) in result.read_text(encoding="utf-8")
@@ -83,8 +95,10 @@ def test_native_object_worker_still_rejects_a_real_oracle_mismatch(
 ):
     from pcc.backend import self_backend_aarch64_darwin as emitter
 
+    observed_targets = []
     manifest, result = _validation_worker(
         tmp_path, monkeypatch, "arm64-apple-darwin", True,
+        observed_targets=observed_targets,
     )
     original = emitter.emit_aarch64_darwin_asm
 
@@ -93,6 +107,7 @@ def test_native_object_worker_still_rejects_a_real_oracle_mismatch(
 
     monkeypatch.setattr(emitter, "emit_aarch64_darwin_asm", mismatching_oracle)
     assert pipeline.run_python_multi_codegen_worker(str(manifest)) == 1
+    assert observed_targets == [("arm64-apple-darwin", "arm64-apple-darwin")]
     assert "direct indexed kernel assembly differs from text oracle" in result.read_text(
         encoding="utf-8",
     )

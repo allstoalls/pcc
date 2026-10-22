@@ -12,9 +12,9 @@ import pytest
     ("in", "ab", 100000), ("not in", "ab", 0),
 ])
 def test_temporary_string_operands_release_each_iteration(
-    tmp_path: Path, pcc_py_runtime_archive, operator, container, expected,
+    tmp_path: Path, pcc_runtime_archive, operator, container, expected,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "string_operand.py"
     source.write_text('''from pcc.extern import c_int64, extern
@@ -42,7 +42,7 @@ main()
 '''.replace("OPERATOR", operator).replace("CONTAINER", repr(container)))
     binary = tmp_path / "string_operand"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND="0"),
                          capture_output=True, text=True, timeout=15)
     assert ran.returncode == 0, ran.stdout + ran.stderr
@@ -53,9 +53,9 @@ main()
 
 
 def test_string_predicates_preserve_order_and_lhs_across_rhs_gc(
-    tmp_path: Path, pcc_py_runtime_archive,
+    tmp_path: Path, pcc_runtime_archive,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "string_order.py"
     source.write_text('''import gc
@@ -92,7 +92,7 @@ main()
 ''')
     binary = tmp_path / "string_order"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
                              capture_output=True, text=True, timeout=15)
@@ -101,8 +101,8 @@ main()
 
 
 @pytest.mark.parametrize("operator", ["==", "in"])
-def test_rhs_failure_releases_temporary_string(tmp_path: Path, pcc_py_runtime_archive, operator):
-    from pcc.py_frontend.pipeline import compile_python
+def test_rhs_failure_releases_temporary_string(tmp_path: Path, pcc_runtime_archive, operator):
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "string_error.py"
     source.write_text('''from pcc.extern import c_int64, extern
@@ -128,15 +128,15 @@ main()
 '''.replace("OPERATOR", operator))
     binary = tmp_path / "string_error"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND="0"),
                          capture_output=True, text=True, timeout=15)
     assert ran.returncode == 0, ran.stdout + ran.stderr
     assert int(ran.stdout) < 65536, ran.stdout
 
 
-def test_dynamic_string_equality_order_callback_and_cleanup(tmp_path, pcc_py_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+def test_dynamic_string_equality_order_callback_and_cleanup(tmp_path, pcc_runtime_archive):
+    from pcc.frontends.python.pipeline import compile_python
     source = tmp_path / "dynamic_equality.py"
     source.write_text('''import gc
 from typing import Any
@@ -165,7 +165,7 @@ main()
 ''')
     binary = tmp_path / "dynamic_equality"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
                              capture_output=True, text=True, timeout=20)

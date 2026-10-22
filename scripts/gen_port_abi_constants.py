@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Generate the pcc-Python port's ABI constants from the C runtime headers.
 
-The ports under ``pcc/py_runtime/py/`` read object fields through byte
+The ports under ``pcc/runtime/py/`` read object fields through byte
 offsets. Those offsets are currently hand-written literals in 140+ places, so
 a C-side layout change reaches the port only if a human notices
 (ARCH-P2-PORT-ABI-AUTOGEN). This generator makes the C headers the single
 source of truth: it compiles a probe with the host cc, reads real
 ``offsetof``/``sizeof``/enum values, and writes
-``pcc/py_runtime/py/py_abi_constants.py`` and the matching static-export
+``pcc/runtime/py/py_abi_constants.py`` and the matching static-export
 metadata consumed by single-object runtime builds.
 
 Usage:
@@ -40,9 +40,9 @@ def repo_root() -> Path:
 
 
 REPO = repo_root()
-RUNTIME = REPO / "pcc" / "py_runtime"
+RUNTIME = REPO / "pcc" / "runtime"
 OUTPUT = RUNTIME / "py" / "py_abi_constants.py"
-EXPORTS_OUTPUT = REPO / "pcc" / "py_frontend" / "codegen" / "port_abi_exports.py"
+EXPORTS_OUTPUT = REPO / "pcc" / "frontends" / "python" / "codegen" / "port_abi_exports.py"
 
 # What the ports need. Kept in step with
 # tests/python/test_runtime_layout_contract.py, which pins these same
@@ -82,7 +82,7 @@ STRUCT_FIELDS: dict[str, tuple[str, ...]] = {
         "join_wait_tail", "join_entry", "join_target", "wait_kind",
         "cancel_requested", "channel_owner_a", "channel_owner_b",
         "channel_arm_a", "channel_arm_b", "channel_value",
-        "channel_status", "channel_index",
+        "channel_status", "channel_index", "identity",
     ),
 }
 
@@ -121,6 +121,10 @@ _DEFINE_TYPE_TAG_RE = re.compile(
 FLAGS: tuple[str, ...] = (
     "PY_FLAG_FINALIZED", "PY_FLAG_GC_TRACKED", "PY_FLAG_IMMORTAL",
     "PY_FLAG_GC_MALLOC_ALLOC", "PY_FLAG_GC_PINNED",
+    "PY_FLAG_FUNC_AUTO_PARK", "PY_FLAG_FUNC_TRANSPARENT_CALL",
+    "PY_FLAG_GEN_SOURCE", "PY_FLAG_FUNC_CONTINUATION_FACTORY",
+    "PY_FLAG_EXC_SUPPRESS_CONTEXT", "PY_FLAG_EXC_UNICODE_PAYLOAD",
+    "PY_FLAG_EXC_OS_PAYLOAD", "PY_FLAG_FUNC_BUILTIN", "PY_FLAG_CLASS_ATTRS_EXPOSED",
 )
 
 RUNTIME_ABI_CONSTANTS: tuple[str, ...] = (
@@ -316,7 +320,10 @@ def render(abi: dict[str, dict[str, int]]) -> str:
     ]
     for heading, items in _constant_groups(abi):
         out += ["", f"# --- {heading} ---"]
-        out.extend(f"{name} = {value}" for name, value in items)
+        for name, value in items:
+            if name == "PY_FLAG_GEN_SOURCE":
+                out.append("# Source generator objects are iterator data even if their body can park.")
+            out.append(f"{name} = {value}")
     out.append("")
     return "\n".join(out)
 
@@ -330,7 +337,7 @@ def render_exports(abi: dict[str, dict[str, int]]) -> str:
         '"""',
         "",
         "PORT_ABI_NATIVE_EXPORTS = {",
-        '    "pcc.py_runtime.py.py_abi_constants": {',
+        '    "pcc.runtime.py.py_abi_constants": {',
     ]
     for name, value in _constant_items(abi):
         out.append(

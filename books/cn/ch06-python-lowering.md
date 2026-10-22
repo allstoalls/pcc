@@ -1,6 +1,6 @@
 # 第 6 章 Python 低层化:facade 与 mixin 群
 
-类型推断(见第 5 章)结束后,pcc 的 Python 前端拿到的是一棵带类型标注的 AST;LLVM 后端与 self 后端(见第 12、13 章)接收的是 LLVM IR。把前者变成后者的层叫 Layer-1 codegen,它是整个 Python 路径里语义密度最高的一层:Python 的下标、迭代、异常、所有权、格式化,全部在这里被翻译成对运行时函数的调用序列与基本块结构。本章讲两件事。第一,这一层的物理组织:[pcc/py_frontend/codegen/layer1.py](../../pcc/py_frontend/codegen/layer1.py) 如何从一个两万行的单文件巨石拆成一个 56 行的 facade 加 86 个 mixin,以及拆分过程中"编译器必须能编译自己"这条约束如何反过来塑造了代码形态。第二,这一层的语义纪律:为什么每个可 raise 的运行时调用之后都必须插入 `py_err_occurred()` 检查,以及当同一个 Python 语义散布在多条低层化(lowering)路径上时,会发生什么——本章"历史与教训"里的双下标路径和六条除法路径,是这个失败模式最有教育意义的两次现场。
+类型推断(见第 5 章)结束后,pcc 的 Python 前端拿到的是一棵带类型标注的 AST;LLVM 后端与 self 后端(见第 12、13 章)接收的是 LLVM IR。把前者变成后者的层叫 Layer-1 codegen,它是整个 Python 路径里语义密度最高的一层:Python 的下标、迭代、异常、所有权、格式化,全部在这里被翻译成对运行时函数的调用序列与基本块结构。本章讲两件事。第一,这一层的物理组织:[pcc/frontends/python/codegen/layer1.py](../../pcc/frontends/python/codegen/layer1.py) 如何从一个两万行的单文件巨石拆成一个 56 行的 facade 加 86 个 mixin,以及拆分过程中"编译器必须能编译自己"这条约束如何反过来塑造了代码形态。第二,这一层的语义纪律:为什么每个可 raise 的运行时调用之后都必须插入 `py_err_occurred()` 检查,以及当同一个 Python 语义散布在多条低层化(lowering)路径上时,会发生什么——本章"历史与教训"里的双下标路径和六条除法路径,是这个失败模式最有教育意义的两次现场。
 
 ## 本章导读:低层化把语义连接到运行时
 
@@ -14,14 +14,14 @@
 
 ### 6.1.1 巨石的终点
 
-在 2026 年 4 月底(commit `88ee9157`,版本 0.1.2),[pcc/py_frontend/codegen/layer1.py](../../pcc/py_frontend/codegen/layer1.py) 是一个 20,195 行的单文件:表达式分发、语句分发、下标、循环、异常、类、native 模块低层化,全部塞在一个 `L1CodeGen` 类里。今天,同一个文件是 56 行,只剩下:
+在 2026 年 4 月底(commit `88ee9157`,版本 0.1.2),[pcc/frontends/python/codegen/layer1.py](../../pcc/frontends/python/codegen/layer1.py) 是一个 20,195 行的单文件:表达式分发、语句分发、下标、循环、异常、类、native 模块低层化,全部塞在一个 `L1CodeGen` 类里。今天,同一个文件是 56 行,只剩下:
 
 ```python
 class L1CodeGen(L1CodeGenEntrypointMixin, L1CodeGenMixinStack):
     ...
 ```
 
-真正的实现散布在 [pcc/py_frontend/codegen/](../../pcc/py_frontend/codegen) 目录下约一百个文件、六万余行代码里:`*_lowering.py` 形式的 mixin、`native_*.py` 形式的原生模块低层化,加上 `class_gen.py`、`hoist_lowering.py` 这样的大型专项模块。
+真正的实现散布在 [pcc/frontends/python/codegen/](../../pcc/frontends/python/codegen) 目录下约一百个文件、六万余行代码里:`*_lowering.py` 形式的 mixin、`native_*.py` 形式的原生模块低层化,加上 `class_gen.py`、`hoist_lowering.py` 这样的大型专项模块。
 
 为什么要拆?有三个原因,其中只有第一个是显然的。
 
@@ -93,7 +93,7 @@ def _expr_is_subscript(expr: Expr, kind: str) -> bool:
 
 ### 6.3.2 第二次踩穿与第二种机制:contextual host param
 
-后续拆分尝试把 `isinstance` 低层化做成普通辅助函数(第一参数 `host` 接收 `L1CodeGen` 实例)时再次踩穿同一块地板:`host` 参数被推断为 DynType,函数体整体回退([docs/investigations/layer1-host-helper-context-gap.md](../../docs/investigations/layer1-host-helper-context-gap.md))。这次的修复是一个新机制:pipeline 对 `pcc.py_frontend.codegen.*` 下首参数名为 `host` 的顶层函数自动启用 `contextual_host_params`,把 `host` 绑定到一个合成的 `L1CodeGen` host 类型;`ir_scaffold_lowering.py` 的语法识别器同步接受 `host.builder.*` 作为 IR scaffold 接收者。从此 Layer-1 有两种合法的拆分形态:mixin 方法(靠 receiver-aware 推断)与 host-param 辅助函数(靠 contextual host 类型),二者都有专门的回退棘轮测试钉住。
+后续拆分尝试把 `isinstance` 低层化做成普通辅助函数(第一参数 `host` 接收 `L1CodeGen` 实例)时再次踩穿同一块地板:`host` 参数被推断为 DynType,函数体整体回退([docs/investigations/layer1-host-helper-context-gap.md](../../docs/investigations/layer1-host-helper-context-gap.md))。这次的修复是一个新机制:pipeline 对 `pcc.frontends.python.codegen.*` 下首参数名为 `host` 的顶层函数自动启用 `contextual_host_params`,把 `host` 绑定到一个合成的 `L1CodeGen` host 类型;`ir_scaffold_lowering.py` 的语法识别器同步接受 `host.builder.*` 作为 IR scaffold 接收者。从此 Layer-1 有两种合法的拆分形态:mixin 方法(靠 receiver-aware 推断)与 host-param 辅助函数(靠 contextual host 类型),二者都有专门的回退棘轮测试钉住。
 
 ### 6.3.3 顺手暴露的语义哑弹:`dict.get` 缺失键
 
@@ -223,7 +223,7 @@ native 模块低层化与"生态支持必须通用"(义务 3)的关系需要说�
 
 **起因。** 一晚之内三个独立 bug 共享同一形状——运行时函数 `py_raise` 了,发射点没有 `_emit_post_call_err_check`,异常跳过 try/except 迟爆(native weakref 构造、弱字典下标存储、生成器 `throw`)。三连击之后,正确的反应不是修第四个,而是把这一类清账([docs/investigations/emission-site-err-check-audit.md](../../docs/investigations/emission-site-err-check-audit.md))。
 
-**方法。** 两步机械扫描:收集 C 运行时里体内含 `py_raise(` 的函数(78 个);对 [pcc/py_frontend/codegen/](../../pcc/py_frontend/codegen) 里每个 `self.runtime["<fn>"]` 发射点,若其后 8 行内没有 err 检查则标记——58 个嫌疑点。然后是审计的关键纪律:**嫌疑不是 bug。** 每个家族先写"红探针"(在 CPython 下确认期望行为,在 pcc 下确认错误行为),才允许动代码。结果分布很有教育意义:`py_obj_next` 家族 5 处全是假阳性(就是 6.4.3 那套 `maybe_end`/`propagate` 等价路由,8 行窗口扫不到);正则引擎家族 3 处假阳性(检查在多行参数列表之后,窗口太短);双目运算家族是真阳性×2——而且红探针顺带挖出更深的运行时洞:`py_obj_add/sub/mul` 压根没有派发用户 `__add__` dunder;生成器 `throw/close` 家族真阳性,且新插的检查立即暴露 `py_gen_close` 把注入的 GeneratorExit 留在 TLS 里的第二个洞。
+**方法。** 两步机械扫描:收集 C 运行时里体内含 `py_raise(` 的函数(78 个);对 [pcc/frontends/python/codegen/](../../pcc/frontends/python/codegen) 里每个 `self.runtime["<fn>"]` 发射点,若其后 8 行内没有 err 检查则标记——58 个嫌疑点。然后是审计的关键纪律:**嫌疑不是 bug。** 每个家族先写"红探针"(在 CPython 下确认期望行为,在 pcc 下确认错误行为),才允许动代码。结果分布很有教育意义:`py_obj_next` 家族 5 处全是假阳性(就是 6.4.3 那套 `maybe_end`/`propagate` 等价路由,8 行窗口扫不到);正则引擎家族 3 处假阳性(检查在多行参数列表之后,窗口太短);双目运算家族是真阳性×2——而且红探针顺带挖出更深的运行时洞:`py_obj_add/sub/mul` 压根没有派发用户 `__add__` dunder;生成器 `throw/close` 家族真阳性,且新插的检查立即暴露 `py_gen_close` 把注入的 GeneratorExit 留在 TLS 里的第二个洞。
 
 **教训。** 第一,漏 err 检查的症状(迟爆)使它天然抗拒逐例发现,值得周期性机械审计;第二,审计启发式的假阳性模式要回写进审计文档(块名签名 `maybe_end`/`propagate` = 已审等价路由;扫描窗口应到语句结束而非固定行数);第三,在检查缺失的地方补上检查,经常会让下游更深的运行时洞当场现形——检查不只是修 bug,是让 bug 可见的仪器。
 
@@ -233,7 +233,7 @@ Layer-1 codegen 的物理形态——56 行 facade、86 个 mixin、12 个 nativ
 
 ## 练习
 
-1. **读源码验证。** 对比 `subscript_lowering.py::_emit_subscript_load` 与 `exact_int_lowering.py::_emit_subscript_load_object`:列出二者在 err 检查、`_gc_release_if_owned`、结果拆箱(`_coerce_from_object`)上的全部差异。两个函数的 `TupleType` 分支都没有跟 err 检查——到运行时源码([pcc/py_runtime/src/](../../pcc/py_runtime/src))里查证 `py_tuple_get` 的越界行为,判断这是等价路由、刻意豁免,还是一个待修的洞。
+1. **读源码验证。** 对比 `subscript_lowering.py::_emit_subscript_load` 与 `exact_int_lowering.py::_emit_subscript_load_object`:列出二者在 err 检查、`_gc_release_if_owned`、结果拆箱(`_coerce_from_object`)上的全部差异。两个函数的 `TupleType` 分支都没有跟 err 检查——到运行时源码([pcc/runtime/src/](../../pcc/runtime/src))里查证 `py_tuple_get` 的越界行为,判断这是等价路由、刻意豁免,还是一个待修的洞。
 2. **IR 取证。** 写一个同时含 `x = d["k"]` 与 `print(d["k"])` 的小程序,用 `--emit-llvm` 在严格模式下编译,在 IR 中找出 `dict.getitem` 与 `dict.getitem.obj` 两个调用,并标出各自后随的 `py_err_occurred` 检查块。
 3. **设计权衡。** 提出一个把双下标路径合并为单一共享 helper 的重构方案。指出至少三个阻力点(提示:返回值的拆箱需求不同、所有权释放点不同、exact-int 路径对键的对象化要求),并论证你的方案如何在不增加第三条路径的前提下通过五 GC 自举闸门。
 4. **审计实践。** 在 `for_loop_lowering.py` 中找到 `_emit_for_obj_iterator` 的 `maybe_end`/`propagate` 块结构,解释为什么 `py_obj_next` 之后没有 `_emit_post_call_err_check` 不构成 6.4.1 义务的违反;再到 `comprehension_lowering.py` 里找出同构结构,评估两处是否可能漂移。

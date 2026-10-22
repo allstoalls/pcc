@@ -1,6 +1,6 @@
 """Ratchet on the atomics surface of the remaining C and the pcc-Python ports.
 
-The C runtime is retired; the C left under ``pcc/py_runtime/src`` is the
+The C runtime is retired; the C left under ``pcc/runtime/src`` is the
 CPython bridge (``py_libpython.c``) and the C ABI headers, which the scans
 below still cover.
 
@@ -42,7 +42,7 @@ def _repo_root() -> Path:
     raise RuntimeError("AGENTS.md not found above " + __file__)
 
 
-RUNTIME = _repo_root() / "pcc" / "py_runtime"
+RUNTIME = _repo_root() / "pcc" / "runtime"
 SRC = RUNTIME / "src"
 PORT = RUNTIME / "py"
 
@@ -72,7 +72,7 @@ KNOWN_C_ATOMIC_ORDERINGS = {"RELAXED", "ACQUIRE", "RELEASE", "ACQ_REL"}
 
 # The ordering-explicit intrinsic surface (pcc/unsafe/__init__.py). The
 # frontend maps relaxed->monotonic and fails closed on anything else; see
-# pcc/py_frontend/codegen/unsafe_lowering.py.
+# pcc/frontends/python/codegen/unsafe_lowering.py.
 EXPECTED_UNSAFE_ATOMIC_INTRINSICS = {
     "atomic_load_i32",
     "atomic_load_i64",
@@ -177,7 +177,7 @@ def test_pcc_unsafe_atomic_surface_is_pinned():
 def test_gc_ports_emit_ordering_explicit_intrinsics_not_c_helpers(
     tmp_path, monkeypatch, port_name, required_ir
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = PORT / port_name

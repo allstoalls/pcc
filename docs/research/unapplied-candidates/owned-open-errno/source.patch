@@ -1,0 +1,328 @@
+--- a/pcc/runtime/py/freestanding_stdio.py
++++ b/pcc/runtime/py/freestanding_stdio.py
+@@ -69,6 +69,7 @@
+ __pcc_freestanding__ = True
+ 
+ pcc_errno_set = extern("pcc_errno_set", (c_int32,), c_void)
++pcc_errno_get = extern("pcc_errno_get", (), c_int32)
+ 
+ # Registry nodes are separate from the public 64-byte owned FILE layout:
+ # next@0, stream@8. The lock protects registry traversal and stream lifetime,
+@@ -204,6 +205,7 @@
+ @c_abi_export("fopen")
+ def fopen(path, mode) -> c_ptr:
+     if ptr_is_null(path) or ptr_is_null(mode):
++        pcc_errno_set(22)
+         return null()
+     first = load_i8(mode, 0)
+     access: i64 = 0
+@@ -224,6 +226,7 @@
+         disposition: i64 = 3
+         flags = abi_constant("stdio.flag.writable")
+     else:
++        pcc_errno_set(22)
+         return null()
+ 
+     offset: i64 = 1
+@@ -235,6 +238,7 @@
+                 "stdio.flag.writable"
+             )
+         elif marker != 98 and marker != 116:
++            pcc_errno_set(22)
+             return null()
+         offset = offset + 1
+     if first == 97:
+@@ -242,6 +246,9 @@
+ 
+     fd = open_file(path, access, disposition)
+     if fd < 0:
++        # The owned syscall ABI returns -errno. Linux does not update the
++        # separate libc-style TLS slot; publish the captured failure here.
++        pcc_errno_set(0 - fd)
+         return null()
+     append_position: i64 = 0
+     if (flags & abi_constant("stdio.flag.append")) != 0:
+@@ -250,11 +257,19 @@
+         # write is still forced to EOF by O_APPEND.
+         append_position = seek_file(fd, 0, 2)
+         if append_position < 0:
++            # Darwin seek_file exposes libSystem's -1/errno ABI; Linux
++            # exposes the raw -errno result. Capture before close can alter it.
++            saved_errno: i64 = 0 - append_position
++            if load_i8(target_sys_platform(), 0) == 100:
++                saved_errno = pcc_errno_get()
+             close(fd)
++            # Cleanup must not replace the operation's captured error.
++            pcc_errno_set(saved_errno)
+             return null()
+     stream = _stream_new(fd, flags, 0)
+     if ptr_is_null(stream):
+         close(fd)
++        pcc_errno_set(12)
+         return null()
+     if (flags & abi_constant("stdio.flag.append")) != 0:
+         store_i64(
+--- a/pcc/runtime/py/py_file.py
++++ b/pcc/runtime/py/py_file.py
+@@ -101,6 +101,7 @@
+     (c_ptr, c_ptr, c_ptr, c_ptr, c_ptr, c_ptr), c_int64)
+ py_obj_setattr = extern("py_obj_setattr", (c_ptr, c_ptr, c_ptr), c_int64)
+ pcc_errno_get = extern("pcc_errno_get", (), c_int32)
++pcc_errno_exception_kind = extern("pcc_errno_exception_kind", (c_int32,), c_int64)
+ pcc_errno_message_into = extern("pcc_errno_message_into", (c_int32, c_ptr, c_int64), c_int32)
+ py_str_splitlines_keepends = extern(
+     "py_str_splitlines_keepends", (c_ptr, c_int32), c_ptr
+@@ -227,6 +228,7 @@
+ _FILE_ERRNO_NUMBER = 1
+ _FILE_ERRNO_MESSAGE = 2
+ _FILE_ERRNO_ARGS = 3
++_FILE_ERRNO_FILENAME = 4
+ _FILE_DYNAMIC_METHOD = 8
+ _FILE_BOUND_METHOD = 9
+ _FILE_FSPATH = 10
+@@ -379,7 +381,7 @@
+     store_i8(output, index, 0)
+ 
+ 
+-def _file_raise_errno(code: int) -> int:
++def _file_raise_errno(code: int, filename_slot) -> int:
+     slots = stack_alloc(_FILE_COUNT * _FILE_BYTES)
+     tokens = stack_alloc(_FILE_COUNT * _FILE_BYTES)
+     memset(slots, 0, _FILE_COUNT * _FILE_BYTES)
+@@ -388,13 +390,23 @@
+         store_i64(tokens, index * _FILE_BYTES, -1)
+         index = index + 1
+     pcc_gc_frame_enter(global_addr("pcc_file_owned_map"), slots)
++    if not ptr_is_null(filename_slot):
++        # Copy from the caller's authoritative input slot before allocating.
++        # This owner preserves the exact str/bytes filename through cleanup.
++        token: int = pcc_gc_root_copy_borrowed_lease(
++            ptr_add(slots, _FILE_ERRNO_FILENAME * _FILE_BYTES), filename_slot)
++        store_i64(tokens, _FILE_ERRNO_FILENAME * _FILE_BYTES, token)
++        if token < 0:
++            _file_error(19, cstr("file error could not retain its filename"))
+     message = stack_alloc(256)
+     pcc_errno_message_into(code, message, 256)
+     count: int = 0
+     while count < 255 and load_i8(message, count) != 0:
+         count = count + 1
+-    store_ptr(slots, _FILE_ERRNO_EXCEPTION * _FILE_BYTES, py_exc_new(14, message))
+-    if _file_adopt(slots, tokens, _FILE_ERRNO_EXCEPTION) == 0:
++    if not py_err_occurred():
++        kind: int = pcc_errno_exception_kind(code)
++        store_ptr(slots, _FILE_ERRNO_EXCEPTION * _FILE_BYTES, py_exc_new(kind, message))
++    if not py_err_occurred() and _file_adopt(slots, tokens, _FILE_ERRNO_EXCEPTION) == 0:
+         store_ptr(slots, _FILE_ERRNO_NUMBER * _FILE_BYTES, py_int_from_i64(code))
+         if _file_adopt(slots, tokens, _FILE_ERRNO_NUMBER) == 0:
+             store_ptr(slots, _FILE_ERRNO_MESSAGE * _FILE_BYTES, py_str_new(message, count))
+@@ -411,13 +423,16 @@
+             py_obj_setattr(exception, cstr("errno"), number)
+             if not py_err_occurred():
+                 py_obj_setattr(exception, cstr("strerror"), text)
++            if not py_err_occurred() and not ptr_is_null(filename_slot):
++                py_obj_setattr(exception, cstr("filename"),
++                    load_ptr(slots, _FILE_ERRNO_FILENAME * _FILE_BYTES))
+             if not py_err_occurred():
+                 py_obj_setattr(exception, cstr("args"), args)
+             if not py_err_occurred():
+                 py_incref(exception)
+                 py_raise_owned(exception)
+     py_tls_exc_swap_slot(ptr_add(slots, _FILE_ERROR * _FILE_BYTES))
+-    index = _FILE_ERRNO_ARGS
++    index = _FILE_ERRNO_FILENAME
+     while index >= _FILE_ERRNO_EXCEPTION:
+         _file_drop(slots, tokens, index)
+         index = index - 1
+@@ -544,9 +559,11 @@
+         fp = pcc_stdio_fdopen(descriptor, mode_data,
+                              1 if descriptor_mode == _FILE_FDOPEN_OWNED else 0, buffering)
+     if ptr_is_null(fp):
++        # Snapshot errno before any allocation, formatting or owner release.
++        code: int = pcc_errno_get()
+         if descriptor_mode != 0:
+-            return _file_raise_errno(pcc_errno_get())
+-        return _file_error(14, cstr("could not open file"))
++            return _file_raise_errno(code, null())
++        return _file_raise_errno(code, ptr_add(slots, _FILE_FIRST * _FILE_BYTES))
+     if descriptor_mode == 0:
+         out = pcc_gc_alloc(_FILE_SIZE, PY_TYPE_FILE, 0)
+         if ptr_is_null(out):
+@@ -1228,7 +1245,7 @@
+     if ptr_is_null(f):
+         return null()
+     if fflush(load_ptr(f, 16)) != 0:
+-        _file_raise_errno(pcc_errno_get())
++        _file_raise_errno(pcc_errno_get(), null())
+         return null()
+     none = global_load_ptr("py_None")
+     py_incref(none)
+--- a/tests/python/test_owned_fdopen_provider.py
++++ b/tests/python/test_owned_fdopen_provider.py
+@@ -81,6 +81,8 @@
+         })
+         self.load(ROOT/'pcc/runtime/py/freestanding_stdio.py')
+         self.load(ROOT/'pcc/runtime/py/py_file.py')
++        self.load_selected(ROOT/'pcc/runtime/py/freestanding_errno.py',
++                           {'pcc_errno_exception_kind'})
+         self.install_integer_runtime()
+ 
+     def load_selected(self, path, names, constants=()):
+--- /dev/null
++++ b/tests/python/test_native_open_errno.py
+@@ -0,0 +1,156 @@
++"""Missing-file errors traverse owned fopen, payload and handler dispatch.
++
++Host ABI models check the actual provider bodies. Emitted execution is a
++separate gate and requires an explicitly selected source-matched runtime.
++"""
++import errno
++import os
++
++import pytest
++
++from tests.python.test_owned_fdopen_provider import FileRuntime, Obj
++from tests.python.owned_regression_support import (
++    assert_owned_program,
++    assert_reference_program,
++    explicit_owned_runtime,
++)
++
++
++@pytest.mark.parametrize("number,tag", [(2, 34), (17, 35), (13, 36), (20, 38), (84, 14)])
++@pytest.mark.parametrize("bytes_path", [False, True])
++def test_open_errno_keeps_original_filename_and_args(number, tag, bytes_path):
++    runtime = FileRuntime()
++    filename = Obj("bytes", b"/missing/owned") if bytes_path else runtime.string("/missing/owned")
++    runtime.errno = errno.EBADF
++    runtime.ns["open_file"] = lambda *_: -number
++    result = runtime.ns["py_file_open"](filename, runtime.string("r"))
++    error = runtime.error
++    assert result is None and error.value[0] == tag
++    assert error.attrs["errno"] == number
++    assert error.attrs["strerror"].value == os.strerror(number)
++    assert error.attrs["filename"] is filename
++    args = error.attrs["args"].value
++    assert args[0] == number and args[1].value == os.strerror(number)
++    assert not runtime.frames and not runtime.leases
++
++
++def test_open_errno_metadata_failure_keeps_allocation_exception():
++    runtime = FileRuntime()
++    original = Obj("exception", (19, "metadata allocation"))
++    runtime.ns["open_file"] = lambda *_: -errno.ENOENT
++
++    def fail_metadata(*_):
++        runtime.error = original
++        return -1
++
++    runtime.ns["py_obj_setattr"] = fail_metadata
++    assert runtime.ns["py_file_open"](runtime.string("missing"), runtime.string("r")) is None
++    assert runtime.error is original
++    assert not runtime.frames and not runtime.leases
++
++
++@pytest.mark.parametrize("platform", ["linux", "darwin"])
++def test_fopen_restores_seek_errno_after_close(platform):
++    runtime = FileRuntime()
++    closed = []
++    runtime.ns["open_file"] = lambda *_: 123
++    runtime.ns["target_sys_platform"] = lambda: runtime.cstr(platform)
++
++    def seek(*_):
++        runtime.errno = errno.ESPIPE
++        return -1 if platform == "darwin" else -errno.ESPIPE
++
++    runtime.ns["seek_file"] = seek
++
++    def close(fd):
++        closed.append(fd)
++        runtime.errno = errno.EBADF
++        return -errno.EBADF
++
++    runtime.ns["close"] = close
++    assert runtime.ns["fopen"](runtime.cstr("path"), runtime.cstr("a")) is None
++    assert closed == [123] and runtime.errno == errno.ESPIPE
++
++
++def test_fopen_allocation_failure_publishes_enomem_after_close():
++    runtime = FileRuntime()
++    closed = []
++    runtime.ns["open_file"] = lambda *_: 123
++    runtime.ns["_stream_new"] = lambda *_: None
++
++    def close(fd):
++        closed.append(fd)
++        runtime.errno = errno.EBADF
++        return -errno.EBADF
++
++    runtime.ns["close"] = close
++    assert runtime.ns["fopen"](runtime.cstr("path"), runtime.cstr("r")) is None
++    assert closed == [123] and runtime.errno == errno.ENOMEM
++
++
++PROGRAM = r'''
++import gc
++import tempfile
++
++MISSING_MESSAGE = MISSING_MESSAGE_VALUE
++EXISTS_MESSAGE = EXISTS_MESSAGE_VALUE
++
++def check_missing(path):
++    try:
++        with open(path, 'r'):
++            raise AssertionError('missing path opened')
++    except PermissionError:
++        raise AssertionError('sibling handler caught missing file')
++    except FileNotFoundError as error:
++        assert type(error) is FileNotFoundError
++        assert isinstance(error, OSError) and isinstance(error, Exception)
++        assert error.errno == 2
++        assert error.strerror == MISSING_MESSAGE
++        assert error.args == (2, MISSING_MESSAGE)
++        assert error.filename == path and type(error.filename) is type(path)
++        assert error.filename2 is None
++        assert str(error) == '[Errno 2] ' + MISSING_MESSAGE + ': ' + repr(path)
++        saved = error
++    except OSError:
++        raise AssertionError('missing file lost its subclass')
++    gc.collect()
++    assert saved.filename == path and saved.args[0] == 2
++
++def main():
++    with tempfile.TemporaryDirectory() as root:
++        missing = root + '/missing'
++        check_missing(missing)
++        check_missing(missing.encode())
++        occupied = root + '/occupied'
++        with open(occupied, 'w') as stream:
++            stream.write('kept')
++        try:
++            with open(occupied, 'x'):
++                raise AssertionError('exclusive create replaced a file')
++        except FileNotFoundError:
++            raise AssertionError('sibling FileNotFoundError caught EEXIST')
++        except FileExistsError as error:
++            assert error.errno == 17 and error.filename == occupied
++            assert error.args == (17, EXISTS_MESSAGE)
++        with open(occupied, 'r') as stream:
++            assert stream.read() == 'kept'
++    print('OPEN_ERRNO_OK')
++
++main()
++'''
++PROGRAM = PROGRAM.replace("MISSING_MESSAGE_VALUE", repr(os.strerror(2))).replace(
++    "EXISTS_MESSAGE_VALUE", repr(os.strerror(17)))
++
++
++def test_open_errno_reference(tmp_path):
++    assert_reference_program(PROGRAM, "OPEN_ERRNO_OK\n", tmp_path)
++
++
++@pytest.mark.integration
++@pytest.mark.parametrize("python_program_compiler", ("pcc0", "pcc1"), indirect=True)
++def test_open_errno_native_five_gc(python_program_compiler, request,
++                                  explicit_owned_runtime, tmp_path, capfd):
++    mode = request.node.callspec.params["python_program_compiler"]
++    assert_owned_program(PROGRAM, "OPEN_ERRNO_OK\n", tmp_path,
++                         python_program_compiler, mode, explicit_owned_runtime,
++                         capfd, provenance_probe="2")

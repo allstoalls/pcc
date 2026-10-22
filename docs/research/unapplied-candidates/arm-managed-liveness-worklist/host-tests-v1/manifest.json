@@ -1,0 +1,43 @@
+{
+  "application_status": "UNAPPLIED",
+  "coverage_limits": [
+    "Static expected collection only; no executed host or compiler evidence",
+    "Host list-storage oracle and injected append2 failure, not native raw-memory/realloc execution",
+    "Synthetic row savings are not real workload or Stage1 speed evidence"
+  ],
+  "execution_status": "UNRUN",
+  "files": [
+    {
+      "mode": "100644",
+      "path": "tests/python/test_native_liveness_worklist.py",
+      "postimage_bytes": 14360,
+      "postimage_sha256": "53d25748a4963fe3c24b5c399a2adce90d6c48d8afad8110c7fadce11effdb09",
+      "preimage_sha256": null
+    }
+  ],
+  "limits": {
+    "exclusive_shared_lock": true,
+    "free_reserve_bytes": 4294967296,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "seconds": 300
+  },
+  "patch_sha256": "ce5e491e77195efa37e7086361cc4fcbd6873ee50447892c8267d7df709e2e7e",
+  "production_artifact_commit": "f6e7fffc35e6542d30a5eebb96dcbd08880e3352",
+  "production_manifest_sha256": "8d8de3cd946c9fdc7013e7b29f31bfb76f29951254af2d257b89259da235a978",
+  "production_patch_sha256": "90928dbd238208e4a11868dae4b0e7d171fbc24d28a875377d5dbf31b90f7f67",
+  "proposed_host_selection": {
+    "tests/python/test_managed_phi_liveness.py": 18,
+    "tests/python/test_native_liveness_worklist.py": 33
+  },
+  "proposed_total_host_cases": 51,
+  "public_files": [
+    "tests.patch",
+    "README.md",
+    "manifest.json"
+  ],
+  "readme_sha256": "7675ebea6cd667cbbe7579ad68e15e1432264b22d7ab993a47320a3bf7aec07a",
+  "schema": "pcc.arm-managed-liveness-worklist-host-tests.v1",
+  "source_review_status": "PASS: independent review of all33 static cases, corrected self-loop count, nonvacuous owner/error cleanup, empty-domain result boundary, fresh kernels and explicit inline-trigger set oracle; all execution remains UNRUN.",
+  "unchanged_production_postimage_sha256": "f1882fa4c29ad15c8843d30a9bf4d4bebf5b52307d0dc4daa155157b8d8289fe"
+}

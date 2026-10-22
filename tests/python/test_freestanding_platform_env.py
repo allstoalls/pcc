@@ -4,12 +4,12 @@ import platform
 import subprocess
 import sys
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLATFORM_SOURCE = (
-    REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_platform_env.py"
+    REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_platform_env.py"
 )
 
 
@@ -154,7 +154,7 @@ def test_platform_env_object_has_only_allocator_and_initial_env_boundary(tmp_pat
 
 def test_linux_platform_env_reads_compiler_owned_initial_envp(tmp_path, monkeypatch):
     from pcc.backend.self_backend_dispatch import emit_self_asm
-    from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+    from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
     monkeypatch.setattr(
         UnsafeIntrinsicMixin,
@@ -183,7 +183,7 @@ def test_linux_platform_env_reads_compiler_owned_initial_envp(tmp_path, monkeypa
 
 
 def test_runtime_archive_plan_selects_platform_env_object():
-    runtime_dir = REPO_ROOT / "pcc" / "py_runtime"
+    runtime_dir = REPO_ROOT / "pcc" / "runtime"
     plan = subprocess.run(
         ["make", "-B", "-n", "libpy_runtime_pcc_py.a"],
         cwd=runtime_dir,
@@ -201,10 +201,10 @@ def test_runtime_archive_plan_selects_platform_env_object():
 
 
 def test_runtime_archive_c_helpers_consume_owned_platform_environment(
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
 ):
     undefined = subprocess.run(
-        ["nm", "-A", "-u", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-u", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -231,7 +231,7 @@ def test_runtime_archive_c_helpers_consume_owned_platform_environment(
 
 def test_default_runtime_routes_os_environment_through_owned_platform_table(
     tmp_path,
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
 ):
     source = tmp_path / "platform_env_runtime_smoke.py"
     executable = tmp_path / "platform_env_runtime_smoke"
@@ -254,7 +254,7 @@ def test_default_runtime_routes_os_environment_through_owned_platform_table(
         backend="self",
         ir_scaffold_mode="on",
         libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     symbols = subprocess.run(
         ["nm", "-g", str(executable)],

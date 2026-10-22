@@ -11,7 +11,7 @@ import pytest
 
 from pcc1_gate import find_current_pcc1, skip_or_fail_no_current_pcc1
 
-from pcc.capi_surface import capi_header_manifest, extension_abi_plan
+from pcc.frontends.c.capi_surface import capi_header_manifest, extension_abi_plan
 
 REPO = repo_root()
 
@@ -3292,7 +3292,7 @@ def test_cached_built_source_tree_counts_as_installable_meson_payload(tmp_path):
     carries no build system, so installing the same spec twice reported
     ``install_success`` true and then false on the identical machine.
     """
-    from pcc.cli_bootstrap import _native_has_installable_meson_payload
+    from pcc.driver.cli_bootstrap import _native_has_installable_meson_payload
 
     source = tmp_path / "numpy"
     (source / "_core").mkdir(parents=True)

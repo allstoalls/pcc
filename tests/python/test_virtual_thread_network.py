@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.owned_ir_validation import verify_ir_text
+
 import os
 from pathlib import Path
 import socket
@@ -9,9 +11,8 @@ import subprocess
 import textwrap
 
 import pytest
-from llvmlite import binding as llvm
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 from pcc1_gate import find_current_pcc1
 
 
@@ -177,7 +178,7 @@ def test_darwin_sequential_tcp_contract(tmp_path: Path, monkeypatch) -> None:
     text = llvm_ir.read_text(encoding="utf-8")
     # Frame-root addresses used by sibling retry/cleanup blocks must be
     # defined in a block that dominates every use.
-    llvm.parse_assembly(text).verify()
+    verify_ir_text(text)
     for symbol in (
         "py_virtual_thread_tcp_listen",
         "py_virtual_thread_tcp_accept_observe",
@@ -198,7 +199,7 @@ def test_darwin_sequential_tcp_contract(tmp_path: Path, monkeypatch) -> None:
     assert "nanosleep" not in text
 
     runtime_source = (
-        REPO / "pcc" / "py_runtime" / "py" / "py_asyncio_io_runtime.py"
+        REPO / "pcc" / "runtime" / "py" / "py_asyncio_io_runtime.py"
     ).read_text(encoding="utf-8")
     for function_name, syscall_name in (
         ("py_virtual_thread_tcp_accept_observe", "pcc_platform_tcp_accept_observe"),
@@ -239,13 +240,13 @@ def test_darwin_sequential_tcp_contract(tmp_path: Path, monkeypatch) -> None:
 def test_sequential_tcp_gc_matrix(
     tmp_path: Path,
     monkeypatch,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """Compile once from current source and execute the flat API on GC0..4."""
     source = tmp_path / "sequential_tcp_gc.py"
     executable = tmp_path / "sequential_tcp_gc"
     source.write_text(_tcp_source(_reserve_port()), encoding="utf-8")
-    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_py_runtime_archive))
+    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_runtime_archive))
     compile_python(
         str(source),
         str(executable),
@@ -275,7 +276,7 @@ def test_sequential_tcp_gc_matrix(
 @pytest.mark.xdist_group(name="pcc1_sequential_tcp")
 def test_current_pcc1_self_no_libpython_sequential_tcp_echo(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """Compile the same finite API with source-current pcc1/self."""
     pcc1 = find_current_pcc1(REPO)
@@ -286,7 +287,7 @@ def test_current_pcc1_self_no_libpython_sequential_tcp_echo(
     source.write_text(_tcp_source(_reserve_port()), encoding="utf-8")
     environment = dict(os.environ)
     environment.pop("LC_ALL", None)
-    environment["PCC_RUNTIME_ARCHIVE"] = str(pcc_py_runtime_archive)
+    environment["PCC_RUNTIME_ARCHIVE"] = str(pcc_runtime_archive)
     built = subprocess.run(
         [
             str(pcc1),

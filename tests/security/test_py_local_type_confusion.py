@@ -37,7 +37,7 @@ main()
 
 
 def test_local_reused_for_float_then_int_is_boxed_consistently(compile_and_run):
-    r = compile_and_run(PROGRAM, backend="llvm")
+    r = compile_and_run(PROGRAM, backend="self")
     assert r.returncode == 0, r.stdout + r.stderr
     lines = r.stdout.splitlines()
     assert "FLOAT:3.5" in lines
@@ -87,7 +87,7 @@ main()
 
 
 def test_local_reused_int_then_float_is_boxed_consistently(compile_and_run):
-    r = compile_and_run(PROGRAM_REVERSE, backend="llvm")
+    r = compile_and_run(PROGRAM_REVERSE, backend="self")
     assert r.returncode == 0, r.stdout + r.stderr
     lines = r.stdout.splitlines()
     assert "INT:3" in lines
@@ -95,7 +95,7 @@ def test_local_reused_int_then_float_is_boxed_consistently(compile_and_run):
 
 
 def test_local_reused_str_then_int_widens_to_object(compile_and_run):
-    r = compile_and_run(PROGRAM_STR_INT, backend="llvm")
+    r = compile_and_run(PROGRAM_STR_INT, backend="self")
     assert r.returncode == 0, r.stdout + r.stderr
     lines = r.stdout.splitlines()
     assert "STR:hi" in lines
@@ -110,7 +110,7 @@ def test_local_typed_across_branches_is_boxed_consistently(compile_and_run):
     # a forced-object widening layered on the existing shared-scope inference in
     # type_infer.py (no scope-propagation change — that variant broke the
     # pcc1->pcc2->pcc3 self-host).
-    r = compile_and_run(PROGRAM_BRANCH, backend="llvm")
+    r = compile_and_run(PROGRAM_BRANCH, backend="self")
     assert r.returncode == 0, r.stdout + r.stderr
     assert "V:3.5" in r.stdout.splitlines()
 
@@ -149,7 +149,7 @@ main()
 
 
 def test_branch_join_reverse_order_is_boxed_consistently(compile_and_run):
-    r = compile_and_run(PROGRAM_BRANCH_REVERSE, backend="llvm")
+    r = compile_and_run(PROGRAM_BRANCH_REVERSE, backend="self")
     assert r.returncode == 0, r.stdout + r.stderr
     # n = 3 > 0, so the int branch is taken; the widened boxed slot must read
     # back the int, not a type-confused float bit-pattern.
@@ -157,6 +157,6 @@ def test_branch_join_reverse_order_is_boxed_consistently(compile_and_run):
 
 
 def test_branch_join_str_vs_int_widens_to_object(compile_and_run):
-    r = compile_and_run(PROGRAM_BRANCH_STR_INT, backend="llvm")
+    r = compile_and_run(PROGRAM_BRANCH_STR_INT, backend="self")
     assert r.returncode == 0, r.stdout + r.stderr
     assert "V:hi" in r.stdout.splitlines()

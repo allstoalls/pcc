@@ -7,7 +7,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from pcc.package_schema import CAMPAIGN_PROFILES, campaign_profile
+from pcc.package.schema import CAMPAIGN_PROFILES, campaign_profile
 
 VALID_STATUSES = {"fail", "pass", "selected", "skip", "xfail"}
 

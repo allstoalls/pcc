@@ -4,7 +4,7 @@ for the T-P0-VTHREAD-1M-GATE track (first slice).
 This is a **measurement** harness over a self-contained *logical* scheduler
 model, not a scheduler, not the runtime, and not a 1M-readiness claim. It mirrors
 the operation shape of the three waitsets the real C runtime owns
-(``pcc/py_runtime/src/pcc_threads.c``): a ready queue, a deadline-sorted timer
+(``pcc/runtime/src/pcc_threads.c``): a ready queue, a deadline-sorted timer
 queue, and an IO waitset — and reports **deterministic logical counters** plus
 two named *surrogate* counters.
 

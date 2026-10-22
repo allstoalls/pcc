@@ -19,5 +19,5 @@ def test_current_pcc1_exists_when_package_parity_is_required():
     pcc1 = find_current_pcc1(REPO)
     assert pcc1 is not None, (
         "pcc1 package parity was required, but no pcc1 binary newer than "
-        "pcc/cli_bootstrap.py was found"
+        "pcc/driver/cli_bootstrap.py was found"
     )

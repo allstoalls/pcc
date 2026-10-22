@@ -11,8 +11,8 @@ def _read(rel: str) -> str:
 
 
 def test_exception_runtime_log_points_are_mirrored_between_c_and_pcc_python():
-    py_tls = _read("pcc/py_runtime/py/py_exc_tls.py")
-    py_obj = _read("pcc/py_runtime/py/py_exc_objects.py")
+    py_tls = _read("pcc/runtime/py/py_exc_tls.py")
+    py_obj = _read("pcc/runtime/py/py_exc_objects.py")
 
     for needle in ["6, 3", "6, 4"]:
         assert needle in py_tls
@@ -22,8 +22,8 @@ def test_exception_runtime_log_points_are_mirrored_between_c_and_pcc_python():
 
 def test_dispatch_runtime_log_points_are_mirrored_between_c_and_pcc_python():
     py_src = (
-        _read("pcc/py_runtime/py/py_obj_ops_dispatch.py")
-        + _read("pcc/py_runtime/py/py_obj_ops_slice.py")
+        _read("pcc/runtime/py/py_obj_ops_dispatch.py")
+        + _read("pcc/runtime/py/py_obj_ops_slice.py")
     )
     for event_code in range(1, 10):
         needle = f"7, {event_code}"

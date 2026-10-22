@@ -7,7 +7,7 @@ where ``sub`` is a SUBMODULE file (``pkg/sub.py``), not a name defined in
 
 Before the fix this fell back to libpython (PCC-PY-COMPILE-001 under
 ``--python-libpython=off``): the top-level import-discovery
-(``_top_level_import_targets`` in pcc/py_frontend/pipeline.py) only added the
+(``_top_level_import_targets`` in pcc/frontends/python/pipeline.py) only added the
 PACKAGE (``pkg``) to the native compile set for a ``from pkg import sub``
 statement, never the submodule (``pkg.sub``). So ``pkg.sub`` was absent from
 the native export table, the from-import lowering's

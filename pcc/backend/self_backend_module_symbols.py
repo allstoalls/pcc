@@ -2,9 +2,9 @@ from __future__ import annotations
 
 """Target-neutral module-symbol preparation for the self backend."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from .self_backend_ir import GlobalDef, ParsedFunction
+from .self_backend_ir import GlobalDef, ParsedFunction, TypeParseContext
 
 
 @dataclass(frozen=True)
@@ -14,6 +14,7 @@ class PreparedModuleSymbols:
     internal_symbols: frozenset[str]
     thread_local_symbols: frozenset[str]
     target_triple: str = ""
+    type_context: TypeParseContext | None = field(default=None, repr=False, compare=False)
 
 
 def _stable_symbol_digest(text: str) -> str:
@@ -43,6 +44,19 @@ def prepare_module_symbols(
     functions: list[ParsedFunction],
     target_triple: str = "",
 ) -> PreparedModuleSymbols:
+    type_context = None
+    for global_ in globals_:
+        if global_.type_context is not None:
+            type_context = global_.type_context
+            break
+    if type_context is None:
+        for function in functions:
+            if function.type_context is not None:
+                type_context = function.type_context
+                break
+    if type_context is None:
+        from .self_backend_parse import _parse_named_types
+        type_context = _parse_named_types(ir_text)
     defined_symbols = frozenset(
         {global_.name for global_ in globals_ if global_.initializer} | {func.name for func in functions}
     )
@@ -61,6 +75,7 @@ def prepare_module_symbols(
     internal_prefix = "__pccmod_" + _stable_symbol_digest(prefix_seed) + "_"
     return PreparedModuleSymbols(
         target_triple=target_triple,
+        type_context=type_context,
         internal_prefix=internal_prefix,
         defined_symbols=defined_symbols,
         internal_symbols=internal_symbols,

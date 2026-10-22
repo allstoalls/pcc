@@ -189,6 +189,44 @@ def f64_bits(value: float) -> int:
     _trap("f64_bits")
 
 
+def c_abi_sizeof(type_name: str) -> int:
+    """Target C storage size of a literal typed-ABI scalar/struct (not void).
+
+    This is an integer expression, not an AST size literal for stack_alloc.
+    Check a literal reservation against this size, or use a dynamic allocator.
+    """
+    _trap("c_abi_sizeof")
+
+
+def c_abi_alignof(type_name: str) -> int:
+    """Target C natural alignment of a literal typed-ABI scalar/struct."""
+    _trap("c_abi_alignof")
+
+
+def call_c_abi(fn: Any, restype: str, argtypes: tuple[str, ...], values: tuple, result: Any) -> None:
+    """Call an address using a literal, non-variadic C ABI signature.
+
+    Types use the ``c_abi_typed_export`` grammar. ``values`` is a tuple
+    literal; structural arguments are recursively nested tuple literals.
+    Integer leaves are explicit machine lanes (narrow widths truncate),
+    floating leaves convert to the declared width, and ``ptr`` is a raw
+    address. No Python tuple is allocated for these syntax-only operands.
+
+    ``result`` is None for void, otherwise writable caller-owned storage
+    with the declared type's target C size and alignment. Scalars and
+    aggregates are written in that layout, including pointer results. This
+    function always returns None. The caller owns storage, pointer validity,
+    exact callee-signature agreement, and the lifetime/pinning of pointees
+    behind raw or interior addresses across any callback or safepoint.
+    Managed values used directly as operands are retained through the call;
+    raw result storage is not a managed-object root or ownership transfer.
+    A stack_alloc reservation must be a literal and include any padding:
+    use c_abi_sizeof/c_abi_alignof to check it, and ptr_add with ptr_to_int
+    to align the start when the allocation's alignment is not guaranteed.
+    """
+    _trap("call_c_abi")
+
+
 def f64_pair_make(first: float, second: float) -> complex:
     """Build the compiler-owned ``{f64,f64}`` machine aggregate."""
     _trap("f64_pair_make")
@@ -206,6 +244,15 @@ def f64_pair_second(value: complex) -> float:
 
 def null() -> Any:
     _trap("null")
+
+
+def frame_address() -> Any:
+    """The calling function's frame pointer (x29 on AArch64, rbp on x86-64).
+
+    Its first word is the caller's frame pointer and the next one the return
+    address; the precise stack-map walk follows that chain.
+    """
+    _trap("frame_address")
 
 
 def ptr_eq(lhs: Any, rhs: Any) -> bool:
@@ -311,6 +358,23 @@ def seek_file(fd: int, offset: int, whence: int) -> int:
     _trap("seek_file")
 
 
+def pwrite_file(fd: int, ptr: Any, size: int, offset: int) -> int:
+    """Write at an absolute offset; return a short count or negative errno.
+
+    The caller owns the descriptor and must keep the payload address stable
+    throughout the operation. Unsupported targets return -ENOSYS.
+    """
+    _trap("pwrite_file")
+
+
+def truncate_file(fd: int, length: int) -> int:
+    """Resize an owned descriptor without seeking or closing it.
+
+    Return zero or negative errno. Unsupported targets return -ENOSYS.
+    """
+    _trap("truncate_file")
+
+
 def open_readonly(path: Any) -> int:
     """Open a path read-only and return fd or a negative errno."""
     _trap("open_readonly")
@@ -341,6 +405,25 @@ def open_file(path: Any, access_mode: int, disposition: int) -> int:
     _trap("open_file")
 
 
+def open_file_flags(path: Any, flags: int, permissions: int, dir_fd: int) -> int:
+    """Open relative to a descriptor with target-native POSIX flags and mode.
+
+    Returns the new descriptor or a negative errno. The caller supplies the
+    target's AT_FDCWD for a working-directory-relative path. Linux and Darwin
+    implement this primitive; other platforms report unsupported (-ENOSYS).
+    """
+    _trap("open_file_flags")
+
+
+def mkdir_at(path: Any, mode: int, dir_fd: int) -> int:
+    """Create a directory relative to dir_fd, returning zero or negative errno.
+
+    The caller supplies the target's AT_FDCWD for the current directory.
+    Linux and Darwin implement this primitive; other targets return -ENOSYS.
+    """
+    _trap("mkdir_at")
+
+
 def rename_file(source: Any, destination: Any) -> int:
     """Atomically rename a path, replacing the destination when permitted."""
     _trap("rename_file")
@@ -349,6 +432,17 @@ def rename_file(source: Any, destination: Any) -> int:
 def chmod_file(path: Any, mode: int) -> int:
     """Set POSIX permission bits on a path."""
     _trap("chmod_file")
+
+
+def utime_file(path: Any, times: Any) -> int:
+    """Apply two signed-i64 Unix seconds from a non-null LP64 time buffer.
+
+    Returns zero on success, -1 on failure. Windows may return 1 when the
+    timestamps were applied but handle cleanup failed. This owned boundary
+    is distinct from the standard C utime ABI; it is not public os.utime.
+    The caller must reject embedded NUL before exposing its path as a C string.
+    """
+    _trap("utime_file")
 
 
 def sync_file(fd: int) -> int:
@@ -530,6 +624,26 @@ def spawn_process_pipe(
     _trap("spawn_process_pipe")
 
 
+def spawn_process_redirect(
+    path: Any,
+    argv: Any,
+    envp: Any,
+    cwd: Any,
+    stdin_fd: int,
+    stdout_fd: int,
+    stderr_fd: int,
+) -> int:
+    """Spawn with the child's standard streams on the given descriptors.
+
+    A negative descriptor leaves that stream inherited; descriptors other
+    than inherited ones must be above 2. ``cwd`` (a C string, or NULL for
+    the parent's directory) is the child's working directory. The child
+    stays in the parent's process group, and the parent keeps its
+    descriptors. Returns the child pid or a negative platform error.
+    """
+    _trap("spawn_process_redirect")
+
+
 def stack_alloc(size: int) -> Any:
     _trap("stack_alloc")
 
@@ -560,6 +674,11 @@ def access(path: Any, mode: int) -> int:
 
 def stat_kind(path: Any) -> int:
     _trap("stat_kind")
+
+
+def lstat_kind(path: Any) -> int:
+    """Snapshot a path without following it: error=0, other=1, dir=2, link=3."""
+    _trap("lstat_kind")
 
 
 def stat_mtime(path: Any) -> float:
@@ -657,6 +776,24 @@ def windows_real_path(path: Any, output: Any, capacity: int) -> Any:
     _trap("windows_real_path")
 
 
+def windows_tempdir_create(path: Any, owner: Any) -> int:
+    """Atomically create a private directory and write its HANDLE to owner.
+
+    Return zero or negative errno; non-Windows targets return -ENOSYS.
+    """
+    _trap("windows_tempdir_create")
+
+
+def windows_tempdir_remove_owned(owner: Any) -> int:
+    """Remove only this HANDLE's tree; non-Windows targets return -ENOSYS."""
+    _trap("windows_tempdir_remove_owned")
+
+
+def windows_tempdir_close_owned(owner: Any) -> int:
+    """Release the owned HANDLE; non-Windows targets return -ENOSYS."""
+    _trap("windows_tempdir_close_owned")
+
+
 def directory_open(path: Any) -> Any:
     """Open an owned directory stream; null denotes failure."""
     _trap("directory_open")
@@ -665,6 +802,16 @@ def directory_open(path: Any) -> Any:
 def directory_next(stream: Any) -> Any:
     """Borrow a UTF-8 entry name until the next stream operation."""
     _trap("directory_next")
+
+
+def directory_entry_type(stream: Any, entry: Any) -> int:
+    """Classify the current directory record: unknown=0, other=1, dir=2, link=3.
+
+    The entry must be the name most recently returned by directory_next on
+    this live stream. The classification reads cached entry metadata and
+    performs no filesystem query, allocation or callback.
+    """
+    _trap("directory_entry_type")
 
 
 def directory_error(stream: Any) -> int:
@@ -1134,10 +1281,14 @@ __all__ = [
     "f64_div",
     "f64_signbit",
     "f64_bits",
+    "call_c_abi",
+    "c_abi_sizeof",
+    "c_abi_alignof",
     "f64_pair_make",
     "f64_pair_first",
     "f64_pair_second",
     "null",
+    "frame_address",
     "ptr_eq",
     "ptr_is_null",
     "is_tagged_int",
@@ -1160,12 +1311,17 @@ __all__ = [
     "read",
     "close",
     "seek_file",
+    "pwrite_file",
+    "truncate_file",
     "open_readonly",
     "darwin_current_rss_bytes",
     "darwin_peak_rss_bytes",
     "open_file",
+    "open_file_flags",
+    "mkdir_at",
     "rename_file",
     "chmod_file",
+    "utime_file",
     "sync_file",
     "socket_open",
     "socket_connect",
@@ -1200,6 +1356,7 @@ __all__ = [
     "process_exit",
     "spawn_process",
     "spawn_process_pipe",
+    "spawn_process_redirect",
     "stack_alloc",
     "strlen",
     "getenv",
@@ -1208,6 +1365,7 @@ __all__ = [
     "initial_environ",
     "access",
     "stat_kind",
+    "lstat_kind",
     "stat_mtime",
     "stat_size",
     "is_symlink",
@@ -1225,7 +1383,8 @@ __all__ = [
     "atomic_test_and_set",
     "atomic_clear",
     "windows_full_path", "windows_real_path",
-    "directory_open", "directory_next", "directory_error", "directory_close",
+    "windows_tempdir_create", "windows_tempdir_remove_owned", "windows_tempdir_close_owned",
+    "directory_open", "directory_next", "directory_entry_type", "directory_error", "directory_close",
     "syscall6",
     "linux_set_thread_pointer",
     "page_alloc",

@@ -70,7 +70,7 @@ main()
 
 
 def test_keyword_method_calls_match_cpython_on_every_gc(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     source = tmp_path / "kw_method_calls.py"
     source.write_text(PROGRAM, encoding="utf-8")
@@ -81,7 +81,7 @@ def test_keyword_method_calls_match_cpython_on_every_gc(
     output = tmp_path / "kw_method_calls"
     python_program_compiler(
         str(source), str(output), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         ran = subprocess.run(

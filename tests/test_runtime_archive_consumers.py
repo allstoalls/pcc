@@ -10,10 +10,10 @@ import sys
 from types import ModuleType, SimpleNamespace
 
 import pytest
-from llvmlite import binding as llvm
+from pcc.frontends.python.pipeline_targets import host_target_triple
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.pipeline_runtime_archive import (
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.pipeline_runtime_archive import (
     target_id as pipeline_runtime_target_id,
 )
 from pcc.tools.ir_to_obj import emit_object
@@ -44,7 +44,7 @@ def _write_valid_runtime_archive(
         f"def cache_member() -> int:\n    return {return_value}\n",
         encoding="utf-8",
     )
-    target_triple = llvm.get_default_triple()
+    target_triple = host_target_triple()
     ir_text = (
         f'target triple = "{target_triple}"\n'
         "define i32 @cache_member() {\n"
@@ -86,7 +86,9 @@ def _configure_pcc_runtime_cache(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> tuple[Path, Path]:
-    source_runtime = tmp_path / "source" / "pcc" / "py_runtime"
+    # Pin the supported mode so these tests reach cache/provenance validation.
+    monkeypatch.setenv("PCC_WITH_THREADS", "1")
+    source_runtime = tmp_path / "source" / "pcc" / "runtime"
     source_runtime.mkdir(parents=True)
     (source_runtime / "Makefile").write_text("all:\n\t@true\n", encoding="utf-8")
     repo_root = tmp_path / "repo"
@@ -308,11 +310,7 @@ def test_pcc_runtime_cache_reuses_only_a_bound_verified_entry(
         _write_valid_runtime_archive(work_runtime)
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(
-        runtime_build_cache,
-        "subprocess",
-        SimpleNamespace(run=fake_make),
-    )
+    _install_mocked_cache_make(monkeypatch, fake_make)
 
     first = runtime_build_cache.cached_pcc_python_runtime()
     second = runtime_build_cache.cached_pcc_python_runtime()
@@ -339,6 +337,52 @@ def test_pcc_runtime_cache_reuses_only_a_bound_verified_entry(
     assert target.read_text(encoding="utf-8") == (
         pipeline_runtime_target_id(str(manifest["target_triple"])) + "\n"
     )
+
+
+def _install_mocked_cache_make(monkeypatch, fake_make) -> None:
+    real_admission = runtime_build_cache.require_native_provisioning_allowed
+    monkeypatch.setattr(runtime_build_cache, "subprocess", SimpleNamespace(run=fake_make))
+
+    def admit_only_installed_fake_make() -> None:
+        if getattr(runtime_build_cache.subprocess, "run", None) is not fake_make:
+            real_admission()
+
+    # Only this already-installed fake is admitted; real provisioning retains
+    # the original guard, including the host CI job's no-native reservation.
+    monkeypatch.setattr(
+        runtime_build_cache, "require_native_provisioning_allowed",
+        admit_only_installed_fake_make,
+    )
+
+
+def test_pcc_runtime_cache_mock_admission_preserves_unmocked_provisioning_guard(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pcc.driver.native_provisioning import NativeProvisioningError
+
+    _, expected_runtime = _configure_pcc_runtime_cache(monkeypatch, tmp_path)
+    monkeypatch.setenv("PCC_TEST_NO_NATIVE_PROVISIONING", "1")
+    calls = []
+
+    def fake_make(*args, **kwargs):
+        calls.append("fake")
+        pytest.fail("the restored subprocess must not reach the old fake Make")
+
+    _install_mocked_cache_make(monkeypatch, fake_make)
+    monkeypatch.setattr(runtime_build_cache, "subprocess", subprocess)
+
+    def unexpected_make(*args, **kwargs):
+        calls.append("real")
+        pytest.fail("unmocked provisioning reached Make before admission")
+
+    # Observe the real subprocess boundary without allowing a Make invocation
+    # even if admission regresses. This is not the registered fake callable.
+    monkeypatch.setattr(subprocess, "run", unexpected_make)
+    with pytest.raises(NativeProvisioningError, match="automatic native test provisioning is disabled"):
+        runtime_build_cache.cached_pcc_python_runtime()
+    assert calls == []
+    assert not expected_runtime.exists()
 
 
 def test_pcc_runtime_cache_format_change_preserves_the_old_immutable_directory(
@@ -544,7 +588,7 @@ def test_pcc_runtime_cache_rebuilds_a_replaced_capi_inventory(
 def test_compiler_anchor_consumer_requires_the_verified_inventory_bundle(
     tmp_path: Path,
 ) -> None:
-    archive = _write_valid_runtime_archive(tmp_path / "pcc" / "py_runtime")
+    archive = _write_valid_runtime_archive(tmp_path / "pcc" / "runtime")
 
     assert pipeline._capi_export_anchor_symbols(str(archive)) == [
         "PyRuntime_CacheAnchor"
@@ -598,7 +642,7 @@ def test_hatch_freshness_requires_an_adjacent_manifest(
 ) -> None:
     hatch_module = _load_hatch_build(monkeypatch)
     root = tmp_path / "source"
-    runtime_root = root / "pcc" / "py_runtime"
+    runtime_root = root / "pcc" / "runtime"
     archive = _write_valid_runtime_archive(runtime_root)
     manifest_path_for_archive(archive).unlink()
     hook = _new_build_hook(hatch_module, root)
@@ -612,7 +656,7 @@ def test_hatch_self_build_failure_never_retries_an_external_backend(
 ):
     hatch_module = _load_hatch_build(monkeypatch)
     root = tmp_path / "source"
-    archive = _write_valid_runtime_archive(root / "pcc" / "py_runtime")
+    archive = _write_valid_runtime_archive(root / "pcc" / "runtime")
     hook = _new_build_hook(hatch_module, root)
     attempts = []
 
@@ -648,7 +692,7 @@ def test_hatch_freshness_rejects_invalid_but_accepts_valid_provenance(
 ) -> None:
     hatch_module = _load_hatch_build(monkeypatch)
     root = tmp_path / "source"
-    runtime_root = root / "pcc" / "py_runtime"
+    runtime_root = root / "pcc" / "runtime"
     archive = _write_valid_runtime_archive(runtime_root)
     hook = _new_build_hook(hatch_module, root)
 
@@ -668,7 +712,7 @@ def test_hatch_refuses_to_publish_after_make_without_valid_provenance(
 ) -> None:
     hatch_module = _load_hatch_build(monkeypatch)
     root = tmp_path / "source"
-    runtime_root = root / "pcc" / "py_runtime"
+    runtime_root = root / "pcc" / "runtime"
     archive = _write_valid_runtime_archive(runtime_root)
     manifest_path_for_archive(archive).unlink()
     prebuilt = tmp_path / "pcc1"
@@ -697,7 +741,7 @@ def test_hatch_refuses_to_publish_after_make_without_capi_inventory(
 ) -> None:
     hatch_module = _load_hatch_build(monkeypatch)
     root = tmp_path / "source"
-    runtime_root = root / "pcc" / "py_runtime"
+    runtime_root = root / "pcc" / "runtime"
     archive = _write_valid_runtime_archive(runtime_root)
     capi_inventory_path_for_archive(archive).unlink()
     prebuilt = tmp_path / "pcc1"
@@ -726,7 +770,7 @@ def test_hatch_force_includes_the_verified_manifest(
 ) -> None:
     hatch_module = _load_hatch_build(monkeypatch)
     root = tmp_path / "source"
-    runtime_root = root / "pcc" / "py_runtime"
+    runtime_root = root / "pcc" / "runtime"
     archive = _write_valid_runtime_archive(runtime_root)
     manifest = manifest_path_for_archive(archive)
     prebuilt = tmp_path / "pcc1"
@@ -745,22 +789,22 @@ def test_hatch_force_includes_the_verified_manifest(
     hook.initialize("standard", build_data)
 
     assert build_data["force_include"][str(manifest)] == (
-        "pcc/py_runtime/libpy_runtime_pcc_py.a.provenance.json"
+        "pcc/runtime/libpy_runtime_pcc_py.a.provenance.json"
     )
     capi_inventory = capi_inventory_path_for_archive(archive)
     assert build_data["force_include"][str(capi_inventory)] == (
-        "pcc/py_runtime/libpy_runtime_pcc_py.a.capi_syms"
+        "pcc/runtime/libpy_runtime_pcc_py.a.capi_syms"
     )
     wheel_markers = [
         Path(source)
         for source, destination in build_data["force_include"].items()
-        if destination == "pcc/py_runtime/libpy_runtime_pcc_py.a.wheel"
+        if destination == "pcc/runtime/libpy_runtime_pcc_py.a.wheel"
     ]
     assert len(wheel_markers) == 1
     marker_lines = wheel_markers[0].read_text(encoding="utf-8").splitlines()
     assert marker_lines[0] == "pcc.runtime-wheel-artifact.v2"
     assert marker_lines[1] == "target=test-target"
-    from pcc.py_frontend.pipeline_runtime_archive import wheel_stamp_matches
+    from pcc.frontends.python.pipeline_runtime_archive import wheel_stamp_matches
 
     installed_marker = Path(str(archive) + ".wheel")
     installed_marker.write_bytes(wheel_markers[0].read_bytes())
@@ -773,7 +817,7 @@ def test_hatch_wrong_target_cleanup_removes_the_manifest_sidecar(
 ) -> None:
     hatch_module = _load_hatch_build(monkeypatch)
     root = tmp_path / "source"
-    runtime_root = root / "pcc" / "py_runtime"
+    runtime_root = root / "pcc" / "runtime"
     archive = _write_valid_runtime_archive(runtime_root)
     manifest = manifest_path_for_archive(archive)
     capi_inventory = capi_inventory_path_for_archive(archive)
@@ -801,7 +845,7 @@ def test_hatch_forces_rebuild_for_untrusted_manifest(
 ) -> None:
     hatch_module = _load_hatch_build(monkeypatch)
     root = tmp_path / "source"
-    runtime_root = root / "pcc" / "py_runtime"
+    runtime_root = root / "pcc" / "runtime"
     archive = _write_valid_runtime_archive(runtime_root)
     manifest = manifest_path_for_archive(archive)
     if damage == "missing":

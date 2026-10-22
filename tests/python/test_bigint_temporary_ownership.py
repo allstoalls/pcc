@@ -5,7 +5,7 @@ import subprocess
 
 
 def test_boxed_integer_bounds_and_error_operands_are_released(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, monkeypatch,
+    tmp_path, pcc_runtime_archive, python_program_compiler, monkeypatch,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = tmp_path / "integer_bounds.py"
@@ -50,7 +50,7 @@ main()
 ''')
     output = tmp_path / "integer_bounds"
     python_program_compiler(str(source), str(output), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(output)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)))

@@ -58,10 +58,10 @@ into two tiers:
 
 ```bash
 # fast intent locks (also part of the default suite)
-env -u LC_ALL uv run pytest tests/python/test_intent_constraints.py -m intent -n0
+uv run pytest tests/python/test_intent_constraints.py -m intent -n0
 
 # heavy behavioural constraints
-env -u LC_ALL uv run pytest tests/python/test_intent_constraints.py -m integration -n0
+uv run pytest tests/python/test_intent_constraints.py -m integration -n0
 ```
 
 ## Current status (2026-06-19, macOS arm64)

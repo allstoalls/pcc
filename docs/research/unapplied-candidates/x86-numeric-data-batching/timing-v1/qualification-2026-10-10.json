@@ -1,0 +1,233 @@
+{
+  "candidate_status": "UNAPPLIED",
+  "comparison": {
+    "all_four_complete_objects_equal": true,
+    "baseline_wall_spread_percent": 3.4689426652663293,
+    "cpu_ns": {
+      "baseline_mean": 12474167723.5,
+      "candidate_mean": 11584122543.0,
+      "mean_reduction_percent": 7.135106727988353
+    },
+    "criteria": {
+      "forward_order_improves": true,
+      "mean_reduction_exceeds_baseline_spread": true,
+      "minimum_mean_wall_reduction": true,
+      "no_first_pair_stop_loss": true,
+      "reverse_order_improves": true
+    },
+    "decision": "WHOLE_ENTRY_THRESHOLD_MET_REVIEW_ONLY",
+    "forward_wall_reduction_percent": 6.037876399352243,
+    "limits": "Two samples per arm, one historical host COFF corpus; no current-CI, native-pcc1 or whole-Stage1 speedup claim.",
+    "reverse_wall_reduction_percent": 8.234342326672628,
+    "schema": "pcc.numeric-batching-whole-entry-comparison.v1",
+    "sequence": [
+      "b1",
+      "c1",
+      "c2",
+      "b2"
+    ],
+    "status": "PASS",
+    "through_entry_high_water_rss_bytes": {
+      "baseline_mean": 503650304.0,
+      "candidate_mean": 446494720.0,
+      "mean_reduction_percent": 11.34826754715907
+    },
+    "wall_ns": {
+      "baseline_mean": 12479054016.5,
+      "candidate_mean": 11590912151.5,
+      "mean_reduction_percent": 7.117060827092222
+    }
+  },
+  "decision": "WHOLE_ENTRY_THRESHOLD_MET_REVIEW_ONLY",
+  "driver_sha256": "985429b611a05e0a0716fb31c5eb8733b66810aa6f9ce862325bda4203ee5078",
+  "evidence_sha256": {
+    "baseline_postseal": "821af9ad09726dac1b48699138e59d7b7a744b260e0d3862e471c12d182cf02d",
+    "candidate_postseal": "f703f71a42c249a1017624a790c592313b530bb4d107c7eb4227eb16f304a1c0",
+    "comparison": "2fb1b03560ade5a2beaaadc8ec1033c0a425a0338164c5f9d2b9acd8e412f59a",
+    "qualification": "ea52a1807fa974b5f9dae692dd9fdb9cf30d184d5bee3ed1dc49adbf7d6e7346"
+  },
+  "executed": {
+    "all_four_complete_objects_and_decoded_contracts_equal": true,
+    "fresh_processes": 4,
+    "hooks_counters_warmups_or_retries": false,
+    "ordinary_encode_assembly_object_calls_per_process": 1,
+    "same_interpreter_and_guard": true,
+    "stages": {
+      "b1": {
+        "arm": "baseline",
+        "bootstrap_sha256": "6d5c7dc6a120b619db1ee3a80b40e4779668d22ce69d96d78aaae10a398a9860",
+        "cleanup": "CLEAN; root reaped; ECHILD; no active handles",
+        "cpu_ns": 12691233579,
+        "denied_audit_events": 0,
+        "guard_elapsed_seconds": 20.186587516000145,
+        "guard_sampled_root_rss_peak_bytes": 501919744,
+        "guard_sha256": "bf5ef8e4bff58bd02475ff78966c37f2c733b352c10487d2ca195d2cba41a8c0",
+        "guard_status": "COMPLETE",
+        "result_sha256": "be93d9d7764705087f5ea21d7a2ce4ad1311f50f6e7839ec784076bdaa4f6274",
+        "returncode": 0,
+        "rss_after_entry_bytes": 503361536,
+        "rss_before_entry_bytes": 203538432,
+        "slot": "b1",
+        "wall_ns": 12695499631,
+        "wrapper_sha256": "9d020afe9f46a1401ec29dea9e96b8ea796f396c72a4535aca506a9a3a4c0af0"
+      },
+      "b2": {
+        "arm": "baseline",
+        "bootstrap_sha256": "6d5c7dc6a120b619db1ee3a80b40e4779668d22ce69d96d78aaae10a398a9860",
+        "cleanup": "CLEAN; root reaped; ECHILD; no active handles",
+        "cpu_ns": 12257101868,
+        "denied_audit_events": 0,
+        "guard_elapsed_seconds": 19.75836150500254,
+        "guard_sampled_root_rss_peak_bytes": 503939072,
+        "guard_sha256": "f7016c71053c890e74ffba5f31e26b3217471b385fef8530c461245642086180",
+        "guard_status": "COMPLETE",
+        "result_sha256": "9bf445569fe925ef43fb5ab04dd58b4a8ec35d042793b2e96d7e152c515c5739",
+        "returncode": 0,
+        "rss_after_entry_bytes": 503939072,
+        "rss_before_entry_bytes": 203427840,
+        "slot": "b2",
+        "wall_ns": 12262608402,
+        "wrapper_sha256": "1e8704ee1339c28b941c2991ef7cfb24989a2f3457db168a8b56fdac8b21d97b"
+      },
+      "c1": {
+        "arm": "candidate",
+        "bootstrap_sha256": "6d5c7dc6a120b619db1ee3a80b40e4779668d22ce69d96d78aaae10a398a9860",
+        "cleanup": "CLEAN; root reaped; ECHILD; no active handles",
+        "cpu_ns": 11923803168,
+        "denied_audit_events": 0,
+        "guard_elapsed_seconds": 19.321927778000827,
+        "guard_sampled_root_rss_peak_bytes": 410095616,
+        "guard_sha256": "937c3838163d83021f081c61aed9ecfe64c4303eefc38e6ca9f0256ed2a55e54",
+        "guard_status": "COMPLETE",
+        "result_sha256": "2fd28fa1d231636e164d2ebad25ce8ff09e3237f9cd99b018fd6d43147507d9a",
+        "returncode": 0,
+        "rss_after_entry_bytes": 446533632,
+        "rss_before_entry_bytes": 203415552,
+        "slot": "c1",
+        "wall_ns": 11928961055,
+        "wrapper_sha256": "cd97bac19201395486888f68fc73c192799852fea6623ded50fb1d3d0c160c91"
+      },
+      "c2": {
+        "arm": "candidate",
+        "bootstrap_sha256": "6d5c7dc6a120b619db1ee3a80b40e4779668d22ce69d96d78aaae10a398a9860",
+        "cleanup": "CLEAN; root reaped; ECHILD; no active handles",
+        "cpu_ns": 11244441918,
+        "denied_audit_events": 0,
+        "guard_elapsed_seconds": 18.579201131004083,
+        "guard_sampled_root_rss_peak_bytes": 426532864,
+        "guard_sha256": "0552b0b2d109053b6a7c458eaec26f926244810b88b0b27822c6c6d962bc6df5",
+        "guard_status": "COMPLETE",
+        "result_sha256": "60c05bbb14b38de471f83c01102f8a67c1c5a23bf7c389a829dba5c48214ef4e",
+        "returncode": 0,
+        "rss_after_entry_bytes": 446455808,
+        "rss_before_entry_bytes": 203333632,
+        "slot": "c2",
+        "wall_ns": 11252863248,
+        "wrapper_sha256": "422c8f53552995b0d131d85fbfba836bfe0f243743f62fc779f81dd4a15d7b23"
+      }
+    }
+  },
+  "extra_rounds": false,
+  "input": {
+    "assembly": {
+      "bytes": 76565862,
+      "sha256": "8ad079c23208ef05f5385e975d45421ac5c50f882a14b68d942cf9134567f919"
+    },
+    "reference_object": {
+      "bytes": 12228800,
+      "sha256": "4d910a121adc58f3f57f9d5041abcb406ff9ad3c6a5748581c6671d6cdcfcb6a"
+    },
+    "scope": "One retained pre-class-outline Windows c_ast assembly corpus, not current frontend output or current CI frequencies.",
+    "target": "x86_64-pc-windows-msvc"
+  },
+  "limits_per_slot": {
+    "exclusive_shared_lock": true,
+    "free_reserve_bytes": 4294967296,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "max_output_growth_bytes": 536870912,
+    "runs": 1,
+    "seconds": 300
+  },
+  "measurement_closed": true,
+  "memory_scope": "ru_maxrss before/after entry is a process-lifetime high-water including imports and input loading; it is not current RSS or isolated phase allocation. Guard sampled RSS includes the entire process and later decoding, and is reported separately. Neither metric is a hard kernel RSS bound.",
+  "packet_manifest_sha256": "20a6da7f2f6ada122869baeb03ebf0e4bbc887dc659422bf5a163571952d2c66",
+  "predeclared_thresholds": {
+    "both_order_pairs_must_improve": true,
+    "first_candidate_wall_regression_stop_percent": 10,
+    "mean_reduction_must_exceed_baseline_spread": true,
+    "minimum_mean_wall_reduction_percent": 5
+  },
+  "prerequisites": {
+    "corpus_mechanism": "90.1262 percent fewer retained _Data records with complete object equality; separate counted evidence",
+    "corpus_qualification_sha256": "c040e107db94637973cc639381278e904e7daf39df8b1bf28011138bd6c22ba5",
+    "corpus_result_commit": "e57e8afd12f4d60ef07875f5e92d1b42716350e9",
+    "host_cases": "46/46 PASS, separate evidence",
+    "host_result_commit": "e75360e6a405ce90e83d1583d59a65e1b71b9214"
+  },
+  "preserved_driver_commit": "d30ebf1976bcb7456e62899d5ebe1771d369691c",
+  "qualification_date_utc": "2026-10-10",
+  "schema": "pcc.numeric_data_batching_timing_public_qualification.v1",
+  "scope_limits": [
+    "Two observations per arm under a fixed order-balanced plan. This is limited host evidence for one historical corpus, not a statistical guarantee for arbitrary workloads.",
+    "The 7.1171 percent wall reduction is whole assembler-entry evidence, not a full worker, current CI or Stage1 speedup.",
+    "No native closed-world compiler/runtime/GC qualification is added by this host measurement.",
+    "No production change is applied by this receipt; a separate two-path activation and exact-commit CI need review."
+  ],
+  "sequence": [
+    "b1",
+    "c1",
+    "c2",
+    "b2"
+  ],
+  "source_and_cleanup": "Every slot preserved both complete source inventories, exact input/output contracts and audit-free clean cleanup. Independent complete postseals passed after all four slots; the shared lock is released.",
+  "source_relation": "Only the assembler production path and its new host test differ between these retained snapshots. The baseline complete pcc subtree equals d233 production; unrelated retained snapshot files are not claimed to match the full current CI checkout.",
+  "sources": {
+    "baseline": {
+      "assembler_sha256": "cc71a7b5b5c5db56d665fc83afe670b021c20f76403fb5a381a085cdf37cf84d",
+      "codegen_checksum": "e0145952375a080377be0084bcb6b91ce825102c213b5453473c3896d2fac36c",
+      "inventory_sha256": "568c44d837939cde5ab4da2c2f0115ab30f978716bc423a40e07d9cf2bdc0185",
+      "pcc_tree": "ee02ba6bf0d79e9706c1791aa650093f5f91c338"
+    },
+    "candidate": {
+      "assembler_sha256": "a85b7b1fcfa7cb6fec61e08b1cb8a95096cb03b9ebe38778d2d0de1472fc88b4",
+      "codegen_checksum": "ce75a8770afcdad0679e4fb854f4bb6752fec786ae7558bf07fa46ec52152eb6",
+      "inventory_sha256": "7430a30766c11a59e7185758b725b289388ae131498ce6a8a568bdf10ff773ba",
+      "pcc_tree": "930263bf204e578796c72dab5d4aa31fd7ab27ae"
+    }
+  },
+  "status": "PASS: fixed host whole-entry criteria met",
+  "timing_scope": "Whole ordinary COFF entry including SEH rewrite, parse, layout, emission, schema validation, adaptation, unwind and serialization. Imports, input loading/hash, decoding, persistence and full source seals are outside the interval.",
+  "unrun_groups": [
+    {
+      "group": "complete tests/python/test_async_await.py",
+      "reason": "Not selected by the admitted 46-case or corpus gate. Its full compile/run coverage needs ordinary subprocess/native execution outside the current hard-NPROC0 and process-audit boundary.",
+      "status": "UNRUN"
+    },
+    {
+      "group": "gateway host subsets",
+      "reason": "Not selected or executed for this exact candidate. A compatible host subset would require its own reviewed selection; no earlier gateway result is inherited.",
+      "status": "UNRUN"
+    },
+    {
+      "group": "gateway full/native suite",
+      "reason": "Ordinary compile/run and process-based integration work is outside this single-process corpus admission; no candidate-matched runtime/executable gate has been run.",
+      "status": "UNRUN"
+    },
+    {
+      "group": "pcc0 native and observed GC0/GC1",
+      "reason": "No matched runtime build and hash-bound executable gate for this new candidate. Previous exact-ELF admissions and witnesses cannot be transferred.",
+      "status": "UNRUN"
+    },
+    {
+      "group": "observed GC2/GC3/GC4",
+      "reason": "No candidate native gate; required thread/process behavior cannot be represented by the hard-NPROC0 host boundary.",
+      "status": "UNRUN"
+    },
+    {
+      "group": "native compiler/pcc1, full Stage1/fixed point and platform CI",
+      "reason": "The candidate remains an unapplied artifact. No exact-candidate native compiler build or CI run has occurred; older production CI evidence is not reused.",
+      "status": "UNRUN"
+    }
+  ]
+}

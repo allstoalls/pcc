@@ -9,7 +9,7 @@ Per `docs/plans/python-frontend-plan.md` §Positioning. Measured
 | 2 | Numeric code speed (typed) | 0.9×–1.2× of Codon | Phase-1 typed fib runs sub-20ms on ARM; no formal pyperformance harness yet | Benchmark harness in place but `pyperformance` comparison not wired | ⚠️ pending measurement |
 | 3 | Dynamic code speed | ≈ CPython (Codon fails) | Any `import numpy/pandas/requests` style script runs end-to-end through libpython; speed ≈ CPython because that's the actual execution path | Codon cannot run these at all | ✅ |
 | 4 | `import numpy/pandas/requests` works | ✅ target | ✅ — phase4 covers 13+ stdlib modules (sys/os/math/json/datetime/pathlib/re/base64/urllib.parse/io/time/string/builtins). numpy/pandas/requests blocked only by `pip install` in this workspace; the runtime path is proven via `json.loads(...)`, `os.listdir(...)`, `urllib.parse.quote(...)` | Codon ❌ | ✅ |
-| 5 | Runtime lib LoC | ≤ 6000 C | 4978 LoC (`wc -l pcc/py_runtime/src/*.c`) | Codon runtime is ~40k C++ | ✅ |
+| 5 | Runtime lib LoC | ≤ 6000 C | 4978 LoC (`wc -l pcc/runtime/src/*.c`) | Codon runtime is ~40k C++ | ✅ |
 | 6 | exe size (hello world, typed) | ≤ 800 KB | Typed-only phase1 exe: **32.8 KB** (`module_const`). Phase1 tests without CPython fallback: ~33–100 KB. Phase4 + libpython: ~93 KB static | Codon typed hello ~5 MB | ✅ |
 | 7 | Compile time | ≤ 0.5× baseline for pyperformance-sized project | Per-test phase4 compile: 0.23–0.33 s. No pyperformance project yet harnessed. | Comparison pending | ⚠️ pending |
 | 8 | License | MIT | MIT (repo root) | Codon: commercial | ✅ |

@@ -89,7 +89,7 @@ def test_dict_fromkeys_native_no_libpython(tmp_path):
 
 def test_dict_fromkeys_mirrors_reject_iterator_errors_before_returning_dict():
     py_source = (
-        REPO / "pcc" / "py_runtime" / "py" / "py_dict.py"
+        REPO / "pcc" / "runtime" / "py" / "py_dict.py"
     ).read_text(encoding="utf-8")
 
     py_body = py_source.split("def py_dict_fromkeys", 1)[1].split(

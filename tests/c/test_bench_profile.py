@@ -1,6 +1,6 @@
 import json
 
-from pcc.bench_profile import BenchResult, format_bench_json
+from pcc.diagnostics.bench_profile import BenchResult, format_bench_json
 
 
 def test_bench_json_schema():

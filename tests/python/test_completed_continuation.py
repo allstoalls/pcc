@@ -4,8 +4,8 @@ from pathlib import Path
 import subprocess
 
 
-def test_completed_continuation_value_survives_every_collector(tmp_path, pcc_py_runtime_archive):
-    archive = pcc_py_runtime_archive
+def test_completed_continuation_value_survives_every_collector(tmp_path, pcc_runtime_archive):
+    archive = pcc_runtime_archive
     root = Path(__file__).resolve().parents[2]
     source = tmp_path / "completed.c"
     source.write_text('''#include "py_runtime.h"
@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
 }
 ''')
     executable = tmp_path / "completed"
-    compiled = subprocess.run(["clang", "-I" + str(root / "pcc/py_runtime/include"),
+    compiled = subprocess.run(["clang", "-I" + str(root / "pcc/runtime/include"),
         str(source), str(archive), "-pthread", "-o", str(executable)],
         capture_output=True, text=True, timeout=30)
     assert compiled.returncode == 0, compiled.stdout + compiled.stderr

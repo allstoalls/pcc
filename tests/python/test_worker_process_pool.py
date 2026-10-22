@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from pcc.py_frontend.pipeline_frontend_workers import run_worker_commands
+from pcc.frontends.python.pipeline_frontend_workers import run_worker_commands
 
 
 def test_pool_stops_on_first_failure_and_cleans_running_children(tmp_path):
@@ -36,8 +36,46 @@ def test_pool_preserves_environment_prefix_and_empty_quoted_arguments(tmp_path):
     assert output.read_text() == "value with spaces|['', \"quote'word\"]"
 
 
+def test_cleanup_reaps_leader_exit_race_without_masking_worker_failure(monkeypatch):
+    from pcc.frontends.python import worker_process_pool as pool
+
+    class Process:
+        def __init__(self, pid, failed):
+            self.pid = pid
+            self.failed = failed
+            self.exited = False
+            self.returncode = None
+
+        def poll(self):
+            if self.failed:
+                self.returncode = 7
+            elif self.exited:
+                self.returncode = 0
+            return self.returncode
+
+        def wait(self, timeout):
+            return self.poll()
+
+    failure = Process(1001, True)
+    peer = Process(1002, False)
+    processes = iter((failure, peer))
+    monkeypatch.setattr(pool.subprocess, "Popen", lambda *args, **kwargs: next(processes))
+    monkeypatch.setattr(pool.time, "sleep", lambda seconds: None)
+
+    def signal(pid, number):
+        if pid == peer.pid and not peer.exited:
+            peer.exited = True
+            raise PermissionError("group contains only unreaped zombies")
+        raise ProcessLookupError("leader has exited")
+
+    monkeypatch.setattr(pool.os, "killpg", signal)
+    result = pool._host_pool([(["failure"], []), (["peer"], [])], 2)
+    assert result == (1 << 32) | 7
+    assert peer.returncode == 0
+
+
 def test_weighted_pool_starts_a_fitting_worker_before_its_predecessor_exits(tmp_path):
-    from pcc.py_frontend.worker_process_pool import run_weighted_worker_processes
+    from pcc.frontends.python.worker_process_pool import run_weighted_worker_processes
 
     ready = tmp_path / "ready"
     done = tmp_path / "done"
@@ -61,10 +99,10 @@ def test_weighted_pool_starts_a_fitting_worker_before_its_predecessor_exits(tmp_
     assert done.read_text() == tail.read_text() == "ok"
 
 
-def test_native_pool_runs_native_children_and_stops_on_failure(tmp_path, pcc_py_runtime_archive):
+def test_native_pool_runs_native_children_and_stops_on_failure(tmp_path, pcc_runtime_archive):
     from pathlib import Path
-    from pcc.py_frontend.pipeline import compile_python, compile_python_multi
-    from pcc.py_frontend import worker_process_pool
+    from pcc.frontends.python.pipeline import compile_python, compile_python_multi
+    from pcc.frontends.python import worker_process_pool
 
     child_source = tmp_path / "child.py"
     child = tmp_path / "child"
@@ -87,13 +125,13 @@ def main():
 main()
 ''')
     compile_python(str(child_source), str(child), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     parent_source = tmp_path / "parent.py"
     parent = tmp_path / "parent"
     parent_source.write_text('''
 import sys
 import subprocess
-from pcc.py_frontend.worker_process_pool import run_worker_processes, run_weighted_worker_processes
+from pcc.frontends.python.worker_process_pool import run_worker_processes, run_weighted_worker_processes
 def main():
     child = sys.argv[1]
     commands = [child + " slow " + sys.argv[2], child + " fail", child + " later " + sys.argv[3]]
@@ -109,9 +147,9 @@ main()
 ''')
     compile_python_multi(
         [str(Path(worker_process_pool.__file__)), str(parent_source)], str(parent),
-        module_names=["pcc.py_frontend.worker_process_pool", "pool_parent"],
+        module_names=["pcc.frontends.python.worker_process_pool", "pool_parent"],
         entry_module="pool_parent", recursive_stdlib=True,
-        backend="self", libpython_mode="off", runtime_archive=str(pcc_py_runtime_archive),
+        backend="self", libpython_mode="off", runtime_archive=str(pcc_runtime_archive),
     )
     for gc in range(5):
         pid_file = tmp_path / f"child-{gc}.pid"

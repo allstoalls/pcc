@@ -49,9 +49,9 @@ def keyword(handle: Pair) -> int:
 def test_valueclass_function_signature_expansion_preserves_defaults_and_wire(
     tmp_path, valueclass_function_modules,
 ):
-    from pcc.py_frontend import pipeline_exports as exports_api
-    from pcc.py_frontend.pipeline_context import build_closed_world_context
-    from pcc.py_frontend.py_ast import FuncDef
+    from pcc.frontends.python import pipeline_exports as exports_api
+    from pcc.frontends.python.pipeline_context import build_closed_world_context
+    from pcc.frontends.python.py_ast import FuncDef
 
     paths, names = valueclass_function_modules
     parsed, exports, derived = build_closed_world_context(paths, names)
@@ -91,9 +91,9 @@ def test_valueclass_function_signature_expansion_preserves_defaults_and_wire(
 def test_valueclass_function_expansion_keeps_optional_signature_metadata(
     valueclass_function_modules, signature_state,
 ):
-    from pcc.py_frontend.codegen.extern_func_info_lowering import ExternFuncInfoLoweringMixin
-    from pcc.py_frontend.pipeline_context import build_closed_world_context
-    from pcc.py_frontend.pipeline_exports import _expand_local_valueclass_export_refs
+    from pcc.frontends.python.codegen.extern_func_info_lowering import ExternFuncInfoLoweringMixin
+    from pcc.frontends.python.pipeline_context import build_closed_world_context
+    from pcc.frontends.python.pipeline_exports import _expand_local_valueclass_export_refs
 
     paths, names = valueclass_function_modules
     _, exports, _ = build_closed_world_context(paths, names)
@@ -112,8 +112,8 @@ def test_valueclass_function_expansion_keeps_optional_signature_metadata(
 def test_cross_module_valueclass_function_positional_and_keyword_calls_use_payload_abi(
     tmp_path, valueclass_function_modules,
 ):
-    from pcc.ir_diff import IrSummary
-    from pcc.py_frontend.pipeline_context import compile_contextual_per_module_fallback_counts
+    from pcc.diagnostics.ir_diff import IrSummary
+    from pcc.frontends.python.pipeline_context import compile_contextual_per_module_fallback_counts
 
     paths, names = valueclass_function_modules
     counts = compile_contextual_per_module_fallback_counts(

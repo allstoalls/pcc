@@ -8,7 +8,7 @@ import pytest
 
 @pytest.mark.parametrize("kind", ["bytes", "str", "bytearray"])
 def test_join_results_release_on_rebind_argument_and_attribute_store(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, monkeypatch, kind,
+    tmp_path, pcc_runtime_archive, python_program_compiler, monkeypatch, kind,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = tmp_path / "join_owner.py"
@@ -47,7 +47,7 @@ main()
         "CHUNK", '"x"' if kind == "str" else 'b"x"'))
     binary = tmp_path / "join_owner"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         run = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30,
                              env=dict(os.environ, PCC_GC_BACKEND=str(backend)))

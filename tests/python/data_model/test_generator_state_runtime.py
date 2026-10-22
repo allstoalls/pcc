@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 def test_generator_next_send_finish_and_stop_value_native(
-    tmp_path, pcc_py_runtime_archive
+    tmp_path, pcc_runtime_archive
 ):
     src = tmp_path / "gen_probe.c"
     exe = tmp_path / "gen_probe"
@@ -84,9 +84,9 @@ def test_generator_next_send_finish_and_stop_value_native(
         [
             os.environ.get("CC", "cc"),
             "-I",
-            str(pcc_py_runtime_archive.parent / "include"),
+            str(pcc_runtime_archive.parent / "include"),
             str(src),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(exe),
@@ -98,9 +98,9 @@ def test_generator_next_send_finish_and_stop_value_native(
 
 
 def test_generator_finish_symbols_are_wired():
-    py_src = Path("pcc/py_runtime/py/py_gen.py").read_text(encoding="utf-8")
-    header = Path("pcc/py_runtime/include/py_runtime.h").read_text(encoding="utf-8")
-    abi = Path("pcc/py_frontend/codegen/runtime_abi.py").read_text(encoding="utf-8")
+    py_src = Path("pcc/runtime/py/py_gen.py").read_text(encoding="utf-8")
+    header = Path("pcc/runtime/include/py_runtime.h").read_text(encoding="utf-8")
+    abi = Path("pcc/frontends/python/codegen/runtime_abi.py").read_text(encoding="utf-8")
 
     assert '@c_abi_export("py_gen_finish")' in py_src
     assert "PyObject *py_gen_finish(PyObject *gen, PyObject *value);" in header
@@ -108,7 +108,7 @@ def test_generator_finish_symbols_are_wired():
 
 
 def test_generator_resume_boundaries_attribute_silent_null_results():
-    py_src = Path("pcc/py_runtime/py/py_gen.py").read_text(encoding="utf-8")
+    py_src = Path("pcc/runtime/py/py_gen.py").read_text(encoding="utf-8")
 
     messages = (
         "generator construction received a NULL resume thunk or frame",

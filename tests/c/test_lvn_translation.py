@@ -1,7 +1,9 @@
-from pcc.ast import c_ast
-from pcc.parse.c_parser import CParser
-from pcc.passes import PassContext, PassPipeline
-from pcc.passes.propagation import LocalValueNumberingPass
+import pytest
+
+from pcc.frontends.c.ast import c_ast
+from pcc.frontends.c.parse.c_parser import CParser
+from pcc.frontends.c.passes import PassContext, PassPipeline
+from pcc.frontends.c.passes.propagation import LocalValueNumberingPass
 
 
 def _transformed_function(code: str):
@@ -157,3 +159,66 @@ def test_lvn_does_not_reuse_string_literal_as_an_array_initializer():
     assert isinstance(second_decl.init, c_ast.Constant)
     assert second_decl.init.type == "string"
     assert second_decl.init.value == '"abcdefgh"'
+
+
+@pytest.mark.parametrize("effect", (
+    "mutate(&cached);",
+    "if (mutate(&cached)) {}",
+    "*alias = 1;",
+    "alias[0] = 1;",
+    "(*alias)++;",
+))
+def test_lvn_invalidates_cached_result_after_aliased_write(effect):
+    func = _transformed_function(
+        "int mutate(long *p); int f(void) { long cached = 0; "
+        "long *alias = &cached; " + effect +
+        "long next = 0; return next; }"
+    )
+    next_decl = func.body.block_items[-2]
+    assert isinstance(next_decl.init, c_ast.Constant)
+    assert next_decl.init.value == "0"
+
+
+@pytest.mark.parametrize("effect", (
+    "mutate(&x);",
+    "if (mutate(&x)) {}",
+    "*alias = 1;",
+    "alias[0] = 1;",
+    "(*alias)++;",
+))
+def test_lvn_invalidates_expression_operand_after_aliased_write(effect):
+    func = _transformed_function(
+        "int mutate(int *p); int f(int x, int y) { int cached = x + y; "
+        "int *alias = &x; " + effect +
+        "int next = x + y; return next; }"
+    )
+    next_decl = func.body.block_items[-2]
+    assert isinstance(next_decl.init, c_ast.BinaryOp)
+    assert next_decl.init.op == "+"
+
+
+@pytest.mark.integration
+def test_lvn_aliased_call_and_store_preserve_native_values(tmp_path):
+    import subprocess
+    from tests.owned_runtime_c_fixture import link_c_harness
+
+    source = tmp_path / "lvn_aliased_memory.c"
+    source.write_text(
+        "int mutate(long *p) { *p = 1; return 1; }\n"
+        "int main(void) {\n"
+        "  long ready = 0;\n"
+        "  if (mutate(&ready) != 1) return 1;\n"
+        "  long sent = 0;\n"
+        "  if (sent != 0 || ready != 1) return 2;\n"
+        "  long first = 7;\n"
+        "  long *alias = &first;\n"
+        "  *alias = 9;\n"
+        "  long second = 7;\n"
+        "  if (first != 9 || second != 7) return 3;\n"
+        "  return 0;\n"
+        "}\n"
+    )
+    executable = tmp_path / "lvn_aliased_memory"
+    link_c_harness(source, executable)
+    run = subprocess.run([str(executable)], capture_output=True, text=True, timeout=10)
+    assert run.returncode == 0, run.stdout + run.stderr

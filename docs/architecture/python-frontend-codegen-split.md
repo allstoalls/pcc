@@ -6,8 +6,8 @@ Active architecture note for the `L1CodeGen` split.
 
 ## Model
 
-`pcc.py_frontend.codegen.layer1.L1CodeGen` is the host class. The native
-lowering files under `pcc.py_frontend.codegen` are contextual mixins, not
+`pcc.frontends.python.codegen.layer1.L1CodeGen` is the host class. The native
+lowering files under `pcc.frontends.python.codegen` are contextual mixins, not
 standalone compiler implementations.
 
 The semantic type of `self` inside these mixins is `L1CodeGen`.
@@ -15,19 +15,19 @@ The semantic type of `self` inside these mixins is `L1CodeGen`.
 Current contextual mixins include:
 
 ```text
-pcc.py_frontend.codegen.async_with_lowering
-pcc.py_frontend.codegen.core_helpers
-pcc.py_frontend.codegen.cpy_import_state
-pcc.py_frontend.codegen.dynamic_type_lowering
-pcc.py_frontend.codegen.exception_lowering
-pcc.py_frontend.codegen.extern_lowering
-pcc.py_frontend.codegen.import_lowering
-pcc.py_frontend.codegen.ir_scaffold_lowering
-pcc.py_frontend.codegen.lambda_callback_lowering
-pcc.py_frontend.codegen.typed_int_abi
-pcc.py_frontend.codegen.typing_lowering
-pcc.py_frontend.codegen.unsafe_lowering
-pcc.py_frontend.codegen.native_*
+pcc.frontends.python.codegen.async_with_lowering
+pcc.frontends.python.codegen.core_helpers
+pcc.frontends.python.codegen.cpy_import_state
+pcc.frontends.python.codegen.dynamic_type_lowering
+pcc.frontends.python.codegen.exception_lowering
+pcc.frontends.python.codegen.extern_lowering
+pcc.frontends.python.codegen.import_lowering
+pcc.frontends.python.codegen.ir_scaffold_lowering
+pcc.frontends.python.codegen.lambda_callback_lowering
+pcc.frontends.python.codegen.typed_int_abi
+pcc.frontends.python.codegen.typing_lowering
+pcc.frontends.python.codegen.unsafe_lowering
+pcc.frontends.python.codegen.native_*
 ```
 
 ## Gates
@@ -92,7 +92,7 @@ shape supported by the closed-world compiler.
 
 `tests/fallback_baseline.json` is the authoritative fallback ratchet.
 
-Policy lives in `pcc.py_frontend.codegen.host_contract`, not in the baseline
+Policy lives in `pcc.frontends.python.codegen.host_contract`, not in the baseline
 JSON. New split modules must be added there and must have contextual baseline
 entries.
 

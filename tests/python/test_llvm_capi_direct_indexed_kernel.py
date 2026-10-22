@@ -16,14 +16,14 @@ from pcc.backend.self_backend_aarch64_darwin import (
     emit_aarch64_darwin_indexed_module,
     emit_aarch64_darwin_indexed_transport,
 )
-from pcc.llvm_capi import ir
-from pcc.llvm_capi.direct_indexed_kernel import (
+from pcc.ir import ir
+from pcc.ir.direct_indexed_kernel import (
     build_direct_indexed_function,
     direct_indexed_module_cfg_stats,
     direct_indexed_module_first_libpython_edge,
     direct_indexed_module_needs_libpython,
 )
-from pcc.py_frontend.codegen.class_gen import _classgen_emit_dynamic_attr_value
+from pcc.frontends.python.codegen.class_gen import _classgen_emit_dynamic_attr_value
 
 
 _DIRECT_STATIC_METHOD_ABI = (
@@ -559,10 +559,10 @@ _FRONTEND_INLINE_EDGE_SOURCE = (
 
 def _generate_frontend_module(monkeypatch, *, direct: bool):
     """Lower the canary source through L1CodeGen in direct or text mode."""
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen import exception_lowering
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen import exception_lowering
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
     if direct:
         monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "1")
@@ -595,6 +595,8 @@ def _generate_frontend_module(monkeypatch, *, direct: bool):
     )
     typed = type_infer.infer_module(ast_module)
     codegen = L1CodeGen(typed, ir_scaffold_mode="on")
+    # This fixture exercises the Darwin indexed emitter on every host.
+    codegen._target_triple = "arm64-apple-darwin"
     rendered = codegen.generate(typed)
     return codegen.module, rendered
 
@@ -688,7 +690,7 @@ def test_frontend_edge_only_cleanup_blocks_keep_safepoint_records(monkeypatch):
 def test_frontend_ir_module_helpers_have_matching_static_exports():
     """Frontend uses of ``IRBuilder_*`` module helpers must be self-host resolvable.
 
-    The compiled stage resolves a module-level ``pcc.llvm_capi.ir`` helper only
+    The compiled stage resolves a module-level ``pcc.ir.ir`` helper only
     when it is imported by name and listed in
     ``layer1_support._build_static_native_exports()`` with the real positional
     arity; the attribute form ``ir.IRBuilder_x(...)`` falls back to a dynamic
@@ -699,9 +701,9 @@ def test_frontend_ir_module_helpers_have_matching_static_exports():
     import inspect
     from pathlib import Path
 
-    from pcc.py_frontend.codegen import layer1_support
+    from pcc.frontends.python.codegen import layer1_support
 
-    codegen_dir = Path(ir.__file__).resolve().parents[1] / "py_frontend" / "codegen"
+    codegen_dir = Path(layer1_support.__file__).resolve().parent
     attribute_form: dict[str, list[str]] = {}
     imported: set[str] = set()
     for source in codegen_dir.glob("*.py"):
@@ -710,11 +712,11 @@ def test_frontend_ir_module_helpers_have_matching_static_exports():
         if hits:
             attribute_form[source.name] = sorted(set(hits))
         for block in re.findall(
-            r"from pcc\.llvm_capi\.ir import \(([^)]*)\)", text, re.S
+            r"from pcc\.ir\.ir import \(([^)]*)\)", text, re.S
         ):
             imported.update(re.findall(r"\b(IRBuilder_[A-Za-z0-9_]+)", block))
         imported.update(
-            re.findall(r"from pcc\.llvm_capi\.ir import (IRBuilder_[A-Za-z0-9_]+)\b", text)
+            re.findall(r"from pcc\.ir\.ir import (IRBuilder_[A-Za-z0-9_]+)\b", text)
         )
     assert not attribute_form, (
         "ir.IRBuilder_* attribute calls are not resolvable under pcc1; import "
@@ -726,7 +728,7 @@ def test_frontend_ir_module_helpers_have_matching_static_exports():
     # is such a case).  When a helper IS in the export table, its declared
     # positional arity must match the real function, or a call site with the
     # extra argument mis-types and falls back to the dynamic path.
-    exports = layer1_support._build_static_native_exports()["pcc.llvm_capi.ir"]
+    exports = layer1_support._build_static_native_exports()["pcc.ir.ir"]
     problems = []
     for name in sorted(imported):
         export = exports.get(name)
@@ -1146,7 +1148,7 @@ def test_direct_publication_uses_exact_static_abi_in_stage1_context(tmp_path):
     import os
     from pathlib import Path
 
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     repo = Path(__file__).absolute().parents[2]
     named_output = os.environ.get("PCC_CONTEXTUAL_IR_OUTPUT")
@@ -1178,7 +1180,7 @@ def test_direct_publication_uses_exact_static_abi_in_stage1_context(tmp_path):
     # C compilation and linking now belong to the compiler closure. The old
     # 228-file snapshot predates those owners; keep the ABI assertions below
     # tied to the actual closure instead of an unrelated historical count.
-    assert "pcc.evaluater.c_evaluator" in mods
+    assert "pcc.frontends.c.evaluator.c_evaluator" in mods
     assert "pcc.backend.macho_exec" in mods
     assert "pcc.backend.self_backend_aarch64_fragments" in mods
 
@@ -1213,23 +1215,23 @@ def test_direct_publication_uses_exact_static_abi_in_stage1_context(tmp_path):
         "pcc.backend.macho_obj",
         "pcc.backend.macho_spec",
         "pcc.backend.native_object",
-        "pcc.py_frontend.codegen.assignment_statement_lowering",
-        "pcc.py_frontend.codegen.assignment_store_lowering",
-        "pcc.py_frontend.codegen.class_gen",
-        "pcc.py_frontend.codegen.comprehension_lowering",
-        "pcc.py_frontend.codegen.exact_int_lowering",
-        "pcc.py_frontend.codegen.generation_lowering",
-        "pcc.py_frontend.codegen.hoist_boxing",
-        "pcc.py_frontend.codegen.layer1_init",
-        "pcc.py_frontend.codegen.module_global_lowering",
-        "pcc.py_frontend.codegen.native_text_modules",
-        "pcc.py_frontend.pipeline_frontend_worker_execution",
-        "pcc.py_frontend.pipeline_frontend_parallel",
-        "pcc.py_frontend.pipeline_self_link",
-        "pcc.py_frontend.pipeline_self_backend_link",
-        "pcc.py_frontend.pipeline",
-        "pcc.llvm_capi.ir",
-        "pcc.llvm_capi.direct_indexed_kernel",
+        "pcc.frontends.python.codegen.assignment_statement_lowering",
+        "pcc.frontends.python.codegen.assignment_store_lowering",
+        "pcc.frontends.python.codegen.class_gen",
+        "pcc.frontends.python.codegen.comprehension_lowering",
+        "pcc.frontends.python.codegen.exact_int_lowering",
+        "pcc.frontends.python.codegen.generation_lowering",
+        "pcc.frontends.python.codegen.hoist_boxing",
+        "pcc.frontends.python.codegen.layer1_init",
+        "pcc.frontends.python.codegen.module_global_lowering",
+        "pcc.frontends.python.codegen.native_text_modules",
+        "pcc.frontends.python.pipeline_frontend_worker_execution",
+        "pcc.frontends.python.pipeline_frontend_parallel",
+        "pcc.frontends.python.pipeline_self_link",
+        "pcc.frontends.python.pipeline_self_backend_link",
+        "pcc.frontends.python.pipeline",
+        "pcc.ir.ir",
+        "pcc.ir.direct_indexed_kernel",
     }
     assert targets.issubset(set(mods))
     counts = pipeline.compile_contextual_per_module_fallback_counts(
@@ -1243,11 +1245,11 @@ def test_direct_publication_uses_exact_static_abi_in_stage1_context(tmp_path):
     assert counts == {module_name: 0 for module_name in targets}
 
     parallel_ir = (
-        tmp_path / "pcc_py_frontend_pipeline_frontend_parallel.ll"
+        tmp_path / "pcc_frontends_python_pipeline_frontend_parallel.ll"
     ).read_text(encoding="utf-8")
     parallel_match = re.search(
         r"define external ptr "
-        r"@user_pcc_py_frontend_pipeline_frontend_parallel_"
+        r"@user_pcc_frontends_python_pipeline_frontend_parallel_"
         r"compile_parallel_uncached\([^)]*\) \{(.+?)\n\}",
         parallel_ir,
         re.DOTALL,
@@ -1255,17 +1257,17 @@ def test_direct_publication_uses_exact_static_abi_in_stage1_context(tmp_path):
     assert parallel_match is not None
     assert "strict.nolib.stub" not in parallel_match.group(1)
 
-    link_ir = (tmp_path / "pcc_py_frontend_pipeline_self_backend_link.ll").read_text()
+    link_ir = (tmp_path / "pcc_frontends_python_pipeline_self_backend_link.ll").read_text()
     owned_link = re.search(
-        r"define [^\n]+@user_pcc_py_frontend_pipeline_self_backend_link_"
+        r"define [^\n]+@user_pcc_frontends_python_pipeline_self_backend_link_"
         r"_owned_macho_link_in_process\([^\n]*\) \{\n(.*?)\n\}", link_ir, re.S,
     )
     assert owned_link is not None
     assert "strict.nolib.stub" not in owned_link.group(1)
 
-    caller_ir = (tmp_path / "pcc_llvm_capi_ir.ll").read_text(encoding="utf-8")
+    caller_ir = (tmp_path / "pcc_ir_ir.ll").read_text(encoding="utf-8")
     callee_ir = (
-        tmp_path / "pcc_llvm_capi_direct_indexed_kernel.ll"
+        tmp_path / "pcc_ir_direct_indexed_kernel.ll"
     ).read_text(encoding="utf-8")
     assembler_ir = (
         tmp_path / "pcc_backend_arm64_asm_driver.ll"
@@ -1312,7 +1314,7 @@ def test_direct_publication_uses_exact_static_abi_in_stage1_context(tmp_path):
         assert "@py_obj_setattr(" not in method_body, method
         assert "@user_pcc_backend_arm64_asm_driver__SectionBuffer_is_text(" in method_body, method
         assert "strict.nolib.stub" not in method_body, method
-    from pcc.ir_diff import IrSummary
+    from pcc.diagnostics.ir_diff import IrSummary
 
     fragment_edges = (
         ("self_backend_aarch64_fragments", "AArch64EmissionFragments__append_record",
@@ -1350,7 +1352,7 @@ def test_direct_publication_uses_exact_static_abi_in_stage1_context(tmp_path):
         assert "@py_obj_call" not in getter_body, getter
         assert "@py_valuebox_get_field" not in getter_body, getter
     pipeline_ir = (
-        tmp_path / "pcc_py_frontend_pipeline.ll"
+        tmp_path / "pcc_frontends_python_pipeline.ll"
     ).read_text(encoding="utf-8")
     assert "classgen.arg.ARM64_RELOC_UNSIGNED" not in assembler_ir
     assert not re.search(
@@ -1362,7 +1364,7 @@ def test_direct_publication_uses_exact_static_abi_in_stage1_context(tmp_path):
     assert not re.search(r"shl i64 1, %mul\.", assembler_ir)
     assert not re.search(
         r"define external void "
-        r"@user_pcc_py_frontend_pipeline__record_macho_link_profile\([^\n]*\) "
+        r"@user_pcc_frontends_python_pipeline__record_macho_link_profile\([^\n]*\) "
         r"\{\nstrict\.nolib\.stub:",
         pipeline_ir,
     )
@@ -1381,7 +1383,7 @@ def test_direct_publication_uses_exact_static_abi_in_stage1_context(tmp_path):
     assert not re.search(r"%dyn\.attr\.(?:" + dynamic_names + r")\.", caller_ir)
 
     method_prefix = (
-        "user_pcc_llvm_capi_direct_indexed_kernel_"
+        "user_pcc_ir_direct_indexed_kernel_"
         "DirectIndexedFunctionBuilder_"
     )
     for method_name in _DIRECT_STATIC_METHOD_ABI:

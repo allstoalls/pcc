@@ -1,0 +1,68 @@
+{
+  "arms": {
+    "candidate": {
+      "actual_candidate_edges": 3,
+      "executable_bytes": 26302840,
+      "executable_sha256": "912aea9c4a76f91efb839856c978b13384d4e0341d4b3d92b5b1c37aaa196cb6",
+      "generated_ir_bytes": 640329,
+      "generated_ir_sha256": "92d6e84015e2c47084e6dfb692364e8713e6770920679c294a583e14884affba",
+      "guard_elapsed_seconds": 8.905897152000762,
+      "object_slot_calls": 4,
+      "peak_sampled_rss_bytes": 124796928
+    },
+    "inline-reference": {
+      "actual_candidate_edges": 0,
+      "executable_bytes": 26367032,
+      "executable_sha256": "84aa5f918b6137ff4a89b41d374c53d3b9f84242ab0e20b1e94d63ee1dfdb607",
+      "generated_ir_bytes": 738581,
+      "generated_ir_sha256": "16eff8ae773792145b5ddbea4ca041c6d634198940feed24675db4bbe225e0db",
+      "guard_elapsed_seconds": 9.43658141099877,
+      "object_slot_calls": 4,
+      "peak_sampled_rss_bytes": 127582208
+    }
+  },
+  "candidate_source_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "comparison": "The reference restores one former inline reporting method within the same candidate compiler and runtime. It is not an independent baseline compiler/runtime.",
+  "compile_harness_manifest_sha256": "3d3fe30e9442c95a8b0f3ff70db640ee34d485556ea33a26b9f13d20ab7e8c6c",
+  "compiler_sha256": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+  "date_utc": "2026-10-09",
+  "harness_preservation_commit": "3d7eeb4300413f3864c73414965760f600bbfe04",
+  "measurement_limits": "One compilation per arm. Elapsed times are diagnostic only, not a speedup benchmark.",
+  "program_sha256": "1f9407b70ea3b765c4bba302dea9ecca7d363f5ddeef7b5af4b301f657e8adc6",
+  "qualification_boundaries": {
+    "compiled_pcc1": "UNRUN",
+    "complete_candidate_and_canonical_source_inventory_checks": "PASS before and after each arm",
+    "full_async_gateway": "UNRUN",
+    "gc0_through_gc4": "UNRUN",
+    "macos_execution": "UNRUN",
+    "native_execution": "UNRUN",
+    "same_process_cpython_reference": "PASS",
+    "separate_fresh_RuntimeError_C_fixture": "UNRUN"
+  },
+  "receipt_sha256": "bbf55599af5599eb302ad7d5fca0fe18d5870f99a65dd887012897ae5b664e3d",
+  "runtime_configuration": {
+    "ordered_members": 191,
+    "refcount": "atomic",
+    "target": "x86_64-unknown-linux-gnu",
+    "threads": true
+  },
+  "runtime_sha256": "a6645f903e03f6766ecc7466b76f2993318582d287a393831aa5522158421915",
+  "schema": "pcc.cold_slot_callsite_compile_public.v1",
+  "scope": "Host-pcc0 public executable compilation of one unchanged Python callsite fixture using ordinary import discovery and an explicit host target. Emitted ELF files have not yet been executed.",
+  "size_comparison": {
+    "executable_bytes_reduction": 64192,
+    "ir_bytes_reduction": 98252,
+    "ir_bytes_reduction_percent": 13.3028063272681
+  },
+  "source_patch_sha256": "4dd5955455944d3b905fd7f5998ac874fd0b815c22d45af13092f9c582259136",
+  "status": "BOTH_COMPILE_PASS",
+  "supervision": {
+    "audit_denials": 0,
+    "cleanup": "Both known roots reaped, ECHILD true, no remaining handles",
+    "continuous_disk_reserve_bytes": 4294967296,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "wall_seconds_each": 300
+  },
+  "test_successor_delta_sha256": "43e74045c8305a16caa0c88f4404476f3ce752a5cd8039250534b274212fd4ac"
+}

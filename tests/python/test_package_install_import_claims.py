@@ -20,7 +20,7 @@ import zipfile
 from pathlib import Path
 
 from pcc.package.install import install_package
-from pcc.package_schema import PACKAGE_MANIFEST_SCHEMA
+from pcc.package.schema import PACKAGE_MANIFEST_SCHEMA
 
 
 def _write_pure_python_wheel(path: Path) -> Path:

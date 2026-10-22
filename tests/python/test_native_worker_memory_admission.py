@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python, compile_python_multi
-from pcc.py_frontend import pipeline_frontend_workers, worker_process_pool
+from pcc.frontends.python.pipeline import compile_python, compile_python_multi
+from pcc.frontends.python import pipeline_frontend_workers, worker_process_pool
 
 
 PROBE = r'''
 import os
 from pcc.extern import extern, c_int64
-from pcc.py_frontend.pipeline_frontend_workers import compiled_native_export_jobs, compiled_native_summary_plan, compiled_native_worker_budget
+from pcc.frontends.python.pipeline_frontend_workers import compiled_native_export_jobs, compiled_native_summary_plan, compiled_native_worker_budget
 
 rss = extern("pcc_os_current_rss_bytes", (), c_int64)
 collector = extern("pcc_gc_backend", (), c_int64)
@@ -49,20 +49,20 @@ main()
 '''
 
 
+# the existing owned RSS boundary covers Darwin/Linux
+@pytest.mark.pcc_gate(probe=lambda: not (os.name != "posix"))
 def test_native_rss_selects_budget_and_refuses_an_unfit_worker(
-    tmp_path, pcc_py_runtime_archive,
+    tmp_path, pcc_runtime_archive,
 ):
-    if os.name != "posix":
-        pytest.skip("the existing owned RSS boundary covers Darwin/Linux")
     source = tmp_path / "memory_admission.py"
     executable = tmp_path / "memory_admission"
     source.write_text(PROBE, encoding="utf-8")
     compile_python_multi(
         [str(Path(pipeline_frontend_workers.__file__)), str(source)], str(executable),
-        module_names=["pcc.py_frontend.pipeline_frontend_workers", "memory_admission"],
+        module_names=["pcc.frontends.python.pipeline_frontend_workers", "memory_admission"],
         entry_module="memory_admission", recursive_stdlib=True,
         backend="self", libpython_mode="off", ir_scaffold_mode="on",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in (0, 1, 2, 3, 4):
         env = dict(os.environ)
@@ -96,8 +96,8 @@ PARENT_PROBE = r'''
 import os
 import sys
 from pcc.extern import extern, c_int64
-from pcc.py_frontend.pipeline_frontend_workers import compiled_native_summary_plan, worker_env_prefix, shell_quote_arg
-from pcc.py_frontend.worker_process_pool import run_worker_processes
+from pcc.frontends.python.pipeline_frontend_workers import compiled_native_summary_plan, worker_env_prefix, shell_quote_arg
+from pcc.frontends.python.worker_process_pool import run_worker_processes
 collector = extern("pcc_gc_backend", (), c_int64)
 def main() -> None:
     actual = collector()  # initialize actual selector before changing its env hint
@@ -115,23 +115,23 @@ main()
 '''
 
 
+# the existing owned RSS boundary covers Darwin/Linux
+@pytest.mark.pcc_gate(probe=lambda: not (os.name != "posix"))
 def test_native_summary_child_uses_the_planned_collector_snapshot(
-    tmp_path, pcc_py_runtime_archive, monkeypatch,
+    tmp_path, pcc_runtime_archive, monkeypatch,
 ):
-    if os.name != "posix":
-        pytest.skip("the existing owned RSS boundary covers Darwin/Linux")
     child_source, child = tmp_path / "collector_child.py", tmp_path / "collector_child"
     child_source.write_text(CHILD_PROBE, encoding="utf-8")
     compile_python(str(child_source), str(child), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     parent_source, parent = tmp_path / "collector_parent.py", tmp_path / "collector_parent"
     parent_source.write_text(PARENT_PROBE, encoding="utf-8")
     compile_python_multi(
         [str(Path(pipeline_frontend_workers.__file__)), str(Path(worker_process_pool.__file__)), str(parent_source)],
-        str(parent), module_names=["pcc.py_frontend.pipeline_frontend_workers",
-                                  "pcc.py_frontend.worker_process_pool", "collector_parent"],
+        str(parent), module_names=["pcc.frontends.python.pipeline_frontend_workers",
+                                  "pcc.frontends.python.worker_process_pool", "collector_parent"],
         entry_module="collector_parent", recursive_stdlib=True, backend="self",
-        libpython_mode="off", ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive),
+        libpython_mode="off", ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive),
     )
     for actual, conflicting in ((0, 4), (1, 0)):
         output = tmp_path / ("child-" + str(actual))

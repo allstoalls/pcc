@@ -4,7 +4,7 @@
 **Status of this document:** design + characterization slice only. **No UB
 trapping is implemented in this slice; none is claimed.** The instrumentation
 pass described below is a *later* task that will own edits to
-`pcc/codegen/c_codegen.py`; this document specifies its contract in advance so
+`pcc/frontends/c/codegen/c_codegen.py`; this document specifies its contract in advance so
 the characterization tests written in the same slice have a precise
 "trap emitted" gate to flip against.
 
@@ -62,7 +62,7 @@ only one leaves the others silently un-guarded.
 
 ## 3. Where pcc emits these operations today (insertion sites)
 
-All line numbers are approximate anchors in `pcc/codegen/c_codegen.py` at the
+All line numbers are approximate anchors in `pcc/frontends/c/codegen/c_codegen.py` at the
 time of writing; the implementer must re-grep, since the file moves.
 
 * **Direct expression path** — `codegen_BinaryOp` (~L6957):

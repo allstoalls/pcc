@@ -1,6 +1,6 @@
 # Chapter 3: The C Frontend — Parsing, fake-libc, and the Evaluator
 
-The C frontend is the most mature subsystem in the pcc repository: it has compiled and run real projects at the scale of Lua, SQLite, PostgreSQL `libpq`, zlib, lz4, zstd, PCRE, and OpenSSL. This chapter covers how a C source file — or a directory of them — becomes parseable translation units (TUs) and flows through the evaluator pipeline. Concretely: the parser's dual-track structure from PLY to a native LR driver, the two preprocessing paths, the declaration-only fake libc under [utils/fake_libc_include/](../../utils/fake_libc_include), the preprocess→parse→IR→optimize→execute pipeline in [pcc/evaluater/c_evaluator.py](../../pcc/evaluater/c_evaluator.py), and source collection plus `--sources-from-make` in [pcc/project.py](../../pcc/project.py). How expressions are lowered to LLVM IR and how signedness is tracked belongs to Chapter 4; this chapter stops at the line where the AST enters the code generator.
+The C frontend is the most mature subsystem in the pcc repository: it has compiled and run real projects at the scale of Lua, SQLite, PostgreSQL `libpq`, zlib, lz4, zstd, PCRE, and OpenSSL. This chapter covers how a C source file — or a directory of them — becomes parseable translation units (TUs) and flows through the evaluator pipeline. Concretely: the parser's dual-track structure from PLY to a native LR driver, the two preprocessing paths, the declaration-only fake libc under [utils/fake_libc_include/](../../utils/fake_libc_include), the preprocess→parse→IR→optimize→execute pipeline in [pcc/frontends/c/evaluator/c_evaluator.py](../../pcc/frontends/c/evaluator/c_evaluator.py), and source collection plus `--sources-from-make` in [pcc/driver/project.py](../../pcc/driver/project.py). How expressions are lowered to LLVM IR and how signedness is tracked belongs to Chapter 4; this chapter stops at the line where the AST enters the code generator.
 
 ## Chapter Overview: Read the C Frontend as Four Gates
 
@@ -18,9 +18,9 @@ The question the C frontend has to answer is not "how do you parse C" — textbo
 2. **Declarations and implementations can be separated.** Parsing and type checking need the prototype of `printf`, not its implementation — the implementation arrives at link time from the real libc. That observation is the root of the fake-libc design.
 3. **Real projects do not come with a list of source files.** They come with Makefiles, configure scripts, amalgamations, and TUs that conditional compilation moves in and out of the build. The frontend's entry point is not `parse(file)`; it is "recover the set of participating `.c` files and preprocessor flags from a directory and its build system."
 
-For the parser proper, the design space had three candidates: write a full C frontend from scratch, bind clang's AST, or reuse pycparser. pcc chose the third: the file header of [pcc/parse/c_parser.py](../../pcc/parse/c_parser.py) still carries pycparser's copyright notice (Eli Bendersky, BSD), and the grammar comments state plainly that it implements the BNF of K&R2 appendix A.13. The reasoning is pragmatic: pycparser's grammar and AST have been hardened by more than a decade of real-world code, while binding clang would turn the "frontend" into a wrapper around an enormous external C++ dependency — in direct conflict with the self-hosting goal laid out in Chapter 1. But reuse was a starting point, not a destination: pycparser depends on PLY, and PLY builds its parse tables dynamically at runtime using Python reflection, which is a liability for the bootstrap track where pcc must compile itself. So the C parser evolved along a dual track — the PLY version retained as a reference, the default path replaced by a PLY-free native LR driver (Section 3.2).
+For the parser proper, the design space had three candidates: write a full C frontend from scratch, bind clang's AST, or reuse pycparser. pcc chose the third: the file header of [pcc/frontends/c/parse/c_parser.py](../../pcc/frontends/c/parse/c_parser.py) still carries pycparser's copyright notice (Eli Bendersky, BSD), and the grammar comments state plainly that it implements the BNF of K&R2 appendix A.13. The reasoning is pragmatic: pycparser's grammar and AST have been hardened by more than a decade of real-world code, while binding clang would turn the "frontend" into a wrapper around an enormous external C++ dependency — in direct conflict with the self-hosting goal laid out in Chapter 1. But reuse was a starting point, not a destination: pycparser depends on PLY, and PLY builds its parse tables dynamically at runtime using Python reflection, which is a liability for the bootstrap track where pcc must compile itself. So the C parser evolved along a dual track — the PLY version retained as a reference, the default path replaced by a PLY-free native LR driver (Section 3.2).
 
-Preprocessing is likewise dual-track: a pure-Python built-in preprocessor ([pcc/preprocessor.py](../../pcc/preprocessor.py)) for environments without a system compiler, and a main path that borrows the system `cc -E` while substituting fake libc headers for the real system headers. Both tracks share one stance: **text-level reshaping is legitimate at the preprocessing boundary, and illegitimate at the IR layer.** The repository's IR Fix Policy permits exactly one remaining text-level IR rewrite, the `va_arg` path (see Chapter 12); by contrast, this chapter is full of regexes and character scanners — because the preprocessing layer's job is precisely to reshape the host's world into a C subset the parser accepts. That is the boundary layer doing its job, not a fig leaf over hacks.
+Preprocessing is likewise dual-track: a pure-Python built-in preprocessor ([pcc/frontends/c/preprocessor.py](../../pcc/frontends/c/preprocessor.py)) for environments without a system compiler, and a main path that borrows the system `cc -E` while substituting fake libc headers for the real system headers. Both tracks share one stance: **text-level reshaping is legitimate at the preprocessing boundary, and illegitimate at the IR layer.** The repository's IR Fix Policy permits exactly one remaining text-level IR rewrite, the `va_arg` path (see Chapter 12); by contrast, this chapter is full of regexes and character scanners — because the preprocessing layer's job is precisely to reshape the host's world into a C subset the parser accepts. That is the boundary layer doing its job, not a fig leaf over hacks.
 
 ## 3.2 The Parser: from PLY to a Native LR Driver
 
@@ -40,7 +40,7 @@ On top of the pycparser baseline, pcc's grammar carries extensions that real pro
 PLY constructs its LALR tables on first run, at noticeable cost, so `CParser.__init__` persists them to disk. The cache module names are versioned constants:
 
 ```python
-_DEFAULT_PLY_LEXTAB = "pcc_lextab_v14"
+_DEFAULT_PLY_LEXTAB = "pcc_frontends_c_lextab_v14"
 _DEFAULT_PLY_YACCTAB = "pcc_yacctab_v19"
 ```
 
@@ -50,14 +50,14 @@ The version numbers are a manual discipline: **change the grammar or lexer, bump
 
 ### 3.2.3 The Native LR Driver: Moving PLY out of the Closure
 
-The factory `make_c_parser()` in [pcc/parse/__init__.py](../../pcc/parse/__init__.py) is now the only correct entry point:
+The factory `make_c_parser()` in [pcc/frontends/c/parse/__init__.py](../../pcc/frontends/c/parse/__init__.py) is now the only correct entry point:
 
 ```python
 def make_c_parser():
     if os.environ.get("PCC_USE_PLY_C_PARSER") == "1":
-        from pcc.parse.c_parser import CParser
+        from pcc.frontends.c.parse.c_parser import CParser
         return CParser()
-    from pcc.parse.c_parse_driver import CParseDriver
+    from pcc.frontends.c.parse.c_parse_driver import CParseDriver
     return CParseDriver()
 ```
 
@@ -70,9 +70,9 @@ source text ──► c_lex.CLexer (native lexer) ──► CParseDriver ──�
                                                      └── grammar actions (c_parser_actions)
 ```
 
-- [pcc/parse/c_parsetab.py](../../pcc/parse/c_parsetab.py) holds **frozen** LR tables: pure-data Python literals generated offline from the PLY grammar by [scripts/freeze_c_parser_tables.py](../../scripts/freeze_c_parser_tables.py), importing no PLY at load time. The file header carries `GRAMMAR_SHA256` — a SHA-256 over the concatenated sources of every `p_*` method in `c_parser.py` — which CI cross-checks against the live grammar to detect "changed the grammar, forgot to re-freeze." This mechanizes the manual version-number discipline of Section 3.2.2: from "a human remembers to bump" to "a hash mismatch raises an alarm."
-- [pcc/parse/c_parse_driver.py](../../pcc/parse/c_parse_driver.py) is a ~250-line standard shift/reduce state machine. Its `_PSlot` class reproduces PLY's minimal action-side interface (`p[i]`, `p.lineno(i)`, `p.slice`), so both drivers share a single set of grammar-action semantics.
-- [pcc/parse/c_lex.py](../../pcc/parse/c_lex.py) is a hand-written character-at-a-time scanner — no regexes on the hot path (regex remains only for the inherently multi-character patterns: integer suffixes, float exponents) — with a constructor signature and token names fully compatible with `pcc.lex.c_lexer.CLexer`.
+- [pcc/frontends/c/parse/c_parsetab.py](../../pcc/frontends/c/parse/c_parsetab.py) holds **frozen** LR tables: pure-data Python literals generated offline from the PLY grammar by [scripts/freeze_c_parser_tables.py](../../scripts/freeze_c_parser_tables.py), importing no PLY at load time. The file header carries `GRAMMAR_SHA256` — a SHA-256 over the concatenated sources of every `p_*` method in `c_parser.py` — which CI cross-checks against the live grammar to detect "changed the grammar, forgot to re-freeze." This mechanizes the manual version-number discipline of Section 3.2.2: from "a human remembers to bump" to "a hash mismatch raises an alarm."
+- [pcc/frontends/c/parse/c_parse_driver.py](../../pcc/frontends/c/parse/c_parse_driver.py) is a ~250-line standard shift/reduce state machine. Its `_PSlot` class reproduces PLY's minimal action-side interface (`p[i]`, `p.lineno(i)`, `p.slice`), so both drivers share a single set of grammar-action semantics.
+- [pcc/frontends/c/parse/c_lex.py](../../pcc/frontends/c/parse/c_lex.py) is a hand-written character-at-a-time scanner — no regexes on the hot path (regex remains only for the inherently multi-character patterns: integer suffixes, float exponents) — with a constructor signature and token names fully compatible with `pcc.frontends.c.lex.c_lexer.CLexer`.
 
 Behavioral equivalence between the two tracks is held by the gate [tests/c/test_c_parse_driver_parity.py](../../tests/c/test_c_parse_driver_parity.py). One honest boundary statement: the docstring of `c_parse_driver.py` itself notes that while the driver, actions, and tables are PLY-free at the source level, the overall pcc package still loads PLY transitively via [pcc/__init__.py](../../pcc/__init__.py) — an unfinished surface clean-up, not an achieved "zero PLY."
 
@@ -82,7 +82,7 @@ Why go to this trouble? Because the parser is inside the bootstrap closure. pcc1
 
 ### 3.3.1 The Built-in Preprocessor
 
-The `Preprocessor` in [pcc/preprocessor.py](../../pcc/preprocessor.py) is pure Python. Its module docstring lists the supported surface: `#include "..."` (read and inlined), `#include <...>` (**silently ignored**), object-like/function-like/flag macros, `#undef`, full `#ifdef`/`#ifndef`/`#if`/`#elif`/`#else`/`#endif` with `defined()` evaluation, `##` token pasting, `__VA_ARGS__`. With system headers ignored, common types are injected from `TYPE_PREAMBLE` (typedef text for `size_t`, `va_list`, `FILE`, and friends) and common macros preloaded from `BUILTIN_DEFINES` (`NULL`, `INT_MAX`, `__STDC_VERSION__`, ...).
+The `Preprocessor` in [pcc/frontends/c/preprocessor.py](../../pcc/frontends/c/preprocessor.py) is pure Python. Its module docstring lists the supported surface: `#include "..."` (read and inlined), `#include <...>` (**silently ignored**), object-like/function-like/flag macros, `#undef`, full `#ifdef`/`#ifndef`/`#if`/`#elif`/`#else`/`#endif` with `defined()` evaluation, `##` token pasting, `__VA_ARGS__`. With system headers ignored, common types are injected from `TYPE_PREAMBLE` (typedef text for `size_t`, `va_list`, `FILE`, and friends) and common macros preloaded from `BUILTIN_DEFINES` (`NULL`, `INT_MAX`, `__STDC_VERSION__`, ...).
 
 The most instructive piece is the `#if` expression evaluator. The intuitive implementation would feed the macro-expanded expression to Python's `eval()` — but `eval` is on the banned-builtin list of the self-host audit ([scripts/audit_selfhost.py](../../scripts/audit_selfhost.py)), and the source comment says so explicitly. So `_eval_cpp_expr()` comes with a full recursive-descent parser, `_CppExprParser`, producing a tagged-tuple tree that `_eval_tree()` evaluates with **C semantics**: `&&`/`||` and the untaken `?:` branch short-circuit (a dead `1/0` on the other side does not raise — matching C), integer division truncates toward zero (`int(l / r) if (l < 0) ^ (r < 0) else l // r`), and `!0 == 1`. Failures raise `_CppExprError`; the caller `_eval_condition()` warns and treats the condition as false. This is a microcosm: **bootstrap constraints leak all the way into apparently unrelated utility code.**
 
@@ -90,7 +90,7 @@ Macro expansion is a per-line fixed-point iteration: `_expand_line()` calls `_ex
 
 ### 3.3.2 The System-cpp Path: Borrowed Power, Kept on a Leash
 
-The main path is `CEvaluator._system_cpp()` in [pcc/evaluater/c_evaluator.py](../../pcc/evaluater/c_evaluator.py): when a system compiler exists (`_has_system_cpp()` probes for `cc`/`gcc`), preprocessing is delegated to the real thing, with three mechanisms keeping the output inside pcc's digestible subset:
+The main path is `CEvaluator._system_cpp()` in [pcc/frontends/c/evaluator/c_evaluator.py](../../pcc/frontends/c/evaluator/c_evaluator.py): when a system compiler exists (`_has_system_cpp()` probes for `cc`/`gcc`), preprocessing is delegated to the real thing, with three mechanisms keeping the output inside pcc's digestible subset:
 
 ```text
 cc -E -P -nostdinc -isystem utils/fake_libc_include  -I <user dirs>...  <many -D>  file.c
@@ -129,14 +129,14 @@ A few headers carry real content. `stdio.h` declares `__stdinp`/`__stdoutp`/`__s
 
 ## 3.5 The Evaluator Pipeline
 
-`CEvaluator` in [pcc/evaluater/c_evaluator.py](../../pcc/evaluater/c_evaluator.py) is the engine room of the C path. The core pipeline lives in the module-level functions `_compile_translation_unit_artifact_job` and `_compile_preprocessed_translation_unit_artifact`, shaped as:
+`CEvaluator` in [pcc/frontends/c/evaluator/c_evaluator.py](../../pcc/frontends/c/evaluator/c_evaluator.py) is the engine room of the C path. The core pipeline lives in the module-level functions `_compile_translation_unit_artifact_job` and `_compile_preprocessed_translation_unit_artifact`, shaped as:
 
 ```text
 TranslationUnit(name, path, source)
   → _preprocess_translation_unit_source        # one of the two paths of 3.3, plus normalization
   → make_c_parser().parse(codestr)             # the dual-track parser of 3.2
   → PassPipeline.run_high_tier(ast, ctx)       # AST analysis passes populate PassContext
-  → LLVMCodeGenerator(...).generate_code(ast)  # semantic lowering (Chapter 4)
+  → CCodeGenerator(...).generate_code(ast)  # semantic lowering (Chapter 4)
   → postprocess_ir_text(str(module))           # IR text post-processing (va_arg exemption only, Ch. 12)
   → PassPipeline.run_low_tier(ir_text, ctx)    # IR-level passes
   → artifact dict                              # ir_text / return_type / external_defs /
@@ -155,7 +155,7 @@ One debugging hook worth memorizing: when IR parsing fails, setting `PCC_DUMP_BA
 
 ## 3.6 Project Collection and --sources-from-make
 
-[pcc/project.py](../../pcc/project.py) turns "a path" into "a list of `TranslationUnit`s." Chapter 2 surveyed the four compile modes; here we cover mechanism and limits.
+[pcc/driver/project.py](../../pcc/driver/project.py) turns "a path" into "a list of `TranslationUnit`s." Chapter 2 surveyed the four compile modes; here we cover mechanism and limits.
 
 **Directories default to merged mode.** `_collect_directory()` collects `*.c` non-recursively (`os.listdir` + sort), places the file containing `main()` last, and concatenates everything into one large TU with `// --- filename ---` marker lines. The `main` test, `_has_main()`, is two-phase: a coarse regex `\b(?:int|void)\s+main\s*\([^;{}]*\)\s*\{`, and on a hit, a **real preprocessing run** (`CEvaluator._system_cpp`) followed by re-matching against the preprocessed output — so a `main` excluded by `#if` conditionals does not cause a false positive; if preprocessing fails, it falls back to the regex with a warning. `--separate-tus` mode (`_collect_directory_units`) collects the same files as independent TUs and requires exactly one `main`; dependency inputs under `--depends-on` must define none at all.
 
@@ -225,8 +225,8 @@ Every layer of the C frontend projects the same judgment: **start by reusing mat
 
 ## Exercises
 
-1. **Verify in source.** Find the comment explaining the `p_declaration`/`p_decl_body` split in [pcc/parse/c_parser.py](../../pcc/parse/c_parser.py). Explain: if they were a single rule, why would `typedef int T; T x;` on consecutive lines fail to parse? What role does yacc's lookahead token play?
-2. **Cache archaeology.** Compare the manual version number in `_DEFAULT_PLY_YACCTAB` with the `GRAMMAR_SHA256` mechanism in [pcc/parse/c_parsetab.py](../../pcc/parse/c_parsetab.py): for each, give one staleness scenario it catches and one it cannot. Then read `_compiler_cache_fingerprint()` and explain why the compiled-artifact cache needs no manual version number at all (hint: `_COMPILE_CACHE_VERSION` still exists — what class of change does it guard against?).
+1. **Verify in source.** Find the comment explaining the `p_declaration`/`p_decl_body` split in [pcc/frontends/c/parse/c_parser.py](../../pcc/frontends/c/parse/c_parser.py). Explain: if they were a single rule, why would `typedef int T; T x;` on consecutive lines fail to parse? What role does yacc's lookahead token play?
+2. **Cache archaeology.** Compare the manual version number in `_DEFAULT_PLY_YACCTAB` with the `GRAMMAR_SHA256` mechanism in [pcc/frontends/c/parse/c_parsetab.py](../../pcc/frontends/c/parse/c_parsetab.py): for each, give one staleness scenario it catches and one it cannot. Then read `_compiler_cache_fingerprint()` and explain why the compiled-artifact cache needs no manual version number at all (hint: `_COMPILE_CACHE_VERSION` still exists — what class of change does it guard against?).
 3. **A fake-libc mismatch on paper.** `_fake_typedefs.h` asserts `mode_t` is `unsigned short`; the built-in preprocessor's `TYPE_PREAMBLE` asserts `unsigned int`. Construct a minimal C program whose `sizeof` behavior differs between the two preprocessing paths. Then argue: what kind of real libc call would turn this mismatch into a runtime error?
 4. **Design trade-off.** The built-in preprocessor implements `_CppExprParser` for `#if` evaluation instead of calling `eval()`. Beyond the self-host audit's ban, give at least two reasons independent of bootstrapping (hint: C semantics vs. Python semantics; attack surface). Then argue the opposite direction: if pcc were never going to self-host, would `eval()` have been the right engineering choice?
 5. **Replay the case study.** Using only the information in Section 3.7.2, write down your first four actions upon receiving the report "PCRE hangs in `pcre_compile`," annotating each with the hypothesis it is meant to falsify. Then compare against the actual sequence in [docs/investigations/pcre-op-lengths-incomplete-array-binding.md](../../docs/investigations/pcre-op-lengths-incomplete-array-binding.md) and identify the most expensive redundant step in your plan.

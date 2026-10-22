@@ -3,15 +3,15 @@ from __future__ import annotations
 import inspect
 import subprocess
 
-from pcc.c_abi_layout import builtin_scalar_layout, pointer_scalar_layout
-from pcc.codegen.c_codegen import (
-    LLVMCodeGenerator,
+from pcc.frontends.c.c_abi_layout import builtin_scalar_layout, pointer_scalar_layout
+from pcc.frontends.c.codegen.c_codegen import (
+    CCodeGenerator,
     _ir_type_align_static,
     _ir_type_size_static,
 )
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.llvm_capi.compat import ir_c as ir
-from pcc.ssa.builder import SSABuilder
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.ir.compat import ir_c as ir
+from pcc.frontends.c.ssa.builder import SSABuilder
 
 
 def test_scalar_layout_consumers_share_one_contract():
@@ -19,10 +19,8 @@ def test_scalar_layout_consumers_share_one_contract():
     assert "floating_scalar_layout(" in inspect.getsource(_ir_type_size_static)
     assert "pointer_scalar_layout(" in inspect.getsource(_ir_type_size_static)
     assert "integer_scalar_layout(" in inspect.getsource(_ir_type_align_static)
-    assert "integer_scalar_layout(" in inspect.getsource(LLVMCodeGenerator._ir_type_size)
-    assert "floating_scalar_layout(" in inspect.getsource(LLVMCodeGenerator._ir_type_size)
-    assert "pointer_scalar_layout(" in inspect.getsource(LLVMCodeGenerator._ir_type_size)
-    assert "integer_scalar_layout(" in inspect.getsource(LLVMCodeGenerator._ir_type_align)
+    assert "_ir_type_size_static(" in inspect.getsource(CCodeGenerator._ir_type_size)
+    assert "_ir_type_align_static(" in inspect.getsource(CCodeGenerator._ir_type_align)
     assert "builtin_scalar_layout(" in inspect.getsource(SSABuilder._builtin_type_size)
     assert "builtin_scalar_layout(" in inspect.getsource(SSABuilder._builtin_type_align)
     assert "pointer_scalar_layout(" in inspect.getsource(SSABuilder._ast_type_size)
@@ -39,7 +37,7 @@ def test_scalar_layout_ir_and_ssa_facts_match():
         (ir.FloatType(), ["float"]),
         (ir.DoubleType(), ["double"]),
     )
-    codegen = LLVMCodeGenerator()
+    codegen = CCodeGenerator()
     for ir_type, names in cases:
         layout = builtin_scalar_layout(names)
         assert _ir_type_size_static(ir_type) == layout.size

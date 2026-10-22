@@ -20,7 +20,7 @@ from pathlib import Path
 
 from pcc1_gate import find_current_pcc1, skip_or_fail_no_current_pcc1
 
-import pcc.cli_bootstrap as cb
+import pcc.driver.cli_bootstrap as cb
 
 
 def _repo_root() -> Path:

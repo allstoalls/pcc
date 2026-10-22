@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from pcc.array_core import (
+from pcc.package.array_model import (
     array_arange,
     array_arg_reduce,
     array_argwhere,

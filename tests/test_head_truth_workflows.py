@@ -29,7 +29,6 @@ def test_light_and_heavy_commands_are_owned_by_manifest_registry() -> None:
     assert "fallback-ratchet" in gate_ids
     assert "control-plane-ratchets" in gate_ids
     assert "gc-production-contract" in gate_ids
-    assert "llvm-bootstrap" in gate_ids
     assert "self-five-gc-bootstrap" in gate_ids
     assert "numpy-core-head" in gate_ids
     assert "numpy-core-head" in REQUIRED_GATE_IDS
@@ -55,7 +54,7 @@ def test_heavy_registry_prebuilds_runtime_archive_before_consumers() -> None:
     )
     assert preflight.suite == "heavy"
     assert preflight.kind == "command"
-    assert preflight.command[:4] == ("make", "-B", "-C", "pcc/py_runtime")
+    assert preflight.command[:4] == ("make", "-B", "-C", "pcc/runtime")
     assert "libpy_runtime_pcc_py.a" in preflight.command
     assert "PCC=../../.venv/bin/pcc" in preflight.command
     assert "PYTHON=../../.venv/bin/python3" in preflight.command

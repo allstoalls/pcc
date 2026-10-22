@@ -1,0 +1,43 @@
+{
+  "application_status": "UNAPPLIED",
+  "correction": "Move both snapshots to the actual emitter owner boundary; retain identity/emptiness/output/error checks and assert exact invocation identity/count.",
+  "execution_status": "UNRUN",
+  "files": [
+    {
+      "mode": "100644",
+      "path": "tests/python/test_x86_64_indexed_instruction_bridge.py",
+      "postimage_bytes": 14637,
+      "postimage_sha256": "49a006a3dfda86f687e62e8c6087fdf84ed4bb4ee9065b4c242c99e6d012f596",
+      "preimage_sha256": "9f25e751406d5cdc9e9c361b31a8c8f18c2d4e9093a4a047ae67ee01c90822b7"
+    }
+  ],
+  "limits_unchanged": {
+    "exclusive_shared_lock": true,
+    "free_reserve_bytes": 4294967296,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "seconds": 300
+  },
+  "observed_unchanged_codegen_checksum": "610f289ab84407149dbe231ac35e1b190079366bf852ccbafd0bdcc5ec85ddab",
+  "original_v2_manifest_sha256": "871eadf0bf54042154dc05e38c7a9564e8abf0f0a0e015cd4c812adada2bd723",
+  "original_v2_patch_sha256": "9132e8d5be54a4429d90350005f6021d6ce93d6a1126f761c42e9ac837f4cf29",
+  "patch_sha256": "1ca24e71b411a5099232c8a6daf0e15adc98e79ef29511eb98a8eff7441655dd",
+  "preserved_failed_gate": {
+    "deselected_native": 1,
+    "failed": 1,
+    "failure": "New equality test captured block_map before unchanged public preparation replaced it; owner-entry restoration assertion was applied at the wrong boundary.",
+    "passed": 0,
+    "result_sha256": "b637801f2055ee0abadbb57847dd8c44d792a05cd7e257dc57ff449604d38225",
+    "selected": 109,
+    "unrun": 108
+  },
+  "production_pcc_tree": "5882f6f16ccfd1d9cbe55c06426e8888f51e9ab7",
+  "production_postimage_sha256": "145713c125d1d4e4e72c8d499646cd5c85874f4b6a83d3fd3c23dde934cea1ca",
+  "readme_sha256": "a040050b442d38642aa2999199fe6b799b6cafe77dfedd04555a5da6a732092c",
+  "schema": "pcc.x86-indexed-instruction-bridge-test-successor.v3",
+  "source_evidence": {
+    "baseline_backend_sha256": "9c515249d01aa01a0baa6913f7e51c28d80555c90685160b9e5590a755677ec5",
+    "pcc/backend/self_backend_prepare.py": "1b042b1297c67713513a764f8f47dea08b6afaed6b83f0f963034a90cca77837"
+  },
+  "source_review": "PASS: independent exact-delta review verified both owner-entry snapshots, direct eager-oracle boundary, invocation identity/count/order, and retention of every identity/emptiness/output/error/cleanup assertion; no execution."
+}

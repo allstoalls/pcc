@@ -29,3 +29,56 @@
 #define LDBL_MIN DBL_MIN
 #define LDBL_MAX DBL_MAX
 #define LDBL_EPSILON DBL_EPSILON
+
+/* Remaining C11 5.2.4.2.2 characteristics, from the owned IEEE predefines. */
+#ifndef FLT_EVAL_METHOD
+#define FLT_EVAL_METHOD 0
+#endif
+#ifndef FLT_MIN_10_EXP
+#define FLT_MIN_10_EXP __FLT_MIN_10_EXP__
+#endif
+#ifndef FLT_MAX_10_EXP
+#define FLT_MAX_10_EXP __FLT_MAX_10_EXP__
+#endif
+#ifndef FLT_DECIMAL_DIG
+#define FLT_DECIMAL_DIG __FLT_DECIMAL_DIG__
+#endif
+#ifndef FLT_TRUE_MIN
+#define FLT_TRUE_MIN __FLT_DENORM_MIN__
+#endif
+#ifndef FLT_HAS_SUBNORM
+#define FLT_HAS_SUBNORM 1
+#endif
+#ifndef DBL_MIN_10_EXP
+#define DBL_MIN_10_EXP __DBL_MIN_10_EXP__
+#endif
+#ifndef DBL_MAX_10_EXP
+#define DBL_MAX_10_EXP __DBL_MAX_10_EXP__
+#endif
+#ifndef DBL_DECIMAL_DIG
+#define DBL_DECIMAL_DIG __DBL_DECIMAL_DIG__
+#endif
+#ifndef DBL_TRUE_MIN
+#define DBL_TRUE_MIN __DBL_DENORM_MIN__
+#endif
+#ifndef DBL_HAS_SUBNORM
+#define DBL_HAS_SUBNORM 1
+#endif
+#ifndef LDBL_MIN_10_EXP
+#define LDBL_MIN_10_EXP DBL_MIN_10_EXP
+#endif
+#ifndef LDBL_MAX_10_EXP
+#define LDBL_MAX_10_EXP DBL_MAX_10_EXP
+#endif
+#ifndef LDBL_DECIMAL_DIG
+#define LDBL_DECIMAL_DIG DBL_DECIMAL_DIG
+#endif
+#ifndef LDBL_TRUE_MIN
+#define LDBL_TRUE_MIN DBL_TRUE_MIN
+#endif
+#ifndef LDBL_HAS_SUBNORM
+#define LDBL_HAS_SUBNORM 1
+#endif
+#ifndef DECIMAL_DIG
+#define DECIMAL_DIG DBL_DECIMAL_DIG
+#endif

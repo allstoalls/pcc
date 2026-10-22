@@ -4,10 +4,10 @@ import os
 import subprocess
 import sys
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
-def test_any_all_bytes_and_bytearray_match_python(tmp_path, pcc_py_runtime_archive):
+def test_any_all_bytes_and_bytearray_match_python(tmp_path, pcc_runtime_archive):
     source = tmp_path / "any_bytes.py"
     source.write_text('''
 def check(data: bytes):
@@ -25,7 +25,7 @@ main()
     assert expected.returncode == 0, expected.stderr
     output = tmp_path / "any_bytes"
     compile_python(str(source), str(output), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         result = subprocess.run([str(output)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(gc)))
@@ -33,7 +33,7 @@ main()
         assert result.stdout == expected.stdout, f"GC{gc}: {result.stdout}"
 
 
-def test_any_releases_its_temporary_byte_slice(tmp_path, pcc_py_runtime_archive):
+def test_any_releases_its_temporary_byte_slice(tmp_path, pcc_runtime_archive):
     source = tmp_path / "any_owner.py"
     source.write_text('''
 from pcc.extern import extern, c_int64
@@ -53,7 +53,7 @@ main()
 ''', encoding="utf-8")
     output = tmp_path / "any_owner"
     compile_python(str(source), str(output), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     result = subprocess.run([str(output)], capture_output=True, text=True, timeout=20,
                             env=dict(os.environ, PCC_GC_BACKEND="0"))
     assert result.returncode == 0, result.stderr

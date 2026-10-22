@@ -5,7 +5,7 @@ from pathlib import Path
 
 def _repo_root() -> Path:
     for parent in Path(__file__).resolve().parents:
-        if (parent / "pcc" / "py_runtime" / "py" / "py_coroutine.py").exists():
+        if (parent / "pcc" / "runtime" / "py" / "py_coroutine.py").exists():
             return parent
     raise RuntimeError("could not locate pcc repository root")
 
@@ -20,7 +20,7 @@ def _read(path: str) -> str:
 def test_current_coroutine_runtime_is_synchronous_no_suspension_subset():
     """Baseline for No.42: today's coroutine object is not a continuation."""
 
-    py_src = _read("pcc/py_runtime/py/py_coroutine.py")
+    py_src = _read("pcc/runtime/py/py_coroutine.py")
 
     assert (
         'return py_coroutine_new_native(cstr("sleep"), null(), null(), null())'
@@ -29,9 +29,9 @@ def test_current_coroutine_runtime_is_synchronous_no_suspension_subset():
 
 
 def test_virtual_thread_continuation_object_model_exists():
-    runtime_header = _read("pcc/py_runtime/include/py_runtime.h")
-    coroutine_py = _read("pcc/py_runtime/py/py_coroutine.py")
-    abi = _read("pcc/py_frontend/codegen/runtime_abi.py")
+    runtime_header = _read("pcc/runtime/include/py_runtime.h")
+    coroutine_py = _read("pcc/runtime/py/py_coroutine.py")
+    abi = _read("pcc/frontends/python/codegen/runtime_abi.py")
 
     assert "PyContinuationObject" in runtime_header
     assert "py_continuation_new" in runtime_header
@@ -42,7 +42,7 @@ def test_virtual_thread_continuation_object_model_exists():
 
 
 def test_virtual_thread_scheduler_api_exists():
-    runtime_header = _read("pcc/py_runtime/include/py_runtime.h")
+    runtime_header = _read("pcc/runtime/include/py_runtime.h")
 
     assert "py_virtual_thread_new" in runtime_header
     assert "py_virtual_thread_start" in runtime_header
@@ -60,7 +60,7 @@ def test_gc_has_suspended_continuation_root_hooks():
     GC-facing root-map surface that a future continuation object will use.
     """
 
-    runtime_header = _read("pcc/py_runtime/include/py_runtime.h")
+    runtime_header = _read("pcc/runtime/include/py_runtime.h")
 
     assert "pcc_gc_trace_continuation_roots" in runtime_header
     assert "pcc_gc_register_continuation_root" in runtime_header
@@ -69,8 +69,8 @@ def test_gc_has_suspended_continuation_root_hooks():
 
 
 def test_virtual_thread_blocking_and_poller_api_exists():
-    runtime_header = _read("pcc/py_runtime/include/py_runtime.h")
-    abi = _read("pcc/py_frontend/codegen/runtime_abi.py")
+    runtime_header = _read("pcc/runtime/include/py_runtime.h")
+    abi = _read("pcc/frontends/python/codegen/runtime_abi.py")
 
     assert "py_virtual_thread_sleep" in runtime_header
     assert "py_virtual_thread_poll_timers" in runtime_header

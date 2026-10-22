@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 from tests.runtime_build_cache import cached_pcc_python_runtime
 
 

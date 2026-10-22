@@ -8,12 +8,12 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-CLI_SOURCE = REPO_ROOT / "pcc" / "cli_bootstrap.py"
-HARNESS_SOURCE = REPO_ROOT / "pcc" / "cli_bootstrap_pytest.py"
+CLI_SOURCE = REPO_ROOT / "pcc" / "driver" / "cli_bootstrap.py"
+HARNESS_SOURCE = REPO_ROOT / "pcc" / "driver" / "cli_bootstrap_pytest.py"
 
 
 def test_cli_keeps_both_native_pytest_request_spellings() -> None:
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     assert cli._is_pytest_request(["--pytest"])
     assert cli._is_pytest_request(["pytest"])
@@ -22,7 +22,7 @@ def test_cli_keeps_both_native_pytest_request_spellings() -> None:
 
 
 def test_cli_pytest_facade_forwards_current_stage_and_timeout(monkeypatch) -> None:
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     observed = {}
 
@@ -49,7 +49,7 @@ def test_extracted_harness_launcher_uses_supplied_stage_and_bounded_runs(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    import pcc.cli_bootstrap_pytest as harness
+    import pcc.driver.cli_bootstrap_pytest as harness
 
     tests_dir = tmp_path / "tests"
     tests_dir.mkdir()
@@ -122,8 +122,8 @@ def test_pytest_harness_source_is_owned_by_sibling_and_facade_stays_thin() -> No
         node
         for node in cli_tree.body
         if isinstance(node, ast.ImportFrom)
-        and node.level == 1
-        and node.module == "cli_bootstrap_pytest"
+        and node.level == 0
+        and node.module == "pcc.driver.cli_bootstrap_pytest"
     ]
     assert len(facade_imports) == 1
     assert [
@@ -146,10 +146,10 @@ def test_pytest_harness_source_is_owned_by_sibling_and_facade_stays_thin() -> No
 
 
 def test_repo_main_closure_and_static_exports_include_pytest_harness() -> None:
-    from pcc.py_frontend.codegen.layer1_support import (
+    from pcc.frontends.python.codegen.layer1_support import (
         _default_native_module_exports,
     )
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         _collect_relative_module_closure,
         _filter_ir_scaffold_closure,
     )
@@ -166,11 +166,11 @@ def test_repo_main_closure_and_static_exports_include_pytest_harness() -> None:
         ir_scaffold_mode="on",
     )
 
-    index = modules.index("pcc.cli_bootstrap_pytest")
+    index = modules.index("pcc.driver.cli_bootstrap_pytest")
     assert Path(sources[index]).resolve() == HARNESS_SOURCE.resolve()
-    exports = _default_native_module_exports("pcc.cli_bootstrap_pytest")
+    exports = _default_native_module_exports("pcc.driver.cli_bootstrap_pytest")
     assert exports is not None
-    signature = exports["pcc.cli_bootstrap_pytest"]["run_pcc1_pytest"]
+    signature = exports["pcc.driver.cli_bootstrap_pytest"]["run_pcc1_pytest"]
     assert signature["kind"] == "function"
     assert signature["return_ty"] == ("int",)
     assert signature["param_types"] == (

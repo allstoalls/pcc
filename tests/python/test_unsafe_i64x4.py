@@ -6,7 +6,7 @@ from pathlib import Path
 
 from pcc1_gate import find_current_pcc1, skip_or_fail_no_current_pcc1
 from pcc.backend.self_backend_dispatch import emit_self_asm
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -49,9 +49,9 @@ def _assert_i64x4_ir(ir_text: str) -> None:
 
 
 def test_i64x4_intrinsic_type_survives_closed_world_stub_exports() -> None:
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.py_ast import Assign, FuncDef, ValueClassType
-    from pcc.py_frontend.type_infer import infer_module
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.py_ast import Assign, FuncDef, ValueClassType
+    from pcc.frontends.python.type_infer import infer_module
 
     source = (
         "from pcc.unsafe import load_i64x4\n"

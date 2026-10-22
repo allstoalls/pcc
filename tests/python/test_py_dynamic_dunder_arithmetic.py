@@ -4,7 +4,7 @@ import textwrap
 
 
 def test_call_result_arithmetic_compiles_dynamic_dunder_self_backend(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "dynamic_dunder_arithmetic.py"
     src.write_text(textwrap.dedent(

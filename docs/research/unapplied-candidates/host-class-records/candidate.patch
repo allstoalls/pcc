@@ -1,0 +1,1304 @@
+--- a/pcc/frontends/python/pipeline.py
++++ b/pcc/frontends/python/pipeline.py
+@@ -2907,6 +2907,9 @@
+         mark_function_object_exports=_mark_closed_world_function_object_exports,
+         write_native_exports_wire=_write_native_exports_wire,
+         write_reexport_edges_wire=_write_reexport_edges_wire,
++        host_exports_capability=(
++            _pipeline_exports._host_native_exports_transport_capability()
++        ),
+     )
+ 
+ 
+@@ -3095,7 +3098,15 @@
+     ast_dir: str = "",
+     profile: Optional[dict] = None,
+     module_dependency_map=None,
++    host_export_contract=None,
+ ) -> str:
++    host_export_schema = _pipeline_exports._host_native_exports_transport_capability()
++    host_writer = None
++    if (
++        host_export_schema
++        and tuple(worker_prefix) == (str(sys.executable), "-m", "pcc")
++    ):
++        host_writer = _pipeline_exports._write_host_native_exports_wire
+     return _pipeline_frontend_parallel.build_shared_exports(
+         tmp,
+         src_paths,
+@@ -3113,6 +3124,9 @@
+         ast_dir=ast_dir,
+         profile=profile,
+         module_dependency_map=module_dependency_map,
++        host_export_contract=host_export_contract,
++        host_export_schema=host_export_schema,
++        write_host_native_exports_wire=host_writer,
+         build_unique_class_preload_index=(
+             _build_unique_external_class_preload_index
+         ),
+--- a/pcc/frontends/python/pipeline_exports.py
++++ b/pcc/frontends/python/pipeline_exports.py
+@@ -8,6 +8,7 @@
+ 
+ import json
+ import os
++import sys
+ 
+ from pcc.frontends.python import pipeline_ast_wire as _pipeline_ast_wire
+ from pcc.frontends.python import pipeline_ir_text as _pipeline_ir_text
+@@ -20,6 +21,7 @@
+ _find_substring = _pipeline_ir_text.find_substring
+ _NATIVE_EXPORT_WIRE_SCHEMA = "pcc.frontends.python.native_exports.v1"
+ _NATIVE_EXPORT_INDEXED_SCHEMA = "pcc.frontends.python.native_exports.indexed.v1"
++_HOST_NATIVE_EXPORT_RECORD_SCHEMA = "pcc.frontends.python.native_exports.host_class_records.v1"
+ 
+ 
+ def _export_param_types(args, raw_pointer_names=()):
+@@ -1730,6 +1732,115 @@
+     )
+ 
+ 
++def _host_native_exports_transport_capability() -> str:
++    """Only CPython readers advertise the private host transport."""
++    if sys.implementation.name == "cpython":
++        return _HOST_NATIVE_EXPORT_RECORD_SCHEMA
++    return ""
++
++
++def _copy_host_export_wire_value(value):
++    """Copy raw JSON, without interpreting argument-default markers."""
++    if isinstance(value, dict):
++        return {key: _copy_host_export_wire_value(item) for key, item in value.items()}
++    if isinstance(value, list):
++        return [_copy_host_export_wire_value(item) for item in value]
++    return value
++
++
++def _host_export_record_modules(payload, copy_records: bool = False):
++    """Validate the complete table before exposing its ordered full graph."""
++    if not _host_native_exports_transport_capability():
++        raise ValueError("host class-record exports require a CPython reader")
++    fields = {
++        "schema", "class_records", "modules", "derived_class_map",
++        "function_object_uses",
++    }
++    if not isinstance(payload, dict) or set(payload) != fields:
++        raise ValueError("invalid host class-record export fields")
++    if payload["schema"] != _HOST_NATIVE_EXPORT_RECORD_SCHEMA:
++        raise ValueError("invalid host class-record export schema")
++    records = payload["class_records"]
++    modules = payload["modules"]
++    if not isinstance(records, list) or not isinstance(modules, list):
++        raise ValueError("invalid host class-record export arrays")
++    for record in records:
++        if not isinstance(record, dict) or record.get("kind") != "class":
++            raise ValueError("invalid host class-record export record")
++    if not isinstance(payload["derived_class_map"], dict) or not isinstance(
++        payload["function_object_uses"], list
++    ):
++        raise ValueError("invalid host class-record export metadata")
++    out = {}
++    for module_row in modules:
++        if not isinstance(module_row, list) or len(module_row) != 2:
++            raise ValueError("invalid host class-record export module")
++        module_name, bindings = module_row
++        if not isinstance(module_name, str) or module_name in out or not isinstance(bindings, list):
++            raise ValueError("invalid or duplicate host class-record export module")
++        exports = {}
++        for binding in bindings:
++            if not isinstance(binding, list) or len(binding) != 3:
++                raise ValueError("invalid host class-record export binding")
++            export_name, tag, value = binding
++            if not isinstance(export_name, str) or export_name in exports:
++                raise ValueError("invalid or duplicate host class-record export name")
++            if tag == "class":
++                if type(value) is not int or value < 0 or value >= len(records):
++                    raise ValueError("invalid host class-record export reference")
++                value = records[value]
++            elif tag == "inline":
++                if not isinstance(value, dict) or value.get("kind") == "class":
++                    raise ValueError("invalid inline host class-record export")
++            else:
++                raise ValueError("unknown host class-record export binding")
++            # Private semantic decoding visits each binding without a memo.
++            # Raw-return callers also retain independent mutable containers.
++            exports[export_name] = (
++                _copy_host_export_wire_value(value) if copy_records else value
++            )
++        out[module_name] = exports
++    return out
++
++
++def _write_host_native_exports_wire(
++    path: str, native_exports, derived_class_map, function_object_uses=(),
++) -> None:
++    """Deduplicate raw class JSON only; preserve every visible binding."""
++    if not _host_native_exports_transport_capability():
++        raise ValueError("host class-record exports require a CPython writer")
++    wire_modules = _native_export_to_wire(native_exports)
++    records = []
++    record_ids = {}
++    modules = []
++    for module_name, exports in wire_modules.items():
++        bindings = []
++        for export_name, info in exports.items():
++            if info.get("kind") == "class":
++                # Full ordered value equality, never owner/name identity.
++                key = json.dumps(info)
++                record_id = record_ids.get(key)
++                if record_id is None:
++                    record_id = len(records)
++                    record_ids[key] = record_id
++                    records.append(info)
++                bindings.append([export_name, "class", record_id])
++            else:
++                bindings.append([export_name, "inline", info])
++        modules.append([module_name, bindings])
++    payload = {
++        "schema": _HOST_NATIVE_EXPORT_RECORD_SCHEMA,
++        "class_records": records,
++        "modules": modules,
++        "derived_class_map": _native_export_to_wire(derived_class_map),
++        "function_object_uses": _native_export_to_wire(function_object_uses),
++    }
++    _host_export_record_modules(payload)
++    text = json.dumps(payload)
++    with open(path, "w", encoding="utf-8") as stream:
++        stream.write(text)
++
++
+ def _write_native_exports_wire(
+     path: str,
+     native_exports,
+@@ -1782,6 +1893,17 @@
+             return native_exports, derived_class_map, function_object_uses
+         return native_exports, derived_class_map
+     payload = json.loads(text)
++    if payload.get("schema") == _HOST_NATIVE_EXPORT_RECORD_SCHEMA:
++        native_exports = _native_export_from_wire(
++            _host_export_record_modules(payload)
++        )
++        derived_class_map = _native_export_from_wire(payload["derived_class_map"])
++        if include_function_object_uses:
++            return (
++                native_exports, derived_class_map,
++                _native_export_from_wire(payload["function_object_uses"]),
++            )
++        return native_exports, derived_class_map
+     if payload.get("schema") != _NATIVE_EXPORT_WIRE_SCHEMA:
+         raise ValueError("invalid frontend native exports file")
+     native_exports = _native_export_from_wire(payload.get("native_exports", {}))
+@@ -1841,6 +1963,8 @@
+             out[module_name] = value
+         return out
+     payload = json.loads(text)
++    if payload.get("schema") == _HOST_NATIVE_EXPORT_RECORD_SCHEMA:
++        return _host_export_record_modules(payload, copy_records=True)
+     if payload.get("schema") != _NATIVE_EXPORT_WIRE_SCHEMA:
+         raise ValueError("invalid frontend native exports file")
+     native_exports = payload.get("native_exports")
+--- a/pcc/frontends/python/pipeline_frontend_parallel.py
++++ b/pcc/frontends/python/pipeline_frontend_parallel.py
+@@ -5,6 +5,7 @@
+ import os
+ import json
+ import subprocess
++import sys
+ import tempfile
+ import time
+ from typing import Optional
+@@ -384,6 +385,51 @@
+     return _compiled_native_summary_jobs(requested)
+ 
+ 
++def _host_export_contract_matches(contract, worker_base, worker_environment) -> bool:
++    """Bind a capability to the actual source-worker command and context."""
++    if (
++        not isinstance(contract, dict)
++        or not isinstance(worker_base, (tuple, list))
++        or not isinstance(worker_environment, str)
++    ):
++        return False
++    return (
++        contract.get("worker_base") == tuple(worker_base)
++        and contract.get("worker_environment") == worker_environment
++        and contract.get("cwd") == os.getcwd()
++        and contract.get("environment") == dict(os.environ)
++    )
++
++
++def _host_export_shards_support_records(
++    result_owners, capability_rows, contract, schema,
++) -> bool:
++    if (
++        not isinstance(schema, str) or not schema
++        or not result_owners or set(result_owners) != set(capability_rows)
++    ):
++        return False
++    for result_path, owner in result_owners.items():
++        if not isinstance(owner, tuple) or len(owner) != 2:
++            return False
++        if not _host_export_contract_matches(contract, owner[0], owner[1]):
++            return False
++        capabilities = capability_rows[result_path]
++        if not isinstance(capabilities, list) or capabilities != [schema]:
++            return False
++    return True
++
++
++def _require_host_export_consumer(contract, worker_base, pipeline_error) -> None:
++    if isinstance(contract, dict) and contract.get("selected"):
++        if not _host_export_contract_matches(
++            contract, worker_base, contract.get("worker_environment"),
++        ):
++            raise pipeline_error(
++                "host frontend worker owner changed after exports publication"
++            )
++
++
+ def build_shared_exports(
+     tmp: str,
+     src_paths,
+@@ -402,6 +448,9 @@
+     ast_dir: str = "",
+     profile: Optional[dict] = None,
+     module_dependency_map=None,
++    host_export_contract=None,
++    host_export_schema: str = "",
++    write_host_native_exports_wire=None,
+     build_unique_class_preload_index=None,
+     contextual_host_for_module=None,
+     build_contextual_host_export_surface=None,
+@@ -434,6 +483,20 @@
+     os.makedirs(export_dir, exist_ok=True)
+     result_paths: list[str] = []
+     commands: list[str] = []
++    # Keep producer ownership separate from the claimed capability. A result
++    # from a different executable/entrypoint/context cannot authorize codegen.
++    track_host_capabilities = (
++        write_host_native_exports_wire is not None
++        and bool(host_export_schema)
++        and isinstance(host_export_contract, dict)
++    )
++    if track_host_capabilities:
++        worker_prefix = tuple(worker_prefix)
++    export_worker_base = (
++        tuple(worker_prefix) + (worker_arg,) if track_host_capabilities else ()
++    )
++    result_owners = {}
++    capability_rows = {}
+     for worker_index, chunk in enumerate(chunks):
+         manifest_path = os.path.join(
+             tmp,
+@@ -463,9 +526,18 @@
+         command_parts = [shell_quote_arg(part) for part in worker_prefix]
+         command_parts.append(shell_quote_arg(worker_arg))
+         command_parts.append(shell_quote_arg(manifest_path))
+-        commands.append(
+-            worker_env_prefix() + " " + join_strings(command_parts, " ")
+-        )
++        command_environment = None
++        if track_host_capabilities:
++            captured_environment = host_export_contract.get("worker_environment")
++            if _host_export_contract_matches(
++                host_export_contract, export_worker_base, captured_environment,
++            ):
++                command_environment = captured_environment
++        if command_environment is None:
++            command_environment = worker_env_prefix()
++        if track_host_capabilities:
++            result_owners[result_path] = (export_worker_base, command_environment)
++        commands.append(command_environment + " " + join_strings(command_parts, " "))
+ 
+     if oversized_chunk_count:
+         run_worker_commands(
+@@ -502,6 +574,8 @@
+     export_worker_sum_ms = 0
+     export_worker_max_ms = 0
+     for result_path in result_paths:
++        if track_host_capabilities:
++            capability_rows[result_path] = []
+         with open(result_path, "r", encoding="utf-8") as stream:
+             result_text = stream.read()
+         for raw_line in result_text.splitlines():
+@@ -513,6 +587,8 @@
+                 raise pipeline_error(message)
+             if parts[0] != "EXPORT" or len(parts) < 3:
+                 raise pipeline_error("invalid frontend export worker result")
++            if track_host_capabilities:
++                capability_rows[result_path].append(parts[4] if len(parts) >= 5 else "")
+             shard_exports, _derived, shard_object_uses = read_native_exports_wire(
+                 parts[1],
+                 include_function_object_uses=True,
+@@ -702,15 +778,28 @@
+             )
+         else:
+             contextual_host_exports = {}
+-    write_native_exports_wire(
+-        exports_path,
+-        native_exports,
+-        class_map,
+-        module_dependencies=module_dependency_map,
+-        unique_class_preload_index=unique_class_preload_index,
+-        contextual_modules=tuple(contextual_modules),
+-        contextual_host_exports=contextual_host_exports,
+-    )
++    use_host_records = (
++        module_dependency_map is None
++        and write_host_native_exports_wire is not None
++        and _host_export_shards_support_records(
++            result_owners, capability_rows, host_export_contract, host_export_schema,
++        )
++    )
++    if use_host_records:
++        write_host_native_exports_wire(exports_path, native_exports, class_map)
++    else:
++        write_native_exports_wire(
++            exports_path,
++            native_exports,
++            class_map,
++            module_dependencies=module_dependency_map,
++            unique_class_preload_index=unique_class_preload_index,
++            contextual_modules=tuple(contextual_modules),
++            contextual_host_exports=contextual_host_exports,
++        )
++    if isinstance(host_export_contract, dict):
++        host_export_contract["selected"] = use_host_records
++        profile_counter(profile, "multi_frontend_host_class_records", int(use_host_records))
+     profile_counter(
+         profile,
+         "multi_frontend_export_worker_sum_ms",
+@@ -1010,6 +1099,19 @@
+     # A numeric worker count limits concurrency; it must not turn off the
+     # native export/codegen ownership and memory-safe deferred pipeline.
+     native_owned_lanes = compiled_native_worker
++    host_export_contract = None
++    if not native_owned_lanes and sys.implementation.name == "cpython":
++        # One frozen command base constructs both EXPORT and codegen jobs.
++        # Ambient source-selection state is checked before publication/launch;
++        # as for all compiler inputs, source files must stay stable meanwhile.
++        worker_prefix = tuple(worker_prefix)
++        host_export_contract = {
++            "worker_base": worker_prefix + (worker_arg,),
++            "worker_environment": worker_env_prefix(),
++            "cwd": os.getcwd(),
++            "environment": dict(os.environ),
++            "selected": False,
++        }
+     if checkpoint_root:
+         if (
+             native_owned_lanes
+@@ -1131,6 +1233,7 @@
+             ast_dir=ast_dir,
+             profile=profile,
+             module_dependency_map=module_dependency_map,
++            host_export_contract=host_export_contract,
+         )
+         profile_end(profile, "multi_frontend_export_parallel", started)
+ 
+@@ -1242,6 +1345,9 @@
+                 )
+             )
+         scheduled_chunks = oversized_chunks + safe_chunks
++        _require_host_export_consumer(
++            host_export_contract, tuple(worker_prefix) + (worker_arg,), pipeline_error,
++        )
+         checkpoint_skip_masks = []
+         if checkpoint_root:
+             from pcc.frontends.python import pipeline_stage1_checkpoint as checkpoint
+@@ -1363,7 +1469,10 @@
+             command_parts = [shell_quote_arg(part) for part in worker_prefix]
+             command_parts.append(shell_quote_arg(worker_arg))
+             command_parts.append(shell_quote_arg(manifest_path))
+-            command_environment = worker_env_prefix()
++            command_environment = (
++                host_export_contract["worker_environment"]
++                if host_export_contract is not None else worker_env_prefix()
++            )
+             if oversized_assembly_handoff and worker_index < oversized_chunk_count:
+                 # The frontend, indexed emitter and assembler have different
+                 # high-water shapes.  Keep the direct indexed emitter here,
+@@ -1448,6 +1557,9 @@
+             profile_counter(profile, "multi_frontend_codegen_deferred", 1)
+             return (_DEFERRED_CODEGEN_RESULT,)
+ 
++        _require_host_export_consumer(
++            host_export_contract, tuple(worker_prefix) + (worker_arg,), pipeline_error,
++        )
+         try:
+             started = profile_begin(profile)
+             in_process_codegen = (
+--- a/pcc/frontends/python/pipeline_frontend_worker_execution.py
++++ b/pcc/frontends/python/pipeline_frontend_worker_execution.py
+@@ -179,6 +179,7 @@
+     mark_function_object_exports,
+     write_native_exports_wire,
+     write_reexport_edges_wire,
++    host_exports_capability: str = "",
+ ) -> int:
+     import gc
+ 
+@@ -198,6 +199,7 @@
+             mark_function_object_exports=mark_function_object_exports,
+             write_native_exports_wire=write_native_exports_wire,
+             write_reexport_edges_wire=write_reexport_edges_wire,
++            host_exports_capability=host_exports_capability,
+         )
+     finally:
+         if collector_was_enabled:
+@@ -215,6 +217,7 @@
+     mark_function_object_exports,
+     write_native_exports_wire,
+     write_reexport_edges_wire,
++    host_exports_capability: str = "",
+ ) -> int:
+     worker_timing = worker_timing_enabled()
+     total_started = time.monotonic() if worker_timing else 0.0
+@@ -285,6 +288,10 @@
+         if worker_timing:
+             total_ms = int((time.monotonic() - total_started) * 1000)
+             line += "\t" + str(total_ms)
++        if host_exports_capability:
++            if not worker_timing:
++                line += "\t0"
++            line += "\t" + host_exports_capability
+         stream.write(line + "\n")
+     return 0
+ 
+--- /dev/null
++++ b/tests/python/test_host_class_record_exports.py
+@@ -0,0 +1,834 @@
++"""Host class records compact transport without changing consumer semantics.
++
++The legacy wire is an external test oracle, never a production checksum.
++Scheduler tests use callbacks only; they do not launch compiler subprocesses.
++"""
++
++from __future__ import annotations
++
++from copy import deepcopy
++import json
++import os
++from pathlib import Path
++import sys
++from types import SimpleNamespace
++
++import pytest
++
++from pcc.frontends.python import (
++    module_action_dag,
++    pipeline,
++    pipeline_exports as exports_wire,
++    pipeline_frontend_parallel as parallel,
++    pipeline_frontend_worker_execution as worker_execution,
++    type_infer,
++)
++from pcc.frontends.python.codegen.class_override_index import (
++    build_export_attribute_interceptors,
++    build_export_method_overrides,
++)
++from pcc.frontends.python.export_meta import encode_type
++from pcc.frontends.python.py_ast import ClassType, FloatType
++from pcc.frontends.python.py_lift import parse_and_lift
++
++
++def _class(name="Shared", owner="owner", *, value=17, bases=()):
++    marker = exports_wire._EXPORT_DEFAULT_WIRE_KEY
++    default = exports_wire._export_default_from_wire({
++        marker: "list",
++        "elems": [
++            {marker: "int", "value": value},
++            {marker: "bytes", "value": [0, 127, 255]},
++        ],
++    })
++    return {
++        "kind": "class",
++        "class_name": name,
++        "owning_module": owner,
++        "base_names": bases,
++        "field_names": ("value",),
++        "field_types": (("value", ("float", 64)),),
++        "methods": ({
++            "name": "measure",
++            "param_types": (("dyn",),),
++            "return_ty": ("float", 64),
++            "call_sig": ({
++                "name": "values",
++                "kind": "pos_or_kw",
++                "annotation": ("dyn",),
++                "has_default": True,
++                "default": default,
++            },),
++        },),
++        "future_metadata": {"labels": ("z", "a"), "enabled": True},
++    }
++
++
++def _fixture_exports():
++    shared = _class()
++    changed_default = _class(value=23)
++    changed_field = deepcopy(shared)
++    changed_field["field_types"] = (("value", ("int", 64, True)),)
++    changed_unknown = deepcopy(shared)
++    changed_unknown["future_metadata"]["labels"] = ("z", "different")
++    changed_method = deepcopy(shared)
++    changed_method["methods"][0]["return_ty"] = ("str",)
++    reordered = dict(reversed(tuple(shared.items())))
++    function = {
++        "kind": "function", "param_types": (), "return_ty": ("dyn",),
++        "call_sig": (), "future_metadata": {"values": (1, 2)},
++    }
++    return {
++        "root": {"Alias": shared, "call": function},
++        "owner": {"Shared": deepcopy(shared), "other_call": function},
++        "variants": {
++            "default": changed_default,
++            "field": changed_field,
++            "unknown": changed_unknown,
++            "method": changed_method,
++            "reordered": reordered,
++        },
++        "empty": {},
++    }
++
++
++def _write_pair(tmp_path, exports=None, derived=None, uses=None):
++    exports = _fixture_exports() if exports is None else exports
++    derived = {"owner.Shared": ("variants.Child",)} if derived is None else derived
++    uses = (("root", "call"), ("owner", "other_call")) if uses is None else uses
++    legacy = tmp_path / "legacy.json"
++    host = tmp_path / "host.json"
++    exports_wire._write_native_exports_wire(legacy, exports, derived, uses)
++    exports_wire._write_host_native_exports_wire(host, exports, derived, uses)
++    return legacy, host
++
++
++def _read(path, mode):
++    if mode == "raw":
++        return exports_wire._read_native_exports_wire_raw_modules(path)
++    if mode == "module":
++        return exports_wire._read_native_exports_wire_for_module(path, "root")
++    include_uses = mode.endswith("with_uses")
++    if mode.startswith("text"):
++        return exports_wire._decode_native_exports_wire(
++            path.read_text(encoding="utf-8"), include_uses,
++        )
++    return exports_wire._read_native_exports_wire(path, include_uses)
++
++
++@pytest.mark.parametrize("mode", (
++    "raw", "full", "full_with_uses", "text", "text_with_uses", "module",
++))
++def test_host_record_readers_are_exactly_legacy_equivalent(tmp_path, mode):
++    legacy, host = _write_pair(tmp_path)
++    assert _read(host, mode) == _read(legacy, mode)
++    if mode == "raw":
++        assert json.dumps(_read(host, mode)) == json.dumps(_read(legacy, mode))
++
++
++def test_records_intern_complete_ordered_raw_class_values_only(tmp_path):
++    exports = _fixture_exports()
++    before = exports_wire._native_export_to_wire(exports)
++    legacy, host = _write_pair(tmp_path, exports)
++    payload = json.loads(host.read_text(encoding="utf-8"))
++    assert tuple(payload) == (
++        "schema", "class_records", "modules", "derived_class_map",
++        "function_object_uses",
++    )
++    assert payload["schema"] == exports_wire._HOST_NATIVE_EXPORT_RECORD_SCHEMA
++    assert len(payload["class_records"]) == 6
++    assert [row[0] for row in payload["modules"]] == list(exports)
++    rows = {name: bindings for name, bindings in payload["modules"]}
++    assert rows["root"][0] == ["Alias", "class", 0]
++    assert rows["owner"][0] == ["Shared", "class", 0]
++    assert rows["root"][1][1] == "inline"
++    assert rows["variants"] == [
++        ["default", "class", 1], ["field", "class", 2],
++        ["unknown", "class", 3], ["method", "class", 4],
++        ["reordered", "class", 5],
++    ]
++    assert rows["empty"] == []
++    assert list(payload["class_records"][0]) == list(exports["root"]["Alias"])
++    assert list(payload["class_records"][5]) == list(exports["variants"]["reordered"])
++    assert exports_wire._native_export_to_wire(exports) == before
++    expanded = exports_wire._host_export_record_modules(payload, copy_records=True)
++    assert json.dumps(expanded) == json.dumps(_read(legacy, "raw"))
++    previous = host.read_bytes()
++    exports_wire._write_host_native_exports_wire(
++        host, exports, {"owner.Shared": ("variants.Child",)},
++        (("root", "call"), ("owner", "other_call")),
++    )
++    assert host.read_bytes() == previous
++
++
++@pytest.mark.parametrize("mode", ("raw", "full", "full_with_uses", "module"))
++def test_each_visible_binding_has_independent_mutable_state(tmp_path, mode):
++    _legacy, host = _write_pair(tmp_path)
++    value = _read(host, mode)
++    modules = value if mode == "raw" else value[0]
++    first = modules["root"]["Alias"]
++    second = modules["owner"]["Shared"]
++    first_method = first["methods"][0]
++    second_method = second["methods"][0]
++    first_default = first_method["call_sig"][0]["default"]
++    second_default = second_method["call_sig"][0]["default"]
++    assert first == second and first is not second
++    assert first_method is not second_method
++    assert first_method["call_sig"][0] is not second_method["call_sig"][0]
++    assert first_default is not second_default
++    first["future_metadata"]["enabled"] = False
++    first_method["return_ty"] = ("str",)
++    assert second["future_metadata"]["enabled"] is True
++    assert second_method["return_ty"] == (["float", 64] if mode == "raw" else ("float", 64))
++    if mode == "raw":
++        first_default["elems"][0]["value"] = 91
++        first_default["elems"][1]["value"].append(99)
++        assert second_default["elems"][0]["value"] == 17
++        assert second_default["elems"][1]["value"] == [0, 127, 255]
++    else:
++        assert first_default.elems[0] is not second_default.elems[0]
++        # Export ASTs are frozen, but even a low-level consumer mutation must
++        # not cross the visible-binding boundary.
++        object.__setattr__(first_default.elems[0], "value", 91)
++        assert second_default.elems[0].value == 17
++    first_call = modules["root"]["call"]
++    second_call = modules["owner"]["other_call"]
++    assert first_call is not second_call
++    first_call["future_metadata"]["values"] = (99,)
++    assert second_call["future_metadata"]["values"] == ([1, 2] if mode == "raw" else (1, 2))
++    assert _read(host, mode) == _read(_legacy, mode)
++
++
++def test_raw_expansion_keeps_private_templates_and_default_lists_private(tmp_path):
++    _legacy, host = _write_pair(tmp_path)
++    payload = json.loads(host.read_text(encoding="utf-8"))
++    before = deepcopy(payload)
++    first = exports_wire._host_export_record_modules(payload, copy_records=True)
++    second = exports_wire._host_export_record_modules(payload, copy_records=True)
++    default = first["root"]["Alias"]["methods"][0]["call_sig"][0]["default"]
++    default["elems"][1]["value"].append(61)
++    first["root"]["call"]["future_metadata"]["values"].append(88)
++    assert payload == before
++    assert second == exports_wire._host_export_record_modules(payload, copy_records=True)
++    assert second["root"]["Alias"] is not second["owner"]["Shared"]
++
++
++@pytest.mark.parametrize("root", ("root", "other", "absent"))
++def test_module_reader_keeps_full_graph_and_root_scoped_ambiguity(tmp_path, root):
++    exports = {
++        "root": {"LocalOnly": _class("LocalOnly", "root"), "Shared": _class("Shared", "root")},
++        "other": {"Shared": _class("Shared", "other")},
++        "unique": {"Solo": _class("Solo", "unique")},
++        "unimported": {"Child": _class("Child", "unimported", bases=("root.Shared",))},
++    }
++    legacy, host = _write_pair(tmp_path, exports, {}, ())
++    actual = exports_wire._read_native_exports_wire_for_module(host, root)
++    expected = exports_wire._read_native_exports_wire_for_module(legacy, root)
++    assert actual == expected
++    assert actual[3] is False
++    assert tuple(actual[0]) == tuple(exports)
++    keys = {name for name, _type_id in actual[2]["keys"]}
++    assert "Solo" in keys
++    assert ("LocalOnly" in keys) is (root != "root")
++    assert ("Shared" in keys) is (root != "absent")
++    overrides = build_export_method_overrides(actual[0])
++    assert overrides == build_export_method_overrides(expected[0])
++    assert "measure" in overrides["root.Shared"]
++
++
++def test_full_graph_keeps_unimported_override_and_attribute_interceptors(tmp_path):
++    base = _class("Base", "base")
++    child = _class("Child", "child", bases=("base.Base",))
++    hook = _class("Hook", "hook")
++    hook["methods"] = ({"name": "__getattribute__"},)
++    diamond = _class("Diamond", "unimported", bases=("child.Child", "hook.Hook"))
++    exports = {
++        "root": {}, "base": {"Base": base}, "child": {"Child": child},
++        "hook": {"Hook": hook}, "unimported": {"Diamond": diamond},
++    }
++    legacy, host = _write_pair(tmp_path, exports, {}, ())
++    full = exports_wire._read_native_exports_wire_for_module(host, "root")[0]
++    baseline = exports_wire._read_native_exports_wire_for_module(legacy, "root")[0]
++    assert full == baseline
++    overrides = build_export_method_overrides(full)
++    assert overrides == build_export_method_overrides(baseline)
++    assert {"measure", "__getattribute__"}.issubset(overrides["base.Base"])
++    interceptors = build_export_attribute_interceptors(full)
++    assert interceptors == build_export_attribute_interceptors(baseline)
++    assert {"base.Base", "child.Child", "hook.Hook", "unimported.Diamond"}.issubset(interceptors)
++
++
++@pytest.mark.parametrize("expression", ("item.value", "item.measure()"))
++def test_unimported_unique_class_inference_matches_legacy(tmp_path, expression):
++    exports = {"root": {}, "provider": {"Solo": _class("Solo", "provider")}}
++    legacy, host = _write_pair(tmp_path, exports, {}, ())
++    source = 'def read(item: "Solo"):\n    return ' + expression + "\n"
++    typed = []
++    for path in (legacy, host):
++        modules, derived, preload, indexed = (
++            exports_wire._read_native_exports_wire_for_module(path, "root")
++        )
++        assert indexed is False
++        typed.append(type_infer.infer_module(
++            parse_and_lift(source, "root.py", "root"),
++            external_exports={name: value for name, value in modules.items() if name != "root"},
++            derived_class_map=derived, unique_external_class_preload=preload,
++        ))
++    expected, actual = typed
++    assert isinstance(actual.body[0].args[0].annotation, ClassType)
++    assert actual.body[0].args[0].annotation.module == "provider"
++    assert encode_type(actual.body[0].args[0].annotation) == encode_type(expected.body[0].args[0].annotation)
++    assert isinstance(expected.body[0].body[0].value.ty, FloatType)
++    assert encode_type(actual.body[0].body[0].value.ty) == encode_type(expected.body[0].body[0].value.ty)
++
++
++def test_action_state_summaries_and_every_module_key_are_exactly_equal(tmp_path):
++    exports = _fixture_exports()
++    legacy, host = _write_pair(tmp_path, exports)
++    names = list(exports)
++    sources = []
++    for name in names:
++        path = tmp_path / (name + ".py")
++        path.write_text("pass\n", encoding="utf-8")
++        sources.append(str(path))
++    plan = {
++        "compiler_digest": "1" * 64, "runtime_abi_digest": "2" * 64,
++        "target": "test:host", "options_digest": "3" * 64,
++        "action_root": str(tmp_path / "actions"),
++    }
++    dependencies = {name: () for name in names}
++    dependencies["root"] = ("owner",)
++    dependencies["owner"] = ("variants",)
++    states = [pipeline._build_python_frontend_action_state(
++        sources, names, str(path), plan, module_dependency_map=dependencies,
++    ) for path in (legacy, host)]
++    expected, actual = states
++    assert actual.payload() == expected.payload()
++    assert actual.digest() == expected.digest()
++    for name in names:
++        assert actual.module_map()[name].summary == expected.module_map()[name].summary
++        assert module_action_dag.action_key(actual, name, "module-ir") == module_action_dag.action_key(expected, name, "module-ir")
++
++
++@pytest.mark.parametrize("mode", ("raw", "full", "full_with_uses", "module"))
++def test_host_file_readers_open_and_read_once(tmp_path, monkeypatch, mode):
++    _legacy, host = _write_pair(tmp_path)
++    original_open = open
++    events = []
++
++    class Reader:
++        def __init__(self, *args, **kwargs):
++            events.append("open")
++            self.stream = original_open(*args, **kwargs)
++
++        def __enter__(self):
++            self.stream.__enter__()
++            return self
++
++        def __exit__(self, *args):
++            return self.stream.__exit__(*args)
++
++        def read(self):
++            events.append("read")
++            return self.stream.read()
++
++    monkeypatch.setattr(exports_wire, "open", Reader, raising=False)
++    _read(host, mode)
++    assert events == ["open", "read"]
++
++
++def _valid_payload():
++    return {
++        "schema": exports_wire._HOST_NATIVE_EXPORT_RECORD_SCHEMA,
++        "class_records": [{"kind": "class", "class_name": "A"}],
++        "modules": [["root", [["A", "class", 0]]]],
++        "derived_class_map": {}, "function_object_uses": [],
++    }
++
++
++@pytest.mark.parametrize("reference", (True, False, -1, 1, 1 << 100, 0.0, "0", None, [], {}))
++@pytest.mark.parametrize("mode", ("raw", "full", "full_with_uses", "text", "module"))
++def test_host_record_references_reject_wrong_type_and_out_of_range(tmp_path, reference, mode):
++    payload = _valid_payload()
++    payload["modules"][0][1][0][2] = reference
++    path = tmp_path / "invalid.json"
++    path.write_text(json.dumps(payload), encoding="utf-8")
++    with pytest.raises(ValueError, match="reference"):
++        _read(path, mode)
++
++
++@pytest.mark.parametrize("field", (
++    "schema", "class_records", "modules", "derived_class_map", "function_object_uses",
++))
++def test_host_envelope_requires_each_field(field):
++    payload = _valid_payload()
++    del payload[field]
++    with pytest.raises(ValueError):
++        exports_wire._host_export_record_modules(payload)
++
++
++@pytest.mark.parametrize("field,value", (
++    ("schema", "unknown"), ("class_records", {}), ("class_records", [None]),
++    ("class_records", [{"kind": "function"}]), ("modules", {}),
++    ("modules", [None]), ("modules", [["root"]]),
++    ("modules", [["root", [], "extra"]]), ("modules", [[True, []]]),
++    ("modules", [["root", {}]]), ("modules", [["root", [None]]]),
++    ("modules", [["root", [["A", "class"]]]]),
++    ("modules", [["root", [["A", "class", 0, "extra"]]]]),
++    ("modules", [["root", [[True, "class", 0]]]]),
++    ("modules", [["root", [["A", "unknown", 0]]]]),
++    ("modules", [["root", [["A", "inline", None]]]]),
++    ("modules", [["root", [["A", "inline", {"kind": "class"}]]]]),
++    ("modules", [["root", []], ["root", []]]),
++    ("modules", [["root", [["A", "class", 0], ["A", "class", 0]]]]),
++    ("derived_class_map", []), ("function_object_uses", {}),
++    ("legacy_digest", "not-a-production-field"),
++))
++@pytest.mark.parametrize("mode", ("raw", "full", "module"))
++def test_host_envelope_rejects_malformed_fields_rows_tags_and_duplicates(tmp_path, field, value, mode):
++    payload = _valid_payload()
++    payload[field] = value
++    path = tmp_path / "invalid.json"
++    path.write_text(json.dumps(payload), encoding="utf-8")
++    with pytest.raises(ValueError):
++        _read(path, mode)
++    with pytest.raises(ValueError):
++        exports_wire._host_export_record_modules(payload, copy_records=True)
++
++
++@pytest.mark.parametrize("payload", (None, [], "host", 0))
++def test_host_helper_rejects_non_object_envelopes(payload):
++    with pytest.raises(ValueError):
++        exports_wire._host_export_record_modules(payload)
++
++
++def test_empty_host_graph_is_valid_and_has_no_indexed_prerequisites(tmp_path):
++    _legacy, host = _write_pair(tmp_path, {}, {}, ())
++    assert _read(host, "full_with_uses") == ({}, {}, ())
++    assert _read(host, "raw") == {}
++    assert _read(host, "module") == (
++        {}, {}, {"types": (), "keys": (), "dependencies": ()}, False,
++    )
++
++
++@pytest.mark.parametrize("implementation,supported", (("cpython", True), ("pypy", False), ("pcc", False)))
++def test_capability_is_cpython_only(monkeypatch, implementation, supported):
++    monkeypatch.setattr(exports_wire, "sys", SimpleNamespace(
++        implementation=SimpleNamespace(name=implementation),
++    ))
++    assert exports_wire._host_native_exports_transport_capability() == (
++        exports_wire._HOST_NATIVE_EXPORT_RECORD_SCHEMA if supported else ""
++    )
++
++
++def test_host_writer_and_reader_fail_closed_without_host_capability(tmp_path, monkeypatch):
++    _legacy, host = _write_pair(tmp_path)
++    monkeypatch.setattr(exports_wire, "_host_native_exports_transport_capability", lambda: "")
++    for mode in ("raw", "full", "module"):
++        with pytest.raises(ValueError, match="CPython"):
++            _read(host, mode)
++    target = tmp_path / "must-not-write.json"
++    with pytest.raises(ValueError, match="CPython"):
++        exports_wire._write_host_native_exports_wire(target, {}, {})
++    assert not target.exists()
++    assert _read(_legacy, "full")[0]
++
++
++def test_legacy_writer_golden_bytes_and_indexed_writer_golden_bytes_are_unchanged(tmp_path):
++    exports = {"root": {}, "dep": {}}
++    legacy = tmp_path / "legacy.json"
++    exports_wire._write_native_exports_wire(legacy, exports, {}, (("dep", "f"),))
++    assert legacy.read_bytes() == (
++        b'{"schema": "pcc.frontends.python.native_exports.v1", '
++        b'"native_exports": {"root": {}, "dep": {}}, '
++        b'"derived_class_map": {}, "function_object_uses": [["dep", "f"]]}'
++    )
++    indexed = tmp_path / "indexed.wire"
++    exports_wire._write_native_exports_wire(
++        indexed, exports, {}, (("dep", "f"),),
++        module_dependencies={"root": ("dep",), "dep": ()},
++        unique_class_preload_index={
++            "types": (), "base_keys": (),
++            "roots": {"root": ((), ()), "dep": ((), ())},
++        },
++    )
++    assert indexed.read_bytes() == (
++        b'pcc.frontends.python.native_exports.indexed.v1\n'
++        b'D\t{}\nF\t[["dep", "f"]]\nP\t{"root": ["dep"], "dep": []}\n'
++        b'T\t[]\nG\t[]\nC\t[]\nH\t{}\n'
++        b'U\troot\t[[], []]\nU\tdep\t[[], []]\nM\troot\t{}\nM\tdep\t{}\n'
++    )
++    assert _read(indexed, "raw") == exports
++    assert _read(indexed, "full_with_uses") == (exports, {}, (("dep", "f"),))
++    selected, _derived, _preload, is_indexed = _read(indexed, "module")
++    assert selected == exports and is_indexed is True
++
++
++def _contract():
++    return {
++        "worker_base": (sys.executable, "-m", "pcc", "--worker"),
++        "worker_environment": "PCC_TEST_OWNER=host",
++        "cwd": os.getcwd(), "environment": dict(os.environ), "selected": False,
++    }
++
++
++def test_capability_contract_binds_exact_command_environment_and_cwd(monkeypatch, tmp_path):
++    contract = _contract()
++    base = contract["worker_base"]
++    environment = contract["worker_environment"]
++    matches = parallel._host_export_contract_matches
++    assert matches(contract, base, environment)
++    assert matches(contract, list(base), environment)
++    for other in (("pcc1", "--worker"), base[:-1], base + ("--other",), ("other-python",) + base[1:]):
++        assert not matches(contract, other, environment)
++    assert not matches(contract, base, environment + " PCC_EXTRA=1")
++    assert not matches(None, base, environment)
++    assert not matches({}, base, environment)
++    assert not matches(contract, " ".join(base), environment)
++    assert not matches(contract, base, None)
++    with monkeypatch.context() as changed:
++        changed.setenv("PCC_HOST_RECORD_UNRELATED_ENV", "changed")
++        assert not matches(contract, base, environment)
++    with monkeypatch.context() as changed:
++        changed.chdir(tmp_path)
++        assert not matches(contract, base, environment)
++    for missing in ("worker_base", "worker_environment", "cwd", "environment"):
++        incomplete = dict(contract)
++        del incomplete[missing]
++        assert not matches(incomplete, base, environment)
++
++
++@pytest.mark.parametrize("case", (
++    "all", "missing", "mixed", "unknown", "duplicate", "empty", "extra",
++    "tuple_rows", "no_shards", "owner", "environment", "malformed_owner",
++    "missing_schema", "missing_contract",
++))
++def test_all_expected_shards_must_advertise_one_matching_capability(case):
++    contract = _contract()
++    schema = exports_wire._HOST_NATIVE_EXPORT_RECORD_SCHEMA
++    owner = (contract["worker_base"], contract["worker_environment"])
++    owners = {"first.tsv": owner, "second.tsv": owner}
++    rows = {name: [schema] for name in owners}
++    if case == "missing":
++        del rows["second.tsv"]
++    elif case == "mixed":
++        rows["second.tsv"] = [""]
++    elif case == "unknown":
++        rows["second.tsv"] = [schema + ".unknown"]
++    elif case == "duplicate":
++        rows["second.tsv"] = [schema, schema]
++    elif case == "empty":
++        rows["second.tsv"] = []
++    elif case == "extra":
++        rows["unexpected.tsv"] = [schema]
++    elif case == "tuple_rows":
++        rows["second.tsv"] = (schema,)
++    elif case == "no_shards":
++        owners, rows = {}, {}
++    elif case == "owner":
++        owners["second.tsv"] = (("pcc1", "--worker"), owner[1])
++    elif case == "environment":
++        owners["second.tsv"] = (owner[0], owner[1] + " OTHER=1")
++    elif case == "malformed_owner":
++        owners["second.tsv"] = owner[0]
++    elif case == "missing_schema":
++        schema = ""
++    elif case == "missing_contract":
++        contract = None
++    assert parallel._host_export_shards_support_records(
++        owners, rows, contract, schema,
++    ) is (case == "all")
++
++
++@pytest.mark.parametrize("change", ("owner", "environment", "cwd"))
++def test_post_publication_consumer_drift_fails_before_launch(monkeypatch, tmp_path, change):
++    contract = _contract()
++    contract["selected"] = True
++    base = contract["worker_base"]
++    parallel._require_host_export_consumer(contract, base, RuntimeError)
++    if change == "owner":
++        base = ("pcc1", "--worker")
++    elif change == "environment":
++        monkeypatch.setenv("PCC_HOST_RECORD_CONSUMER_DRIFT", "1")
++    else:
++        monkeypatch.chdir(tmp_path)
++    with pytest.raises(RuntimeError, match="owner changed"):
++        parallel._require_host_export_consumer(contract, base, RuntimeError)
++    contract["selected"] = False
++    parallel._require_host_export_consumer(contract, base, RuntimeError)
++
++
++@pytest.mark.parametrize("prefix,supported", (
++    ((sys.executable, "-m", "pcc"), True),
++    (("pcc1",), False), (("python", "-m", "pcc"), False),
++    ((sys.executable, "-m", "other"), False),
++    ((sys.executable, "-I", "-m", "pcc"), False),
++))
++def test_pipeline_facade_offers_host_writer_only_to_exact_host_entrypoint(monkeypatch, prefix, supported):
++    seen = {}
++
++    def capture(*_args, **kwargs):
++        seen.update(kwargs)
++        return "exports.json"
++
++    monkeypatch.setattr(parallel, "build_shared_exports", capture)
++    contract = _contract()
++    result = pipeline._build_python_frontend_shared_exports_parallel(
++        "scratch", ["root.py"], ["root"], [[0]], list(prefix),
++        entry_module="root", sibling_inits=(), libpython_mode="off",
++        ir_scaffold_mode="on", verbose=False, max_parallel=2,
++        oversized_chunk_count=0, safe_parallel=2, host_export_contract=contract,
++    )
++    assert result == "exports.json"
++    assert seen["write_native_exports_wire"] is exports_wire._write_native_exports_wire
++    assert seen["write_host_native_exports_wire"] is (
++        exports_wire._write_host_native_exports_wire if supported else None
++    )
++    assert seen["host_export_contract"] is contract
++    assert seen["module_dependency_map"] is None
++
++
++@pytest.mark.parametrize("timing", (False, True))
++@pytest.mark.parametrize("capability", ("", exports_wire._HOST_NATIVE_EXPORT_RECORD_SCHEMA))
++def test_export_optional_capability_keeps_legacy_columns_and_shard_wire(tmp_path, monkeypatch, timing, capability):
++    times = iter((10.0, 11.0))
++    monkeypatch.setattr(worker_execution, "time", SimpleNamespace(monotonic=lambda: next(times)))
++    result = tmp_path / "result.tsv"
++    manifest = {
++        "result_path": str(result), "ir_dir": str(tmp_path), "ast_dir": "",
++        "src_paths": ["root.py"], "module_names": ["root"],
++        "assigned_indices": [0],
++    }
++    exports = {"root": {"A": _class("A", "root")}}
++    seen = {}
++
++    def write_edges(path, edges, **kwargs):
++        seen["edges"] = (path, edges, kwargs)
++
++    status = worker_execution._run_export_worker(
++        manifest, worker_timing_enabled=lambda: timing,
++        build_closed_world_context=lambda *_args, **_kwargs: ([None], exports, {}),
++        write_ast_wire=lambda *_args: None,
++        closed_world_reexport_edges=lambda *_args: (),
++        closed_world_module_dependencies=lambda *_args: (("root", ()),),
++        mark_function_object_exports=lambda *_args, **_kwargs: (("root", "f"),),
++        write_native_exports_wire=exports_wire._write_native_exports_wire,
++        write_reexport_edges_wire=write_edges,
++        host_exports_capability=capability,
++    )
++    assert status == 0
++    parts = result.read_text(encoding="utf-8").rstrip("\n").split("\t")
++    assert parts[:3] == [
++        "EXPORT", str(tmp_path / "exports_result.tsv.json"),
++        str(tmp_path / "reexports_result.tsv.json"),
++    ]
++    assert parts[3:] == (
++        (["1000" if timing else "0", capability] if capability else ["1000"])
++        if (capability or timing) else []
++    )
++    assert json.loads(Path(parts[1]).read_text(encoding="utf-8"))["schema"] == exports_wire._NATIVE_EXPORT_WIRE_SCHEMA
++    assert _read(Path(parts[1]), "full_with_uses") == (exports, {}, (("root", "f"),))
++    assert seen["edges"][2] == {"module_dependencies": (("root", ()),)}
++
++
++def _publish_mock_shards(tmp_path, monkeypatch, row_tails, *, mutate_environment=False, indexed=False):
++    contract = _contract()
++    events = []
++    modules = ("root", "dep")
++    snapshots = {name: {"A": _class("A", "owner")} for name in modules}
++    schema = exports_wire._HOST_NATIVE_EXPORT_RECORD_SCHEMA
++    dependency_map = {} if indexed else None
++
++    def noop(*_args, **_kwargs):
++        return None
++
++    def write_manifest(_manifest, result, _export_dir, _exports, _ast_dir, _sources, _modules, chunk, **kwargs):
++        index = chunk[0]
++        events.append(("manifest", kwargs["job_kind"], tuple(chunk)))
++        rows = []
++        for tail in row_tails[index]:
++            rows.append("EXPORT\t" + modules[index] + ".exports\t" + modules[index] + ".edges" + tail)
++        Path(result).write_text("\n".join(rows) + ("\n" if rows else ""), encoding="utf-8")
++
++    def run_commands(commands, *, max_parallel):
++        events.append(("run", tuple(commands), max_parallel))
++        if mutate_environment:
++            monkeypatch.setenv("PCC_HOST_RECORD_PUBLICATION_DRIFT", "1")
++
++    def read_exports(path, **_kwargs):
++        name = path.removesuffix(".exports")
++        return {name: snapshots[name]}, {}, ()
++
++    def read_edges(path, **_kwargs):
++        name = path.removesuffix(".edges")
++        return (), ((name, ()),) if indexed else ()
++
++    def normal_writer(path, *args, **kwargs):
++        events.append(("legacy", Path(path).name))
++        exports_wire._write_native_exports_wire(path, *args, **kwargs)
++
++    def host_writer(path, *args, **kwargs):
++        events.append(("host", Path(path).name))
++        exports_wire._write_host_native_exports_wire(path, *args, **kwargs)
++
++    monkeypatch.setattr(parallel, "_build_vthread_effect_summaries", lambda *_args, **_kwargs: (["summary.json"], 1))
++    path = parallel.build_shared_exports(
++        str(tmp_path), ["root.py", "dep.py"], modules, [[0], [1]],
++        (sys.executable, "-m", "pcc"),
++        entry_module="root", sibling_inits=(), libpython_mode="off",
++        ir_scaffold_mode="on", verbose=False, max_parallel=2,
++        oversized_chunk_count=1, safe_parallel=2, ast_dir=str(tmp_path / "ast"),
++        module_dependency_map=dependency_map,
++        host_export_contract=contract, host_export_schema=schema,
++        write_host_native_exports_wire=host_writer,
++        build_unique_class_preload_index=lambda values, _tmp: type_infer.build_unique_external_class_preload_index(values),
++        contextual_host_for_module=lambda _name: False,
++        build_contextual_host_export_surface=lambda _exports: {},
++        write_manifest=write_manifest, shell_quote_arg=str, worker_arg="--worker",
++        worker_env_prefix=lambda: contract["worker_environment"],
++        join_strings=lambda values, sep: sep.join(values),
++        run_worker_commands=run_commands, profiled_gc_collect=noop,
++        read_native_exports_wire=read_exports, read_reexport_edges_wire=read_edges,
++        merge_reexport_edges=noop, flatten_class_export_fields=noop,
++        repair_default_global_owners=noop, merge_mixin_stack_methods=noop,
++        merge_codegen_methods=noop, expand_valueclass_export_refs=noop,
++        apply_function_object_uses=noop, read_ast_wire=lambda _path: None,
++        annotate_vthread_effects=noop,
++        annotate_vthread_effect_summaries=lambda *_args: (2, 0, 0),
++        derived_class_map=lambda _exports: {}, write_native_exports_wire=normal_writer,
++        profile_counter=noop, pipeline_error=RuntimeError,
++    )
++    return Path(path), contract, events
++
++
++@pytest.mark.parametrize("case,selected", (
++    ("modern", True), ("legacy", False), ("legacy_timed", False),
++    ("mixed", False), ("unknown", False), ("duplicate", False),
++    ("empty", False), ("environment", False), ("indexed", False),
++))
++def test_shared_publication_requires_all_shards_and_preserves_scheduling(tmp_path, monkeypatch, case, selected):
++    capability = "\t0\t" + exports_wire._HOST_NATIVE_EXPORT_RECORD_SCHEMA
++    rows = [[capability], [capability]]
++    if case == "legacy":
++        rows = [[""], [""]]
++    elif case == "legacy_timed":
++        rows = [["\t13"], ["\t7"]]
++    elif case == "mixed":
++        rows[1] = [""]
++    elif case == "unknown":
++        rows[1] = ["\t0\tunknown"]
++    elif case == "duplicate":
++        rows[1] = [capability, capability]
++    elif case == "empty":
++        rows[1] = []
++    path, contract, events = _publish_mock_shards(
++        tmp_path, monkeypatch, rows,
++        mutate_environment=case == "environment", indexed=case == "indexed",
++    )
++    assert contract["selected"] is selected
++    assert ("legacy", "native_exports_pre_effect.json") in events
++    assert (("host" if selected else "legacy"), "native_exports.json") in events
++    runs = [event for event in events if event[0] == "run"]
++    assert [event[2] for event in runs] == [1, 2]
++    assert [len(event[1]) for event in runs] == [1, 1]
++    for index, event in enumerate(runs):
++        assert event[1][0].startswith(contract["worker_environment"] + " ")
++        assert event[1][0].endswith("export_" + str(index) + ".manifest")
++    assert [event for event in events if event[0] == "manifest"] == [
++        ("manifest", "export", (0,)), ("manifest", "export", (1,)),
++    ]
++    pre_effect = tmp_path / "native_exports_pre_effect.json"
++    assert json.loads(pre_effect.read_text(encoding="utf-8"))["schema"] == exports_wire._NATIVE_EXPORT_WIRE_SCHEMA
++    text = path.read_text(encoding="utf-8")
++    if case == "indexed":
++        assert text.startswith(exports_wire._NATIVE_EXPORT_INDEXED_SCHEMA + "\n")
++    else:
++        assert json.loads(text)["schema"] == (
++            exports_wire._HOST_NATIVE_EXPORT_RECORD_SCHEMA if selected
++            else exports_wire._NATIVE_EXPORT_WIRE_SCHEMA
++        )
++    expected_names = ("root",) if case == "empty" else ("root", "dep")
++    assert tuple(exports_wire._read_native_exports_wire(path)[0]) == expected_names
++
++
++@pytest.mark.parametrize("change", ("none", "prefix_list", "after_exports", "during_manifests"))
++def test_codegen_reuses_the_frozen_export_owner_and_rechecks_before_launch(tmp_path, monkeypatch, change):
++    monkeypatch.delenv("PCC_STAGE1_CHECKPOINT_DIR", raising=False)
++    monkeypatch.delenv("PCC_DEFER_FRONTEND_CODEGEN_PLAN", raising=False)
++    sources = []
++    for name in ("root", "dep"):
++        path = tmp_path / (name + ".py")
++        path.write_text("pass\n", encoding="utf-8")
++        sources.append(str(path))
++    prefix = [sys.executable, "-m", "pcc"]
++    environment_calls = []
++    manifests = []
++    launches = []
++    seen = {}
++
++    class StopAtLaunch(Exception):
++        pass
++
++    def worker_environment():
++        environment_calls.append(True)
++        return "PCC_TEST_OWNER=captured" if len(environment_calls) == 1 else "PCC_TEST_OWNER=changed"
++
++    def publish(tmp, _sources, names, _chunks, worker_prefix, **kwargs):
++        contract = kwargs["host_export_contract"]
++        seen["contract"] = contract
++        assert worker_prefix == (sys.executable, "-m", "pcc")
++        assert contract["worker_base"] == worker_prefix + ("--worker",)
++        assert contract["worker_environment"] == "PCC_TEST_OWNER=captured"
++        assert contract["environment"] == dict(os.environ)
++        assert contract["cwd"] == os.getcwd()
++        path = Path(tmp) / "native_exports.json"
++        exports_wire._write_host_native_exports_wire(path, {name: {} for name in names}, {})
++        contract["selected"] = True
++        if change == "prefix_list":
++            prefix[:] = ["pcc1"]
++        if change == "after_exports":
++            monkeypatch.setenv("PCC_HOST_RECORD_LATE_DRIFT", "after-exports")
++        return str(path)
++
++    def write_manifest(_path, _result, _ir, exports_path, _ast, _sources, _names, chunk, **_kwargs):
++        manifests.append(tuple(chunk))
++        assert json.loads(Path(exports_path).read_text(encoding="utf-8"))["schema"] == exports_wire._HOST_NATIVE_EXPORT_RECORD_SCHEMA
++        if change == "during_manifests":
++            monkeypatch.setenv("PCC_HOST_RECORD_LATE_DRIFT", "during-manifests")
++
++    def stop_before_launch(commands, *, max_parallel):
++        launches.append((tuple(commands), max_parallel))
++        raise StopAtLaunch()
++
++    def noop(*_args, **_kwargs):
++        return None
++
++    expected_error = RuntimeError if change in ("after_exports", "during_manifests") else StopAtLaunch
++    with pytest.raises(expected_error) as error:
++        parallel.compile_parallel_uncached(
++            sources, ["root", "dep"], jobs=2, entry_module="root",
++            sibling_inits=(), libpython_mode="off", ir_scaffold_mode="on", verbose=False,
++            can_spawn_worker=lambda: True, worker_command_prefix=lambda: prefix,
++            chunk_count_for_workers=lambda *_args: 2,
++            codegen_chunks=lambda *_args: [[0], [1]], ast_wire_enabled=lambda: False,
++            build_shared_exports_callback=publish, write_manifest=write_manifest,
++            shell_quote_arg=str, worker_arg="--worker", worker_env_prefix=worker_environment,
++            join_strings=lambda values, sep: sep.join(values),
++            run_worker_commands=stop_before_launch, profiled_gc_collect=noop,
++            read_worker_ir=lambda *_args: "", profile_begin=lambda _profile: 0,
++            profile_end=noop, profile_counter=noop, pipeline_error=RuntimeError,
++            auto_source_lanes=False,
++        )
++    assert len(environment_calls) == 1
++    assert seen["contract"]["selected"] is True
++    if change in ("after_exports", "during_manifests"):
++        assert "owner changed" in str(error.value)
++        assert launches == []
++        assert manifests == ([] if change == "after_exports" else [(0,), (1,)])
++    else:
++        assert manifests == [(0,), (1,)]
++        assert len(launches) == 1 and launches[0][1] == 2
++        assert len(launches[0][0]) == 2
++        for command in launches[0][0]:
++            assert command.startswith("PCC_TEST_OWNER=captured " + sys.executable + " -m pcc --worker ")
++

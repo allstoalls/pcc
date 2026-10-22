@@ -21,7 +21,7 @@ _BUILD.mkdir(parents=True, exist_ok=True)
 
 
 def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -64,6 +64,18 @@ def test_os_environ_get_one_arg_dispatches_to_py_os_getenv(mode):
     # No dynamic os import / environ getattr in the function body.
     assert "cpy.import.os" not in body, body
     assert "cpy.get.environ" not in body, body
+
+
+@pytest.mark.parametrize("with_default", [False, True])
+def test_os_environ_pop_uses_owned_getitem_contains_and_unset(with_default):
+    arguments = '"PCC_POP_PROBE", None' if with_default else '"PCC_POP_PROBE"'
+    source = "import os\ndef probe():\n    return os.environ.pop(" + arguments + ")\n"
+    text = _compile_to_ll(source, "environ_pop_" + str(with_default), mode="on")
+    body = _function_body(text, "probe")
+    assert body is not None
+    assert "@py_os_environ_getitem" in body and "@py_os_unsetenv" in body
+    assert ("@py_os_environ_contains" in body) == with_default
+    assert "cpy.import.os" not in body and "strict.nolib.stub" not in body
 
 
 @pytest.mark.parametrize("mode", ["off", "on"])

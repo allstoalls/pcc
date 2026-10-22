@@ -1,0 +1,1527 @@
+{
+  "common_not_started_modules": [
+    "pcc.backend.arm64_encode",
+    "pcc.backend.self_backend_parse",
+    "pcc.backend.self_backend_precise_stackmaps",
+    "pcc.backend.self_backend_x86_64_linux",
+    "pcc.driver.cli_bootstrap",
+    "pcc.driver.cli_bootstrap_array_core",
+    "pcc.frontends.c.codegen.c_codegen",
+    "pcc.frontends.c.parse.c_parsetab",
+    "pcc.frontends.c.ssa.builder",
+    "pcc.frontends.python.codegen.class_gen",
+    "pcc.frontends.python.codegen.unsafe_lowering",
+    "pcc.frontends.python.codegen.user_function_lowering",
+    "pcc.frontends.python.pipeline",
+    "pcc.frontends.python.type_infer"
+  ],
+  "limits": [
+    "All four shared Stage1 deadlines occurred before final compiler output. The separate macOS pcc0 job passed; no all-GC/native fixed-point claim follows.",
+    "Completed-worker elapsed sums overlap in parallel and are nested; do not add capture/emit to codegen.",
+    "Incomplete and not-started modules are censored. Do not infer eventual duration from last line or IR size.",
+    "Module names identify compilation inputs, not compiler leaf hotspots.",
+    "Exactly repeated generic function names are legitimate calls; module completions are deduplicated, real cancelled retry attempts retained.",
+    "Existing production has no elapsed backend subphase telemetry. Untimestamped per-function ARM debug trace and event-list profiling are not a bounded cross-target substitute."
+  ],
+  "necessary_observation": [
+    "Separate frontend release/GC from selected backend invocation.",
+    "Split verifier/layout, stackmap planning, function setup/emission and final section/metadata work inside backend.",
+    "Split late owned assembler from container encoding and file write, including Windows emit-complete/no-worker-done examples."
+  ],
+  "observation_owner": "retained real CI artifacts, read-only analysis",
+  "platforms": [
+    {
+      "admission_window": {
+        "max_active_tasks": 4,
+        "seconds": 2297.334627275,
+        "seconds_by_active_tasks": {
+          "0": 0.09727432699946803,
+          "1": 426.5791374220003,
+          "2": 27.16588744700033,
+          "3": 27.069328747002032,
+          "4": 1816.422999331998
+        }
+      },
+      "artifact": "bootstrap-linux-x86_64.zip",
+      "class_gen_codegen_status": "not_started",
+      "completed_worker_elapsed_sums_ms": {
+        "capture_ms": 591138,
+        "codegen_ms": 6658393,
+        "indexed_emit_fraction": 0.4697325615955682,
+        "indexed_emit_ms": 3127664,
+        "infer_ms": 21396,
+        "other_codegen_ms": 2939591
+      },
+      "counts": {
+        "attempt_events": {
+          "calibrate": 34,
+          "retire": 384,
+          "start": 354
+        },
+        "completed": 384,
+        "incomplete": 4,
+        "not_started": 68,
+        "root_modules": 456,
+        "started": 388
+      },
+      "failure": {
+        "error": "stage deadline exceeded",
+        "source": {
+          "clean_commit": true,
+          "commit": "b68d422cf134357a16ea79be004c1174c7e39fac",
+          "source_file_count": 1125,
+          "source_scope": "compiler-runtime-headers-build-harness-v1",
+          "source_sha256": "dc02bcb972ab2200a1bf02f6bf5701425cfeeaef30b4386e8b43e100c93c300c"
+        },
+        "stages": []
+      },
+      "generation_lowering_codegen_status": "not_completed",
+      "incomplete_modules": [
+        {
+          "capture_line": 11260,
+          "capture_ms": 7108,
+          "cfg": {
+            "blocks": 43652,
+            "call_cont_blocks": 2719,
+            "call_err_cleanup_blocks": 267,
+            "err_frame_blocks": 2240,
+            "functions": 69,
+            "inline_error_edges": 0,
+            "instructions": 221257
+          },
+          "emit_line": 11414,
+          "fallback_records": 0,
+          "indexed_emit_ms": 41746,
+          "module": "pcc.backend.macho_obj",
+          "start_line": 11216,
+          "supported_records": 268827
+        },
+        {
+          "capture_line": 11418,
+          "capture_ms": 6003,
+          "cfg": {
+            "blocks": 37157,
+            "call_cont_blocks": 2418,
+            "call_err_cleanup_blocks": 275,
+            "err_frame_blocks": 1932,
+            "functions": 73,
+            "inline_error_edges": 0,
+            "instructions": 193224
+          },
+          "fallback_records": 0,
+          "module": "pcc.backend.macho_link",
+          "start_line": 11329,
+          "supported_records": 234144
+        },
+        {
+          "capture_line": 11421,
+          "capture_ms": 4230,
+          "cfg": {
+            "blocks": 24142,
+            "call_cont_blocks": 1607,
+            "call_err_cleanup_blocks": 248,
+            "err_frame_blocks": 1119,
+            "functions": 77,
+            "inline_error_edges": 0,
+            "instructions": 132679
+          },
+          "fallback_records": 0,
+          "module": "pcc.backend.self_backend_half",
+          "start_line": 11387,
+          "supported_records": 159062
+        },
+        {
+          "capture_line": 11442,
+          "capture_ms": 4299,
+          "cfg": {
+            "blocks": 25241,
+            "call_cont_blocks": 2337,
+            "call_err_cleanup_blocks": 379,
+            "err_frame_blocks": 1560,
+            "functions": 44,
+            "inline_error_edges": 0,
+            "instructions": 132158
+          },
+          "fallback_records": 0,
+          "module": "pcc.frontends.python.codegen.subscript_lowering",
+          "start_line": 11424,
+          "supported_records": 160735
+        }
+      ],
+      "member": "shared/stage1.log",
+      "member_bytes": 1342240,
+      "member_sha256": "61d0eec08f9d895fb0866434f3f6e615a2d63cce3c39b68a7eb0db67ca5351ae",
+      "not_started_modules": [
+        "datetime",
+        "pcc.backend.arm64_encode",
+        "pcc.backend.macho_semantic_layout",
+        "pcc.backend.native_object",
+        "pcc.backend.self_backend_aarch64_darwin",
+        "pcc.backend.self_backend_aarch64_darwin_calls",
+        "pcc.backend.self_backend_aarch64_darwin_compute",
+        "pcc.backend.self_backend_kernel",
+        "pcc.backend.self_backend_parse",
+        "pcc.backend.self_backend_precise_stackmaps",
+        "pcc.backend.self_backend_target_passes",
+        "pcc.backend.self_backend_x86_64_linux",
+        "pcc.backend.x86_64_asm_driver",
+        "pcc.driver.cli_bootstrap",
+        "pcc.driver.cli_bootstrap_array_core",
+        "pcc.driver.project",
+        "pcc.frontends.c.codegen.c_codegen",
+        "pcc.frontends.c.codegen.c_ssa_lowering",
+        "pcc.frontends.c.evaluator.c_evaluator",
+        "pcc.frontends.c.parse.c_parsetab",
+        "pcc.frontends.c.passes.llvm_explicit",
+        "pcc.frontends.c.ply.lex",
+        "pcc.frontends.c.ply.yacc",
+        "pcc.frontends.c.ssa.builder",
+        "pcc.frontends.python.codegen._l1_codegen_static_methods",
+        "pcc.frontends.python.codegen.assignment_statement_lowering",
+        "pcc.frontends.python.codegen.attr_load_lowering",
+        "pcc.frontends.python.codegen.call_expression_lowering",
+        "pcc.frontends.python.codegen.call_object_lowering",
+        "pcc.frontends.python.codegen.class_gen",
+        "pcc.frontends.python.codegen.compare_membership_lowering",
+        "pcc.frontends.python.codegen.exception_lowering",
+        "pcc.frontends.python.codegen.extern_lowering",
+        "pcc.frontends.python.codegen.for_loop_lowering",
+        "pcc.frontends.python.codegen.generation_lowering",
+        "pcc.frontends.python.codegen.generator_lowering",
+        "pcc.frontends.python.codegen.hoist_analysis",
+        "pcc.frontends.python.codegen.hoist_lowering",
+        "pcc.frontends.python.codegen.ir_scaffold_lowering",
+        "pcc.frontends.python.codegen.list_method_lowering",
+        "pcc.frontends.python.codegen.literal_lowering",
+        "pcc.frontends.python.codegen.method_call_expression_lowering",
+        "pcc.frontends.python.codegen.method_call_lowering",
+        "pcc.frontends.python.codegen.module_global_lowering",
+        "pcc.frontends.python.codegen.native_modules",
+        "pcc.frontends.python.codegen.native_virtual_thread",
+        "pcc.frontends.python.codegen.numeric_builtin_lowering",
+        "pcc.frontends.python.codegen.runtime_abi",
+        "pcc.frontends.python.codegen.string_method_lowering",
+        "pcc.frontends.python.codegen.unsafe_lowering",
+        "pcc.frontends.python.codegen.user_function_lowering",
+        "pcc.frontends.python.codegen.vthread_effect_analysis",
+        "pcc.frontends.python.pipeline",
+        "pcc.frontends.python.pipeline_exports",
+        "pcc.frontends.python.pipeline_frontend_worker_execution",
+        "pcc.frontends.python.pipeline_frontend_workers",
+        "pcc.frontends.python.pipeline_self_backend_emit",
+        "pcc.frontends.python.py_parse",
+        "pcc.frontends.python.type_infer",
+        "pcc.frontends.python.worker_process_pool",
+        "pcc.ir.direct_indexed_kernel",
+        "pcc.ir.ir",
+        "pcc.ir.optimization.inline",
+        "pcc.ir.optimization.instcombine",
+        "pcc.ir.optimization.mem2reg",
+        "pcc.ir.optimization.simplifycfg",
+        "pcc.package.build_exec",
+        "pcc.package.uv_lock_sync"
+      ],
+      "platform": "linux-x86_64",
+      "release_frontend": {
+        "proof": "source/default inference only; complete child environment not retained",
+        "value": false
+      },
+      "top_completed_input_modules": [
+        {
+          "capture_line": 9894,
+          "capture_ms": 13143,
+          "cfg": {
+            "blocks": 80142,
+            "call_cont_blocks": 7238,
+            "call_err_cleanup_blocks": 361,
+            "err_frame_blocks": 5543,
+            "functions": 344,
+            "inline_error_edges": 0,
+            "instructions": 398599
+          },
+          "codegen_ms": 150026,
+          "done_line": 10071,
+          "emit_line": 9956,
+          "fallback_records": 0,
+          "indexed_emit_ms": 71170,
+          "infer_ms": 164,
+          "module": "pcc.frontends.c.parse.c_parser",
+          "start_line": 9841,
+          "supported_records": 482388
+        },
+        {
+          "capture_line": 10133,
+          "capture_ms": 12744,
+          "cfg": {
+            "blocks": 77258,
+            "call_cont_blocks": 6975,
+            "call_err_cleanup_blocks": 334,
+            "err_frame_blocks": 5350,
+            "functions": 325,
+            "inline_error_edges": 0,
+            "instructions": 384041
+          },
+          "codegen_ms": 141801,
+          "done_line": 10318,
+          "emit_line": 10268,
+          "fallback_records": 0,
+          "indexed_emit_ms": 68585,
+          "infer_ms": 165,
+          "module": "pcc.frontends.c.parse.c_parser_actions",
+          "start_line": 10061,
+          "supported_records": 464698
+        },
+        {
+          "capture_line": 10532,
+          "capture_ms": 9663,
+          "cfg": {
+            "blocks": 59654,
+            "call_cont_blocks": 3792,
+            "call_err_cleanup_blocks": 125,
+            "err_frame_blocks": 3054,
+            "functions": 47,
+            "inline_error_edges": 0,
+            "instructions": 308827
+          },
+          "codegen_ms": 114874,
+          "done_line": 10812,
+          "emit_line": 10644,
+          "fallback_records": 0,
+          "indexed_emit_ms": 55732,
+          "infer_ms": 120,
+          "module": "pcc.backend.self_backend_aarch64_darwin_materialize",
+          "start_line": 10316,
+          "supported_records": 371544
+        },
+        {
+          "capture_line": 9891,
+          "capture_ms": 8456,
+          "cfg": {
+            "blocks": 51539,
+            "call_cont_blocks": 3377,
+            "call_err_cleanup_blocks": 417,
+            "err_frame_blocks": 2745,
+            "functions": 71,
+            "inline_error_edges": 0,
+            "instructions": 268604
+          },
+          "codegen_ms": 107500,
+          "done_line": 9957,
+          "emit_line": 9939,
+          "fallback_records": 0,
+          "indexed_emit_ms": 51562,
+          "infer_ms": 97,
+          "module": "pcc.backend.macho_exec",
+          "start_line": 9730,
+          "supported_records": 323844
+        },
+        {
+          "capture_line": 9933,
+          "capture_ms": 7512,
+          "cfg": {
+            "blocks": 46440,
+            "call_cont_blocks": 3247,
+            "call_err_cleanup_blocks": 174,
+            "err_frame_blocks": 2690,
+            "functions": 35,
+            "inline_error_edges": 0,
+            "instructions": 250468
+          },
+          "codegen_ms": 99787,
+          "done_line": 10057,
+          "emit_line": 9960,
+          "fallback_records": 0,
+          "indexed_emit_ms": 47837,
+          "infer_ms": 89,
+          "module": "pcc.frontends.python.pipeline_frontend_parallel",
+          "start_line": 9900,
+          "supported_records": 300464
+        },
+        {
+          "capture_line": 9720,
+          "capture_ms": 7713,
+          "cfg": {
+            "blocks": 51623,
+            "call_cont_blocks": 3686,
+            "call_err_cleanup_blocks": 602,
+            "err_frame_blocks": 2776,
+            "functions": 123,
+            "inline_error_edges": 0,
+            "instructions": 260383
+          },
+          "codegen_ms": 99614,
+          "done_line": 9897,
+          "emit_line": 9856,
+          "fallback_records": 0,
+          "indexed_emit_ms": 48045,
+          "infer_ms": 110,
+          "module": "pcc.backend.elf_x86_64",
+          "start_line": 9554,
+          "supported_records": 317167
+        },
+        {
+          "capture_line": 10878,
+          "capture_ms": 7672,
+          "cfg": {
+            "blocks": 45400,
+            "call_cont_blocks": 3682,
+            "call_err_cleanup_blocks": 279,
+            "err_frame_blocks": 2770,
+            "functions": 33,
+            "inline_error_edges": 0,
+            "instructions": 239375
+          },
+          "codegen_ms": 97282,
+          "done_line": 11187,
+          "emit_line": 11165,
+          "fallback_records": 0,
+          "indexed_emit_ms": 46650,
+          "infer_ms": 173,
+          "module": "pcc.frontends.python.pipeline_context",
+          "start_line": 10834,
+          "supported_records": 288470
+        },
+        {
+          "capture_line": 10536,
+          "capture_ms": 8376,
+          "cfg": {
+            "blocks": 49996,
+            "call_cont_blocks": 3357,
+            "call_err_cleanup_blocks": 348,
+            "err_frame_blocks": 2676,
+            "functions": 136,
+            "inline_error_edges": 0,
+            "instructions": 257844
+          },
+          "codegen_ms": 96327,
+          "done_line": 10646,
+          "emit_line": 10642,
+          "fallback_records": 0,
+          "indexed_emit_ms": 46358,
+          "infer_ms": 81,
+          "module": "pcc.backend.x86_64_encode",
+          "start_line": 10352,
+          "supported_records": 313637
+        },
+        {
+          "capture_line": 10539,
+          "capture_ms": 7528,
+          "cfg": {
+            "blocks": 49710,
+            "call_cont_blocks": 3154,
+            "call_err_cleanup_blocks": 435,
+            "err_frame_blocks": 2447,
+            "functions": 97,
+            "inline_error_edges": 0,
+            "instructions": 257343
+          },
+          "codegen_ms": 93648,
+          "done_line": 10649,
+          "emit_line": 10643,
+          "fallback_records": 0,
+          "indexed_emit_ms": 45335,
+          "infer_ms": 106,
+          "module": "pcc.driver.cli_core",
+          "start_line": 10424,
+          "supported_records": 311881
+        },
+        {
+          "capture_line": 5584,
+          "capture_ms": 12780,
+          "cfg": {
+            "blocks": 84613,
+            "call_cont_blocks": 7544,
+            "call_err_cleanup_blocks": 913,
+            "err_frame_blocks": 5114,
+            "functions": 543,
+            "inline_error_edges": 0,
+            "instructions": 408354
+          },
+          "codegen_ms": 91614,
+          "done_line": 5593,
+          "emit_line": 5592,
+          "fallback_records": 0,
+          "indexed_emit_ms": 38822,
+          "infer_ms": 20,
+          "module": "pcc.frontends.python.py_ast",
+          "start_line": 5341,
+          "supported_records": 500493
+        }
+      ]
+    },
+    {
+      "admission_window": {
+        "max_active_tasks": 4,
+        "seconds": 2333.3428015560003,
+        "seconds_by_active_tasks": {
+          "0": 0.09929340400094588,
+          "1": 554.8842380869984,
+          "2": 24.80514988900245,
+          "3": 376.55049177699823,
+          "4": 1377.003628399
+        }
+      },
+      "artifact": "linux_aarch64.zip",
+      "class_gen_codegen_status": "not_started",
+      "completed_worker_elapsed_sums_ms": {
+        "capture_ms": 456000,
+        "codegen_ms": 6538762,
+        "indexed_emit_fraction": 0.6261907070482149,
+        "indexed_emit_ms": 4094512,
+        "infer_ms": 17881,
+        "other_codegen_ms": 1988250
+      },
+      "counts": {
+        "attempt_events": {
+          "calibrate": 35,
+          "retire": 440,
+          "start": 407
+        },
+        "completed": 440,
+        "incomplete": 2,
+        "not_started": 14,
+        "root_modules": 456,
+        "started": 442
+      },
+      "failure": {
+        "error": "stage deadline exceeded",
+        "source": {
+          "clean_commit": true,
+          "commit": "b68d422cf134357a16ea79be004c1174c7e39fac",
+          "source_file_count": 1125,
+          "source_scope": "compiler-runtime-headers-build-harness-v1",
+          "source_sha256": "dc02bcb972ab2200a1bf02f6bf5701425cfeeaef30b4386e8b43e100c93c300c"
+        },
+        "stages": []
+      },
+      "generation_lowering_codegen_status": "completed",
+      "incomplete_modules": [
+        {
+          "capture_line": 15286,
+          "capture_ms": 5176,
+          "cfg": {
+            "blocks": 71275,
+            "call_cont_blocks": 5474,
+            "call_err_cleanup_blocks": 403,
+            "err_frame_blocks": 4188,
+            "functions": 89,
+            "inline_error_edges": 0,
+            "instructions": 369530
+          },
+          "fallback_records": 0,
+          "module": "pcc.frontends.python.codegen.hoist_lowering",
+          "start_line": 15151,
+          "supported_records": 445583
+        },
+        {
+          "capture_line": 15289,
+          "capture_ms": 6353,
+          "cfg": {
+            "blocks": 88932,
+            "call_cont_blocks": 6442,
+            "call_err_cleanup_blocks": 185,
+            "err_frame_blocks": 5264,
+            "functions": 45,
+            "inline_error_edges": 0,
+            "instructions": 452543
+          },
+          "fallback_records": 0,
+          "module": "pcc.backend.self_backend_aarch64_darwin_compute",
+          "start_line": 15155,
+          "supported_records": 545469
+        }
+      ],
+      "member": "shared/stage1.log",
+      "member_bytes": 1746873,
+      "member_sha256": "4c084017a1b80df8cd8944609934b83f55bf313e208ba802611ee5e7ba2ace2a",
+      "not_started_modules": [
+        "pcc.backend.arm64_encode",
+        "pcc.backend.self_backend_parse",
+        "pcc.backend.self_backend_precise_stackmaps",
+        "pcc.backend.self_backend_x86_64_linux",
+        "pcc.driver.cli_bootstrap",
+        "pcc.driver.cli_bootstrap_array_core",
+        "pcc.frontends.c.codegen.c_codegen",
+        "pcc.frontends.c.parse.c_parsetab",
+        "pcc.frontends.c.ssa.builder",
+        "pcc.frontends.python.codegen.class_gen",
+        "pcc.frontends.python.codegen.unsafe_lowering",
+        "pcc.frontends.python.codegen.user_function_lowering",
+        "pcc.frontends.python.pipeline",
+        "pcc.frontends.python.type_infer"
+      ],
+      "platform": "linux-aarch64",
+      "release_frontend": {
+        "proof": "source/default inference only; complete child environment not retained",
+        "value": false
+      },
+      "top_completed_input_modules": [
+        {
+          "capture_line": 13113,
+          "capture_ms": 8466,
+          "cfg": {
+            "blocks": 115526,
+            "call_cont_blocks": 6551,
+            "call_err_cleanup_blocks": 1409,
+            "err_frame_blocks": 4687,
+            "functions": 54,
+            "inline_error_edges": 0,
+            "instructions": 561144
+          },
+          "codegen_ms": 187748,
+          "done_line": 13475,
+          "emit_line": 13394,
+          "fallback_records": 0,
+          "indexed_emit_ms": 134129,
+          "infer_ms": 322,
+          "module": "pcc.frontends.python.codegen.call_expression_lowering",
+          "start_line": 12894,
+          "supported_records": 687461
+        },
+        {
+          "capture_line": 13116,
+          "capture_ms": 10377,
+          "cfg": {
+            "blocks": 138108,
+            "call_cont_blocks": 9650,
+            "call_err_cleanup_blocks": 378,
+            "err_frame_blocks": 7975,
+            "functions": 131,
+            "inline_error_edges": 0,
+            "instructions": 714711
+          },
+          "codegen_ms": 145520,
+          "done_line": 13259,
+          "emit_line": 13179,
+          "fallback_records": 0,
+          "indexed_emit_ms": 91354,
+          "infer_ms": 92,
+          "module": "pcc.backend.self_backend_aarch64_darwin_calls",
+          "start_line": 12892,
+          "supported_records": 859212
+        },
+        {
+          "capture_line": 13618,
+          "capture_ms": 8732,
+          "cfg": {
+            "blocks": 118538,
+            "call_cont_blocks": 9626,
+            "call_err_cleanup_blocks": 1540,
+            "err_frame_blocks": 6590,
+            "functions": 483,
+            "inline_error_edges": 0,
+            "instructions": 605909
+          },
+          "codegen_ms": 123219,
+          "done_line": 13818,
+          "emit_line": 13807,
+          "fallback_records": 0,
+          "indexed_emit_ms": 77550,
+          "infer_ms": 133,
+          "module": "pcc.frontends.python.py_parse",
+          "start_line": 13478,
+          "supported_records": 734151
+        },
+        {
+          "capture_line": 13785,
+          "capture_ms": 4655,
+          "cfg": {
+            "blocks": 64144,
+            "call_cont_blocks": 3659,
+            "call_err_cleanup_blocks": 597,
+            "err_frame_blocks": 2952,
+            "functions": 81,
+            "inline_error_edges": 0,
+            "instructions": 331210
+          },
+          "codegen_ms": 106122,
+          "done_line": 14045,
+          "emit_line": 13817,
+          "fallback_records": 0,
+          "indexed_emit_ms": 78393,
+          "infer_ms": 67,
+          "module": "pcc.ir.optimization.simplifycfg",
+          "start_line": 13700,
+          "supported_records": 399316
+        },
+        {
+          "capture_line": 12881,
+          "capture_ms": 6941,
+          "cfg": {
+            "blocks": 102081,
+            "call_cont_blocks": 8263,
+            "call_err_cleanup_blocks": 604,
+            "err_frame_blocks": 6231,
+            "functions": 645,
+            "inline_error_edges": 0,
+            "instructions": 511204
+          },
+          "codegen_ms": 101384,
+          "done_line": 12885,
+          "emit_line": 12884,
+          "fallback_records": 0,
+          "indexed_emit_ms": 62974,
+          "infer_ms": 138,
+          "module": "pcc.ir.ir",
+          "start_line": 12575,
+          "supported_records": 623968
+        },
+        {
+          "capture_line": 13141,
+          "capture_ms": 5065,
+          "cfg": {
+            "blocks": 74007,
+            "call_cont_blocks": 4909,
+            "call_err_cleanup_blocks": 1412,
+            "err_frame_blocks": 2902,
+            "functions": 41,
+            "inline_error_edges": 0,
+            "instructions": 355493
+          },
+          "codegen_ms": 95693,
+          "done_line": 13449,
+          "emit_line": 13390,
+          "fallback_records": 0,
+          "indexed_emit_ms": 66995,
+          "infer_ms": 261,
+          "module": "pcc.frontends.python.codegen.method_call_expression_lowering",
+          "start_line": 13124,
+          "supported_records": 437465
+        },
+        {
+          "capture_line": 14861,
+          "capture_ms": 3783,
+          "cfg": {
+            "blocks": 53020,
+            "call_cont_blocks": 3570,
+            "call_err_cleanup_blocks": 662,
+            "err_frame_blocks": 2838,
+            "functions": 32,
+            "inline_error_edges": 0,
+            "instructions": 268643
+          },
+          "codegen_ms": 94263,
+          "done_line": 15147,
+          "emit_line": 15145,
+          "fallback_records": 0,
+          "indexed_emit_ms": 72449,
+          "infer_ms": 43,
+          "module": "pcc.ir.optimization.instcombine",
+          "start_line": 14831,
+          "supported_records": 327685
+        },
+        {
+          "capture_line": 5578,
+          "capture_ms": 5840,
+          "cfg": {
+            "blocks": 84613,
+            "call_cont_blocks": 7544,
+            "call_err_cleanup_blocks": 913,
+            "err_frame_blocks": 5114,
+            "functions": 543,
+            "inline_error_edges": 0,
+            "instructions": 408354
+          },
+          "codegen_ms": 88953,
+          "done_line": 5593,
+          "emit_line": 5592,
+          "fallback_records": 0,
+          "indexed_emit_ms": 57673,
+          "infer_ms": 10,
+          "module": "pcc.frontends.python.py_ast",
+          "start_line": 5345,
+          "supported_records": 500493
+        },
+        {
+          "capture_line": 9893,
+          "capture_ms": 6079,
+          "cfg": {
+            "blocks": 80142,
+            "call_cont_blocks": 7238,
+            "call_err_cleanup_blocks": 361,
+            "err_frame_blocks": 5543,
+            "functions": 344,
+            "inline_error_edges": 0,
+            "instructions": 398599
+          },
+          "codegen_ms": 86711,
+          "done_line": 10060,
+          "emit_line": 9972,
+          "fallback_records": 0,
+          "indexed_emit_ms": 54682,
+          "infer_ms": 112,
+          "module": "pcc.frontends.c.parse.c_parser",
+          "start_line": 9799,
+          "supported_records": 482388
+        },
+        {
+          "capture_line": 9890,
+          "capture_ms": 3818,
+          "cfg": {
+            "blocks": 51539,
+            "call_cont_blocks": 3377,
+            "call_err_cleanup_blocks": 417,
+            "err_frame_blocks": 2745,
+            "functions": 71,
+            "inline_error_edges": 0,
+            "instructions": 268604
+          },
+          "codegen_ms": 83676,
+          "done_line": 9975,
+          "emit_line": 9968,
+          "fallback_records": 0,
+          "indexed_emit_ms": 56978,
+          "infer_ms": 58,
+          "module": "pcc.backend.macho_exec",
+          "start_line": 9729,
+          "supported_records": 323844
+        }
+      ]
+    },
+    {
+      "admission_window": {
+        "max_active_tasks": 4,
+        "seconds": 2296.2424177000003,
+        "seconds_by_active_tasks": {
+          "0": 0.15001189999952658,
+          "1": 561.1771499000005,
+          "2": 25.96374889999936,
+          "3": 42.77823889999945,
+          "4": 1666.1732681000012
+        }
+      },
+      "artifact": "windows_x86_64.zip",
+      "class_gen_codegen_status": "not_started",
+      "completed_worker_elapsed_sums_ms": {
+        "capture_ms": 444228,
+        "codegen_ms": 6274014,
+        "indexed_emit_fraction": 0.430992981526659,
+        "indexed_emit_ms": 2704056,
+        "infer_ms": 16050,
+        "other_codegen_ms": 3125730
+      },
+      "counts": {
+        "attempt_events": {
+          "calibrate": 35,
+          "retire": 410,
+          "start": 379
+        },
+        "completed": 410,
+        "incomplete": 4,
+        "not_started": 42,
+        "root_modules": 456,
+        "started": 414
+      },
+      "failure": {
+        "error": "stage deadline exceeded",
+        "source": {
+          "clean_commit": true,
+          "commit": "b68d422cf134357a16ea79be004c1174c7e39fac",
+          "source_file_count": 1125,
+          "source_scope": "compiler-runtime-headers-build-harness-v1",
+          "source_sha256": "41cd514f3d31ca2f46183956374bd562b54251d4a875f879ef01d2cc26180e74"
+        },
+        "stages": []
+      },
+      "generation_lowering_codegen_status": "completed",
+      "incomplete_modules": [
+        {
+          "capture_line": 13165,
+          "capture_ms": 13581,
+          "cfg": {
+            "blocks": 138108,
+            "call_cont_blocks": 9650,
+            "call_err_cleanup_blocks": 378,
+            "err_frame_blocks": 7975,
+            "functions": 131,
+            "inline_error_edges": 0,
+            "instructions": 714711
+          },
+          "emit_line": 13228,
+          "fallback_records": 0,
+          "indexed_emit_ms": 91064,
+          "module": "pcc.backend.self_backend_aarch64_darwin_calls",
+          "start_line": 12941,
+          "supported_records": 859212
+        },
+        {
+          "capture_line": 13162,
+          "capture_ms": 11163,
+          "cfg": {
+            "blocks": 115526,
+            "call_cont_blocks": 6551,
+            "call_err_cleanup_blocks": 1409,
+            "err_frame_blocks": 4687,
+            "functions": 54,
+            "inline_error_edges": 0,
+            "instructions": 561144
+          },
+          "emit_line": 13229,
+          "fallback_records": 0,
+          "indexed_emit_ms": 97223,
+          "module": "pcc.frontends.python.codegen.call_expression_lowering",
+          "start_line": 12942,
+          "supported_records": 687461
+        },
+        {
+          "capture_line": 13222,
+          "capture_ms": 7104,
+          "cfg": {
+            "blocks": 74007,
+            "call_cont_blocks": 4909,
+            "call_err_cleanup_blocks": 1412,
+            "err_frame_blocks": 2902,
+            "functions": 41,
+            "inline_error_edges": 0,
+            "instructions": 355493
+          },
+          "fallback_records": 0,
+          "module": "pcc.frontends.python.codegen.method_call_expression_lowering",
+          "start_line": 13173,
+          "supported_records": 437465
+        },
+        {
+          "capture_line": 13225,
+          "capture_ms": 4087,
+          "cfg": {
+            "blocks": 38940,
+            "call_cont_blocks": 4280,
+            "call_err_cleanup_blocks": 1072,
+            "err_frame_blocks": 2341,
+            "functions": 78,
+            "inline_error_edges": 0,
+            "instructions": 208619
+          },
+          "fallback_records": 0,
+          "module": "pcc.frontends.python.codegen.for_loop_lowering",
+          "start_line": 13190,
+          "supported_records": 255476
+        }
+      ],
+      "member": "shared/stage1.log",
+      "member_bytes": 1534489,
+      "member_sha256": "a9e5504602d40bd3cc760a854a2d6cdaba6c0057b347f21d7a9eb552002d62b9",
+      "not_started_modules": [
+        "datetime",
+        "pcc.backend.arm64_encode",
+        "pcc.backend.native_object",
+        "pcc.backend.self_backend_aarch64_darwin",
+        "pcc.backend.self_backend_parse",
+        "pcc.backend.self_backend_precise_stackmaps",
+        "pcc.backend.self_backend_x86_64_linux",
+        "pcc.driver.cli_bootstrap",
+        "pcc.driver.cli_bootstrap_array_core",
+        "pcc.frontends.c.codegen.c_codegen",
+        "pcc.frontends.c.evaluator.c_evaluator",
+        "pcc.frontends.c.parse.c_parsetab",
+        "pcc.frontends.c.passes.llvm_explicit",
+        "pcc.frontends.c.ply.yacc",
+        "pcc.frontends.c.ssa.builder",
+        "pcc.frontends.python.codegen._l1_codegen_static_methods",
+        "pcc.frontends.python.codegen.assignment_statement_lowering",
+        "pcc.frontends.python.codegen.attr_load_lowering",
+        "pcc.frontends.python.codegen.call_object_lowering",
+        "pcc.frontends.python.codegen.class_gen",
+        "pcc.frontends.python.codegen.compare_membership_lowering",
+        "pcc.frontends.python.codegen.exception_lowering",
+        "pcc.frontends.python.codegen.generator_lowering",
+        "pcc.frontends.python.codegen.hoist_lowering",
+        "pcc.frontends.python.codegen.ir_scaffold_lowering",
+        "pcc.frontends.python.codegen.list_method_lowering",
+        "pcc.frontends.python.codegen.literal_lowering",
+        "pcc.frontends.python.codegen.native_virtual_thread",
+        "pcc.frontends.python.codegen.numeric_builtin_lowering",
+        "pcc.frontends.python.codegen.runtime_abi",
+        "pcc.frontends.python.codegen.string_method_lowering",
+        "pcc.frontends.python.codegen.unsafe_lowering",
+        "pcc.frontends.python.codegen.user_function_lowering",
+        "pcc.frontends.python.codegen.vthread_effect_analysis",
+        "pcc.frontends.python.pipeline",
+        "pcc.frontends.python.pipeline_exports",
+        "pcc.frontends.python.py_parse",
+        "pcc.frontends.python.type_infer",
+        "pcc.ir.direct_indexed_kernel",
+        "pcc.ir.optimization.instcombine",
+        "pcc.ir.optimization.simplifycfg",
+        "pcc.package.build_exec"
+      ],
+      "platform": "windows-x86_64",
+      "release_frontend": {
+        "proof": "source/default inference only; complete child environment not retained",
+        "value": false
+      },
+      "top_completed_input_modules": [
+        {
+          "capture_line": 9927,
+          "capture_ms": 7676,
+          "cfg": {
+            "blocks": 80142,
+            "call_cont_blocks": 7238,
+            "call_err_cleanup_blocks": 361,
+            "err_frame_blocks": 5543,
+            "functions": 344,
+            "inline_error_edges": 0,
+            "instructions": 398599
+          },
+          "codegen_ms": 115011,
+          "done_line": 10090,
+          "emit_line": 9988,
+          "fallback_records": 0,
+          "indexed_emit_ms": 50781,
+          "infer_ms": 108,
+          "module": "pcc.frontends.c.parse.c_parser",
+          "start_line": 9868,
+          "supported_records": 482388
+        },
+        {
+          "capture_line": 10134,
+          "capture_ms": 7615,
+          "cfg": {
+            "blocks": 77258,
+            "call_cont_blocks": 6975,
+            "call_err_cleanup_blocks": 334,
+            "err_frame_blocks": 5350,
+            "functions": 325,
+            "inline_error_edges": 0,
+            "instructions": 384041
+          },
+          "codegen_ms": 111124,
+          "done_line": 10392,
+          "emit_line": 10298,
+          "fallback_records": 0,
+          "indexed_emit_ms": 48570,
+          "infer_ms": 100,
+          "module": "pcc.frontends.c.parse.c_parser_actions",
+          "start_line": 10093,
+          "supported_records": 464698
+        },
+        {
+          "capture_line": 13159,
+          "capture_ms": 7338,
+          "cfg": {
+            "blocks": 75655,
+            "call_cont_blocks": 7152,
+            "call_err_cleanup_blocks": 1268,
+            "err_frame_blocks": 4339,
+            "functions": 393,
+            "inline_error_edges": 0,
+            "instructions": 369044
+          },
+          "codegen_ms": 107117,
+          "done_line": 13186,
+          "emit_line": 13169,
+          "fallback_records": 0,
+          "indexed_emit_ms": 45815,
+          "infer_ms": 235,
+          "module": "pcc.backend.self_backend_kernel",
+          "start_line": 12943,
+          "supported_records": 452244
+        },
+        {
+          "capture_line": 9924,
+          "capture_ms": 5290,
+          "cfg": {
+            "blocks": 51539,
+            "call_cont_blocks": 3377,
+            "call_err_cleanup_blocks": 417,
+            "err_frame_blocks": 2745,
+            "functions": 71,
+            "inline_error_edges": 0,
+            "instructions": 268604
+          },
+          "codegen_ms": 101345,
+          "done_line": 10007,
+          "emit_line": 9987,
+          "fallback_records": 0,
+          "indexed_emit_ms": 46428,
+          "infer_ms": 80,
+          "module": "pcc.backend.macho_exec",
+          "start_line": 9768,
+          "supported_records": 323844
+        },
+        {
+          "capture_line": 13156,
+          "capture_ms": 6621,
+          "cfg": {
+            "blocks": 66183,
+            "call_cont_blocks": 6632,
+            "call_err_cleanup_blocks": 1178,
+            "err_frame_blocks": 4264,
+            "functions": 175,
+            "inline_error_edges": 0,
+            "instructions": 350782
+          },
+          "codegen_ms": 98651,
+          "done_line": 13170,
+          "emit_line": 13168,
+          "fallback_records": 0,
+          "indexed_emit_ms": 41889,
+          "infer_ms": 362,
+          "module": "pcc.frontends.python.codegen.native_modules",
+          "start_line": 12940,
+          "supported_records": 427149
+        },
+        {
+          "capture_line": 10890,
+          "capture_ms": 4653,
+          "cfg": {
+            "blocks": 45400,
+            "call_cont_blocks": 3682,
+            "call_err_cleanup_blocks": 279,
+            "err_frame_blocks": 2770,
+            "functions": 33,
+            "inline_error_edges": 0,
+            "instructions": 239375
+          },
+          "codegen_ms": 95392,
+          "done_line": 11239,
+          "emit_line": 11199,
+          "fallback_records": 0,
+          "indexed_emit_ms": 43656,
+          "infer_ms": 120,
+          "module": "pcc.frontends.python.pipeline_context",
+          "start_line": 10858,
+          "supported_records": 288470
+        },
+        {
+          "capture_line": 10573,
+          "capture_ms": 6105,
+          "cfg": {
+            "blocks": 59654,
+            "call_cont_blocks": 3792,
+            "call_err_cleanup_blocks": 125,
+            "err_frame_blocks": 3054,
+            "functions": 47,
+            "inline_error_edges": 0,
+            "instructions": 308827
+          },
+          "codegen_ms": 89441,
+          "done_line": 10855,
+          "emit_line": 10677,
+          "fallback_records": 0,
+          "indexed_emit_ms": 39929,
+          "infer_ms": 72,
+          "module": "pcc.backend.self_backend_aarch64_darwin_materialize",
+          "start_line": 10349,
+          "supported_records": 371544
+        },
+        {
+          "capture_line": 12930,
+          "capture_ms": 5909,
+          "cfg": {
+            "blocks": 102081,
+            "call_cont_blocks": 8263,
+            "call_err_cleanup_blocks": 604,
+            "err_frame_blocks": 6231,
+            "functions": 645,
+            "inline_error_edges": 0,
+            "instructions": 511204
+          },
+          "codegen_ms": 88633,
+          "done_line": 12934,
+          "emit_line": 12933,
+          "fallback_records": 0,
+          "indexed_emit_ms": 38093,
+          "infer_ms": 108,
+          "module": "pcc.ir.ir",
+          "start_line": 12624,
+          "supported_records": 623968
+        },
+        {
+          "capture_line": 9966,
+          "capture_ms": 4728,
+          "cfg": {
+            "blocks": 46440,
+            "call_cont_blocks": 3247,
+            "call_err_cleanup_blocks": 174,
+            "err_frame_blocks": 2690,
+            "functions": 35,
+            "inline_error_edges": 0,
+            "instructions": 250468
+          },
+          "codegen_ms": 87188,
+          "done_line": 10112,
+          "emit_line": 9998,
+          "fallback_records": 0,
+          "indexed_emit_ms": 39320,
+          "infer_ms": 50,
+          "module": "pcc.frontends.python.pipeline_frontend_parallel",
+          "start_line": 9934,
+          "supported_records": 300464
+        },
+        {
+          "capture_line": 9575,
+          "capture_ms": 5502,
+          "cfg": {
+            "blocks": 88932,
+            "call_cont_blocks": 6442,
+            "call_err_cleanup_blocks": 185,
+            "err_frame_blocks": 5264,
+            "functions": 45,
+            "inline_error_edges": 0,
+            "instructions": 452543
+          },
+          "codegen_ms": 86435,
+          "done_line": 9579,
+          "emit_line": 9578,
+          "fallback_records": 0,
+          "indexed_emit_ms": 38809,
+          "infer_ms": 51,
+          "module": "pcc.backend.self_backend_aarch64_darwin_compute",
+          "start_line": 9533,
+          "supported_records": 545469
+        }
+      ]
+    },
+    {
+      "admission_window": {
+        "max_active_tasks": 3,
+        "seconds": 2330.223487916,
+        "seconds_by_active_tasks": {
+          "0": 24.63154466499907,
+          "1": 1540.6161459950004,
+          "2": 497.63309658400135,
+          "3": 267.3427006719993
+        }
+      },
+      "artifact": "macos_arm64.zip",
+      "class_gen_codegen_status": "not_started",
+      "completed_worker_elapsed_sums_ms": {
+        "capture_ms": 146184,
+        "codegen_ms": 2836257,
+        "indexed_emit_fraction": 0.8229250734330492,
+        "indexed_emit_ms": 2334027,
+        "infer_ms": 7622,
+        "other_codegen_ms": 356046
+      },
+      "counts": {
+        "attempt_events": {
+          "calibrate": 36,
+          "cancel": 1,
+          "retire": 412,
+          "start": 378
+        },
+        "completed": 412,
+        "incomplete": 1,
+        "not_started": 43,
+        "root_modules": 456,
+        "started": 413
+      },
+      "failure": null,
+      "generation_lowering_codegen_status": "completed",
+      "guard": {
+        "elapsed_s": 2400.3012857910003,
+        "max_tree_rss_bytes": 2722824192,
+        "peak_tree_rss_bytes": 2050031616,
+        "status": "TIMEOUT",
+        "timeout_s": 2400.0
+      },
+      "incomplete_modules": [
+        {
+          "capture_line": 13670,
+          "capture_ms": 1259,
+          "cfg": {
+            "blocks": 46511,
+            "call_cont_blocks": 4128,
+            "call_err_cleanup_blocks": 654,
+            "err_frame_blocks": 2880,
+            "functions": 236,
+            "inline_error_edges": 0,
+            "instructions": 231541
+          },
+          "fallback_records": 0,
+          "module": "pcc.frontends.c.ply.yacc",
+          "start_line": 13602,
+          "supported_records": 284052
+        }
+      ],
+      "member": "stage1.process.g88gc5fe/target.stderr",
+      "member_bytes": 1570477,
+      "member_sha256": "ea6facdf7c0760520af18972c24221e7b4a5b3f0805041df491ee9b31c5f4a8d",
+      "not_started_modules": [
+        "datetime",
+        "pcc.backend.arm64_encode",
+        "pcc.backend.native_object",
+        "pcc.backend.self_backend_aarch64_darwin",
+        "pcc.backend.self_backend_aarch64_darwin_compute",
+        "pcc.backend.self_backend_parse",
+        "pcc.backend.self_backend_precise_stackmaps",
+        "pcc.backend.self_backend_x86_64_linux",
+        "pcc.driver.cli_bootstrap",
+        "pcc.driver.cli_bootstrap_array_core",
+        "pcc.frontends.c.codegen.c_codegen",
+        "pcc.frontends.c.evaluator.c_evaluator",
+        "pcc.frontends.c.parse.c_parsetab",
+        "pcc.frontends.c.passes.llvm_explicit",
+        "pcc.frontends.c.ssa.builder",
+        "pcc.frontends.python.codegen._l1_codegen_static_methods",
+        "pcc.frontends.python.codegen.assignment_statement_lowering",
+        "pcc.frontends.python.codegen.attr_load_lowering",
+        "pcc.frontends.python.codegen.call_object_lowering",
+        "pcc.frontends.python.codegen.class_gen",
+        "pcc.frontends.python.codegen.compare_membership_lowering",
+        "pcc.frontends.python.codegen.exception_lowering",
+        "pcc.frontends.python.codegen.for_loop_lowering",
+        "pcc.frontends.python.codegen.generator_lowering",
+        "pcc.frontends.python.codegen.hoist_lowering",
+        "pcc.frontends.python.codegen.ir_scaffold_lowering",
+        "pcc.frontends.python.codegen.list_method_lowering",
+        "pcc.frontends.python.codegen.literal_lowering",
+        "pcc.frontends.python.codegen.native_virtual_thread",
+        "pcc.frontends.python.codegen.numeric_builtin_lowering",
+        "pcc.frontends.python.codegen.runtime_abi",
+        "pcc.frontends.python.codegen.string_method_lowering",
+        "pcc.frontends.python.codegen.unsafe_lowering",
+        "pcc.frontends.python.codegen.user_function_lowering",
+        "pcc.frontends.python.codegen.vthread_effect_analysis",
+        "pcc.frontends.python.pipeline",
+        "pcc.frontends.python.pipeline_exports",
+        "pcc.frontends.python.py_parse",
+        "pcc.frontends.python.type_infer",
+        "pcc.ir.direct_indexed_kernel",
+        "pcc.ir.optimization.instcombine",
+        "pcc.ir.optimization.simplifycfg",
+        "pcc.package.build_exec"
+      ],
+      "platform": "macos-arm64",
+      "release_frontend": {
+        "proof": "recorded guard environment",
+        "value": "1"
+      },
+      "top_completed_input_modules": [
+        {
+          "capture_line": 13512,
+          "capture_ms": 3259,
+          "cfg": {
+            "blocks": 115526,
+            "call_cont_blocks": 6551,
+            "call_err_cleanup_blocks": 1409,
+            "err_frame_blocks": 4687,
+            "functions": 54,
+            "inline_error_edges": 0,
+            "instructions": 561144
+          },
+          "codegen_ms": 102389,
+          "done_line": 13517,
+          "emit_line": 13516,
+          "fallback_records": 0,
+          "indexed_emit_ms": 90887,
+          "infer_ms": 163,
+          "module": "pcc.frontends.python.codegen.call_expression_lowering",
+          "start_line": 13490,
+          "supported_records": 687461
+        },
+        {
+          "capture_line": 13482,
+          "capture_ms": 4021,
+          "cfg": {
+            "blocks": 138108,
+            "call_cont_blocks": 9650,
+            "call_err_cleanup_blocks": 378,
+            "err_frame_blocks": 7975,
+            "functions": 131,
+            "inline_error_edges": 0,
+            "instructions": 714711
+          },
+          "codegen_ms": 77625,
+          "done_line": 13487,
+          "emit_line": 13486,
+          "fallback_records": 0,
+          "indexed_emit_ms": 64710,
+          "infer_ms": 53,
+          "module": "pcc.backend.self_backend_aarch64_darwin_calls",
+          "start_line": 13354,
+          "supported_records": 859212
+        },
+        {
+          "capture_line": 13324,
+          "capture_ms": 2958,
+          "cfg": {
+            "blocks": 102081,
+            "call_cont_blocks": 8263,
+            "call_err_cleanup_blocks": 604,
+            "err_frame_blocks": 6231,
+            "functions": 645,
+            "inline_error_edges": 0,
+            "instructions": 511204
+          },
+          "codegen_ms": 60774,
+          "done_line": 13329,
+          "emit_line": 13328,
+          "fallback_records": 0,
+          "indexed_emit_ms": 50082,
+          "infer_ms": 81,
+          "module": "pcc.ir.ir",
+          "start_line": 13018,
+          "supported_records": 623968
+        },
+        {
+          "capture_line": 5730,
+          "capture_ms": 2507,
+          "cfg": {
+            "blocks": 84613,
+            "call_cont_blocks": 7544,
+            "call_err_cleanup_blocks": 913,
+            "err_frame_blocks": 5114,
+            "functions": 543,
+            "inline_error_edges": 0,
+            "instructions": 408354
+          },
+          "codegen_ms": 52255,
+          "done_line": 5842,
+          "emit_line": 5841,
+          "fallback_records": 0,
+          "indexed_emit_ms": 44445,
+          "infer_ms": 5,
+          "module": "pcc.frontends.python.py_ast",
+          "start_line": 5512,
+          "supported_records": 500493
+        },
+        {
+          "capture_line": 13594,
+          "capture_ms": 2083,
+          "cfg": {
+            "blocks": 74007,
+            "call_cont_blocks": 4909,
+            "call_err_cleanup_blocks": 1412,
+            "err_frame_blocks": 2902,
+            "functions": 41,
+            "inline_error_edges": 0,
+            "instructions": 355493
+          },
+          "codegen_ms": 49937,
+          "done_line": 13599,
+          "emit_line": 13598,
+          "fallback_records": 0,
+          "indexed_emit_ms": 42867,
+          "infer_ms": 138,
+          "module": "pcc.frontends.python.codegen.method_call_expression_lowering",
+          "start_line": 13580,
+          "supported_records": 437465
+        },
+        {
+          "capture_line": 10252,
+          "capture_ms": 2458,
+          "cfg": {
+            "blocks": 80142,
+            "call_cont_blocks": 7238,
+            "call_err_cleanup_blocks": 361,
+            "err_frame_blocks": 5543,
+            "functions": 344,
+            "inline_error_edges": 0,
+            "instructions": 398599
+          },
+          "codegen_ms": 45120,
+          "done_line": 10298,
+          "emit_line": 10297,
+          "fallback_records": 0,
+          "indexed_emit_ms": 37606,
+          "infer_ms": 49,
+          "module": "pcc.frontends.c.parse.c_parser",
+          "start_line": 10242,
+          "supported_records": 482388
+        },
+        {
+          "capture_line": 10146,
+          "capture_ms": 1540,
+          "cfg": {
+            "blocks": 51548,
+            "call_cont_blocks": 3377,
+            "call_err_cleanup_blocks": 417,
+            "err_frame_blocks": 2745,
+            "functions": 71,
+            "inline_error_edges": 0,
+            "instructions": 268627
+          },
+          "codegen_ms": 44907,
+          "done_line": 10257,
+          "emit_line": 10256,
+          "fallback_records": 0,
+          "indexed_emit_ms": 39349,
+          "infer_ms": 31,
+          "module": "pcc.backend.macho_exec",
+          "start_line": 10084,
+          "supported_records": 323879
+        },
+        {
+          "capture_line": 13572,
+          "capture_ms": 2180,
+          "cfg": {
+            "blocks": 75655,
+            "call_cont_blocks": 7152,
+            "call_err_cleanup_blocks": 1268,
+            "err_frame_blocks": 4339,
+            "functions": 393,
+            "inline_error_edges": 0,
+            "instructions": 369044
+          },
+          "codegen_ms": 43324,
+          "done_line": 13577,
+          "emit_line": 13576,
+          "fallback_records": 0,
+          "indexed_emit_ms": 35886,
+          "infer_ms": 101,
+          "module": "pcc.backend.self_backend_kernel",
+          "start_line": 13520,
+          "supported_records": 452244
+        },
+        {
+          "capture_line": 10477,
+          "capture_ms": 2190,
+          "cfg": {
+            "blocks": 77258,
+            "call_cont_blocks": 6975,
+            "call_err_cleanup_blocks": 334,
+            "err_frame_blocks": 5350,
+            "functions": 325,
+            "inline_error_edges": 0,
+            "instructions": 384041
+          },
+          "codegen_ms": 42592,
+          "done_line": 10482,
+          "emit_line": 10481,
+          "fallback_records": 0,
+          "indexed_emit_ms": 35795,
+          "infer_ms": 42,
+          "module": "pcc.frontends.c.parse.c_parser_actions",
+          "start_line": 10473,
+          "supported_records": 464698
+        },
+        {
+          "capture_line": 11283,
+          "capture_ms": 1361,
+          "cfg": {
+            "blocks": 45400,
+            "call_cont_blocks": 3682,
+            "call_err_cleanup_blocks": 279,
+            "err_frame_blocks": 2770,
+            "functions": 33,
+            "inline_error_edges": 0,
+            "instructions": 239375
+          },
+          "codegen_ms": 39961,
+          "done_line": 11288,
+          "emit_line": 11287,
+          "fallback_records": 0,
+          "indexed_emit_ms": 35183,
+          "infer_ms": 49,
+          "module": "pcc.frontends.python.pipeline_context",
+          "start_line": 11253,
+          "supported_records": 288470
+        }
+      ]
+    }
+  ],
+  "run_id": 38009075780,
+  "run_url": "https://github.com/ikshengmin/pcc/actions/runs/38009075780",
+  "schema": "pcc-four-platform-stage1-phase-evidence-v1",
+  "source_commit": "b68d422cf134357a16ea79be004c1174c7e39fac",
+  "timer_scope": {
+    "codegen": "worker execution lines631-998, excludes later .ll write and checkpoint work",
+    "cross_target_warning": "Same timer name does not imply identical machine-encoding work placement.",
+    "indexed_emit": "lines790-886 includes selected backend and conditional graph release/GC/freeze, excludes following assembly/container encode/write",
+    "macos_native_sections": "Mac native structured emission already incrementally assembles machine words and builds sections inside indexed emit. Later assemble_sections is list copy when native_finalized.",
+    "text_routes": "Linux ARM and both x86 paths perform textual assembly later, then ELF/COFF container encoding.",
+    "worker_source_sha256": "a2109b4670c369de7ac28bca5af991a6dbf93e9ea070d918a4eecabe6f4314e2"
+  }
+}

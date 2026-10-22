@@ -1,7 +1,7 @@
 """Facade contract for extracted self-backend host subprocess payloads."""
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend import pipeline_self_backend_host
+from pcc.frontends.python import pipeline
+from pcc.frontends.python import pipeline_self_backend_host
 
 
 def test_pipeline_reexports_self_backend_host_payloads_by_identity():

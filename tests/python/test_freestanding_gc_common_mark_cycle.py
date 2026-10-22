@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import FREESTANDING_GC_RUNTIME_GLOBALS
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 STRICT_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_common_mark_cycle.py"
 MANAGED_SOURCE = RUNTIME_DIR / "py" / "py_gc_backend.py"
 MAKEFILE = RUNTIME_DIR / "Makefile"
@@ -31,6 +31,7 @@ OWNED_SYMBOLS = {
     "pcc_gc_trace_slot",
 }
 RAW_FUNCTION_IMPORTS = {
+    "pcc_gc_set_mark_color",
     "pcc_capi_is_cext_type_tag",
     "pcc_gc_gray_count_decrement_acq_rel",
     "pcc_gc_gray_count_store_release",
@@ -64,6 +65,10 @@ RAW_GLOBAL_IMPORTS = {
     "pcc_gc_tracing_finish_claim_backend",
     "pcc_gc_tracing_finish_claim_epoch",
     "pcc_gc_tracing_finish_commits",
+    # A completed mark records the bytes it found reachable for pacing and
+    # pays the allocation debt.
+    "pcc_gc_tracing_marked_bytes",
+    "pcc_gc_debt_bytes",
 }
 
 
@@ -168,7 +173,7 @@ def test_referent_trace_does_not_regray_black_objects():
     assert "if (flags & 32) == 0:" in mark
     black_guard = mark.split("if (flags & 32) == 0:", 1)[1]
     assert "pcc_gc_gray_count_increment_acq_rel()" in black_guard
-    assert "store_i32(obj, 12, (flags & ~56) | 16)" in black_guard
+    assert "pcc_gc_set_mark_color(obj, 16)" in black_guard
     assert "pcc_gc_trace_mark_gray_if_known(child)" in trace_slot
     assert "pcc_gc_mark_root_gray_if_known(child)" not in trace_slot
 
@@ -205,10 +210,10 @@ def test_common_mark_cycle_object_has_exact_raw_closure(
 
 
 def test_production_archive_has_one_common_mark_cycle_owner(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ):
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,

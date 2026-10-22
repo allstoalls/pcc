@@ -1,0 +1,73 @@
+{
+  "base_full_source_relation": "Retained cold-slot compiler snapshot; complete pcc tree matches published02b9. Full source is not a02b9 checkout: older unrelated native test f391 and docs/bootstrap remain.",
+  "base_pcc_git_tree": "d234174fbac80575ea822f6100f65fe914dd4498",
+  "by_file": {
+    "tests/python/test_managed_phi_liveness.py": 18,
+    "tests/python/test_native_liveness_worklist.py": 33
+  },
+  "candidate_pcc_git_tree": "c291620d0277e22b7dffb731ba38a20a8ea59283",
+  "classification": "Actual host assertion failure, with source diagnosis pending. Intended malformed-successor coverage was not reached by the failed case.",
+  "codegen_checksum": "71a7d53a6e959bd2e6664fc7544e62967ac4517372f49b535c245434a0381216",
+  "counts": {
+    "collected": 51,
+    "errors": 0,
+    "failed": 1,
+    "passed": 27,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  },
+  "denied_audit_events": 0,
+  "failed_node": "tests/python/test_native_liveness_worklist.py::test_invalid_unreachable_successor_keeps_first_error_and_closes_work[False]",
+  "failure": "AssertionError: assert ['entry', 'exit'] == ['entry', 'exit', 'unreachable_bad']\n  \n  Right contains one more item: 'unreachable_bad'\n  \n  Full diff:\n    [\n        'entry',\n        'exit',\n  -     'unreachable_bad',\n    ]",
+  "failure_boundary": "New fixture block-name precondition failed before its intended malformed-successor helper invocation",
+  "full_base_after": "PASS: complete protected baseline inventory unchanged",
+  "guard": {
+    "cleanup": "CLEAN",
+    "continuous_minimum_free_bytes": 4294967296,
+    "echild": true,
+    "elapsed_seconds": 4.710000169001432,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "outer_timeout_seconds": 300,
+    "peak_sampled_root_rss_bytes": 92221440,
+    "returncode": 1,
+    "root_reaped": true,
+    "status": "COMPLETE"
+  },
+  "guard_cleanup": "CLEAN/reaped/ECHILD",
+  "guard_sha256": "a95f7e26e9024c3f9b89c679b70e4572e3248cf4e6824dffecf35a16507b5eea",
+  "imported_source_closure": "PASS",
+  "lock_released": true,
+  "preservation_commit": "ca4e92fbadf2c1df5541e32213716005e24ea409",
+  "production_application": "UNAPPLIED",
+  "production_artifact_commit": "f6e7fffc35e6542d30a5eebb96dcbd08880e3352",
+  "production_manifest_sha256": "8d8de3cd946c9fdc7013e7b29f31bfb76f29951254af2d257b89259da235a978",
+  "qualification_sha256": "1276dbddd29065f23ddee07b19cec71f02593ce70824ed53b10dc13be8199d0b",
+  "result_sha256": "5a24d9dacb2357fb53c33c9e7a24646e41b8e004a436aa295efab175d7b9330a",
+  "retries": 0,
+  "schema": "pcc.arm_liveness_public_host_qualification.v1",
+  "scope": "Host-only liveness/control helpers and independent set-oracle comparisons; no program/runtime build, linking or emitted native execution",
+  "selected_unrun": 23,
+  "source_after": {
+    "bytes": 390482262,
+    "files": 30025,
+    "status": "PASS"
+  },
+  "source_before": {
+    "bytes": 390482262,
+    "files": 30025,
+    "status": "PASS"
+  },
+  "source_manifest_sha256": "a94e35677146c015879a00faf129e0a9aafd81d08f8ecd25b29f3799af2b7c4f",
+  "source_or_assertion_changes_after_failure": "None; failed source and receipt preserved",
+  "status": "FAIL",
+  "test_manifest_sha256": "c87fc5bb8878bd48a6909be7766c145cf5f0f0d1ff48c83d214b7252827b3763",
+  "unrun": [
+    "Remaining23 selected host cases:5 new and18 existing",
+    "Real ARM module mechanism/output comparison",
+    "Native compiler/arena error-path execution",
+    "Whole-pipeline timing",
+    "Full Stage1/Stage2"
+  ]
+}

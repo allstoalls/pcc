@@ -1,0 +1,79 @@
+{
+  "application_status": "UNAPPLIED",
+  "counts": {
+    "collected": 27,
+    "deselected": 0,
+    "errors": 0,
+    "failed": 1,
+    "passed": 0,
+    "selected_unrun": 26,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  },
+  "date_utc": "2026-10-09",
+  "failure": {
+    "classification": "Actual candidate production-path failure when module-top reuses an already declared outline helper; not a guard or native-runtime failure.",
+    "exception_type": "TypeError",
+    "expression": "\"noinline\" not in helper.attributes",
+    "message": "argument of type 'FunctionAttributes' is not a container or iterable",
+    "node": "tests/python/test_class_init_outlining.py::test_one_construction_body_and_two_calls_survive_owned_passes[default-owned-module-top]",
+    "phase": "frontend generation of the first fixture, before its structural assertions complete",
+    "source_file": "pcc/frontends/python/codegen/class_gen.py",
+    "source_line": 4903
+  },
+  "guards": {
+    "cleanup": "CLEAN; root reaped; ECHILD; shared lock released",
+    "continuous_free_reserve_bytes": 4294967296,
+    "denied_audit_events": 0,
+    "exit_code": 1,
+    "external_full_source_and_base_seals": "PASS",
+    "guard_elapsed_seconds": 5.603303298001265,
+    "guard_status": "COMPLETE",
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "max_net_disk_growth_bytes": 536870912,
+    "peak_sampled_process_rss_bytes": 129015808,
+    "sampled_rss_is_not_a_hard_rss_cap": true,
+    "source_and_import_boundary_checks": "PASS",
+    "timeout_seconds": 300
+  },
+  "packet": {
+    "manifest_sha256": "1ce720584d908e2d050be614e5b3c49fb9a170104d01a2db67a89c79e8088161",
+    "published_commit": "313582e25cbc83056022291379ba53b4cb370d3a",
+    "review_at_admission": "Source-clear; no execution pass was claimed before this gate",
+    "successor_patch_sha256": "f89c5c84572dfb1cd5026e2226b4c3c9e9d701d9196e9c2d94a63849e123a103"
+  },
+  "receipts": {
+    "bootstrap_sha256": "d9bffaf282d364d64ba696366c29af75d17b59ed53bfad790b3c01dd43928c53",
+    "collection_sha256": "f5e2eb218c9b5a26c2a88604bbf6bb306a9a239c8c53c9bb82f1c1e8b885b1de",
+    "guard_sha256": "21a5920fcd911fdd823c739bc7ee401a2f3d10a7a7b98ead9e339e42feb92d1a",
+    "junit_sha256": "0de9e7b0a02f55333d7e63456948cb1b47feca3037f08f7c9a1ea9f73411e112",
+    "payload_result_sha256": "9655da48f08abec07e7876a69fa52a84844879a7461f1f885ff8bc27ed1d464b",
+    "qualification_sha256": "8c2ed55e5e8ddd42d398531c3bbee9ca5adb25d4cceaaa09e526c871c75824d7"
+  },
+  "schema": "pcc.class-init-outline-host-public-qualification.v4",
+  "scope": [
+    "Only the exact new 27-node host structural file was selected, with -x, -n0 and explicit empty addopts.",
+    "Real frontend generation failed on the first small fixture; no structural test passed.",
+    "The immutable failed candidate/source and original assertions are retained.",
+    "No object emission, runtime build, native/FFI execution, heavy-module mechanism gate, performance measurement, pcc1 or full Stage1 was run.",
+    "The new helper ABI and closed-world native compiler remain unqualified."
+  ],
+  "selected_unrun_reason": "The admitted unchanged -x batch stopped at its first failing node. No test was retried.",
+  "source_identity": {
+    "base_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+    "base_pcc_git_tree": "d234174fbac80575ea822f6100f65fe914dd4498",
+    "candidate_inventory_sha256": "fffcc302d08f3116d64876470f5623e6689b27db92dfcda0df93428876c8197f",
+    "candidate_pcc_git_tree": "b650625b5556a6fd318b0084d97bdda10dda0b3a",
+    "codegen_checksum": "a34f123bd1ba23fe3425a6ff0b5fca17fda0db1a3f56113ed147821bf5fd790d",
+    "postimages": {
+      "pcc/frontends/python/codegen/class_gen.py": "6aa9e4222f4822d764db192c57dec23ff8b6a06aa7f132b5090c6e84c99e56de",
+      "pcc/frontends/python/codegen/generation_lowering.py": "30d38936b4f4dbc1259de9993557c7ccfeca491f3f0546820382185858d56c5b",
+      "tests/python/test_class_init_outlining.py": "89fbde057cdc8950195d7d607eeb0e8786f90b4d1c0143fdc977149f11c9b28e"
+    },
+    "production_base_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+    "whole_source_caveat": "Retained cold-slot compiler snapshot; complete pcc tree matches published02b9. Full source is not a02b9 checkout: older unrelated native test f391 and docs/bootstrap remain."
+  },
+  "status": "FAIL"
+}

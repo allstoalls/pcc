@@ -1,4 +1,4 @@
-from pcc.c_libc_registry_extra import EXTRA_SIGNATURES
+from pcc.frontends.c.c_libc_registry_extra import EXTRA_SIGNATURES
 
 
 def test_extra_signatures_are_named():

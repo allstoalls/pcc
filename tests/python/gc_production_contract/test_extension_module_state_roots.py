@@ -118,7 +118,7 @@ def _extension_module_state_exe(tmp_path_factory):
         "-I",
         str(REPO_ROOT / "utils" / "fake_libc_include"),
         "-I",
-        str(REPO_ROOT / "pcc" / "py_runtime" / "include"),
+        str(REPO_ROOT / "pcc" / "runtime" / "include"),
         str(src),
         "-o",
         str(ext),

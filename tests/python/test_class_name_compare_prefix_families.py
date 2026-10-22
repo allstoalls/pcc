@@ -15,7 +15,7 @@ import textwrap
 
 
 def test_prefix_family_method_and_field_names_resolve_exactly(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prefixnames.py"
     exe = tmp_path / "prefixnames.out"

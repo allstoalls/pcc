@@ -15,9 +15,9 @@ import pytest
     ("HEADER.match(text)", "define", 2000),
 ])
 def test_regex_results_are_owned_in_raw_scaffold_modules(
-    tmp_path: Path, pcc_py_runtime_archive, call, text, expected,
+    tmp_path: Path, pcc_runtime_archive, call, text, expected,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "regex_owner.py"
     source.write_text(r'''import re
@@ -47,7 +47,7 @@ main()
 '''.replace("CALL", call).replace("TEXT", repr(text)))
     binary = tmp_path / "regex_owner"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND="0"),
                          capture_output=True, text=True, timeout=15)
     assert ran.returncode == 0, ran.stdout + ran.stderr
@@ -56,8 +56,8 @@ main()
     assert growth1 < 16384 and growth2 < 16384, (growth1, growth2)
 
 
-def test_dynamic_regex_compile_releases_pattern_and_argument(tmp_path, pcc_py_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+def test_dynamic_regex_compile_releases_pattern_and_argument(tmp_path, pcc_runtime_archive):
+    from pcc.frontends.python.pipeline import compile_python
     source = tmp_path / "dynamic_compile_owner.py"
     source.write_text('''import re
 from pcc.extern import extern, c_int64
@@ -84,7 +84,7 @@ main()
 ''')
     binary = tmp_path / "dynamic_compile_owner"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
                              capture_output=True, text=True, timeout=20)
@@ -95,8 +95,8 @@ main()
             assert growth1 < 16384 and growth2 < 16384, (growth1, growth2)
 
 
-def test_regex_sub_consumes_temporary_operands(tmp_path, pcc_py_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+def test_regex_sub_consumes_temporary_operands(tmp_path, pcc_runtime_archive):
+    from pcc.frontends.python.pipeline import compile_python
     source = tmp_path / "regex_sub_owners.py"
     source.write_text('''import re
 from pcc.extern import extern, c_int64
@@ -121,7 +121,7 @@ main()
 ''')
     binary = tmp_path / "regex_sub_owners"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND="0"),
                          capture_output=True, text=True, timeout=20)
     assert ran.returncode == 0, ran.stdout + ran.stderr
@@ -130,8 +130,8 @@ main()
     assert growth1 < 16384 and growth2 < 16384, (growth1, growth2)
 
 
-def test_regex_sub_evaluation_order_and_argument_error_cleanup(tmp_path, pcc_py_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+def test_regex_sub_evaluation_order_and_argument_error_cleanup(tmp_path, pcc_runtime_archive):
+    from pcc.frontends.python.pipeline import compile_python
     source = tmp_path / "regex_sub_order.py"
     source.write_text('''import re
 import gc
@@ -162,7 +162,7 @@ main()
 ''')
     binary = tmp_path / "regex_sub_order"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
                              capture_output=True, text=True, timeout=20)

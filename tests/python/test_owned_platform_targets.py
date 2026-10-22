@@ -7,7 +7,7 @@ import pytest
 
 from pcc.backend.self_backend_dispatch import emit_self_asm
 from pcc.backend.self_backend_targets import resolve_self_backend_target
-from pcc.llvm_capi import ir
+from pcc.ir import ir
 
 TARGETS = (
     ("aarch64-unknown-linux-gnu", "self-aarch64-linux-v0"),

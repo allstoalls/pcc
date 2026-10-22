@@ -50,7 +50,7 @@ We need two layers of choice:
 - Create `pcc/backend/`, define the backend protocol: `BackendKind`, `BackendConfig`, `BackendSession`.
 - Add `PCC_BACKEND` env + `--backend` CLI (values: `llvm`, `llvm_capi`, `self`).
 - Current default = `llvm`.
-- Existing `pcc/pcc.py` / `pcc/evaluater/c_evaluator.py` only read this configuration.
+- Existing `pcc/pcc.py` / `pcc/frontends/c/evaluator/c_evaluator.py` only read this configuration.
 - **Acceptance**:
   - `env PCC_BACKEND=llvm` is bit-identical to default.
   - `--backend=llvm` raises no new warnings.
@@ -96,7 +96,7 @@ We need two layers of choice:
   - `repo token`: `20k-45k`
   - `working token`: `250k-700k`
 
-#### B2. Expand the surface of `pcc/llvm_capi`
+#### B2. Expand the surface of `pcc/ir`
 - Fill in the minimum required declarations (no need to be complete in one pass):
   - runtime init, context/module, builder, target machine, parse/verify, object lifecycle.
 - Don't aim for completeness; allow `NotImplemented` as a fallback.

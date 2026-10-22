@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from pcc.runtime_log import RuntimeEvent, format_event, summarize_events
+from pcc.diagnostics.runtime_log import RuntimeEvent, format_event, summarize_events
 
 
 def test_runtime_event_json():

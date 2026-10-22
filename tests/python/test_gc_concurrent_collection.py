@@ -9,7 +9,7 @@ from pathlib import Path
 from tests.runtime_build_cache import cached_threaded_pcc_python_runtime
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 _TSAN_UNAVAILABLE_BY_CC: dict[str, str | None] = {}
 
 

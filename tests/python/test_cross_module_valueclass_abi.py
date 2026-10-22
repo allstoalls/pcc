@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 def test_cross_module_valueclass_method_keeps_direct_aggregate_abi(tmp_path) -> None:
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     provider = tmp_path / "provider.py"
     consumer = tmp_path / "consumer.py"
@@ -100,7 +100,7 @@ def pick(source: Source) -> int:
 def test_imported_valueclass_return_annotation_keeps_aggregate_abi(
     tmp_path,
 ) -> None:
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     records = tmp_path / "records.py"
     provider = tmp_path / "provider.py"
@@ -170,7 +170,7 @@ def pick(source: Source) -> int:
 
 
 def test_imported_valueclass_parameter_keeps_aggregate_abi(tmp_path) -> None:
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     records = tmp_path / "records.py"
     consumer = tmp_path / "consumer.py"
@@ -222,8 +222,11 @@ def use_span() -> int:
     )
     ir_text = output.read_text(encoding="utf-8")
     aggregate = r"\{ i64, i64, i64 \}"
+    # A compiler-package name is not a range proof for ordinary Python int.
+    # Keep the valueclass payload ABI while independently preserving the
+    # free function's boxed integer parameter and result.
     assert re.search(
-        rf"define external i64 @user_pcc_backend_consumer_read_span\({aggregate} %span, i64 %index\)",
+        rf"define external ptr @user_pcc_backend_consumer_read_span\({aggregate} %span, ptr %index\)",
         ir_text,
     ), ir_text
     read_start = ir_text.index("@user_pcc_backend_consumer_read_span")
@@ -238,10 +241,12 @@ def use_span() -> int:
     use_end = ir_text.index("\n}", use_start)
     use_ir = ir_text[use_start:use_end]
     assert re.search(
-        rf"call i64 \({aggregate}, i64\) @user_pcc_backend_consumer_read_span\({aggregate}",
+        rf"call ptr \({aggregate}, ptr\) @user_pcc_backend_consumer_read_span\({aggregate}",
         use_ir,
     ), use_ir
     assert "@py_valuebox_new" not in use_ir
+    assert "@py_instance_new" not in use_ir
+    assert "@py_valuebox_get_field" not in use_ir
 
     from pcc.backend.self_backend_dispatch import emit_self_asm
 
@@ -252,7 +257,7 @@ def use_span() -> int:
 def test_relative_imported_valueclass_return_keeps_aggregate_abi(
     tmp_path,
 ) -> None:
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     package = tmp_path / "pkg"
     package.mkdir()
@@ -326,7 +331,7 @@ def pick(source: Source) -> int:
 def test_valueclass_attribute_keeps_projection_in_class_constructor_argument(
     tmp_path,
 ) -> None:
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     package = tmp_path / "pkg"
     package.mkdir()

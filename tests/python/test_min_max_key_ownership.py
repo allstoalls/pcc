@@ -100,7 +100,7 @@ ccc a ccc
 
 
 def test_min_max_key_matches_cpython_under_every_collector(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     source = tmp_path / "min_max_key.py"
     source.write_text(SEMANTICS, encoding="utf-8")
@@ -112,7 +112,7 @@ def test_min_max_key_matches_cpython_under_every_collector(
     binary = tmp_path / "min_max_key"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         ran = subprocess.run(
@@ -215,7 +215,7 @@ _OWNER_BODIES = {
 
 @pytest.mark.parametrize("shape", sorted(_OWNER_BODIES))
 def test_min_max_key_owners_are_released(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive, shape,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive, shape,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = tmp_path / "min_max_owners.py"
@@ -225,7 +225,7 @@ def test_min_max_key_owners_are_released(
     binary = tmp_path / "min_max_owners"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         result = subprocess.run(

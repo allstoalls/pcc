@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pcc.py_frontend import parser
-from pcc.py_frontend.py_ast import Call, Compare, Subscript, Assign, Delete
+from pcc.frontends.python import parser
+from pcc.frontends.python.py_ast import Call, Compare, Subscript, Assign, Delete
 
 
 def test_protocol_builtin_source_shapes():

@@ -86,7 +86,7 @@ columns stay empty until then. Matrix/battery result in goal-state.
 
 ## Slice 2 progress (2026-06-12)
 
-RSS bridge LANDED: `pcc/py_runtime/src/py_os_rss.c` (C-only,
+RSS bridge LANDED: `pcc/runtime/src/py_os_rss.c` (C-only,
 OBJ_PY_CC_HELPERS) exports `pcc_os_current_rss_bytes` (Darwin:
 mach_task_basic_info.resident_size; Linux: /proc/self/statm resident
 pages x page size — UNTESTED until S-P2-LINUX) and
@@ -205,7 +205,7 @@ Remaining queue updated accordingly.
 
 Backends 0-3 are malloc-backed, so their fragmentation/overhead axis is
 defined at the allocator level via a new C-only helper
-(`pcc/py_runtime/src/py_os_heap.c`, OBJ_PY_CC_HELPERS, runtime-ABI
+(`pcc/runtime/src/py_os_heap.c`, OBJ_PY_CC_HELPERS, runtime-ABI
 registered):
 
 ```text

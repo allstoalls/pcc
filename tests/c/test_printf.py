@@ -1,7 +1,5 @@
 import os
 import sys
-import subprocess
-import tempfile
 
 this_dir = os.path.dirname(os.path.abspath(__file__))
 # tests/{c,python}/<file>.py -> repo root is two levels up. This used to
@@ -9,10 +7,10 @@ this_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(os.path.dirname(this_dir))
 sys.path.insert(0, parent_dir)
 
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.parse.c_parser import CParser
-from pcc.codegen.c_codegen import LLVMCodeGenerator, postprocess_ir_text
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
 import unittest
+
+from tests.owned_c_execution import compile_and_run_owned_c
 
 
 def test_printf():
@@ -40,35 +38,34 @@ def test_stdio_globals_link_and_run():
             return 0;
         }
         """
-    processed = CEvaluator._system_cpp(source, base_dir=parent_dir)
-    ast = CParser().parse(processed)
-    cg = LLVMCodeGenerator()
-    cg.generate_code(ast)
+    r = compile_and_run_owned_c(source)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == "x"
 
-    with tempfile.TemporaryDirectory(prefix="pcc_stdio_") as tmpdir:
-        ir_path = os.path.join(tmpdir, "stdio.ll")
-        obj_path = os.path.join(tmpdir, "stdio.o")
-        bin_path = os.path.join(tmpdir, "stdio_bin")
 
-        with open(ir_path, "w") as f:
-            f.write(postprocess_ir_text(str(cg.module)))
+def test_owned_printf_preserves_mixed_varargs_and_return_count():
+    source = r"""
+        #include <stdio.h>
 
-        r = subprocess.run(
-            ["cc", "-c", "-w", ir_path, "-o", obj_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        assert r.returncode == 0, r.stderr
+        const char *select_format(int argc) {
+            return argc > 0 ? "%s:%d:%.2f\n" : "%d";
+        }
 
-        r = subprocess.run(
-            ["cc", obj_path, "-o", bin_path], capture_output=True, text=True, timeout=30
-        )
-        assert r.returncode == 0, r.stderr
+        int main(int argc, char **argv) {
+            const char *format = select_format(argc);
+            int count = printf(format, "owned", -7, 3.5);
+            FILE *saved_stdout = stdout;
+            stdout = stderr;
+            int redirected = printf(format, "redirected", 8, 2.25);
+            stdout = saved_stdout;
+            return count == 14 && redirected == 18 ? 0 : 1;
+        }
+    """
 
-        r = subprocess.run([bin_path], capture_output=True, text=True, timeout=30)
-        assert r.returncode == 0, r.stderr
-        assert r.stdout == "x"
+    result = compile_and_run_owned_c(source)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout == "owned:-7:3.50\n"
+    assert result.stderr == "redirected:8:2.25\n"
 
 
 if __name__ == "__main__":

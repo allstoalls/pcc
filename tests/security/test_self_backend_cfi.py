@@ -4,7 +4,7 @@ Context (SEC-P1-CFI / S-track)
 ------------------------------
 The LLVM execution path hardens emitted AArch64 code with pointer
 authentication and branch-target identification via IR function attributes
-(``pcc/codegen/c_codegen.py::_AARCH64_BRANCH_PROTECTION_ATTRS``), covered by
+(``pcc/frontends/c/codegen/c_codegen.py::_AARCH64_BRANCH_PROTECTION_ATTRS``), covered by
 ``tests/security/test_c_stack_protection.py::
 test_control_flow_protection_pac_or_bti_emitted``.
 
@@ -65,8 +65,8 @@ int main(void) { return dispatch(cb, 41) == 42 ? 0 : 1; }
 
 def _emit_self_asm(source: str, tmp_path) -> str:
     """Compile ``source`` through the pcc self backend and return the asm text."""
-    from pcc.evaluater.c_evaluator import CEvaluator
-    from pcc.project import TranslationUnit
+    from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+    from pcc.driver.project import TranslationUnit
 
     unit = TranslationUnit(
         name="main.c",

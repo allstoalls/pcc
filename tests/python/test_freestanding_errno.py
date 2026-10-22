@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-ERRNO_SOURCE = REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_errno.py"
+ERRNO_SOURCE = REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_errno.py"
 
 
 def _emit_ir(tmp_path: Path) -> str:

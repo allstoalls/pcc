@@ -1,0 +1,202 @@
+diff --git a/scripts/bootstrap.py b/scripts/bootstrap.py
+index 94d54760983ab252d83031d342a123d038922f92..b9fec627f6852ce2d3e89d61f473c2f131582197 100644
+--- a/scripts/bootstrap.py
++++ b/scripts/bootstrap.py
+@@ -749,23 +749,53 @@
+     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+ 
+ 
+-def _read_final_guard_memory_budget(guard_dir: Path, options: Options, stage: int) -> None:
++def _read_final_guard_memory_budget(
++    guard_dir: Path, options: Options, stage: int, *, guard_returncode: int | None = None,
++) -> None:
+     path = guard_dir / "result.json"
++    context = str(path)
++    if guard_returncode is not None:
++        context += f" (guard returncode={guard_returncode})"
+     try:
+         receipt = json.loads(path.read_text())
+-        selection = receipt.get("memory_budget_selection") or {}
+-        if receipt["status"] == "PREFLIGHT_REJECTED":
++        if not isinstance(receipt, dict):
++            raise ValueError("receipt must be a JSON object")
++        status = receipt.get("status")
++        if status in (None, "", "RUNNING"):
++            raise BootstrapError(
++                "incomplete final guard memory receipt: " + context
++                + f": status={status!r}; guard did not publish a final result"
++            )
++        if not isinstance(status, str):
++            raise ValueError("guard status must be a string")
++        selection = receipt.get("memory_budget_selection")
++        if selection is None:
++            selection = {}
++        if not isinstance(selection, dict):
++            raise ValueError("memory budget selection must be a JSON object")
++        if status == "PREFLIGHT_REJECTED":
+             options.memory_budget_selection = selection
+             _write_memory_admission(
+                 stage, options, "PREFLIGHT_REJECTED", admission_owner="process_tree_guard",
+                 error=receipt.get("error", ""), guard_receipt=str(path),
+             )
+             return
++        if "max_tree_rss_bytes" not in selection:
++            raise BootstrapError(
++                "incomplete final guard memory receipt: " + context
++                + f": status={status!r}; final memory selection has no max_tree_rss_bytes"
++            )
+         selected = selection["max_tree_rss_bytes"]
++        if type(selected) is not int:
++            raise ValueError("final automatic cap must be an integer")
+         if not options.min_tree_rss_bytes <= selected <= options.max_tree_rss_bytes:
+             raise ValueError("final automatic cap lies outside the admitted bounds")
++    except FileNotFoundError as exc:
++        raise BootstrapError("missing final guard memory receipt: " + context) from exc
+     except (OSError, ValueError, KeyError, TypeError) as exc:
+-        raise BootstrapError("invalid final guard memory receipt: " + str(exc)) from exc
++        raise BootstrapError(
++            "invalid final guard memory receipt: " + context + ": " + str(exc)
++        ) from exc
+     options.max_tree_rss_bytes = selected
+     options.memory_budget_selection = selection
+     _write_memory_admission(
+@@ -848,13 +878,17 @@
+         env=environment,
+         check=False,
+     )
+-    if _guard_reselects_memory(options):
+-        _read_final_guard_memory_budget(guard_dir, options, stage)
++    # Replay compiler diagnostics even if the guard died before publishing its
++    # final receipt. Receipt validation still fails closed after output replay.
+     for name, stream in (("target.stdout", sys.stdout), ("target.stderr", sys.stderr)):
+         path = guard_dir / name
+         if path.is_file() and path.stat().st_size:
+             stream.write(path.read_text(encoding="utf-8", errors="replace"))
+             stream.flush()
++    if _guard_reselects_memory(options):
++        _read_final_guard_memory_budget(
++            guard_dir, options, stage, guard_returncode=completed.returncode,
++        )
+     return completed.returncode, guard_dir
+ 
+ 
+diff --git a/tests/python/test_worker_memory_budget_selection.py b/tests/python/test_worker_memory_budget_selection.py
+index cdd1d72c76ab4aca76f7e4da3a409b59bdd392ef..6fef1cd9e280d28e69400170169254d40ba2eb2f 100644
+--- a/tests/python/test_worker_memory_budget_selection.py
++++ b/tests/python/test_worker_memory_budget_selection.py
+@@ -399,6 +399,99 @@
+     assert receipt["memory_budget_selection"] == {}
+ 
+ 
++def mock_final_guard_output(monkeypatch, raw_receipt, returncode):
++    directories = []
++
++    def run_guard(command, **kwargs):
++        result = Path(command[command.index("--result") + 1])
++        directories.append(result.parent)
++        if raw_receipt is not None:
++            result.write_text(raw_receipt)
++        (result.parent / "target.stdout").write_text("compiler stdout before guard exit\n")
++        (result.parent / "target.stderr").write_text("compiler stderr before guard exit\n")
++        return bootstrap.subprocess.CompletedProcess(command, returncode)
++
++    monkeypatch.setattr(bootstrap.subprocess, "run", run_guard)
++    return directories
++
++
++@pytest.mark.skipif(bootstrap.os.name == "nt", reason="POSIX guard receipt replay")
++@pytest.mark.parametrize("raw_receipt,diagnostic", [
++    pytest.param(None, "missing", id="no-receipt"),
++    pytest.param(json.dumps({"status": "RUNNING", "max_tree_rss_bytes": 0}),
++                 "incomplete", id="interrupted-before-selection"),
++    pytest.param(json.dumps({"status": "RUNNING", "memory_budget_selection": {
++        "max_tree_rss_bytes": 2 * GIB}}), "incomplete", id="interrupted-after-selection"),
++    pytest.param("{}", "incomplete", id="no-status"),
++    pytest.param(json.dumps({"status": "COMPLETE"}), "incomplete", id="no-selection"),
++    pytest.param(json.dumps({"status": "COMPLETE", "memory_budget_selection": {
++        "selection_kind": "automatic"}}), "incomplete", id="no-selected-cap"),
++    pytest.param("{", "invalid", id="malformed-json"),
++    pytest.param("[]", "invalid", id="non-object-receipt"),
++    pytest.param(json.dumps({"status": "COMPLETE", "memory_budget_selection": []}),
++                 "invalid", id="non-object-selection"),
++    pytest.param(json.dumps({"status": "COMPLETE", "memory_budget_selection": {
++        "max_tree_rss_bytes": GIB}}), "invalid", id="below-minimum"),
++    pytest.param(json.dumps({"status": "COMPLETE", "memory_budget_selection": {
++        "max_tree_rss_bytes": 4 * GIB}}), "invalid", id="above-admitted-ceiling"),
++    pytest.param(json.dumps({"status": "COMPLETE", "memory_budget_selection": {
++        "max_tree_rss_bytes": float(2 * GIB)}}), "invalid", id="non-integer-cap"),
++])
++def test_mac_ci_guard_receipt_failure_preserves_compiler_output(
++    tmp_path, monkeypatch, capsys, raw_receipt, diagnostic,
++):
++    monkeypatch.setattr(bootstrap.sys, "platform", "darwin")
++    options = mac_ci_options(tmp_path)
++    options.max_tree_rss_bytes = 3 * GIB
++    initial_selection = {"selection_kind": "automatic", "max_tree_rss_bytes": 3 * GIB}
++    options.memory_budget_selection = initial_selection.copy()
++    directories = mock_final_guard_output(monkeypatch, raw_receipt, -9)
++
++    with pytest.raises(bootstrap.BootstrapError, match=diagnostic + " final guard memory receipt") as caught:
++        bootstrap._run_guarded(["synthetic-worker"], options, 1, {})
++
++    captured = capsys.readouterr()
++    assert captured.out.count("compiler stdout before guard exit\n") == 1
++    assert captured.err == "compiler stderr before guard exit\n"
++    assert "compiler stderr" not in captured.out
++    assert "guard returncode=-9" in str(caught.value)
++    assert str(directories[0] / "result.json") in str(caught.value)
++    assert options.max_tree_rss_bytes == 3 * GIB
++    assert options.memory_budget_selection == initial_selection
++    assert not (tmp_path / "stage1.memory-budget.json").exists()
++    if raw_receipt is not None:
++        assert (directories[0] / "result.json").read_text() == raw_receipt
++
++
++@pytest.mark.skipif(bootstrap.os.name == "nt", reason="POSIX guard receipt replay")
++@pytest.mark.parametrize("returncode", [0, 7])
++def test_mac_ci_terminal_guard_receipt_preserves_output_and_returncode(
++    tmp_path, monkeypatch, capsys, returncode,
++):
++    monkeypatch.setattr(bootstrap.sys, "platform", "darwin")
++    options = mac_ci_options(tmp_path)
++    options.max_tree_rss_bytes = 3 * GIB
++    options.memory_budget_selection = {"selection_kind": "automatic"}
++    selection = {"selection_kind": "automatic", "max_tree_rss_bytes": 5 * GIB // 2}
++    directories = mock_final_guard_output(monkeypatch, json.dumps({
++        "status": "COMPLETE", "returncode": returncode,
++        "memory_budget_selection": selection,
++    }), returncode)
++
++    actual_code, directory = bootstrap._run_guarded(["synthetic-worker"], options, 1, {})
++
++    assert actual_code == returncode
++    assert directory == directories[0]
++    captured = capsys.readouterr()
++    assert captured.out.count("compiler stdout before guard exit\n") == 1
++    assert captured.err == "compiler stderr before guard exit\n"
++    assert options.max_tree_rss_bytes == selection["max_tree_rss_bytes"]
++    receipt = json.loads((tmp_path / "stage1.memory-budget.json").read_text())
++    assert receipt["status"] == "ADMITTED"
++    assert receipt["guard_status"] == "COMPLETE"
++    assert receipt["memory_budget_selection"] == selection
++
++
+ @pytest.mark.parametrize("kind,checkpoint", [("explicit", None), ("external_guard", None), ("automatic", "checkpoint")])
+ def test_mac_ci_guard_preserves_exact_explicit_inherited_and_checkpoint_caps(tmp_path, monkeypatch, kind, checkpoint):
+     monkeypatch.setattr(bootstrap.sys, "platform", "darwin")
+diff --git a/tests/python/test_worker_resource_plan.py b/tests/python/test_worker_resource_plan.py
+index 82b4f89d133535ccc262d7ed3ffa74df8ed3cfec..0eec2adecdecbbea2814e4717b022ac1720d7c55 100644
+--- a/tests/python/test_worker_resource_plan.py
++++ b/tests/python/test_worker_resource_plan.py
+@@ -891,9 +891,9 @@
+     root = Path(__file__).resolve().parents[2]
+     workflow = (root / ".github/workflows/pcc1-package-parity.yml").read_text()
+     macos = workflow.split("  pcc1-package-parity:\n", 1)[1]
+-    evidence = macos.split("      - name: Preserve macOS bootstrap failure evidence\n", 1)[1]
++    evidence = macos.split("      - name: Preserve macOS bootstrap evidence\n", 1)[1]
+     evidence = evidence.split("      - name:", 1)[0]
+-    assert "if: failure()" in evidence
++    assert "if: always()" in evidence
+     assert "uses: actions/upload-artifact@v4" in evidence
+     paths = evidence.split("          path: |\n", 1)[1].splitlines()
+     assert [path.strip() for path in paths if path.strip()] == [

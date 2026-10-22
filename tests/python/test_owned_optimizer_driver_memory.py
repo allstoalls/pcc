@@ -1,7 +1,7 @@
 """The standalone optimizer must execute the same memory tier as self builds."""
 
-from pcc.native_ir.driver import optimize_ir
-from pcc.py_frontend.compiled_owned_passes import run_owned_passes
+from pcc.ir.optimization.driver import optimize_ir
+from pcc.frontends.python.compiled_owned_passes import run_owned_passes
 
 
 _LOOP = """define i64 @total(i64 %limit) {

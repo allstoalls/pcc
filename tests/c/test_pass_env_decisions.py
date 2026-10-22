@@ -1,4 +1,4 @@
-from pcc.pass_env_decisions import explain_pass_selection
+from pcc.driver.pass_env_decisions import explain_pass_selection
 
 
 def test_pass_env_decisions_reports_disabled_and_allowlist():

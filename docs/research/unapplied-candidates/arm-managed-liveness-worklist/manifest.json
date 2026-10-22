@@ -1,0 +1,36 @@
+{
+  "application_status": "UNAPPLIED",
+  "execution_status": "UNRUN",
+  "files": [
+    {
+      "mode": "100644",
+      "path": "pcc/backend/self_backend_precise_stackmaps.py",
+      "postimage_bytes": 258200,
+      "postimage_sha256": "f1882fa4c29ad15c8843d30a9bf4d4bebf5b52307d0dc4daa155157b8d8289fe",
+      "preimage_bytes": 253415,
+      "preimage_sha256": "bfc3630f958d6c63a1c4f0677b2d55082dfb4d90960978df84cf2c83a72eaa64"
+    }
+  ],
+  "independent_source_review": "PASS for exact production hunk: FIFO/lazy-link equivalence, ring bounds, zero-word original route, scalar-index lifetime and finally cleanup. Native/host execution remains UNRUN.",
+  "known_unknowns": [
+    "Current real-module fixed-point sweep count K and tracked-word width W",
+    "Real queue remainder, weighted row-work reduction, whole-codegen speed and memory change",
+    "Actual native lowering and error-path execution"
+  ],
+  "patch_sha256": "90928dbd238208e4a11868dae4b0e7d171fbc24d28a875377d5dbf31b90f7f67",
+  "production_base_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "public_files": [
+    "production.patch",
+    "README.md",
+    "manifest.json"
+  ],
+  "readme_sha256": "0e3b8ab59c6bd8b35a4b793e589c9af463ed447ce34a701d5d3b43b928cc7e30",
+  "schema": "pcc.arm-managed-liveness-worklist.v1",
+  "test_status": "Focused test source is in preparation, not included in this preservation set; all tests UNRUN.",
+  "unchanged_contracts": [
+    "original bitset transfer equation and row-helper bool ABI",
+    "PHI seed pass, tracked numbering, roots and pointer provenance",
+    "trigger-aware final backwards scan and call-state publication",
+    "unreachable/duplicate/self-loop edges and first-sweep semantic diagnostic order, excluding new allocation failure possibility"
+  ]
+}

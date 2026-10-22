@@ -106,7 +106,7 @@ def test_bespoke_lowering_api_signature_does_not_drift(target, required, optiona
     # The specialized adapters intentionally have different machine arities;
     # pin the Python API they adapt as well as checking effective callees.
     root = Path(__file__).absolute().parents[2]
-    signatures = definition_signatures((root / "pcc/llvm_capi/ir.py").read_text())
+    signatures = definition_signatures((root / "pcc/ir/ir.py").read_text())
     parameters = signatures[target]
     assert all(parameter.kind == "pos" for parameter in parameters)
     assert (

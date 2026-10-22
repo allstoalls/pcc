@@ -16,9 +16,9 @@
 
 但"不依赖 LLVM"必须按声明卫生拆开说,因为 LLVM 在这里以三种身份出现,去留各不相同:
 
-1. **LLVM 作为库**:在严格自举链上不存在。编译出的 pcc1 用 [pcc/llvm_capi/ir.py](../../pcc/llvm_capi/ir.py)——一个纯 Python 的"text-first IR builder"(其文件头自述:增量构造 IR 文本,无对象图)——生成 IR 文本,self 后端解析这份文本发射汇编,系统 `cc` 汇编与链接。整条链上没有任何 LLVM 库调用。
+1. **LLVM 作为库**:在严格自举链上不存在。编译出的 pcc1 用 [pcc/ir/ir.py](../../pcc/ir/ir.py)——一个纯 Python 的"text-first IR builder"(其文件头自述:增量构造 IR 文本,无对象图)——生成 IR 文本,self 后端解析这份文本发射汇编,系统 `cc` 汇编与链接。整条链上没有任何 LLVM 库调用。
 2. **LLVM 作为 IR 方言**:保留。self 后端的输入仍是 LLVM IR 文本格式。这是一个刻意的桥接决定:同一份 IR 既可喂给 LLVM 也可喂给 self 后端,差分对照([tests/c/test_llvm_self_vector_parity.py](../../tests/c/test_llvm_self_vector_parity.py) 把同一段 IR 分别经两条路编译运行、比较退出码与输出)因此可行;[tests/c/test_c_testsuite_self.py](../../tests/c/test_c_testsuite_self.py)、[tests/c/test_gcc_torture_self.py](../../tests/c/test_gcc_torture_self.py) 把整个 C 测试集当作 oracle 差分源。
-3. **LLVM 作为优化器**:默认不在,opt-in 才在。C 路径入口 [pcc/cli_core.py](../../pcc/cli_core.py) 的 `_effective_self_backend_opt_level()` 在 `--backend=self` 时把优化级别压到 0,除非环境变量 `PCC_SELF_BACKEND_VECTORIZE` 显式打开——其文档注释直说原因:self 后端尚未低层化 LLVM 向量化器产物(如 Lua 的 `<4 x ptr>` strcache 广播)。打开后的组合必须按模式标注:LLVM 优化、self 发射,两种身份不混。
+3. **LLVM 作为优化器**:默认不在,opt-in 才在。C 路径入口 [pcc/driver/cli_core.py](../../pcc/driver/cli_core.py) 的 `_effective_self_backend_opt_level()` 在 `--backend=self` 时把优化级别压到 0,除非环境变量 `PCC_SELF_BACKEND_VECTORIZE` 显式打开——其文档注释直说原因:self 后端尚未低层化 LLVM 向量化器产物(如 Lua 的 `<4 x ptr>` strcache 广播)。打开后的组合必须按模式标注:LLVM 优化、self 发射,两种身份不混。
 
 设计空间里被放弃的方案同样重要。(a)写一个 LLVM 式的完整后端——指令调度、图着色寄存器分配——会让这个子系统的复杂度淹没仓库的其余目标;(b)解释器或 JIT——产物形态不对,论题要的是可分发的原生二进制。选定的是(c)**asm 优先的有界忠实子集**:`self_backend_aarch64_darwin.py` 的模块文档把当下支持面逐条列出(标量整数、指针、`alloca`/`load`/`store`、直接调用、整数算术/比较/分支/phi、标量转换),并以一句话立下本后端最重要的不变式——"Unsupported shapes still raise `BackendUnavailable` instead of guessing."(不支持的形状抛 `BackendUnavailable`,而不是猜。)这一句是义务 4 在指令粒度上的落点:后端宁可拒绝编译,不产出语义存疑的代码,也绝不悄悄换路。
 
@@ -111,9 +111,9 @@ phi 的处理值得单独一段,因为它是这个"无寄存器分配"模型里�
 
 ### 从 asm 到可执行文件
 
-C 路径([pcc/evaluater/c_evaluator.py](../../pcc/evaluater/c_evaluator.py))提供三种出口:`_emit_compiled_units_self_backend()` 支持 `--emit-llvm`(IR 文本)、`--emit-asm`(汇编文本)与 `--emit-obj`(写临时 `.s` 后 `cc -c`);`_run_compiled_translation_units_self_backend()` 把多个 TU 的汇编拼接(剥掉各模块的 `.subsections_via_symbols` 尾行,最后统一补一行)、`cc` 链接、直接运行。优化级别大于 0 时 `_prepare_self_backend_units()` 会先经仓库管理的 LLVM 优化一遍 IR——但回忆 13.1:CLI 默认把 self 后端的优化级别压到 0,所以默认路径不触发这一步。
+C 路径([pcc/frontends/c/evaluator/c_evaluator.py](../../pcc/frontends/c/evaluator/c_evaluator.py))提供三种出口:`_emit_compiled_units_self_backend()` 支持 `--emit-llvm`(IR 文本)、`--emit-asm`(汇编文本)与 `--emit-obj`(写临时 `.s` 后 `cc -c`);`_run_compiled_translation_units_self_backend()` 把多个 TU 的汇编拼接(剥掉各模块的 `.subsections_via_symbols` 尾行,最后统一补一行)、`cc` 链接、直接运行。优化级别大于 0 时 `_prepare_self_backend_units()` 会先经仓库管理的 LLVM 优化一遍 IR——但回忆 13.1:CLI 默认把 self 后端的优化级别压到 0,所以默认路径不触发这一步。
 
-Python 自举路径([pcc/py_frontend/pipeline.py](../../pcc/py_frontend/pipeline.py))是这条产物链的主战场。`_link_native()` 按 `_native_backend_kind()` 二选一:`llvm` 走 `_link_with_clang()`,`self` 走 `_link_with_self_backend()`,其余值抛 `PyPipelineError`——没有第三条路,也没有"self 失败就换 llvm"的代码路径存在。`_link_with_self_backend_ir_texts()` 内部分两种形态:单模块小输入走"宿主发射汇编、本进程驱动 `cc`";多模块(自举的常态)走 `_emit_self_objects_many_via_host_python()`——按 `jobs` 并行地"emit_self_asm → 写 `.s` → `cc -c` → `.o`",随后一次 `cc` 链接全部目标文件加运行时归档与 `-lm`。
+Python 自举路径([pcc/frontends/python/pipeline.py](../../pcc/frontends/python/pipeline.py))是这条产物链的主战场。`_link_native()` 按 `_native_backend_kind()` 二选一:`llvm` 走 `_link_with_clang()`,`self` 走 `_link_with_self_backend()`,其余值抛 `PyPipelineError`——没有第三条路,也没有"self 失败就换 llvm"的代码路径存在。`_link_with_self_backend_ir_texts()` 内部分两种形态:单模块小输入走"宿主发射汇编、本进程驱动 `cc`";多模块(自举的常态)走 `_emit_self_objects_many_via_host_python()`——按 `jobs` 并行地"emit_self_asm → 写 `.s` → `cc -c` → `.o`",随后一次 `cc` 链接全部目标文件加运行时归档与 `-lm`。
 
 这条路径上有三个为自举不动点服务的细节。第一,**内容寻址的目标文件缓存**:缓存键的 SHA-256 把所有 `self_backend*.py` 源文件的内容、`PCC_SELF_TARGET_PASSES` 等环境、`cc`、目标身份与 IR 文本全部喂进去——改任何一行后端源码,缓存自动失效,不会出现"旧后端的 `.o` 混进新自举"这种最难调试的脏状态。第二,**确定性链接旗标**:Darwin 上加 `-Wl,-no_uuid`(LC_UUID 是字节比较的天敌),`.subsections_via_symbols` 存在时加 `-Wl,-dead_strip`。第三,**发布序列**:`_finish_self_backend_executable()` 先链接到 `<out>.tmp`,Darwin 上 `codesign --force -s -` 临时签名、`codesign --verify` 强制系统校验器观察最终 Mach-O,`/bin/mv -f` 原子就位,最后做一次读回屏障(默认)或 `/bin/sync`(`PCC_SELF_BACKEND_PUBLISH_SYNC=1` 保留给可靠性二分)。这串看似偏执的动作每一步都对应一次真实失败,见 13.7.1。
 
@@ -155,7 +155,7 @@ BackendUnavailable: self backend does not understand LLVM type '{ i64'
 
 ### 13.7.3 self 后端的二进制崩了,不等于 self 后端错了(2026-05-09,活跃)
 
-一条简短但必要的对照([docs/investigations/stage1-self-backend-ir-scaffold-segfault.md](../../docs/investigations/stage1-self-backend-ir-scaffold-segfault.md),状态 active):`--backend self` 构建出的 pcc1 在编译 stage2 时段错误。最小化后的根因目前指向**前端**方法分派——`_emit_method_call` 的闭世界"任何声明了该方法的类"回退,把 `DynType` 接收者上的 `.append(...)` 错误绑定到 `pcc.llvm_capi.ir.Block.append`,把 `ir.Value` 传给了期望字符串指令行的函数。症状署名是"self 后端的产物崩了",根因不在 [pcc/backend/](../../pcc/backend) 的任何一行。这正是 [AGENTS.md](../../AGENTS.md) 自举回归纪律第 1 条的用武之地:先用模式标注的语言确定第一个失败边界(`pcc0→pcc1` 回退?`pcc1→pcc2` 运行期崩溃?),再列嫌疑子系统。在自托管链条里,后端是所有上游语义错误的最终显影液——它显影的多数照片,拍的都不是它自己。
+一条简短但必要的对照([docs/investigations/stage1-self-backend-ir-scaffold-segfault.md](../../docs/investigations/stage1-self-backend-ir-scaffold-segfault.md),状态 active):`--backend self` 构建出的 pcc1 在编译 stage2 时段错误。最小化后的根因目前指向**前端**方法分派——`_emit_method_call` 的闭世界"任何声明了该方法的类"回退,把 `DynType` 接收者上的 `.append(...)` 错误绑定到 `pcc.ir.ir.Block.append`,把 `ir.Value` 传给了期望字符串指令行的函数。症状署名是"self 后端的产物崩了",根因不在 [pcc/backend/](../../pcc/backend) 的任何一行。这正是 [AGENTS.md](../../AGENTS.md) 自举回归纪律第 1 条的用武之地:先用模式标注的语言确定第一个失败边界(`pcc0→pcc1` 回退?`pcc1→pcc2` 运行期崩溃?),再列嫌疑子系统。在自托管链条里,后端是所有上游语义错误的最终显影液——它显影的多数照片,拍的都不是它自己。
 
 ## 13.8 小结
 

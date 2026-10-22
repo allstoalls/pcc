@@ -4,6 +4,11 @@
 #include "_fake_defines.h"
 #include "_fake_typedefs.h"
 
+/* setvbuf modes (C11 7.21.1p3); the values match glibc, musl and Darwin. */
+#define _IOFBF 0
+#define _IOLBF 1
+#define _IONBF 2
+
 #ifdef __APPLE__
 extern FILE *__stdinp;
 extern FILE *__stdoutp;

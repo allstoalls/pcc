@@ -1,11 +1,11 @@
 import pytest
 
-from pcc.codegen.c_codegen import LLVMCodeGenerator, SemanticError
-from pcc.parse.c_parser import CParser
+from pcc.frontends.c.codegen.c_codegen import CCodeGenerator, SemanticError
+from pcc.frontends.c.parse.c_parser import CParser
 
 
 def _generate(source: str) -> str:
-    generator = LLVMCodeGenerator()
+    generator = CCodeGenerator()
     generator.generate_code(CParser().parse(source))
     return str(generator.module)
 

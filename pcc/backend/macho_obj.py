@@ -118,6 +118,21 @@ class Relocation:
     target_offset: int | None = None
 
 
+def new_relocation(
+    offset: int, symbol: str, relocation_type: int, pcrel: bool, length: int,
+    addend: int, section, minuend, target_offset,
+) -> Relocation:
+    """Build a ``Relocation`` where self codegen knows its fixed layout.
+
+    Constructed from another module, the frozen dataclass is a dynamic class
+    call with keyword packing per record; the linker reads millions.
+    """
+    return Relocation(
+        offset, symbol, relocation_type, pcrel, length, addend,
+        section, minuend, target_offset,
+    )
+
+
 def _append_final_link_relocation_fields(
     records: CompilerIntArena,
     relocations: list[Relocation],
@@ -292,7 +307,7 @@ _PROVEN_RELOCATION_SHAPES = {
 _ADDEND_MAX = 0x7FFFFF
 
 
-def _scan_stack_map_section(data: bytes) -> tuple[int, list[int]]:
+def _scan_stack_map_section(data: bytes, *, compact_budget=None) -> tuple[int, list[int]]:
     """Structurally scan a stack-map payload; return (count, address offsets).
 
     Mirrors the link's scan: validates magic/version/arch/counts/sizes and
@@ -303,9 +318,18 @@ def _scan_stack_map_section(data: bytes) -> tuple[int, list[int]]:
         _scan_stack_map_payload,
     )
 
-    count, scanned, _table_start, _table_count = _scan_stack_map_payload(
-        bytes(data)
-    )
+    if compact_budget is None:
+        count, scanned, _table_start, _table_count = _scan_stack_map_payload(
+            bytes(data)
+        )
+    else:
+        compact_budget.check_peak(
+            2 * compact_budget.unretained_payload_bytes(data),
+            label="Mach-O section stack-map snapshot",
+        )
+        count, scanned, _table_start, _table_count = _scan_stack_map_payload(
+            bytes(data), compact_budget=compact_budget,
+        )
     return count, [fn_start + 8 for _fid, fn_start, _fn_end in scanned]
 
 
@@ -323,7 +347,9 @@ def _align_up(value: int, align_log2: int) -> int:
     return (value + mask) & ~mask
 
 
-def _validate_section(sec: Section, *, relocations=None, relocation_count=None) -> None:
+def _validate_section(
+    sec: Section, *, relocations=None, relocation_count=None, compact_budget=None,
+) -> None:
     # Internal indexed-object validation supplies a fresh row iterator and its
     # exact count. Ordinary object emission continues to use the stored tuple.
     rows_origin = "parameter"
@@ -444,7 +470,12 @@ def _validate_section(sec: Section, *, relocations=None, relocation_count=None) 
             # (assemble worker + merge), so materializing them here dominated
             # link time.  The complete semantic decode+validation still guards
             # the merged table at the final executable boundary.
-            _scanned, address_offsets = _scan_stack_map_section(sec.data)
+            if compact_budget is None:
+                _scanned, address_offsets = _scan_stack_map_section(sec.data)
+            else:
+                _scanned, address_offsets = _scan_stack_map_section(
+                    sec.data, compact_budget=compact_budget,
+                )
         except PreciseStackMapError as exc:
             raise MachOEmitError(f"invalid __pcc_stackmaps payload: {exc}") from exc
         # A row that is not a Relocation used to surface as a bare
@@ -789,6 +820,7 @@ def emit_object(
     sections: list[Section],
     *,
     undefined: list[str] = (),
+    weak_undefined: tuple[str, ...] = (),
     minos: tuple[int, int] = (12, 0),
 ) -> bytes:
     """Emit an arm64 MH_OBJECT with the given sections."""
@@ -827,6 +859,10 @@ def emit_object(
         if name in seen:
             raise MachOEmitError(f"symbol {name!r} both defined and undefined")
         seen.add(name)
+
+    weak_names = set(weak_undefined)
+    if not weak_names.issubset(undefined):
+        raise MachOEmitError("weak references must name undefined symbols")
 
     # Section addresses: one unnamed segment, vmaddr accumulates across
     # sections with each section's alignment (matches as(1)); zerofill
@@ -1158,7 +1194,7 @@ def emit_object(
             "n_strx": strx[name],
             "n_type": spec.N_UNDF | spec.N_EXT,
             "n_sect": spec.NO_SECT,
-            "n_desc": 0,
+            "n_desc": spec.N_WEAK_REF if name in weak_names else 0,
             "n_value": 0,
         })
         for name in undef_ordered

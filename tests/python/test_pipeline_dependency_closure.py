@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 def test_pipeline_dependency_closure_facade_has_single_function_owners():
-    from pcc.py_frontend import pipeline
-    from pcc.py_frontend import pipeline_dependency_closure as closure
+    from pcc.frontends.python import pipeline
+    from pcc.frontends.python import pipeline_dependency_closure as closure
 
     for name in (
         "_validate_package_site_no_libpython_abi",
@@ -22,7 +22,7 @@ def test_pipeline_dependency_closure_facade_has_single_function_owners():
 
 
 def test_package_import_targets_follow_real_relative_source(tmp_path):
-    from pcc.py_frontend.pipeline_dependency_closure import _package_import_targets
+    from pcc.frontends.python.pipeline_dependency_closure import _package_import_targets
 
     package = tmp_path / "pkg"
     package.mkdir()
@@ -40,7 +40,7 @@ def test_package_import_targets_follow_real_relative_source(tmp_path):
 
 
 def test_import_classification_uses_shared_policy_tables():
-    from pcc.py_frontend.pipeline_dependency_closure import _classify_python_import
+    from pcc.frontends.python.pipeline_dependency_closure import _classify_python_import
 
     assert _classify_python_import("typing") == "compile_time_only"
     assert _classify_python_import("os") == "builtin_native_dispatch"

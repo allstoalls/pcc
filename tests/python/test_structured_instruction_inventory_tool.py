@@ -37,7 +37,7 @@ def test_fallback_opcode_inventory_counts_only_text_instructions() -> None:
 
 def test_inventory_distinguishes_producer_words_from_text_reencoding(tmp_path, monkeypatch):
     import json
-    from pcc.llvm_capi import ir
+    from pcc.ir import ir
     from pcc.backend.self_backend_indexed_codec import encode_indexed_module_file
 
     monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "1")

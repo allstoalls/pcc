@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pcc.py_frontend import parser
-from pcc.py_frontend.py_ast import Assign, Attr, Call, Name
+from pcc.frontends.python import parser
+from pcc.frontends.python.py_ast import Assign, Attr, Call, Name
 
 
 def test_call_splat_source_shape_is_preserved():

@@ -1,11 +1,14 @@
 from pathlib import Path
+import platform
+import re
 import subprocess
 import sys
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.types import PyFrontendError
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.types import PyFrontendError
+from tests.owned_ir_validation import verify_ir_text
 
 
 def test_pipeline_import_defers_runtime_abi_initialization():
@@ -13,8 +16,8 @@ def test_pipeline_import_defers_runtime_abi_initialization():
         [
             sys.executable,
             "-c",
-            "import sys; import pcc.py_frontend.pipeline; "
-            "raise SystemExit(int('pcc.py_frontend.codegen.runtime_abi' in sys.modules))",
+            "import sys; import pcc.frontends.python.pipeline; "
+            "raise SystemExit(int('pcc.frontends.python.codegen.runtime_abi' in sys.modules))",
         ],
         capture_output=True,
         text=True,
@@ -23,7 +26,7 @@ def test_pipeline_import_defers_runtime_abi_initialization():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def _compile_freestanding(tmp_path: Path, source: str) -> str:
+def _compile_freestanding(tmp_path: Path, source: str, target_triple=None) -> str:
     src = tmp_path / "kernel.py"
     out = tmp_path / "kernel.ll"
     src.write_text(source, encoding="utf-8")
@@ -33,8 +36,53 @@ def _compile_freestanding(tmp_path: Path, source: str) -> str:
         emit_llvm_only=True,
         libpython_mode="off",
         python_library=True,
+        target_triple=target_triple,
     )
     return out.read_text(encoding="utf-8")
+
+
+def _function(ir_text: str, name: str):
+    module = verify_ir_text(ir_text)
+    functions = [fn for fn in module.functions if fn.name == name]
+    assert len(functions) == 1, name
+    return functions[0]
+
+
+def _function_body(ir_text: str, name: str) -> str:
+    _function(ir_text, name)
+    match = re.search(
+        r"^define\b[^\n]*@" + re.escape(name) + r"\([^\n]*\)[^\n]*\{\n(.*?)^\}",
+        ir_text,
+        re.MULTILINE | re.DOTALL,
+    )
+    assert match is not None, name
+    return match.group(1)
+
+
+def _assert_export(ir_text: str, name: str, return_type: str, parameters=()):
+    from pcc.backend.self_backend_parse import parse_ir_type
+
+    function = _function(ir_text, name)
+    assert function.is_global
+    assert function.ret_type == parse_ir_type(return_type)
+    assert [(arg.type, arg.name) for arg in function.args] == [
+        (parse_ir_type(ty), argument.removeprefix("%")) for ty, argument in parameters
+    ]
+
+
+def _assert_call(ir_text: str, owner: str, callee: str, return_type: str):
+    from pcc.backend.self_backend_kernel import get_indexed_function_kernel
+    from pcc.backend.self_backend_parse import parse_ir_type
+
+    kernel = get_indexed_function_kernel(_function(ir_text, owner))
+    calls = [
+        kernel.diagnostic_call_data(call_id)
+        for call_id in range(len(kernel.call_scalars) // 8)
+        if kernel.call_texts[kernel.call_header(call_id).second] == callee
+    ]
+    assert len(calls) == 1, (owner, callee)
+    assert calls[0][1] == parse_ir_type(return_type)
+    return calls[0]
 
 
 def test_freestanding_atomic_module_has_only_exported_intrinsic_body(tmp_path):
@@ -49,12 +97,10 @@ def test_freestanding_atomic_module_has_only_exported_intrinsic_body(tmp_path):
         "    return old + atomic_load_i64(slot, 0, \"acquire\")\n",
     )
 
-    assert "define i64 @kernel_add(ptr %slot)" in ir_text
+    _assert_export(ir_text, "kernel_add", "i64", [("ptr", "%slot")])
     assert "atomicrmw add" in ir_text
     assert "load atomic i64" in ir_text
-    assert "define i32 @main" not in ir_text
-    assert "define void @_pcc_py_module_top_" not in ir_text
-    assert "define void @_pcc_py_module_fini_" not in ir_text
+    assert [fn.name for fn in verify_ir_text(ir_text).functions] == ["kernel_add"]
 
 
 def test_freestanding_module_stays_runtime_independent_with_threads_enabled(
@@ -70,7 +116,7 @@ def test_freestanding_module_stays_runtime_independent_with_threads_enabled(
         "    return value\n",
     )
 
-    body = ir_text.split("define i64 @identity", 1)[1].split("}\n", 1)[0]
+    body = _function_body(ir_text, 'identity')
     assert "pcc_thread_stop_requested" not in body
     assert "pcc_thread_safepoint" not in body
 
@@ -85,7 +131,7 @@ def test_freestanding_module_docstring_is_compile_time_only(tmp_path):
         "def identity(value: i64) -> i64:\n"
         "    return value\n",
     )
-    assert "define i64 @identity(i64 %value)" in ir_text
+    _assert_export(ir_text, "identity", "i64", [("i64", "%value")])
     assert "raw kernel documentation" not in ir_text
 
 
@@ -100,7 +146,7 @@ def test_freestanding_pointer_abi_fallthrough_uses_raw_null_not_py_none(tmp_path
         "        return value\n"
         "    return value\n",
     )
-    body = ir_text.split("define ptr @select_ptr", 1)[1].split("}\n", 1)[0]
+    body = _function_body(ir_text, 'select_ptr')
     assert "@py_None" not in body
     assert "ret ptr %value" in body
 
@@ -116,14 +162,17 @@ def test_freestanding_void_unsafe_intrinsic_does_not_materialize_py_none(tmp_pat
         "    store_i8(dst, 0, value)\n",
     )
 
-    body = ir_text.split("@write_byte", 1)[1].split("}\n", 1)[0]
+    body = _function_body(ir_text, "write_byte")
     assert "store i8" in body
     assert "@py_None" not in body
 
 
-@pytest.mark.parametrize("emitter", ["llvm", "self"])
+@pytest.mark.parametrize("target", [
+    "arm64-apple-darwin", "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc",
+])
 def test_freestanding_object_has_no_undefined_runtime_or_libc_symbols(
-    tmp_path, emitter
+    tmp_path, target
 ):
     ir_text = _compile_freestanding(
         tmp_path,
@@ -137,32 +186,60 @@ def test_freestanding_object_has_no_undefined_runtime_or_libc_symbols(
         "def entry(slot) -> i64:\n"
         "    old: i64 = atomic_rmw_i64(\"add\", slot, 0, 1, \"acq_rel\")\n"
         "    return old + helper(slot)\n",
+        target_triple=target,
     )
-    obj = tmp_path / ("kernel_" + emitter + ".o")
-    if emitter == "llvm":
-        source = tmp_path / "kernel.ll"
-        source.write_text(ir_text, encoding="utf-8")
+    from pcc.backend.owned_object_emit import emit_owned_object
+
+    data = emit_owned_object(ir_text, target)
+    if "darwin" in target:
+        from pcc.backend.macho_spec import N_TYPE, N_UNDF, parse_object
+
+        undefined = [s["name"] for s in parse_object(data).symbols()
+                     if s["name"] and s["n_type"] & N_TYPE == N_UNDF]
+    elif "windows" in target:
+        from pcc.backend.coff_x86_64 import parse_object
+
+        undefined = [s.name for s in parse_object(data).symbols if s.name and s.section == 0]
     else:
-        from pcc.backend.self_backend_dispatch import emit_self_asm
+        from pcc.backend.elf_x86_64 import parse_relocatable
 
-        source = tmp_path / "kernel.s"
-        source.write_text(emit_self_asm(ir_text), encoding="utf-8")
+        undefined = [s.name for s in parse_relocatable(data).symbols if s.name and s.section_index == 0]
+    assert undefined == []
 
-    build = subprocess.run(
-        ["clang", "-c", str(source), "-o", str(obj)],
-        capture_output=True,
-        text=True,
-        timeout=30,
+
+@pytest.mark.pcc_gate(unavailable=None if sys.platform == "darwin" and platform.machine() == "arm64" else "requires Darwin arm64")
+def test_freestanding_atomic_export_links_and_executes(tmp_path):
+    from pcc.backend.macho_exec import link_executable
+    from pcc.backend.owned_object_emit import emit_owned_object
+
+    triple = "arm64-apple-darwin"
+    ir_text = _compile_freestanding(
+        tmp_path,
+        "from pcc.extern import c_abi_export\n"
+        "from pcc.unsafe import atomic_load_i64, atomic_rmw_i64\n"
+        "__pcc_freestanding__ = True\n"
+        "@c_abi_export('kernel_add')\n"
+        "def kernel_add(slot) -> i64:\n"
+        "    old: i64 = atomic_rmw_i64('add', slot, 0, 1, 'acq_rel')\n"
+        "    return old + atomic_load_i64(slot, 0, 'acquire')\n",
+        target_triple=triple,
     )
-    assert build.returncode == 0, build.stdout + build.stderr
-    undefined = subprocess.run(
-        ["nm", "-u", str(obj)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert undefined.returncode == 0, undefined.stdout + undefined.stderr
-    assert undefined.stdout.strip() == ""
+    caller = '''declare i64 @kernel_add(ptr)
+define i32 @main() {
+entry:
+  %slot = alloca i64, align 8
+  store i64 3, ptr %slot, align 8
+  %result = call i64 @kernel_add(ptr %slot)
+  %exit = trunc i64 %result to i32
+  ret i32 %exit
+}
+'''
+    output = tmp_path / "atomic"
+    output.write_bytes(link_executable([
+        emit_owned_object(ir_text, triple), emit_owned_object(caller, triple),
+    ], entry="_main"))
+    output.chmod(0o755)
+    assert subprocess.run([str(output)], timeout=10).returncode == 7
 
 
 def test_freestanding_directive_requires_no_libpython_library_mode(tmp_path):
@@ -234,7 +311,7 @@ def test_freestanding_function_docstring_is_compile_time_only(tmp_path):
         "    '''function metadata only'''\n"
         "    return value + 1\n",
     )
-    assert "define i64 @documented(i64 %value)" in ir_text
+    _assert_export(ir_text, "documented", "i64", [("i64", "%value")])
     assert "function metadata only" not in ir_text
 
 
@@ -247,7 +324,7 @@ def test_freestanding_literal_shift_has_no_managed_error_edge(tmp_path):
         "def high_byte(value: i64) -> i64:\n"
         "    return (value >> 8) & 255\n",
     )
-    body = ir_text.split("define i64 @high_byte", 1)[1].split("}\n", 1)[0]
+    body = _function_body(ir_text, 'high_byte')
     assert "ashr i64 %value, 8" in body
     assert "py_exc_new" not in body
 
@@ -269,8 +346,7 @@ def test_freestanding_augmented_int_loop_stays_in_raw_i64_lane(tmp_path):
         "        index += 1\n"
         "    return -1\n",
     )
-    body = ir_text.split("define i32 @copy_until_zero", 1)[1]
-    body = body.split("}\n", 1)[0]
+    body = _function_body(ir_text, 'copy_until_zero')
     assert "add i64" in body
     assert "pcc_gc_frame_enter" not in body
     assert "py_int_" not in body
@@ -287,7 +363,7 @@ def test_freestanding_explicit_i64_annotation_owns_machine_arithmetic(tmp_path):
         "def advance(value: i64) -> i64:\n"
         "    return value + 1\n",
     )
-    body = ir_text.split("define i64 @advance", 1)[1].split("}\n", 1)[0]
+    body = _function_body(ir_text, 'advance')
     assert "add i64 %value, 1" in body
     assert "py_int_" not in body
     assert "pcc_gc_" not in body
@@ -305,7 +381,7 @@ def test_freestanding_explicit_u64_uses_unsigned_machine_operations(tmp_path):
         "        return 0\n"
         "    return (value // 3) >> 1\n",
     )
-    body = ir_text.split("define i64 @scale", 1)[1].split("}\n", 1)[0]
+    body = _function_body(ir_text, 'scale')
     assert "icmp ult i64 %value, %limit" in body
     assert "udiv i64 %value, 3" in body
     assert "lshr i64" in body
@@ -420,7 +496,7 @@ def test_freestanding_u64_max_default_is_explicit_and_in_range(tmp_path):
         f"def identity(value: u64 = {(1 << 64) - 1}) -> u64:\n"
         "    return value\n",
     )
-    body = ir_text.split("define i64 @identity", 1)[1].split("}\n", 1)[0]
+    body = _function_body(ir_text, 'identity')
     assert "py_int_" not in body
     assert "pcc_gc_" not in body
 
@@ -451,8 +527,8 @@ def test_freestanding_raw_division_traps_without_managed_runtime(tmp_path):
         "def quotient(lhs: i64, rhs: i64) -> i64:\n"
         "    return lhs // rhs\n",
     )
-    body = ir_text.split("define i64 @quotient", 1)[1].split("}\n", 1)[0]
-    assert "call void @llvm.trap()" in body
+    body = _function_body(ir_text, 'quotient')
+    _assert_call(ir_text, "quotient", "llvm.trap", "void")
     assert "sdiv i64 %lhs, %rhs" in body
     assert "@py_exc_new" not in body
     assert "@py_int_" not in body
@@ -537,8 +613,9 @@ def test_freestanding_rejects_managed_runtime_and_allows_verified_local_calls(tm
         "def entry(value: i64) -> i64:\n"
         "    return helper(value)\n",
     )
-    assert "define i64 @helper(i64 %value)" in ir_text
-    assert "call i64 @helper(i64 %value)" in ir_text
+    _assert_export(ir_text, "helper", "i64", [("i64", "%value")])
+    call = _assert_call(ir_text, "entry", "helper", "i64")
+    assert call[4][0][1] == "value"
 
 
 def test_freestanding_verified_local_gc_abi_call_is_not_an_external_escape(tmp_path):
@@ -553,8 +630,9 @@ def test_freestanding_verified_local_gc_abi_call_is_not_an_external_escape(tmp_p
         "def entry(value: i64) -> i64:\n"
         "    return helper(value)\n",
     )
-    assert "define i64 @pcc_gc_local_helper(i64 %value)" in ir_text
-    assert "call i64 @pcc_gc_local_helper(i64 %value)" in ir_text
+    _assert_export(ir_text, "pcc_gc_local_helper", "i64", [("i64", "%value")])
+    call = _assert_call(ir_text, "entry", "pcc_gc_local_helper", "i64")
+    assert call[4][0][1] == "value"
 
 
 def test_freestanding_verified_local_gc_callback_address_is_not_an_external_escape(
@@ -573,8 +651,11 @@ def test_freestanding_verified_local_gc_callback_address_is_not_an_external_esca
         "def probe(obj) -> i64:\n"
         "    return visit(obj, callback, null())\n",
     )
-    assert "@pcc_gc_local_callback to ptr" in ir_text
-    assert "call i64 @pcc_gc_visit_object_slots" in ir_text
+    call = _assert_call(ir_text, "pcc_gc_local_callback_probe", "pcc_gc_visit_object_slots", "i64")
+    assert re.search(
+        "%" + re.escape(call[4][1][1]) + r" = bitcast [^\n]*@pcc_gc_local_callback to ptr",
+        _function_body(ir_text, "pcc_gc_local_callback_probe"),
+    )
 
 
 def test_freestanding_allows_exact_readonly_gc_runtime_abi_import(tmp_path):
@@ -589,8 +670,8 @@ def test_freestanding_allows_exact_readonly_gc_runtime_abi_import(tmp_path):
         "def read_fragmentation() -> i64:\n"
         "    return metric()\n",
     )
-    body = ir_text.split("define i64 @read_fragmentation", 1)[1].split("}\n", 1)[0]
-    assert "call i64 @pcc_gc_backend4_fragmentation_score()" in body
+    body = _function_body(ir_text, 'read_fragmentation')
+    _assert_call(ir_text, "read_fragmentation", "pcc_gc_backend4_fragmentation_score", "i64")
 
 
 def test_freestanding_allows_only_registered_gc_cross_object_abi_imports(tmp_path):
@@ -626,14 +707,15 @@ def test_freestanding_allows_only_registered_gc_cross_object_abi_imports(tmp_pat
         "    index_remove(obj)\n"
         "    return result\n",
     )
-    body = ir_text.split("define i64 @tracking_probe", 1)[1].split("}\n", 1)[0]
-    assert "call void @pcc_thread_safepoint()" in body
-    assert "call i64 @pcc_threads_enabled()" in body
-    assert "@pcc_runtime_tripwire_fail(ptr %obj" in body
-    assert "call i64 @pcc_gc_granule_is_object_start(ptr %obj)" in body
-    assert "call i64 @pcc_gc_granule_object_retire(ptr %obj)" in body
-    assert "call i64 @py_gc_index_insert(ptr %obj, ptr %node)" in body
-    assert "call ptr @py_gc_index_remove(ptr %obj)" in body
+    body = _function_body(ir_text, 'tracking_probe')
+    for callee, result in [
+        ("pcc_thread_safepoint", "void"), ("pcc_threads_enabled", "i64"),
+        ("pcc_runtime_tripwire_fail", "void"),
+        ("pcc_gc_granule_is_object_start", "i64"),
+        ("pcc_gc_granule_object_retire", "i64"),
+        ("py_gc_index_insert", "i64"), ("py_gc_index_remove", "ptr"),
+    ]:
+        _assert_call(ir_text, "tracking_probe", callee, result)
 
 
 @pytest.mark.parametrize(
@@ -705,7 +787,7 @@ def test_freestanding_allows_only_registered_literal_gc_global_imports(tmp_path)
         "def read_gc_debt() -> i64:\n"
         "    return load_i64(global_addr('pcc_gc_debt_bytes'), 0)\n",
     )
-    body = ir_text.split("define i64 @read_gc_debt", 1)[1].split("}\n", 1)[0]
+    body = _function_body(ir_text, 'read_gc_debt')
     assert "@pcc_gc_debt_bytes" in body
 
     with pytest.raises(pipeline.PyPipelineError, match="managed-runtime reference"):
@@ -721,14 +803,14 @@ def test_freestanding_allows_only_registered_literal_gc_global_imports(tmp_path)
 
 
 def test_freestanding_runtime_global_registry_is_a_static_pcc1_import():
-    from pcc.py_frontend.pipeline_freestanding import (
+    from pcc.frontends.python.pipeline_freestanding import (
         freestanding_gc_runtime_global_imports,
     )
-    from pcc.py_frontend.codegen import layer1_support
+    from pcc.frontends.python.codegen import layer1_support
 
     exports = layer1_support._PCC_FRONTEND_STATIC_NATIVE_EXPORTS
     assert "is_freestanding_gc_runtime_global" in (
-        exports["pcc.py_frontend.codegen.runtime_abi"]
+        exports["pcc.frontends.python.codegen.runtime_abi"]
     )
     assert freestanding_gc_runtime_global_imports(
         "global_addr('pcc_gc_debt_bytes')"
@@ -736,14 +818,14 @@ def test_freestanding_runtime_global_registry_is_a_static_pcc1_import():
 
 
 def test_freestanding_readonly_gc_registry_is_a_static_pcc1_import():
-    from pcc.py_frontend.pipeline_freestanding import (
+    from pcc.frontends.python.pipeline_freestanding import (
         freestanding_readonly_gc_runtime_imports,
     )
-    from pcc.py_frontend.codegen import layer1_support
+    from pcc.frontends.python.codegen import layer1_support
 
     exports = layer1_support._PCC_FRONTEND_STATIC_NATIVE_EXPORTS
     assert "is_freestanding_gc_readonly_runtime_import" in (
-        exports["pcc.py_frontend.codegen.runtime_abi"]
+        exports["pcc.frontends.python.codegen.runtime_abi"]
     )
     assert freestanding_readonly_gc_runtime_imports(
         "metric = extern('pcc_gc_relocation_set_size', (), c_int64)"
@@ -751,14 +833,14 @@ def test_freestanding_readonly_gc_registry_is_a_static_pcc1_import():
 
 
 def test_freestanding_cross_object_gc_registry_is_a_static_pcc1_import():
-    from pcc.py_frontend.pipeline_freestanding import (
+    from pcc.frontends.python.pipeline_freestanding import (
         freestanding_gc_cross_object_runtime_imports,
     )
-    from pcc.py_frontend.codegen import layer1_support
+    from pcc.frontends.python.codegen import layer1_support
 
     exports = layer1_support._PCC_FRONTEND_STATIC_NATIVE_EXPORTS
     assert "is_freestanding_gc_cross_object_runtime_import" in (
-        exports["pcc.py_frontend.codegen.runtime_abi"]
+        exports["pcc.frontends.python.codegen.runtime_abi"]
     )
     assert freestanding_gc_cross_object_runtime_imports(
         "metric = extern('pcc_gc_scheduler_root_count', (), c_int64)"
@@ -808,8 +890,7 @@ def test_freestanding_accepts_generated_abi_constants_as_compile_time_scaffold(
 ):
     source = (
         Path(__file__).resolve().parents[2]
-        / "pcc"
-        / "py_runtime"
+        / "pcc" / "runtime"
         / "py"
         / "freestanding_gc_sweep_slots.py"
     )
@@ -822,7 +903,7 @@ def test_freestanding_accepts_generated_abi_constants_as_compile_time_scaffold(
         python_library=True,
     )
     ir_text = out.read_text(encoding="utf-8")
-    assert "define i64 @pcc_gc_tracing_is_sweep_candidate" in ir_text
+    assert _function(ir_text, "pcc_gc_tracing_is_sweep_candidate").ret_type.bits == 64
     managed_calls = [
         line
         for line in ir_text.splitlines()

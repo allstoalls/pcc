@@ -37,13 +37,13 @@ because its persisted inventory row predates that access.
 Use the host Python associated with pcc for the manual interface:
 
 ```bash
-env -u LC_ALL uv run python -m pcc.tools.compiler_cache_retention status \
+uv run python -m pcc.tools.compiler_cache_retention status \
   --root build/bootstrap-pytest-object-cache
 
-env -u LC_ALL uv run python -m pcc.tools.compiler_cache_retention prune \
+uv run python -m pcc.tools.compiler_cache_retention prune \
   --root build/bootstrap-pytest-object-cache --dry-run
 
-env -u LC_ALL uv run python -m pcc.tools.compiler_cache_retention prune \
+uv run python -m pcc.tools.compiler_cache_retention prune \
   --root build/bootstrap-pytest-object-cache
 ```
 

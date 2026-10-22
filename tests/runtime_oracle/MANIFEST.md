@@ -1,7 +1,7 @@
 # Runtime Oracle Corpus
 
 This directory holds the smallest curated Python programs that exercise
-each `pcc/py_runtime/src/*.c` module's public surface. The **differential
+each `pcc/runtime/src/*.c` module's public surface. The **differential
 oracle harness** (Phase 0, task #176) runs each program through three
 runtime-source paths:
 

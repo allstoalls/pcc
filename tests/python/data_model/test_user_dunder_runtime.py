@@ -6,7 +6,7 @@ import textwrap
 from pathlib import Path
 
 
-def test_user_dunder_str_hash_iter_next_native(tmp_path, pcc_py_runtime_archive):
+def test_user_dunder_str_hash_iter_next_native(tmp_path, pcc_runtime_archive):
     src = tmp_path / "dunder_probe.c"
     exe = tmp_path / "dunder_probe"
     src.write_text(
@@ -83,11 +83,11 @@ def test_user_dunder_str_hash_iter_next_native(tmp_path, pcc_py_runtime_archive)
         [
             os.environ.get("CC", "cc"),
             "-I",
-            str(pcc_py_runtime_archive.parent / "include"),
+            str(pcc_runtime_archive.parent / "include"),
             "-I",
-            str(pcc_py_runtime_archive.parent / "src"),
+            str(pcc_runtime_archive.parent / "src"),
             str(src),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(exe),
@@ -99,8 +99,8 @@ def test_user_dunder_str_hash_iter_next_native(tmp_path, pcc_py_runtime_archive)
 
 
 def test_user_dunder_sources_are_wired():
-    dunder_py = Path("pcc/py_runtime/py/py_dunder.py").read_text(encoding="utf-8")
-    iter_py = Path("pcc/py_runtime/py/py_iter.py").read_text(encoding="utf-8")
+    dunder_py = Path("pcc/runtime/py/py_dunder.py").read_text(encoding="utf-8")
+    iter_py = Path("pcc/runtime/py/py_iter.py").read_text(encoding="utf-8")
 
     assert '@c_abi_export("py_user_hash_dispatch")' in dunder_py
     assert "py_user_iter_dispatch" in iter_py
@@ -108,7 +108,7 @@ def test_user_dunder_sources_are_wired():
 
 
 def test_iterator_runtime_guards_silent_null_before_state_cleanup():
-    iter_py = Path("pcc/py_runtime/py/py_iter.py").read_text(encoding="utf-8")
+    iter_py = Path("pcc/runtime/py/py_iter.py").read_text(encoding="utf-8")
 
     messages = (
         "iter(callable, sentinel) received NULL operand",
@@ -135,11 +135,13 @@ def test_iterator_runtime_guards_silent_null_before_state_cleanup():
         for message in messages[-3:]:
             assert message in source
 
+    # The callable iterator reloads its moving roots for the call and
+    # retires the argument root only after the NULL-result guard.
     for source, call, guard, cleanup in ((
             iter_py,
-            "result = py_obj_call(callable, args, none_obj)",
+            "result = py_obj_call(\n            _iter_reload_moving_root(callable_slot, callable_handle),",
             "callable iterator returned NULL without setting an exception",
-            "py_decref(args)",
+            "_iter_release_owned_root(args_slot, args_handle)",
         ),):
         call_pos = source.index(call)
         guard_pos = source.index(guard, call_pos)
@@ -149,15 +151,16 @@ def test_iterator_runtime_guards_silent_null_before_state_cleanup():
     py_item_guard = iter_py.index(
         "iterator element lookup returned NULL without setting an exception"
     )
+    # The cursor advances by the item's width only after the guard.
     assert py_item_guard < iter_py.index(
-        "store_i64(it_obj, 24, index + 1)", py_item_guard
+        "store_i64(it_obj, 24, index + step)", py_item_guard
     )
 
     for source, allocation, guard, cleanup in ((
             iter_py,
             "index_obj = py_int_from_i64(index)",
             "enumerate could not allocate an index object",
-            "py_decref(item)",
+            "_iter_release_owned_root(item_slot, item_handle)",
         ),):
         allocation_pos = source.index(allocation)
         guard_pos = source.index(guard, allocation_pos)

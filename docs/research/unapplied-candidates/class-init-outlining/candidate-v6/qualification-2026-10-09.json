@@ -1,0 +1,96 @@
+{
+  "application_status": "UNAPPLIED",
+  "counts": {
+    "collected": 29,
+    "deselected": 0,
+    "errors": 0,
+    "failed": 0,
+    "passed": 29,
+    "selected_unrun": 0,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  },
+  "date_utc": "2026-10-09",
+  "guards": {
+    "cleanup": "CLEAN; root reaped; ECHILD; shared lock released",
+    "continuous_free_reserve_bytes": 4294967296,
+    "denied_audit_events": 0,
+    "exit_code": 0,
+    "external_full_source_and_base_seals": "PASS",
+    "guard_elapsed_seconds": 11.503601681000873,
+    "guard_status": "COMPLETE",
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "max_net_disk_growth_bytes": 536870912,
+    "peak_sampled_process_rss_bytes": 137109504,
+    "sampled_rss_is_not_a_hard_rss_cap": true,
+    "source_and_import_boundary_checks": "PASS",
+    "timeout_seconds": 300
+  },
+  "packet": {
+    "manifest_sha256": "83a4b33385806d8c91f7cc1972e7623246610fa252642a540af69b303693bed5",
+    "published_commit": "88b5abb4979ca472cb077ed13a9f59ff42238f8f",
+    "review_at_admission": "Source-clear; this receipt records the subsequent actual gate",
+    "successor_patch_sha256": "527b776a9f0b50945ae6807aae6cdc6b807e2ac6bcd3840ac9a24c55b4fbd1f6"
+  },
+  "predecessor_failures_preserved": [
+    {
+      "classification": "Production FunctionAttributes membership TypeError; fixed in V5",
+      "counts": {
+        "collected": 27,
+        "failed": 1,
+        "passed": 0,
+        "unrun": 26
+      },
+      "qualification_sha256": "8c2ed55e5e8ddd42d398531c3bbee9ca5adb25d4cceaaa09e526c871c75824d7",
+      "receipt_commit": "79011c00553de17cfdb0f7e8169842a7b2e73ae8",
+      "version": "V4"
+    },
+    {
+      "classification": "Cross-block text-order assertion failed; subsequent retained-CFG source readback identified an oracle error; corrected in V6",
+      "counts": {
+        "collected": 29,
+        "failed": 1,
+        "passed": 10,
+        "unrun": 18
+      },
+      "qualification_sha256": "3a1d9955fedf62016696cb7e21edf6836390a9be8327a47c5afca1a281997c1f",
+      "receipt_commit": "cd6b466d3de99cf96cfa08f2c9f7d33100451a32",
+      "version": "V5"
+    }
+  ],
+  "receipts": {
+    "bootstrap_sha256": "6d5c7dc6a120b619db1ee3a80b40e4779668d22ce69d96d78aaae10a398a9860",
+    "collection_sha256": "f44ddf587ae7e4745e883adcd6e13f2de9ec2666ed3bfef6b3df9b0d0140713c",
+    "guard_sha256": "49864beada3c02d35e0e6745b1300bc48f5bb9e4f1d55a4aa06683635d6b6715",
+    "junit_sha256": "9f4f907120fee42e1fe55a0e6ce4727604978ebc8c128ffd230238d010006162",
+    "payload_result_sha256": "d04a051fa70b68a87cdf8dadddbc1fa95a4b76f3a9a88bdb3fd6046371449d2a",
+    "qualification_sha256": "98e005e61093b3d89b2df47336fc33aa2023fad07adec3ceb71b197764890db7"
+  },
+  "schema": "pcc.class-init-outline-host-public-qualification.v6",
+  "scope": [
+    "Exactly 29 collected host structural cases passed with -x, -n0, explicit empty addopts and no exclusions, skips or xfails.",
+    "Coverage includes shared-body/default-and-explicit-inline shape, real missing-noinline rejection, constructor/root-operation oracle comparison, CFG-aware source order, excluded shapes, enclosing-state restoration and three error-status epilogues.",
+    "V6 changes only the source-order test relative to V5; both production postimages, complete pcc tree and observed compiler checksum remain identical.",
+    "This is real frontend parsing, inference, IR generation, owned verification and passes on small host fixtures; it does not establish runtime or emitted-native semantics.",
+    "The original V4 and V5 failed snapshots and receipts remain unchanged.",
+    "Object emission, runtime build, native/FFI execution, real heavy-module mechanism, performance, pcc1, Mac execution and full Stage1 remain UNRUN.",
+    "The new helper ABI and closed-world native compiler remain unqualified; production is not applied."
+  ],
+  "source_identity": {
+    "base_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+    "base_pcc_git_tree": "d234174fbac80575ea822f6100f65fe914dd4498",
+    "candidate_inventory_sha256": "98d5eff5e571bf80e863f665284a568b5d10b1f19b4ff02c89bf79aed5ba9136",
+    "candidate_pcc_git_tree": "dc63c2a946f533f7b31ce63db2f759a044fdc37f",
+    "codegen_checksum": "68581b5d714a4d11835199b80fd6cbcb6e3178245c79dcef6843d73469b1a5e5",
+    "postimages": {
+      "pcc/frontends/python/codegen/class_gen.py": "cbd36884dbb5d118e0da4148ed50b26223ddbfe7f75a6ad3604d2a697f9be8af",
+      "pcc/frontends/python/codegen/generation_lowering.py": "30d38936b4f4dbc1259de9993557c7ccfeca491f3f0546820382185858d56c5b",
+      "tests/python/test_class_init_outlining.py": "2c361ba0e0893a8a6775e9449f2904e043306007de8cabeab967fd9a7d61d168"
+    },
+    "production_base_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+    "whole_source_caveat": "Retained cold-slot compiler snapshot; complete pcc tree matches published02b9. Full source is not a02b9 checkout: older unrelated native test f391 and docs/bootstrap remain."
+  },
+  "status": "PASS"
+}

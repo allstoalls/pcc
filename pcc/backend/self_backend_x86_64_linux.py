@@ -11,7 +11,7 @@ intentionally narrow and explicit:
 - direct calls
 - finite ELF TLS definitions/accesses via the initial-exec model
 - the `pcc.unsafe.syscall6` inline-asm shape (musl x86_64 syscall ABI)
-- i32/i64 atomics (`load atomic`, `store atomic`, `atomicrmw`
+- i8/i16/i32/i64 atomics (`load atomic`, `store atomic`, `atomicrmw`
   add/sub/and/or/xchg, `cmpxchg`, `fence`) via x86-TSO `mov`/`xchg`/
   `lock xadd`/`lock cmpxchg`/`mfence`
 - `ret` / `ret void`
@@ -20,21 +20,33 @@ Anything outside this slice still raises ``BackendUnavailable`` instead of
 guessing.
 """
 
-import struct
-
 from . import BackendUnavailable
 from .code_profile import apply_function_order_profile
+from .precise_stackmap import precise_stackmap_tables_enabled
 from .self_backend_emit import emit_function_blocks
-from .self_backend_instruction_dispatch import emit_instruction_dispatch
-from .self_backend_kernel import get_indexed_function_kernel
+from .self_backend_float_bits import (
+    float32_to_bits,
+    float64_to_bits,
+)
+from .wide_float import encode_float_bits
+from .self_backend_instruction_dispatch import (
+    emit_instruction_dispatch,
+    emit_instruction_dispatch_parts,
+)
+from .self_backend_kernel import IndexedFunctionKernel, get_indexed_function_kernel
 from .self_backend_aarch64_darwin_symbols import sanitize_label
 from .self_backend_ir import (
     GlobalDef,
+    PARSED_INSTRUCTION_KINDS,
+    ParsedBlock,
     ParsedFunction,
     ParsedInstr,
     TypeDesc,
     _align_to,
+    _interned_operands,
     aggregate_member_info,
+    clear_text_key_mapping,
+    reset_operand_intern,
 )
 from .self_backend_module_symbols import PreparedModuleSymbols
 from .self_backend_parse import (
@@ -46,7 +58,7 @@ from .self_backend_parse import (
 from .self_backend_prepare import prepare_module_for_target
 from .self_backend_precise_stackmaps import (
     FunctionStackMapPlan,
-    build_stack_map_plans,
+    build_function_stack_map_plan,
     render_x86_64_stack_map_section,
 )
 from .self_backend_target_passes import run_self_target_memory_pass_pipeline
@@ -58,9 +70,17 @@ from .self_backend_x86_64_linux_data import (
     validate_x86_tls_global,
     validate_x86_tls_globals,
 )
+from .x86_64_frame_registers import (
+    CALLEE_SAVED_AREA_SIZE,
+    keep_frame_slots_in_registers,
+)
+from .x86_64_register_copies import forward_register_copies
 
 _WINDOWS_ABI = False
 _WINDOWS_SCRATCH_BASE = 0
+# Instruction-selection tests read the selector's own text with this off;
+# emission always runs the register, jump and copy passes over it.
+_POST_SELECTION_PASSES = True
 _X86_EMISSION_ACTIVE = False
 
 _MODULE_SYMBOLS = PreparedModuleSymbols(
@@ -71,6 +91,20 @@ _MODULE_SYMBOLS = PreparedModuleSymbols(
 )
 _VARARG_FUNCTIONS: frozenset[str] = frozenset()
 _TLS_GLOBALS: dict[str, GlobalDef] = {}
+
+def retire_x86_module_state() -> None:
+    """Drop prior-module roots only after assembly AND stack-map encoding."""
+    global _MODULE_SYMBOLS, _TLS_GLOBALS, _VARARG_FUNCTIONS
+    if _X86_EMISSION_ACTIVE:
+        raise BackendUnavailable("cannot retire active x86 emission")
+    _MODULE_SYMBOLS = PreparedModuleSymbols(
+        internal_prefix="", defined_symbols=frozenset(),
+        internal_symbols=frozenset(), thread_local_symbols=frozenset(),
+    )
+    # Do not clear the former TypeParseContext or aliased dictionaries in place.
+    _TLS_GLOBALS = {}
+    _VARARG_FUNCTIONS = frozenset()
+
 
 _ARG_REGS = ("rdi", "rsi", "rdx", "rcx", "r8", "r9")
 _ARG_REGS_32 = ("edi", "esi", "edx", "ecx", "r8d", "r9d")
@@ -143,6 +177,230 @@ _GP_REG_ALIASES = {
     "r10": {1: "r10b", 2: "r10w", 4: "r10d", 8: "r10"},
     "r11": {1: "r11b", 2: "r11w", 4: "r11d", 8: "r11"},
 }
+
+
+_FRAME_TRANSFER_WIDTHS = {"QWORD": 8, "DWORD": 4, "WORD": 2, "BYTE": 1}
+_FRAME_TRANSFER_REG_SIZES = {
+    alias: size for aliases in _GP_REG_ALIASES.values() for size, alias in aliases.items()
+}
+
+
+def _parse_frame_transfer(line: str):
+    """``(is_store, width, offset, register)`` of a GP ``mov`` to or from
+    ``[rbp - N]``, or None."""
+    text = line.strip()
+    if not text.startswith("mov "):
+        return None
+    operands = text[4:]
+    comma = operands.find(", ")
+    if comma < 0:
+        return None
+    first = operands[:comma]
+    second = operands[comma + 2:]
+    for is_store, memory, register in ((True, first, second), (False, second, first)):
+        marker = memory.find(" PTR [rbp - ")
+        if marker <= 0 or not memory.endswith("]"):
+            continue
+        width = _FRAME_TRANSFER_WIDTHS.get(memory[:marker], 0)
+        offset = memory[marker + 12:-1]
+        if width and offset.isdecimal() and _FRAME_TRANSFER_REG_SIZES.get(register, 0) == width:
+            return is_store, width, int(offset), register
+    return None
+
+
+def _forward_adjacent_frame_store_load(lines: list[str]) -> list[str]:
+    """Reuse a value just stored to its frame slot instead of reloading it.
+
+    Every SSA value lives in a stack slot, so a definition is stored and its
+    next use usually reloads the same slot on the following line. The store
+    stays (the slot remains the value's home for stack maps and later uses);
+    the reload becomes a register move, or disappears when the register is
+    the same. Only adjacent lines qualify, so no label, call or other write
+    sits between them.
+    """
+    out: list[str] = []
+    index = 0
+    count = len(lines)
+    while index < count:
+        line = lines[index]
+        out.append(line)
+        if index + 1 < count:
+            store = _parse_frame_transfer(line)
+            if store is not None and store[0]:
+                load = _parse_frame_transfer(lines[index + 1])
+                if load is not None and not load[0] and load[1] == store[1] and load[2] == store[2]:
+                    if load[3] != store[3]:
+                        out.append("  mov " + load[3] + ", " + store[3])
+                    index += 2
+                    continue
+        index += 1
+    return out
+
+
+_SETCC_BRANCHES = {
+    "sete": "je", "setne": "jne", "setl": "jl", "setle": "jle", "setg": "jg",
+    "setge": "jge", "setb": "jb", "setbe": "jbe", "seta": "ja", "setae": "jae",
+}
+_BRANCH_INVERSES = {
+    "je": "jne", "jne": "je", "jl": "jge", "jge": "jl", "jle": "jg", "jg": "jle",
+    "jb": "jae", "jae": "jb", "jbe": "ja", "ja": "jbe",
+}
+def _flags_consumer(text: str) -> bool:
+    mnemonic = text.split(" ", 1)[0]
+    return mnemonic in _SETCC_BRANCHES or mnemonic in _BRANCH_INVERSES
+
+
+def _immediate_compare(move: str, compare: str, consumer: str) -> str:
+    """``cmp r10, IMM`` for ``mov r11, IMM; cmp r10, r11`` before a flags-only
+    consumer, else ``""``. ``xor r11, r11`` is the zero immediate."""
+    if not _flags_consumer(consumer):
+        return ""
+    for width_reg, compared in (("r11", "cmp r10, r11"), ("r11d", "cmp r10d, r11d")):
+        if compare != compared:
+            continue
+        immediate = ""
+        if move == "xor " + width_reg + ", " + width_reg:
+            immediate = "0"
+        elif move.startswith("mov " + width_reg + ", "):
+            immediate = move[len(width_reg) + 6:]
+        digits = immediate[1:] if immediate.startswith("-") else immediate
+        if digits.isdecimal() and -2147483648 <= int(immediate) < 2147483648:
+            return compared.split(",", 1)[0] + ", " + immediate
+    return ""
+
+
+def _fuse_x86_compare_branches(lines: list[str]) -> list[str]:
+    """Compare against small immediates directly and branch on compare flags.
+
+    The scalar compare loads its constant operand into r11, and an i1 that
+    feeds an error edge is materialized with setcc, stored to its slot and
+    tested again. ``cmp r10, IMM`` replaces the scratch move when the next
+    instruction only reads flags (so r11 is not consumed, unlike cmov), and
+    ``setcc al; mov [slot], al; test al, al; jne/je`` branches with the
+    setcc's own condition: setcc and mov leave the flags of the compare, and
+    the store stays because the slot remains the value's home.
+    """
+    out: list[str] = []
+    index = 0
+    count = len(lines)
+    while index < count:
+        line = lines[index]
+        text = line.strip()
+        if index + 2 < count and (text.startswith("mov r11") or text.startswith("xor r11")):
+            fused_compare = _immediate_compare(
+                text, lines[index + 1].strip(), lines[index + 2].strip()
+            )
+            if fused_compare:
+                out.append("  " + fused_compare)
+                index += 2
+                continue
+        if (
+            index + 3 < count
+            and text.startswith("set")
+            and text.endswith(" al")
+            and text[:-3] in _SETCC_BRANCHES
+        ):
+            store = lines[index + 1].strip()
+            branch = lines[index + 3].strip()
+            branch_mnemonic = branch.split(" ", 1)[0]
+            if (
+                store.startswith("mov BYTE PTR [rbp - ")
+                and store.endswith("], al")
+                and lines[index + 2].strip() == "test al, al"
+                and branch_mnemonic in ("jne", "je")
+            ):
+                fused = _SETCC_BRANCHES[text[:-3]]
+                if branch_mnemonic == "je":
+                    fused = _BRANCH_INVERSES[fused]
+                out.append(line)
+                out.append(lines[index + 1])
+                out.append("  " + fused + branch[len(branch_mnemonic):])
+                index += 4
+                continue
+        out.append(line)
+        index += 1
+    return out
+
+
+def _has_label_before_next_instruction(lines: list[str], index: int, target: str) -> bool:
+    """Whether ``target`` labels the next instruction, without collecting labels."""
+    label = target + ":"
+    index += 1
+    while index < len(lines):
+        line = lines[index]
+        if line:
+            if line[0] == " " or not line.endswith(":"):
+                return False
+            if line == label:
+                return True
+        index += 1
+    return False
+
+
+def _local_jump(text: str) -> tuple[str, str]:
+    """``(mnemonic, label)`` of ``jmp``/``jcc`` to a ``.L`` label, else ``("", "")``."""
+    space = text.find(" ")
+    if space < 0 or text[0] != "j" or not text.startswith(" .L", space):
+        return "", ""
+    mnemonic = text[:space]
+    if mnemonic != "jmp" and mnemonic not in _BRANCH_INVERSES and mnemonic not in (
+        "js", "jns", "jo", "jno", "jp", "jnp",
+    ):
+        return "", ""
+    return mnemonic, text[space + 1:]
+
+
+def _thread_x86_jumps(lines: list[str]) -> list[str]:
+    """Branch past jump-only blocks and drop jumps to the next label.
+
+    Phi edges and empty blocks become labels whose only instruction is a
+    ``jmp``; every branch to one is redirected to its final target, and
+    ``jcc A; jmp B; A:`` becomes ``jncc B; A:``. A ``jmp`` to a label that
+    immediately follows it is dropped. Labels stay (stack maps may name a
+    block), so a block no branch reaches anymore remains unreachable text.
+    """
+    count = len(lines)
+    forward: dict[str, str] = {}
+    pending: list[str] = []
+    for line in lines:
+        if not line:
+            continue
+        if line[0] != " ":
+            if line.endswith(":"):
+                pending.append(line[:len(line) - 1])
+            else:
+                pending = []
+            continue
+        if pending and line.startswith("  jmp "):
+            mnemonic, target = _local_jump(line.strip())
+            if mnemonic == "jmp":
+                for label in pending:
+                    if label != target:
+                        forward[label] = target
+        pending = []
+    out: list[str] = []
+    index = 0
+    while index < count:
+        line = lines[index]
+        mnemonic, target = _local_jump(line.strip()) if line.startswith("  j") else ("", "")
+        if mnemonic and mnemonic != "jmp" and mnemonic in _BRANCH_INVERSES and index + 1 < count:
+            follow_mnemonic, follow_target = _local_jump(lines[index + 1].strip())
+            if follow_mnemonic == "jmp" and _has_label_before_next_instruction(lines, index + 1, target):
+                mnemonic = _BRANCH_INVERSES[mnemonic]
+                target = follow_target
+                index += 1
+        if mnemonic:
+            hops = 0
+            while target in forward and hops < 16:
+                target = forward[target]
+                hops += 1
+            if mnemonic == "jmp" and _has_label_before_next_instruction(lines, index, target):
+                index += 1
+                continue
+            line = "  " + mnemonic + " " + target
+        out.append(line)
+        index += 1
+    return out
 
 
 def _asm_symbol(name: str) -> str:
@@ -403,6 +661,8 @@ def _materialize_global_symbol_address(name: str, reg: str) -> list[str]:
         return tls_address(_asm_symbol(name), reg, _WINDOWS_SCRATCH_BASE)
     global_ = _tls_global(name)
     if global_ is None:
+        if _WINDOWS_ABI:
+            return [f"  movabs {reg}, OFFSET FLAT:{_asm_symbol(name)}"]
         return [f"  lea {reg}, {_global_symbol_addr(name)}"]
     validate_x86_tls_global(global_)
     symbol = _asm_symbol(global_.name)
@@ -440,6 +700,9 @@ def _value_label(func_name: str, value_name: str, suffix: str) -> str:
 
 
 def _load_global_to_reg(name: str, reg: str, type_desc: TypeDesc) -> list[str]:
+    if _WINDOWS_ABI and _tls_global(name) is None:
+        from .self_backend_win64_abi import global_memory_access
+        return global_memory_access(name, reg, type_desc, _WINDOWS_SCRATCH_BASE, False)
     if _tls_global(name) is not None:
         address_reg = "r11"
         lines = _materialize_global_address(name, address_reg)
@@ -452,6 +715,9 @@ def _load_global_to_reg(name: str, reg: str, type_desc: TypeDesc) -> list[str]:
 
 
 def _store_reg_to_global(name: str, reg: str, type_desc: TypeDesc) -> list[str]:
+    if _WINDOWS_ABI and _tls_global(name) is None:
+        from .self_backend_win64_abi import global_memory_access
+        return global_memory_access(name, reg, type_desc, _WINDOWS_SCRATCH_BASE, True)
     if _tls_global(name) is not None:
         address_reg = (
             "r10" if reg in {"r11", "r11d", "r11w", "r11b"} else "r11"
@@ -666,7 +932,7 @@ def _materialize_aggregate_to_sse_regs(
             for reg, member_type, _member_offset in regs_and_members
         ]
     if is_aggregate_literal_value(value):
-        literal_bytes = aggregate_literal_to_bytes(type_desc, value)
+        literal_bytes = aggregate_literal_to_bytes(type_desc, value, type_context=func.type_context)
         lines: list[str] = []
         for reg, member_type, member_offset in regs_and_members:
             member_size = member_type.slot_size
@@ -700,7 +966,7 @@ def _materialize_aggregate_to_gp_regs(
     if value in {"zeroinitializer", "poison", "undef"}:
         return [f"  xor {_reg32_alias(reg64)}, {_reg32_alias(reg64)}" for reg64, _chunk in regs_and_chunks]
     if is_aggregate_literal_value(value):
-        literal_bytes = aggregate_literal_to_bytes(type_desc, value)
+        literal_bytes = aggregate_literal_to_bytes(type_desc, value, type_context=func.type_context)
         lines: list[str] = []
         offset = 0
         for reg64, chunk_size in regs_and_chunks:
@@ -787,20 +1053,30 @@ def _fill_address_with_byte(dst_reg: str, size: int, byte_value: int) -> list[st
     return lines
 
 
-def _materialize_fp_constant(value: str, type_desc: TypeDesc, reg: str) -> list[str]:
+def _materialize_fp_bits(bits: int, type_desc: TypeDesc, reg: str) -> list[str]:
+    """Move already decoded natural-width bits without interpreting IR text."""
     if type_desc.width <= 32:
-        if value.startswith("0x"):
-            bits = int(value, 16) & 0xFFFFFFFF
-        else:
-            bits = struct.unpack("<I", struct.pack("<f", float(value)))[0]
+        bits = bits & 0xFFFFFFFF
         gp_reg = "r10d" if reg == "xmm10" else "r11d"
         return [f"  mov {gp_reg}, 0x{bits:08x}", f"  movd {reg}, {gp_reg}"]
-    if value.startswith("0x"):
-        bits = int(value, 16) & ((0xFFFFFFFF << 32) | 0xFFFFFFFF)
-    else:
-        bits = struct.unpack("<Q", struct.pack("<d", float(value)))[0]
+    bits = bits & ((0xFFFFFFFF << 32) | 0xFFFFFFFF)
     gp_reg = "r10" if reg == "xmm10" else "r11"
     return [f"  mov {gp_reg}, 0x{bits:016x}", f"  movq {reg}, {gp_reg}"]
+
+
+def _materialize_fp_constant(value: str, type_desc: TypeDesc, reg: str) -> list[str]:
+    if type_desc.width <= 32:
+        # LLVM float hex tokens carry the widened binary64 representation.
+        # Raw vector-lane bytes use _materialize_fp_bits directly instead.
+        if value.startswith("0x"):
+            bits = encode_float_bits(value, 32)
+        else:
+            bits = float32_to_bits(float(value))
+    elif value.startswith("0x"):
+        bits = int(value, 16)
+    else:
+        bits = float64_to_bits(float(value))
+    return _materialize_fp_bits(bits, type_desc, reg)
 
 
 def _materialize_value(func: ParsedFunction, value: str, type_desc: TypeDesc, reg: str) -> list[str]:
@@ -814,6 +1090,17 @@ def _materialize_value(func: ParsedFunction, value: str, type_desc: TypeDesc, re
         return [f"  xor {reg}, {reg}"]
     if value in func.alloca_slots and type_desc.is_ptr:
         return [f"  lea {reg}, {_slot_addr(func.alloca_slots[value].offset)}"]
+    if value.startswith("inttoptrconst:"):
+        if not type_desc.is_ptr:
+            raise BackendUnavailable(
+                f"x86_64 self backend cannot materialize inttoptr constant as non-pointer in {func.name!r}: {value}"
+            )
+        const_value = const_int_from_value(value.split(":", 1)[1])
+        if const_value is None:
+            raise BackendUnavailable(
+                f"x86_64 self backend expected integer constant inside inttoptr expression in {func.name!r}: {value}"
+            )
+        return [f"  mov {reg}, {const_value}"]
     if _is_constant_gep_value(value):
         if not type_desc.is_ptr:
             raise BackendUnavailable(
@@ -859,6 +1146,7 @@ def _materialize_pointer_storage_address(func: ParsedFunction, value: str, reg: 
     if (
         value in func.value_slots
         or value.startswith("@")
+        or value.startswith("inttoptrconst:")
         or _is_constant_gep_value(value)
         or value in {"null", "poison", "undef"}
     ):
@@ -894,11 +1182,11 @@ def _materialize_vector_lane_to_reg(
     if value == "zeroinitializer" or value == "poison":
         return [f"  xor {reg}, {reg}"] if not elem_type.is_fp else _materialize_fp_constant("0.0", elem_type, reg)
     if is_aggregate_literal_value(value):
-        data = aggregate_literal_to_bytes(vector_type, value)
+        data = aggregate_literal_to_bytes(vector_type, value, type_context=func.type_context)
         lane_bytes = data[lane_offset : lane_offset + elem_type.slot_size]
         if elem_type.is_fp:
             int_value = int.from_bytes(lane_bytes, "little", signed=False)
-            return _materialize_fp_constant(f"0x{int_value:x}", elem_type, reg)
+            return _materialize_fp_bits(int_value, elem_type, reg)
         int_value = int.from_bytes(lane_bytes, "little", signed=False)
         if elem_type.is_int and elem_type.width > 0 and int_value >= (1 << (elem_type.width - 1)):
             int_value -= 1 << elem_type.width
@@ -920,7 +1208,7 @@ def _materialize_vector_value_to_address(
     if value == "zeroinitializer" or value == "poison":
         return _zero_address(addr_reg, vector_type.slot_size)
     if is_aggregate_literal_value(value):
-        return _store_literal_bytes_to_address(aggregate_literal_to_bytes(vector_type, value), addr_reg)
+        return _store_literal_bytes_to_address(aggregate_literal_to_bytes(vector_type, value, type_context=func.type_context), addr_reg)
     lines: list[str] = []
     lane_reg = _reg_name(elem_type, 10)
     lines.extend(_materialize_value(func, value, elem_type, lane_reg))
@@ -990,7 +1278,7 @@ def _store_vararg_stack_value(func: ParsedFunction, arg_type: TypeDesc, value: s
             lines.extend(_zero_address("r11", arg_type.slot_size))
             return lines
         if is_aggregate_literal_value(value):
-            lines.extend(_store_literal_bytes_to_address(aggregate_literal_to_bytes(arg_type, value), "r11"))
+            lines.extend(_store_literal_bytes_to_address(aggregate_literal_to_bytes(arg_type, value, type_context=func.type_context), "r11"))
             return lines
         lines.extend(_materialize_aggregate_value_address(func, value, arg_type, "r10"))
         lines.extend(_copy_address_to_address("r10", "r11", arg_type.slot_size))
@@ -1000,7 +1288,7 @@ def _store_vararg_stack_value(func: ParsedFunction, arg_type: TypeDesc, value: s
             f"x86_64 self backend vararg stack type not translated yet in {func.name!r}: {arg_type.describe()}"
         )
     lines = _materialize_value(func, value, arg_type, _reg_name(arg_type, 10))
-    lines.append(f"  mov {_mem_size(arg_type)} [rsp + {stack_offset}], {_reg_name(arg_type, 10)}")
+    lines.extend(_store_reg_to_temp(_reg_name(arg_type, 10), stack_offset, arg_type))
     return lines
 
 
@@ -1048,7 +1336,7 @@ def _emit_internal_vararg_call(
         if kind == "stack_scalar":
             stack_offset = int(payload)
             lines.extend(_materialize_value(func, value, arg_type, _reg_name(arg_type, 10)))
-            lines.append(f"  mov {_mem_size(arg_type)} [rsp + {stack_offset}], {_reg_name(arg_type, 10)}")
+            lines.extend(_store_reg_to_temp(_reg_name(arg_type, 10), stack_offset, arg_type))
             continue
         if kind == "stack_byval":
             stack_offset = int(payload)
@@ -1273,10 +1561,10 @@ def _emit_smul_overflow_intrinsic_call(
     if (
         lhs_type.describe() != rhs_type.describe()
         or not lhs_type.is_int
-        or lhs_type.width != 64
+        or lhs_type.width not in (32, 64)
     ):
         raise BackendUnavailable(
-            f"x86_64 self backend {callee} intrinsic currently expects i64 "
+            f"x86_64 self backend {callee} intrinsic currently expects i32/i64 "
             f"same-width integer args in {func.name!r}"
         )
     if not ret_type.is_struct or len(ret_type.fields) != 2:
@@ -1295,25 +1583,65 @@ def _emit_smul_overflow_intrinsic_call(
             f"in {func.name!r}: {ret_type.describe()}"
         )
     slot_offset = func.value_slots[dest].offset
-    lines = _materialize_value(func, lhs, lhs_type, "r10")
-    lines.extend(_materialize_value(func, rhs, rhs_type, "r11"))
-    # Two-operand signed imul sets OF on signed overflow; the {i64, i1}
-    # slot layout matches the generic call path (value at +0, flag at +8).
-    lines.append("  imul r10, r11")
+    lhs_reg = _reg_name(lhs_type, 10)
+    rhs_reg = _reg_name(rhs_type, 11)
+    lines = _materialize_value(func, lhs, lhs_type, lhs_reg)
+    lines.extend(_materialize_value(func, rhs, rhs_type, rhs_reg))
+    # Match the instruction width to the intrinsic: imul sets OF when the
+    # mathematical product cannot be represented in that signed width.
+    lines.append(f"  imul {lhs_reg}, {rhs_reg}")
     lines.append("  seto r11b")
-    lines.append("  movzx r11, r11b")
-    lines.extend(_store_reg_to_slot("r10", slot_offset, value_type))
-    lines.append(f"  mov QWORD PTR [rbp - {slot_offset - 8}], r11")
+    lines.extend(_store_reg_to_slot(lhs_reg, slot_offset, value_type))
+    lines.extend(_store_reg_to_slot(
+        "r11b", slot_offset - ret_type.field_offset(1), overflow_type,
+    ))
+    return lines
+
+
+def _validate_integer_register_type(type_desc: TypeDesc) -> None:
+    if not type_desc.is_int or not 1 <= type_desc.width <= 64:
+        raise BackendUnavailable(
+            "x86_64 self backend integer register cast requires i1..i64, "
+            f"got {type_desc.describe()}"
+        )
+
+
+def _truncate_reg_to_r10(dst_type: TypeDesc) -> list[str]:
+    """Keep the declared IR bits, not the rounded x86 storage lane."""
+    _validate_integer_register_type(dst_type)
+    width = dst_type.width
+    if width in (8, 16, 32, 64):
+        return []
+    if width < 32:
+        return [f"  and {_reg_name(dst_type, 10)}, {(1 << width) - 1}"]
+    shift = 64 - width
+    # x86 AND r64, imm32 sign-extends its immediate. A shift pair handles
+    # every 33..63-bit mask without a second scratch register or large imm.
+    return [f"  shl r10, {shift}", f"  shr r10, {shift}"]
+
+
+def _zero_extend_reg_to_r10(src_type: TypeDesc) -> list[str]:
+    lines = _truncate_reg_to_r10(src_type)
+    if src_type.width <= 8:
+        lines.append("  movzx r10d, r10b")
+    elif src_type.width <= 16:
+        lines.append("  movzx r10d, r10w")
+    elif src_type.width == 32:
+        lines.append("  mov r10d, r10d")
     return lines
 
 
 def _sign_extend_reg_to_r10(src_type: TypeDesc) -> list[str]:
-    if src_type.width <= 8:
+    _validate_integer_register_type(src_type)
+    if src_type.width == 8:
         return ["  movsx r10, r10b"]
-    if src_type.width <= 16:
+    if src_type.width == 16:
         return ["  movsx r10, r10w"]
-    if src_type.width <= 32:
+    if src_type.width == 32:
         return ["  movsxd r10, r10d"]
+    if src_type.width < 64:
+        shift = 64 - src_type.width
+        return [f"  shl r10, {shift}", f"  sar r10, {shift}"]
     return []
 
 
@@ -1357,7 +1685,7 @@ def _materialize_constant_gep(value: str, reg: str) -> list[str]:
         lines.extend(_emit_add_immediate_to_reg(reg, int(offset_text)))
         return lines
     if value.startswith("getelementptr"):
-        base, offset = parse_constant_gep(value)
+        base, offset = parse_constant_gep(value, type_context=_MODULE_SYMBOLS.type_context)
         lines = _materialize_global_symbol_address(base, reg)
         lines.extend(_emit_add_immediate_to_reg(reg, offset))
         return lines
@@ -1510,7 +1838,7 @@ def _emit_prologue(func: ParsedFunction) -> list[str]:
         if kind == "stack_scalar":
             stack_offset = 16 + int(payload)
             scratch = _reg_name(arg.type, 10)
-            lines.append(f"  mov {scratch}, {_mem_size(arg.type)} {_stack_arg_addr(stack_offset)}")
+            lines.extend(_load_address_offset_to_reg("rbp", stack_offset, scratch, arg.type))
             lines.extend(_store_reg_to_slot(scratch, func.value_slots[arg.name].offset, arg.type))
             continue
         if kind == "stack_byval":
@@ -1547,8 +1875,12 @@ def _atomic_width_check(
     func: ParsedFunction,
     kind: str,
     value_type: TypeDesc,
-    widths: tuple = (32, 64),
+    widths: tuple = (8, 16, 32, 64),
+    *,
+    allow_pointer: bool = False,
 ) -> None:
+    if allow_pointer and value_type.is_ptr:
+        return
     if value_type.is_int and value_type.width in widths:
         return
     names = "/".join(f"i{w}" for w in widths)
@@ -1671,7 +2003,7 @@ def _emit_memory_instruction(func: ParsedFunction, kind: str, data: tuple) -> li
         return lines
 
     if kind == "load_atomic":
-        dest, value_type, ptr_type, ptr_name, _ordering = data
+        dest, value_type, ptr_type, ptr_name, _ordering = data[:5]
         _atomic_width_check(func, kind, value_type)
         if dest not in func.value_slots:
             return []
@@ -1688,8 +2020,8 @@ def _emit_memory_instruction(func: ParsedFunction, kind: str, data: tuple) -> li
         return lines
 
     if kind == "store_atomic":
-        value_type, value, ptr_type, ptr_name, ordering = data
-        _atomic_width_check(func, kind, value_type, widths=(8, 32, 64))
+        value_type, value, ptr_type, ptr_name, ordering = data[:5]
+        _atomic_width_check(func, kind, value_type)
         val_reg = _reg_name(value_type, 10)
         lines = _materialize_value(func, value, value_type, val_reg)
         lines.extend(_materialize_value(func, ptr_name, ptr_type, "r11"))
@@ -1703,12 +2035,7 @@ def _emit_memory_instruction(func: ParsedFunction, kind: str, data: tuple) -> li
 
     if kind == "atomicrmw":
         dest, op, ptr_type, ptr_name, value_type, value, _ordering = data
-        if value_type.is_int and value_type.width == 8 and op != "xchg":
-            raise BackendUnavailable(
-                f"x86_64 self backend atomicrmw i8 supports only xchg "
-                f"(byte flags) in {func.name!r}: {op}"
-            )
-        _atomic_width_check(func, kind, value_type, widths=(8, 32, 64))
+        _atomic_width_check(func, kind, value_type, allow_pointer=op == "xchg")
         val_reg = _reg_name(value_type, 10)
         acc_reg = _reg_name(value_type, 0)
         mem = f"{_mem_size(value_type)} [r11]"
@@ -2053,47 +2380,44 @@ def _emit_compute_instruction(func: ParsedFunction, kind: str, data: tuple) -> l
         op, dest, src_type, value, dst_type = data
         if dest not in func.value_slots:
             return []
+        if op in {"trunc", "zext", "sext"} and src_type.is_int and dst_type.is_int:
+            _validate_integer_register_type(src_type)
+            _validate_integer_register_type(dst_type)
         if op == "zext" and src_type.is_int and dst_type.is_int and src_type.width <= dst_type.width:
-            if value in func.value_slots and src_type.width <= 8:
+            if value in func.value_slots and src_type.width == 8 and dst_type.width > 8:
                 lines = [f"  movzx {_reg_name(dst_type, 10)}, BYTE PTR {_slot_addr(func.value_slots[value].offset)}"]
-            elif value in func.value_slots and src_type.width <= 16:
+            elif value in func.value_slots and src_type.width == 16 and dst_type.width > 16:
                 lines = [f"  movzx {_reg_name(dst_type, 10)}, WORD PTR {_slot_addr(func.value_slots[value].offset)}"]
             else:
                 lines = _materialize_value(func, value, src_type, _reg_name(src_type, 10))
-                if src_type.width < dst_type.width:
-                    src_reg = _reg_name(src_type, 10)
-                    dst_reg = _reg_name(dst_type, 10)
-                    if src_type.width <= 8:
-                        lines.append(f"  movzx {dst_reg}, {src_reg}")
-                    elif src_type.width <= 16:
-                        lines.append(f"  movzx {dst_reg}, {src_reg}")
-                    elif src_type.width <= 32 and dst_type.width > 32:
-                        # Writing the 32-bit subregister already zero-extends
-                        # into the full 64-bit register on x86_64.
-                        pass
+                # Materializing i32 writes r10d, which already clears the
+                # upper half; retain this common width's no-op fastpath.
+                if src_type.width != 32:
+                    lines.extend(_zero_extend_reg_to_r10(src_type))
             lines.extend(_store_reg_to_slot(_reg_name(dst_type, 10), func.value_slots[dest].offset, dst_type))
             return lines
         if op == "sext" and src_type.is_int and dst_type.is_int and src_type.width <= dst_type.width:
             lines = _materialize_value(func, value, src_type, _reg_name(src_type, 10))
             if src_type.width < dst_type.width:
                 lines.extend(_sign_extend_reg_to_r10(src_type))
+            lines.extend(_truncate_reg_to_r10(dst_type))
             lines.extend(_store_reg_to_slot(_reg_name(dst_type, 10), func.value_slots[dest].offset, dst_type))
             return lines
         if op == "trunc" and src_type.is_int and dst_type.is_int and src_type.width >= dst_type.width:
             lines = _materialize_value(func, value, src_type, _reg_name(src_type, 10))
+            lines.extend(_truncate_reg_to_r10(dst_type))
             lines.extend(_store_reg_to_slot(_reg_name(dst_type, 10), func.value_slots[dest].offset, dst_type))
             return lines
         if op == "ptrtoint" and src_type.is_ptr and dst_type.is_int:
+            _validate_integer_register_type(dst_type)
             lines = _materialize_value(func, value, src_type, "r10")
             dest_reg = _reg_name(dst_type, 10)
-            if dest_reg != "r10" and dst_type.width > 64:
-                lines.append(f"  mov {dest_reg}, r10")
+            lines.extend(_truncate_reg_to_r10(dst_type))
             lines.extend(_store_reg_to_slot(dest_reg, func.value_slots[dest].offset, dst_type))
             return lines
         if op == "inttoptr" and src_type.is_int and dst_type.is_ptr:
             lines = _materialize_value(func, value, src_type, _reg_name(src_type, 10))
-            if src_type.width <= 32:
-                lines.append("  mov r10d, r10d")
+            lines.extend(_zero_extend_reg_to_r10(src_type))
             lines.extend(_store_reg_to_slot("r10", func.value_slots[dest].offset, dst_type))
             return lines
         if op == "bitcast":
@@ -2239,7 +2563,7 @@ def _emit_compute_instruction(func: ParsedFunction, kind: str, data: tuple) -> l
         if dest not in func.value_slots:
             return []
         if is_aggregate_literal_value(value):
-            literal_bytes = aggregate_literal_to_bytes(aggregate_type, value)
+            literal_bytes = aggregate_literal_to_bytes(aggregate_type, value, type_context=func.type_context)
             field_bytes = literal_bytes[offset : offset + result_type.slot_size]
             field_value = str(int.from_bytes(field_bytes, byteorder="little", signed=False))
             lines = _materialize_value(func, field_value, result_type, _reg_name(result_type, 10))
@@ -2270,7 +2594,7 @@ def _emit_compute_instruction(func: ParsedFunction, kind: str, data: tuple) -> l
         elif is_aggregate_literal_value(aggregate_value):
             lines.extend(
                 _store_literal_bytes_to_address(
-                    aggregate_literal_to_bytes(aggregate_type, aggregate_value),
+                    aggregate_literal_to_bytes(aggregate_type, aggregate_value, type_context=func.type_context),
                     "r11",
                 )
             )
@@ -2286,7 +2610,7 @@ def _emit_compute_instruction(func: ParsedFunction, kind: str, data: tuple) -> l
             if is_aggregate_literal_value(elem_value):
                 lines.extend(
                     _store_literal_bytes_to_address(
-                        aggregate_literal_to_bytes(elem_type, elem_value),
+                        aggregate_literal_to_bytes(elem_type, elem_value, type_context=func.type_context),
                         "r11",
                     )
                 )
@@ -2376,7 +2700,7 @@ def _emit_compute_instruction(func: ParsedFunction, kind: str, data: tuple) -> l
             raise BackendUnavailable(
                 f"x86_64 self backend shufflevector mask not translated yet in {func.name!r}: {mask_value}"
             )
-        mask_bytes = aggregate_literal_to_bytes(vector_type, mask_value)
+        mask_bytes = aggregate_literal_to_bytes(vector_type, mask_value, type_context=func.type_context)
         for lane in range(vector_type.count):
             mask_offset = lane * elem_type.slot_size
             source_lane = int.from_bytes(
@@ -2420,15 +2744,28 @@ def _emit_compute_instruction(func: ParsedFunction, kind: str, data: tuple) -> l
             raise BackendUnavailable(
                 f"x86_64 self backend unresolved direct callee not translated yet in {func.name!r}"
             )
+        # Constant-size copies/fills unroll into wide moves; the shared
+        # byte loop below is only the fallback for run-time sizes.
+        if (
+            not is_indirect
+            and callee.startswith("llvm.memcpy.")
+            and len(args) >= 4
+            and const_int_from_value(args[2][1]) is not None
+        ):
+            return _emit_memcpy_intrinsic_call(func, args)
+        if (
+            not is_indirect
+            and callee.startswith("llvm.memset.")
+            and len(args) >= 4
+            and const_int_from_value(args[2][1]) is not None
+            and const_int_from_value(args[1][1]) is not None
+        ):
+            return _emit_memset_intrinsic_call(func, args)
         if not is_indirect and callee.startswith("llvm."):
             from .self_backend_x86_intrinsics import emit as emit_extra_intrinsic
             intrinsic_lines = emit_extra_intrinsic(func, dest, ret_type, callee, args, windows=_WINDOWS_ABI)
             if intrinsic_lines is not None:
                 return intrinsic_lines
-        if not is_indirect and callee.startswith("llvm.memcpy."):
-            return _emit_memcpy_intrinsic_call(func, args)
-        if not is_indirect and callee.startswith("llvm.memset."):
-            return _emit_memset_intrinsic_call(func, args)
         if not is_indirect and callee.startswith("llvm.floor."):
             return _emit_floor_intrinsic_call(func, dest, ret_type, callee, args)
         if not is_indirect and callee.startswith("llvm.sqrt."):
@@ -2506,6 +2843,13 @@ def _emit_compute_instruction(func: ParsedFunction, kind: str, data: tuple) -> l
             raise BackendUnavailable(
                 f"x86_64 self backend intrinsic not translated yet in {func.name!r}: {callee}"
             )
+        if not is_indirect and callee == "llvm.pcc.dynamic.alloca":
+            # Frame slots are addressed from RSP here, so moving RSP at run
+            # time would shift every slot; refuse instead of miscompiling.
+            raise BackendUnavailable(
+                "x86_64 self backend does not support run-time sized stack "
+                f"allocation (VLA or alloca) in {func.name!r}"
+            )
         if not is_indirect and callee.startswith("llvm."):
             # Fail fast: an un-lowered LLVM intrinsic must never fall
             # through to a plain `call llvm.foo.i64` — the assembler
@@ -2551,7 +2895,7 @@ def _emit_compute_instruction(func: ParsedFunction, kind: str, data: tuple) -> l
             if kind == "stack_scalar":
                 stack_offset = int(payload)
                 lines.extend(_materialize_value(func, value, arg_type, _reg_name(arg_type, 10)))
-                lines.append(f"  mov {_mem_size(arg_type)} [rsp + {stack_offset}], {_reg_name(arg_type, 10)}")
+                lines.extend(_store_reg_to_temp(_reg_name(arg_type, 10), stack_offset, arg_type))
                 continue
             if kind == "stack_byval":
                 stack_offset = int(payload)
@@ -2565,15 +2909,17 @@ def _emit_compute_instruction(func: ParsedFunction, kind: str, data: tuple) -> l
             raise BackendUnavailable(
                 f"x86_64 self backend call arg location kind not translated yet in {func.name!r}: {kind}"
             )
-        # SysV uses %al to pass the number of vector registers consumed by
-        # variadic arguments. For non-variadic calls %rax is caller-saved and
-        # not an argument register, so setting it here is harmless. Emitting it
-        # unconditionally keeps self-host output deterministic even when a
-        # declaration's vararg bit is normalized at a different stage.
-        if fp_reg_count == 0:
-            lines.append("  xor eax, eax")
-        else:
-            lines.append(f"  mov al, {fp_reg_count}")
+        # SysV uses %al to pass the number of vector registers consumed by a
+        # variadic call; a non-variadic callee ignores %rax. The call site's
+        # own function type decides (calling a variadic function through a
+        # non-variadic type is undefined), so the output stays deterministic
+        # across stages. Setting %al on every call was one instruction in
+        # seven of an x86-64 module.
+        if _is_vararg_call:
+            if fp_reg_count == 0:
+                lines.append("  xor eax, eax")
+            else:
+                lines.append(f"  mov al, {fp_reg_count}")
         if is_indirect:
             callee_type = func.value_types.get(callee, TypeDesc("ptr", pointee=ret_type))
             if not callee_type.is_ptr:
@@ -2617,7 +2963,7 @@ def _emit_return_terminator(func: ParsedFunction, ret_type: TypeDesc, value: str
             if value == "zeroinitializer":
                 lines.extend(_zero_address("r11", ret_type.slot_size))
             elif is_aggregate_literal_value(value):
-                literal = aggregate_literal_to_bytes(ret_type, value)
+                literal = aggregate_literal_to_bytes(ret_type, value, type_context=func.type_context)
                 lines.extend(_store_literal_bytes_to_address(literal, "r11"))
             else:
                 lines.extend(_materialize_aggregate_value_address(func, value, ret_type, "r10"))
@@ -2709,6 +3055,9 @@ def _emit_phi_assignments(func: ParsedFunction, *, source_block: str, target_blo
     if not assignments:
         return []
 
+    direct = _phi_copies_without_temps(func, assignments)
+    if direct is not None:
+        return direct
     total_temp = _align_to(temp_offset, 16)
     lines: list[str] = []
     if total_temp and not _WINDOWS_ABI:
@@ -2722,7 +3071,7 @@ def _emit_phi_assignments(func: ParsedFunction, *, source_block: str, target_blo
             elif match.value == "zeroinitializer":
                 lines.extend(_zero_address("r11", phi.type.slot_size))
             elif is_aggregate_literal_value(match.value):
-                lines.extend(_store_literal_bytes_to_address(aggregate_literal_to_bytes(phi.type, match.value), "r11"))
+                lines.extend(_store_literal_bytes_to_address(aggregate_literal_to_bytes(phi.type, match.value, type_context=func.type_context), "r11"))
             else:
                 lines.extend(_materialize_aggregate_value_address(func, match.value, phi.type, "r10"))
                 lines.extend(_copy_address_to_address("r10", "r11", phi.type.slot_size))
@@ -2743,6 +3092,44 @@ def _emit_phi_assignments(func: ParsedFunction, *, source_block: str, target_blo
 
     if total_temp and not _WINDOWS_ABI:
         lines.append(f"  add rsp, {total_temp}")
+    return lines
+
+
+def _phi_copies_without_temps(func: ParsedFunction, assignments) -> list[str] | None:
+    """Scalar phi copies made one after another, or None when they need the
+    parallel-copy temps.
+
+    The temps exist for edges where a copy would overwrite a slot a later
+    copy still reads (a swap, or two values sharing a slot). One copy reads
+    its source before it writes; several are safe when no destination slot
+    shares a byte with any source slot.
+    """
+    destinations: list[tuple[int, int]] = []
+    sources: list[tuple[int, int]] = []
+    for phi, match, _offset in assignments:
+        if phi.type.is_array or phi.type.is_struct:
+            return None
+        slot = func.value_slots[phi.dest]
+        destinations.append((slot.offset, phi.type.slot_size))
+        source = func.value_slots.get(match.value)
+        if source is not None:
+            sources.append((source.offset, source.type.slot_size))
+        elif match.value in func.alloca_slots or match.value.startswith("%"):
+            # An address or an operand without a slot: keep the temps.
+            if match.value not in func.alloca_slots:
+                return None
+    if len(assignments) > 1:
+        for destination_offset, destination_size in destinations:
+            for source_offset, source_size in sources:
+                # [rbp - offset, rbp - offset + size)
+                if (destination_offset - destination_size < source_offset
+                        and source_offset - source_size < destination_offset):
+                    return None
+    lines: list[str] = []
+    for phi, match, _offset in assignments:
+        reg = _reg_name(phi.type, 10)
+        lines.extend(_materialize_value(func, match.value, phi.type, reg))
+        lines.extend(_store_reg_to_slot(reg, func.value_slots[phi.dest].offset, phi.type))
     return lines
 
 
@@ -2773,6 +3160,49 @@ def _emit_cond_branch_terminator(
     lines.append(f"{true_edge}:")
     lines.extend(_emit_phi_assignments(func, source_block=source_block, target_block=true_target))
     lines.append(f"  jmp {_block_label(func.name, true_target)}")
+    return lines
+
+
+def _emit_indexed_error_edge(
+    func: ParsedFunction,
+    kernel: IndexedFunctionKernel,
+    edge_id: int,
+    cold_lines: list[str],
+) -> list[str]:
+    """Branch to the error target when the edge's i1 condition is true.
+
+    Normal execution falls through. An edge into a shared frame landing goes
+    through a cold stub after the function's blocks that first stores the
+    raise site's traceback table index into the landing's slot. Error targets
+    carry no PHIs (the verifier enforces it), so no edge moves are needed.
+    """
+    target_id = kernel.inline_error_edge_target(edge_id)
+    target_name = kernel.block_names[target_id]
+    lines = _materialize_value(
+        func,
+        kernel.value_name(kernel.inline_error_edge_condition(edge_id)),
+        TypeDesc("int", 1),
+        "al",
+    )
+    lines.append("  test al, al")
+    payload = kernel.inline_error_edge_payload(edge_id)
+    landing_slot = kernel.inline_error_landing_slot(target_id)
+    if payload < 0 or landing_slot < 0:
+        lines.append(f"  jne {_block_label(func.name, target_name)}")
+        return lines
+    slot_name = kernel.value_name(landing_slot)
+    if slot_name not in func.alloca_slots:
+        raise BackendUnavailable(
+            f"x86_64 self backend has no frame slot for inline error landing {slot_name!r} in {func.name!r}"
+        )
+    stub = _block_label(func.name, target_name + ".edge." + str(edge_id))
+    lines.append(f"  jne {stub}")
+    cold_lines.append("")
+    cold_lines.append(stub + ":")
+    cold_lines.append(
+        f"  mov DWORD PTR {_slot_addr(func.alloca_slots[slot_name].offset)}, {payload}"
+    )
+    cold_lines.append(f"  jmp {_block_label(func.name, target_name)}")
     return lines
 
 
@@ -2837,40 +3267,125 @@ def _emit_unreachable_terminator() -> list[str]:
     return ["  ud2"]
 
 
+def _materialize_indexed_control_flow(
+    func: ParsedFunction, kernel: IndexedFunctionKernel,
+) -> None:
+    # Branch/PHI selection still needs every target block and its PHIs. The
+    # ordinary instruction selector only reads one kind/data pair at a time;
+    # do not rebuild a second instruction arena to immediately project it again.
+    blocks = []
+    block_id = 0
+    while block_id < len(kernel.block_names):
+        blocks.append(kernel.diagnostic_block(block_id, include_instructions=False))
+        block_id += 1
+    func.blocks = blocks
+    func.block_map = {block.name: block for block in blocks}
+
+
+def _emit_indexed_instruction_parts(
+    func: ParsedFunction,
+    block: ParsedBlock,
+    kernel: IndexedFunctionKernel,
+    block_id: int,
+    instruction_index: int,
+    instruction_id: int,
+    kind_id: int,
+    data: int | tuple,
+    is_volatile: bool,
+) -> list[str]:
+    # The shared loop supplies packed IDs for its fixed-payload vocabulary and
+    # already-decoded tuples for other kinds, including atomic/cold records.
+    # Let the authoritative decoder distinguish packed and negative cold IDs.
+    if isinstance(data, int):
+        data = kernel.instruction_data_by_id(
+            instruction_id, block_id, instruction_index,
+        )
+    # Preserve the legacy projection's metadata check and operand interning.
+    # x86 selection itself consumes only kind/data; the kernel retains flags.
+    kernel.instruction_arithmetic_flags(block_id, instruction_index)
+    return emit_instruction_dispatch_parts(
+        func,
+        block,
+        PARSED_INSTRUCTION_KINDS[kind_id],
+        _interned_operands(data),
+        emit_memory=_emit_memory_instruction,
+        emit_compute=_emit_compute_instruction,
+    )
+
+
 def _emit_function(
     func: ParsedFunction,
     stack_map_plan: FunctionStackMapPlan,
+    *,
+    phase_timing=None,
 ) -> list[str]:
     global _WINDOWS_SCRATCH_BASE
+    if phase_timing is not None:
+        phase_start = phase_timing.start()
     if _WINDOWS_ABI:
         from .self_backend_win64_abi import outgoing_size
         _WINDOWS_SCRATCH_BASE = outgoing_size(func)
     symbol = _asm_symbol(func.name)
     lines = _emit_prologue(func)
     kernel = get_indexed_function_kernel(func)
-    kernel.materialize_legacy_blocks(func)
-    for block_id, block in enumerate(func.blocks):
-        if block.phis:
-            continue
-        phi_fact: CompilerInt2 = kernel.block_phi_fact(block_id)
-        if phi_fact.second == 0:
-            continue
-        projected = []
-        phi_index = 0
-        while phi_index < phi_fact.second:
-            projected.append(kernel.diagnostic_phi(block_id, phi_index))
-            phi_index += 1
-        block.phis = tuple(projected)
-    lines.extend(
-        emit_function_blocks(
-            func,
-            block_label=_block_label,
-            emit_instruction=_emit_instruction,
-            emit_terminator=_emit_terminator,
-            stack_map_plan=stack_map_plan,
-            indexed_kernel=kernel,
+    if phase_timing is not None:
+        phase_timing.add(12, phase_start)
+    # Indexed input owns no legacy block graph. Keep the compatibility view
+    # alive only while this function emits; retaining it on every function
+    # duplicates the whole module's instructions alongside the indexed arenas.
+    original_blocks = func.blocks
+    original_block_map = func.block_map
+    try:
+        indexed_instruction_emitter = None
+        if (
+            type(func) is ParsedFunction
+            and type(kernel) is IndexedFunctionKernel
+            and type(original_blocks) is list
+            and not original_blocks
+            and type(original_block_map) is dict
+        ):
+            _materialize_indexed_control_flow(func, kernel)
+            indexed_instruction_emitter = _emit_indexed_instruction_parts
+        else:
+            kernel.materialize_legacy_blocks(func)
+            # Supplied compatibility blocks may have released scalar PHIs.
+            # Fresh indexed shells already project every PHI in diagnostic_block;
+            # do not revisit all of their empty-PHI blocks to prove that again.
+            for block_id, block in enumerate(func.blocks):
+                if block.phis:
+                    continue
+                phi_fact: CompilerInt2 = kernel.block_phi_fact(block_id)
+                if phi_fact.second == 0:
+                    continue
+                projected = []
+                phi_index = 0
+                while phi_index < phi_fact.second:
+                    projected.append(kernel.diagnostic_phi(block_id, phi_index))
+                    phi_index += 1
+                block.phis = tuple(projected)
+        lines.extend(
+            emit_function_blocks(
+                func,
+                block_label=_block_label,
+                emit_instruction=_emit_instruction,
+                emit_terminator=_emit_terminator,
+                stack_map_plan=stack_map_plan,
+                indexed_kernel=kernel,
+                emit_indexed_instruction=indexed_instruction_emitter,
+                emit_indexed_error_edge=_emit_indexed_error_edge,
+            )
         )
-    )
+    finally:
+        if not original_blocks:
+            func.blocks = original_blocks
+            func.block_map = original_block_map
+    lines = _fuse_x86_compare_branches(_forward_adjacent_frame_store_load(lines))
+    if _POST_SELECTION_PASSES:
+        lines = keep_frame_slots_in_registers(lines, func, stack_map_plan, windows=_WINDOWS_ABI)
+        # A second round drops the jumps the first one left falling into
+        # their own target.
+        lines = _thread_x86_jumps(_thread_x86_jumps(lines))
+        lines = forward_register_copies(lines)
     lines.append(stack_map_plan.end_label + ":")
     lines.append(f".size {symbol}, .-{symbol}")
     if _WINDOWS_ABI:
@@ -2878,7 +3393,12 @@ def _emit_function(
     return lines
 
 
-def _emit_x86_64_module(ir_text: str, *, windows: bool = False, module=None) -> str:
+def _emit_x86_64_module(
+    ir_text: str, *, windows: bool = False, module=None,
+    stack_map_plans_out=None,
+    phase_timing=None,
+    builder=None,
+) -> str:
     global _WINDOWS_ABI, _X86_EMISSION_ACTIVE
     if _X86_EMISSION_ACTIVE:
         raise BackendUnavailable("x86 emission is already active")
@@ -2886,16 +3406,29 @@ def _emit_x86_64_module(ir_text: str, *, windows: bool = False, module=None) -> 
     _WINDOWS_ABI = windows
     try:
         if module is None:
-            prepared = prepare_module_for_target(ir_text, aggregate_returned_indirect=_aggregate_returned_indirect)
+            prepared = prepare_module_for_target(
+                ir_text,
+                aggregate_returned_indirect=_aggregate_returned_indirect,
+                phase_timing=phase_timing,
+            )
         else:
             from .self_backend_prepare import prepare_parsed_module_for_target
-            prepared = prepare_parsed_module_for_target(module, aggregate_returned_indirect=_aggregate_returned_indirect)
+            prepared = prepare_parsed_module_for_target(
+                module,
+                aggregate_returned_indirect=_aggregate_returned_indirect,
+                phase_timing=phase_timing,
+            )
         from .self_backend_target_match import is_x86_64_windows_triple
         valid = is_x86_64_windows_triple(prepared.triple) if windows else is_x86_64_linux_triple(prepared.triple)
         if not valid:
             raise BackendUnavailable("x86 emitter target mismatch: " + prepared.triple)
         prepared = run_self_target_memory_pass_pipeline(prepared, "self-x86_64-linux-v0")
-        return _emit_prepared_x86_64_module(prepared, ir_text)
+        return _emit_prepared_x86_64_module(
+            prepared, ir_text, stack_map_plans_out=stack_map_plans_out,
+            phase_timing=phase_timing,
+            _share_globals_index=True,
+            builder=builder,
+        )
     finally:
         _WINDOWS_ABI = False
         _X86_EMISSION_ACTIVE = False
@@ -2905,7 +3438,41 @@ def emit_x86_64_linux_asm(ir_text: str) -> str:
     return _emit_x86_64_module(ir_text)
 
 
-def _emit_prepared_x86_64_module(prepared, ir_text: str) -> str:
+def _append_assembly_chunk(
+    chunks: list[str], label_lines: list[str] | None, lines: list[str],
+) -> None:
+    # Keep finished text compact instead of retaining one Python object per
+    # assembly line until the module joins. Symbolic stack-map rendering only
+    # needs labels in their original relative order, not instruction lines.
+    chunks.append("\n".join(lines))
+    if label_lines is not None:
+        for line in lines:
+            if line.strip().endswith(":"):
+                label_lines.append(line)
+
+
+def _split_assembly_entries(entries: list[str]) -> list[str]:
+    # A global initializer is one entry joined with newlines; the text route
+    # splits it again when it reads the module text back.
+    lines: list[str] = []
+    for entry in entries:
+        if "\n" in entry or "\r" in entry:
+            lines.extend(entry.splitlines())
+        else:
+            lines.append(entry)
+    return lines
+
+
+def _emit_prepared_x86_64_module(
+    prepared, ir_text: str, *, stack_map_plans_out=None, phase_timing=None,
+    _share_globals_index: bool = False, builder=None,
+) -> str:
+    """Emit the module's assembly text, or stream it into ``builder``.
+
+    A streaming caller passes an ``X86ModuleBuilder`` and a list that receives
+    the stack-map plans; each function's lines are placed and encoded as soon
+    as the function is finished, and no module text is joined.
+    """
     global _MODULE_SYMBOLS, _VARARG_FUNCTIONS, _TLS_GLOBALS
     triple = prepared.triple
     validate_x86_tls_globals(prepared.globals_)
@@ -2921,34 +3488,117 @@ def _emit_prepared_x86_64_module(prepared, ir_text: str) -> str:
             prepare_frame(func)
     else:
         for func in functions:
-            func.platform_frame_extra = 192 if func.is_vararg else 16
+            # Saved rbx and the nearbyint MXCSR pair (after the vararg
+            # register save area), then the r12-r15 save area.
+            func.platform_frame_extra = (
+                (192 if func.is_vararg else 16) + CALLEE_SAVED_AREA_SIZE
+            )
     _VARARG_FUNCTIONS = frozenset(func.name for func in functions if func.is_vararg)
     tls_globals: dict[str, GlobalDef] = {}
     for global_ in prepared.globals_:
         if global_.tls_model:
             tls_globals[global_.name] = global_
     _TLS_GLOBALS = tls_globals
-    stack_map_plans = {
-        plan.function_name: plan
-        for plan in build_stack_map_plans(
-            functions,
-            prepared.globals_,
-            target="x86_64-linux",
-            function_symbol=_asm_symbol,
-        )
-    }
-    lines = [".intel_syntax noprefix"]
-    lines.extend(emit_globals(prepared.globals_, _MODULE_SYMBOLS))
-    for func in functions:
-        lines.extend(_emit_function(func, stack_map_plans[func.name]))
-    if functions:
-        lines.extend(render_x86_64_stack_map_section(
-            lines,
-            tuple(stack_map_plans[func.name] for func in functions),
-            function_symbol=_asm_symbol,
-            block_label=_block_label,
-        ))
+    # A plan depends only on its function and the immutable module globals.
+    # Construct it at that function's emission boundary so completed kernels
+    # retire before the next plan adds root-state and liveness storage.
+    # Retain the final plans for target-final stack-map offsets below.
+    stack_map_plans = {}
+    if builder is not None and stack_map_plans_out is None:
+        raise BackendUnavailable("streamed x86 emission packs its stack maps")
+    chunks = [".intel_syntax noprefix"]
+    if builder is not None:
+        builder.append_lines(chunks)
+    label_lines = [] if stack_map_plans_out is None else None
+    global_lines = emit_globals(prepared.globals_, _MODULE_SYMBOLS)
+    if global_lines:
+        if builder is None:
+            _append_assembly_chunk(chunks, label_lines, global_lines)
+        else:
+            builder.append_lines(_split_assembly_entries(global_lines))
+    del global_lines
+    # The public entry owns prepared.globals_: preparation copied the input,
+    # and ordinary emission never mutates that list. Direct prepared callers
+    # and timing callbacks may expose/mutate it, so retain their original
+    # per-function indexing. Even the owned timer's methods and clock can be
+    # replaced by callers. The planner additionally rejects custom records.
+    globals_index = (
+        [] if _share_globals_index and phase_timing is None else None
+    )
+    try:
         for func in functions:
+            if phase_timing is not None:
+                phase_start = phase_timing.start()
+            plan = build_function_stack_map_plan(
+                func,
+                prepared.globals_,
+                target="x86_64-linux",
+                identity_name=_asm_symbol(func.name),
+                _globals_index=globals_index,
+            )
+            if phase_timing is not None:
+                phase_timing.add(5, phase_start)
+            stack_map_plans[func.name] = plan
+            if phase_timing is not None:
+                phase_start = phase_timing.start()
+            if builder is None:
+                _append_assembly_chunk(
+                    chunks, label_lines,
+                    _emit_function(func, plan, phase_timing=phase_timing),
+                )
+            else:
+                builder.append_lines(_emit_function(func, plan, phase_timing=phase_timing))
+            # The stack-map plan retains scalar/root metadata, never the IR.
+            # Release completed functions before the next body adds assembly.
             get_indexed_function_kernel(func).close_native_tables()
-    lines.append('.section .note.GNU-stack,"",@progbits')
-    return "\n".join(lines) + "\n"
+            if not func.blocks:
+                # Direct indexed functions are consumed above. Their compatibility
+                # slots are no longer needed by selection; stack-map plans retain
+                # scalar offsets and types, never these lookup dictionaries.
+                # Retire both the direct and equality-bucket projections before
+                # another function or the final assembly/object buffers allocate.
+                clear_text_key_mapping(func.value_slots)
+                func.value_slot_buckets.clear()
+                clear_text_key_mapping(func.alloca_slots)
+                func.alloca_slot_buckets.clear()
+                clear_text_key_mapping(func.value_types)
+            if phase_timing is not None:
+                phase_timing.add(6, phase_start)
+    finally:
+        # A saved exception must not retain the module index through its frames.
+        # A later emission or public replanning builds from its current globals.
+        if globals_index is not None:
+            if globals_index:
+                globals_index[0].clear()
+            globals_index.clear()
+    if phase_timing is not None:
+        phase_start = phase_timing.start()
+    if functions and precise_stackmap_tables_enabled("x86_64-unknown-linux-gnu"):
+        plans = tuple(stack_map_plans[func.name] for func in functions)
+        if stack_map_plans_out is None:
+            _append_assembly_chunk(chunks, None, render_x86_64_stack_map_section(
+                label_lines, plans, function_symbol=_asm_symbol, block_label=_block_label,
+            ))
+        else:
+            # Preserve section order/alignment while deferring metadata bytes
+            # to the owned assembler's final variable-length label offsets.
+            # Plans retain scalar/root metadata only, never the function IR.
+            stack_map_plans_out.extend(plans)
+            if builder is None:
+                chunks.extend(('.section .pcc_stackmaps,"a",@progbits', '.p2align 3'))
+            else:
+                builder.append_lines(('.section .pcc_stackmaps,"a",@progbits', '.p2align 3'))
+    if builder is not None:
+        builder.append_lines(('.section .note.GNU-stack,"",@progbits',))
+        reset_operand_intern()
+        if phase_timing is not None:
+            phase_timing.add(7, phase_start)
+        return ""
+    chunks.append('.section .note.GNU-stack,"",@progbits')
+    # The empty final chunk supplies the newline without copying the full text.
+    chunks.append("")
+    reset_operand_intern()
+    result = "\n".join(chunks)
+    if phase_timing is not None:
+        phase_timing.add(7, phase_start)
+    return result

@@ -1,0 +1,139 @@
+{
+  "caps": {
+    "continuous_minimum_free_bytes": 4294967296,
+    "exclusive_shared_lock": true,
+    "execution": "same supervised PID, verified static ELF descriptor",
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "native_alarm_seconds": 10,
+    "outer_timeout_seconds": 15,
+    "sigalrm_unblocked": true
+  },
+  "codegen_checksum": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+  "compile_qualification_sha256": "300c910626989fca921b9907335d84b6a81215f5275a68b96a583d1b8d7f7b76",
+  "compiler_source_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "executions": [
+    {
+      "artifacts": {
+        "gc_log": {
+          "bytes": 12417,
+          "sha256": "5a833c0e9ef715ef0b06116b78b4e399abe44afd80e7d3687d2ad18e978d8bbb"
+        },
+        "guard": {
+          "bytes": 3199,
+          "sha256": "a1fd783af95bd50f508efea0559ae342f63045381d463968f5d7180e0877a6e3"
+        },
+        "launch": {
+          "bytes": 1156,
+          "sha256": "fe81aca2d0211319bd2a4a60e0d91f201adb2ee7d659859fe4f722865377fa3a"
+        },
+        "stderr": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout": {
+          "bytes": 26,
+          "sha256": "207b1712854e58a77384112a7289dad26cb11df5abdb83ce39fe2d4830584737"
+        }
+      },
+      "cleanup": "CLEAN",
+      "collection_events": 10,
+      "echild": true,
+      "elapsed_seconds": 0.16590589900079067,
+      "executable_sha256": "e5d2bb22f948e48ab91ddc4eb5e32ad1bb09b36cfcd2e7a20db7b25bfd97e3fa",
+      "observed_gc": [
+        0
+      ],
+      "peak_sampled_rss_bytes": 21929984,
+      "requested_gc": 0,
+      "result_sha256": "f7ffdbdb639e2b1e364524bc7acb744919d6f06dedef6bc1f2a4159c0b996575",
+      "returncode": 0,
+      "root_reaped": true,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "slot-status-runtime-equal\n"
+    },
+    {
+      "artifacts": {
+        "gc_log": {
+          "bytes": 19257,
+          "sha256": "57d4efd590d5b5e3064d9a14521d6cee72be08b1206d6282e8b955862a579441"
+        },
+        "guard": {
+          "bytes": 3199,
+          "sha256": "2cdb3f390c457eceda53df53d64ac27fd26b25b0d67b542f799c3847fed04c2a"
+        },
+        "launch": {
+          "bytes": 1156,
+          "sha256": "de97e7908a331129033888f735a2cce98faacaa7bbc2b7d39e9ab8e0e4b3a490"
+        },
+        "stderr": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout": {
+          "bytes": 26,
+          "sha256": "207b1712854e58a77384112a7289dad26cb11df5abdb83ce39fe2d4830584737"
+        }
+      },
+      "cleanup": "CLEAN",
+      "collection_events": 10,
+      "echild": true,
+      "elapsed_seconds": 0.16549638099968433,
+      "executable_sha256": "e5d2bb22f948e48ab91ddc4eb5e32ad1bb09b36cfcd2e7a20db7b25bfd97e3fa",
+      "observed_gc": [
+        1
+      ],
+      "peak_sampled_rss_bytes": 21917696,
+      "requested_gc": 1,
+      "result_sha256": "40d9dcb012b39ff317b982741f3388858810c1ad9911a5944ebcc80dba95f5c1",
+      "returncode": 0,
+      "root_reaped": true,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "slot-status-runtime-equal\n"
+    }
+  ],
+  "full_source_before_after": "PASS",
+  "native_execution_count": 2,
+  "packet_manifest_sha256": "0a657cb72b56d95821d83cbbf508bdf1a04fdccd2b85e40d594e502bf270d2b5",
+  "performance_claim": "None",
+  "preservation_commit": "168ed02d535fb89082e78d2683db7d3cff5c596e",
+  "preserved_predecessor": {
+    "gc0": "Original raw-collector C assertions/exit/output succeeded, strict observation FAIL with no collection events",
+    "gc1": "UNRUN after original observation failure",
+    "qualification_sha256": "5d050a32eef1d2ea2ed47e8783d86829830502285c70338d91347de80e4f8182"
+  },
+  "qualification_sha256": "69e2efd30e73001dda18c85c0a947d906f5cc5ba5e93ffb63cbbf62a5bf52948",
+  "runtime_archive_sha256": "a6645f903e03f6766ecc7466b76f2993318582d287a393831aa5522158421915",
+  "runtime_archive_sidecars_and_elf_postseals": "PASS",
+  "runtime_configuration": {
+    "members": 191,
+    "refcount": "atomic",
+    "threads": true
+  },
+  "schema": "pcc.cold_slot_dispatch_native_public_qualification.v1",
+  "scope": "Two-call dispatch-corrected fresh-error C fixture, former-inline and candidate reporting probes in one owned ELF, actual observed GC0/1 only",
+  "source_relation": "Compiler/runtime full inventory unchanged; native test postimage is separately bound external input. No whole-new-master qualification claim.",
+  "status": "PASS",
+  "test_only_dispatch_successor": {
+    "compiler_inventory_relation": "unchanged old full compiler source inventory; external test-only postimage is separately bound, not substituted into it",
+    "patch_sha256": "1cee8adeb4bb544330b6aa2e30b2d585396519914cf75fad40c61156354004a3",
+    "path": "tests/python/test_slot_call_status_reporting_native.py",
+    "postimage_sha256": "8348c58193351f4d025e3824d596d0a7c38500ca0ce8abf188e3d8382029ab90",
+    "preimage_sha256": "f3915510ed44ed2c5e5f8a73f88b22c004ec11a439bd1c5705b3f6ece420fe65",
+    "public_collection_reason": -1,
+    "replacements": 2
+  },
+  "unrun": [
+    "GC2",
+    "GC3",
+    "GC4",
+    "native pcc1",
+    "macOS",
+    "full async16",
+    "full gateway",
+    "full Stage1",
+    "broad native regression suite"
+  ]
+}

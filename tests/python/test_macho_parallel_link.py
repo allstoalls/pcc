@@ -272,3 +272,181 @@ def test_duplicate_definition_diagnostic_is_worker_count_independent(
         monkeypatch.setenv(PARALLEL_JOBS_ENV, str(jobs))
         with pytest.raises(LinkError, match="duplicate definition of '_main'"):
             link_executable([duplicate, duplicate])
+
+
+@pytest.mark.parametrize("jobs", [1, 4])
+def test_positional_writer_preserves_seed_gaps_cursor_and_descriptor(tmp_path, jobs):
+    import os
+    from pcc.backend.macho_parallel import write_file_output
+
+    path = tmp_path / "positioned"
+    with path.open("w+b") as stream:
+        descriptor = stream.fileno()
+        # Keep this seed buffered: flushing after shrinking would re-add its tail.
+        stream.write(b"abcdefghijklmnop")
+        position = stream.tell()
+        write_file_output(stream, 8, [OutputRegion(2, b"XY")], jobs=jobs)
+        assert stream.tell() == position
+        assert stream.fileno() == descriptor and not stream.closed
+        stream.seek(0)
+        assert stream.read() == b"abXYefgh"
+        stream.seek(3)
+        write_file_output(stream, 14, [OutputRegion(11, b"end")], jobs=jobs)
+        assert stream.tell() == 3
+        stream.seek(0)
+        assert stream.read() == b"abXYefgh\0\0\0end"
+        assert os.fstat(descriptor).st_size == 14
+        write_file_output(stream, 0, [], jobs=jobs)
+        assert not stream.closed and os.fstat(descriptor).st_size == 0
+
+
+def test_positional_writer_rejects_actual_append_flag_before_mutation(tmp_path):
+    import os
+    from pcc.backend.macho_parallel import write_file_output
+
+    path = tmp_path / "append"
+    path.write_bytes(b"original")
+    descriptor = os.open(path, os.O_RDWR | os.O_APPEND)
+    try:
+        # The wrapper mode does not describe the descriptor's O_APPEND flag.
+        with os.fdopen(descriptor, "r+b", closefd=False) as stream:
+            assert "a" not in stream.mode
+            with pytest.raises(ParallelLinkError, match="O_APPEND"):
+                write_file_output(stream, 2, [OutputRegion(0, b"XX")], jobs=2)
+            assert stream.tell() == 0 and not stream.closed
+        assert os.fstat(descriptor).st_size == 8
+    finally:
+        os.close(descriptor)
+    assert path.read_bytes() == b"original"
+
+
+def test_positional_writer_invalid_configuration_precedes_io(tmp_path, monkeypatch):
+    from pcc.backend.macho_parallel import write_file_output
+
+    path = tmp_path / "unchanged"
+    path.write_bytes(b"original")
+    with path.open("r+b") as stream:
+        monkeypatch.setenv(PARALLEL_JOBS_ENV, "bad")
+        with pytest.raises(ParallelLinkError, match="positive integer"):
+            write_file_output(stream, 2, [OutputRegion(0, b"XX")])
+        assert stream.tell() == 0 and not stream.closed
+    assert path.read_bytes() == b"original"
+
+
+def test_positional_writer_retries_short_writes_and_bounds_payload(tmp_path, monkeypatch):
+    import os
+    from pcc.backend import macho_parallel
+
+    original = os.pwrite
+    writes = []
+
+    def short_write(fd, payload, offset):
+        writes.append((offset, len(payload)))
+        return original(fd, payload[:3], offset)
+
+    monkeypatch.setattr(macho_parallel.os, "pwrite", short_write)
+    path = tmp_path / "short"
+    with path.open("w+b") as stream:
+        stream.write(b"-" * 16)
+        macho_parallel.write_file_output(
+            stream, 16, [OutputRegion(2, b"abcdefgh")], jobs=2,
+        )
+        assert stream.tell() == 16 and not stream.closed
+    assert path.read_bytes() == b"--abcdefgh------"
+    assert writes == [(2, 8), (5, 5), (8, 2)]
+
+
+@pytest.mark.parametrize("count", [0, -1, 100])
+def test_positional_writer_rejects_invalid_write_progress(tmp_path, monkeypatch, count):
+    from pcc.backend import macho_parallel
+
+    monkeypatch.setattr(macho_parallel.os, "pwrite", lambda *args: count)
+    path = tmp_path / "no-progress"
+    with path.open("w+b") as stream:
+        with pytest.raises(ParallelLinkError, match="invalid progress"):
+            macho_parallel.write_file_output(stream, 3, [OutputRegion(0, b"abc")])
+        assert not stream.closed and stream.tell() == 0
+
+
+def test_positional_writer_has_real_bounded_parallel_workers(tmp_path, monkeypatch):
+    import os
+    import threading
+    from pcc.backend import macho_parallel
+
+    chunk = macho_parallel._OUTPUT_CHUNK_BYTES
+    barrier = threading.Barrier(4, timeout=3)
+    lock = threading.Lock()
+    participants = set()
+    calls = []
+    original = os.pwrite
+
+    def simultaneous_write(fd, payload, offset):
+        with lock:
+            participants.add(threading.get_ident())
+            calls.append((offset, len(payload)))
+        barrier.wait()
+        return original(fd, payload, offset)
+
+    monkeypatch.setattr(macho_parallel.os, "pwrite", simultaneous_write)
+    path = tmp_path / "parallel"
+    data = b"A" * chunk + b"B" * chunk + b"C" * chunk + b"D" * chunk
+    with path.open("w+b") as stream:
+        macho_parallel.write_file_output(stream, len(data), [OutputRegion(0, data)], jobs=4)
+        assert stream.tell() == 0 and not stream.closed
+    assert path.read_bytes() == data
+    assert len(participants) == 4
+    assert sorted(calls) == [(index * chunk, chunk) for index in range(4)]
+
+
+def test_positional_writer_reports_lowest_failed_region_after_join(tmp_path, monkeypatch):
+    import threading
+    from pcc.backend import macho_parallel
+
+    barrier = threading.Barrier(3, timeout=3)
+    finished = []
+    lock = threading.Lock()
+
+    def failed_write(fd, payload, offset):
+        barrier.wait()
+        with lock:
+            finished.append(offset)
+        raise OSError("region " + str(offset))
+
+    monkeypatch.setattr(macho_parallel.os, "pwrite", failed_write)
+    path = tmp_path / "failures"
+    with path.open("w+b") as stream:
+        with pytest.raises(ParallelLinkError, match="could not write") as caught:
+            macho_parallel.write_file_output(stream, 9, [
+                OutputRegion(6, b"ghi"), OutputRegion(0, b"abc"), OutputRegion(3, b"def"),
+            ], jobs=3)
+        assert str(caught.value.__cause__) == "region 0"
+        assert sorted(finished) == [0, 3, 6]
+        assert stream.tell() == 0 and not stream.closed
+
+
+def test_positional_writer_does_not_read_or_materialize_existing_image(tmp_path):
+    from pcc.backend.macho_parallel import write_file_output
+
+    class WriteOnlyWrapper:
+        def __init__(self, stream):
+            self.stream = stream
+        def fileno(self):
+            return self.stream.fileno()
+        def flush(self):
+            return self.stream.flush()
+        def read(self, *args):
+            raise AssertionError("writer must not read the image")
+        def seek(self, *args):
+            raise AssertionError("writer must not move the cursor")
+        def write(self, *args):
+            raise AssertionError("writer must use positional IO")
+        def close(self):
+            raise AssertionError("writer must not close caller's file")
+
+    path = tmp_path / "sparse"
+    with path.open("w+b") as stream:
+        write_file_output(WriteOnlyWrapper(stream), 8 * 1024 * 1024,
+                          [OutputRegion(7 * 1024 * 1024, b"end")], jobs=4)
+        assert stream.tell() == 0 and not stream.closed
+        stream.seek(7 * 1024 * 1024 - 2)
+        assert stream.read(7) == b"\0\0end\0\0"

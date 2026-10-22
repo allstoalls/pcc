@@ -7,7 +7,7 @@ import textwrap
 
 
 def test_finally_runs_on_unmatched_handler_matches_cpython(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "fin.py"
     exe = tmp_path / "fin.out"
@@ -65,7 +65,7 @@ def test_finally_runs_on_unmatched_handler_matches_cpython(tmp_path, monkeypatch
 
 
 def test_finally_preserves_exception_across_cleanup(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "cleanup.py"
     exe = tmp_path / "cleanup.out"

@@ -55,7 +55,7 @@ main()
 
 
 def _build_and_run(tmp_path: Path, name: str, source: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / (name + ".py")
     exe = tmp_path / (name + ".out")
@@ -103,9 +103,9 @@ def test_bool_is_an_int_subclass_for_isinstance(tmp_path):
 
 def test_uv_lock_sync_lowers_under_strict_no_libpython():
     """The closure module the restriction blocked, compiled the pcc1 way."""
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
     path = Path(__file__).resolve().parents[2] / "pcc/package/uv_lock_sync.py"
     typed = type_infer.infer_module(

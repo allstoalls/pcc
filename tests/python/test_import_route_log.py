@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 def _read_jsonl(path):

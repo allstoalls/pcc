@@ -8,13 +8,17 @@ from pcc.backend.precise_stackmap import decode_stack_map, function_address_offs
 from pcc.backend.relocatable_merge import merge_coff_objects, merge_elf_objects
 
 
+# Checks the serialized precise stack-map table, which objects carry only on request.
+pytestmark = pytest.mark.usefixtures("precise_stackmap_tables")
+
+
 TARGETS = ("aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu",
            "x86_64-pc-windows-msvc")
 
 
 @pytest.mark.parametrize("target", TARGETS)
 def test_c_multi_unit_object_contains_one_stack_map_and_resolved_cross_unit_symbol(tmp_path, target):
-    from pcc.evaluater.c_evaluator import CEvaluator
+    from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
 
     units = [
         ("first.c", f'''target triple = "{target}"

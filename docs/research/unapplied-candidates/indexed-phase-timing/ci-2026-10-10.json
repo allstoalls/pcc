@@ -1,0 +1,371 @@
+{
+  "artifacts": [
+    {
+      "bytes": 311781,
+      "id": 11656791928,
+      "name": "bootstrap-macos-arm64",
+      "sha256": "8e3dc0b7965cee992085ad75482216528b438ffe5a8eec3d1b355cdabf351fb3",
+      "zip_members": 6
+    },
+    {
+      "bytes": 1138163,
+      "id": 11656218736,
+      "name": "bootstrap-linux-x86_64",
+      "sha256": "a3be2a8b9e76b9803aa5515bd5c7625f47eb3f69ee7027d70f5abd4670a76581",
+      "zip_members": 198
+    },
+    {
+      "bytes": 1189189,
+      "id": 11655854268,
+      "name": "bootstrap-linux-aarch64",
+      "sha256": "f3f025a60a63bf9804b3348db09e8e71b4b33d6ea4165b088956d4caad2bd782",
+      "zip_members": 199
+    },
+    {
+      "bytes": 1133843,
+      "id": 11655974120,
+      "name": "bootstrap-windows-x86_64",
+      "sha256": "1f400da12e7d71a6e0645a65d98ceff47b31e4ece4e96221dacd444abd8e6e51",
+      "zip_members": 200
+    },
+    {
+      "bytes": 170754,
+      "id": 11654819861,
+      "name": "macos-pcc0-regression-receipts",
+      "sha256": "0ed2c1cf45edc63185653b47ba0922b769add555041dfed5af71b9d8c9eff87e",
+      "zip_members": 178
+    }
+  ],
+  "evidence_seals": {
+    "artifact_readback_sha256": "c96c21fb7c43ba120d9dea89eda9e99e0c791610e72973042cdd78b6209124dc",
+    "qualification_sha256": "2c158cff721097f8eb5b5be7f5889a3b383e1fc4ba7a6feabe96528f990ba4ef",
+    "terminal_artifacts_sha256": "9f19c656c73962a5530531a4c725ba06eaaee3e7f7cd83c2bcb8ba5a907445c4",
+    "terminal_jobs_sha256": "96100ca639931fd37cd5f607abc4443be130b08f16c688a853321d766c8291d0",
+    "terminal_run_sha256": "01811a143da8e0e0426aeaadc8e99776a18710f91b81e9db5c58f650277c04b2"
+  },
+  "head_commit": "d2334624197b5fc14aaca93bb916683fb1afcb79",
+  "head_tree": "b3021a0242e5bed7dc54c9d7d32cf12182cc11c1",
+  "interpretation": [
+    "The diagnostic increment emitted real 13-field phase summaries on all four Stage1 target routes. This does not demonstrate a speedup.",
+    "All four self-host jobs hit the unchanged 2400-second Stage1 deadline. Shared GC0 Stage1 failed before later all-five-GC self-host chains on Linux and Windows.",
+    "codegen_complete=1 marks that codegen scope only. A killed worker may leave no summary; a summary is not worker or Stage1 completion.",
+    "backend_call_inclusive and function_emit_inclusive contain their child fields; function_setup is nested in function_emit_inclusive. Do not sum parent and child as disjoint work.",
+    "Phase totals are overlapping worker elapsed durations with diagnostic overhead, not CPU shares or stage wall time. Raw summary counts do not deduplicate retried workers.",
+    "The focused macOS pcc0 programs passed on the exact source commit. They do not directly establish native execution of the new phase-timing helper.",
+    "No semantic defect or algorithm safety conclusion is inferred from a deadline alone. Full current-master acceptance, pcc1, later self-host stages, fixed point and downstream wheel gates remain unqualified.",
+    "The new 36-case focused test file was qualified locally with fake clocks/stubbed dispatch. This CI receipt does not relabel it as a newly selected native CI test."
+  ],
+  "jobs": [
+    {
+      "completed_at": "2026-10-10T02:30:52Z",
+      "conclusion": "failure",
+      "failed_steps": [
+        "Qualify all five GC self-host chains"
+      ],
+      "html_url": "https://github.com/ikshengmin/pcc/actions/runs/38014379032/job/114101304355",
+      "id": 114101304355,
+      "name": "Native wheel / linux-aarch64",
+      "started_at": "2026-10-10T01:45:14Z",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-10-10T02:01:38Z",
+      "conclusion": "success",
+      "failed_steps": [],
+      "html_url": "https://github.com/ikshengmin/pcc/actions/runs/38014379032/job/114101304376",
+      "id": 114101304376,
+      "name": "macOS arm64 focused pcc0 native regressions",
+      "started_at": "2026-10-10T01:45:19Z",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-10-10T02:26:00Z",
+      "conclusion": "failure",
+      "failed_steps": [
+        "Build current pcc1"
+      ],
+      "html_url": "https://github.com/ikshengmin/pcc/actions/runs/38014379032/job/114101304390",
+      "id": 114101304390,
+      "name": "macOS arm64 native pcc1 and installed wheel",
+      "started_at": "2026-10-10T01:45:16Z",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-10-10T02:28:59Z",
+      "conclusion": "failure",
+      "failed_steps": [
+        "Qualify all five GC self-host chains"
+      ],
+      "html_url": "https://github.com/ikshengmin/pcc/actions/runs/38014379032/job/114101304392",
+      "id": 114101304392,
+      "name": "Native wheel / linux-x86_64",
+      "started_at": "2026-10-10T01:45:11Z",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-10-10T02:30:53Z",
+      "conclusion": "failure",
+      "failed_steps": [
+        "Qualify all five GC self-host chains"
+      ],
+      "html_url": "https://github.com/ikshengmin/pcc/actions/runs/38014379032/job/114101304579",
+      "id": 114101304579,
+      "name": "Native wheel / windows-x86_64",
+      "started_at": "2026-10-10T01:45:12Z",
+      "status": "completed"
+    }
+  ],
+  "macos_pcc0": {
+    "aggregate_native_executions": 25,
+    "aggregate_programs": [
+      "typed-list-unbox",
+      "typed-loop-unbox",
+      "typed-comprehension-unbox",
+      "original-direct-payload",
+      "original-valuebox"
+    ],
+    "clock_scope": "Real host/native epoch, simulated suspend and emitted native worker-state reader",
+    "collector_evidence_scope": "Each retained execution receipt records a single observed collector equal to the requested backend. Raw GC event streams are not included in this artifact, so no new event parsing is claimed.",
+    "collectors_recorded_as_observed_per_program": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "matched_runtime": {
+      "archive_sha256": "f98025a75e6ce2f8e7cfd55a64c7fc55370912d4e5240accc549300c333bde5e",
+      "capi_inventory_sha256": "71ab7e714faa2f754fd353fc6d7f50cf95267d32f4388895b95d30ddd01dffda",
+      "codegen_sha256": [
+        "6ab202bf8b783acfbe16618a9d008af95144bada728bdb1f097c00036fddec81"
+      ],
+      "config": {
+        "refcount": "atomic",
+        "threads": true
+      },
+      "member_count": 181,
+      "provenance_sha256": "56ff30c872e9d02cea282fc8aeb559571eaa91bcf17a700f9755193a11be63aa",
+      "target": "arm64-apple-darwin"
+    },
+    "output_validation": "All aggregate exit/stdout/stderr results equal their CPython references. Original direct-payload expects del:shutdown on stderr.",
+    "qualification_source_commit": "d2334624197b5fc14aaca93bb916683fb1afcb79",
+    "readback_sha256": "56703860cf595eed7a11f30ecdc03dc006979533183da534e4b29468b813671e",
+    "status": "PASS",
+    "test_counts": {
+      "clock": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 2
+      },
+      "native-worker-clock": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 1
+      },
+      "root-joins": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 5
+      },
+      "time": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 1
+      },
+      "worker-handles": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 2
+      }
+    },
+    "tests_passed": 11,
+    "time_collector_scope": "Requested GC0-4 only; no observed collector field in this report.",
+    "time_native_executions": 5
+  },
+  "manual_dispatches": 0,
+  "monitor_status": "CLOSED_AFTER_ALL_FIVE_JOBS_TERMINAL",
+  "pcc_tree": "ee02ba6bf0d79e9706c1791aa650093f5f91c338",
+  "recorded_at": "2026-10-10T02:34:56.729600+00:00",
+  "repository": "ikshengmin/pcc",
+  "reruns": 0,
+  "run": {
+    "conclusion": "failure",
+    "created_at": "2026-10-10T01:45:09Z",
+    "event": "push",
+    "id": 38014379032,
+    "status": "completed",
+    "updated_at": "2026-10-10T02:30:54Z",
+    "url": "https://github.com/ikshengmin/pcc/actions/runs/38014379032"
+  },
+  "schema": "pcc.indexed-phase-ci-public-receipt.v1",
+  "self_host_platforms": {
+    "linux-aarch64": {
+      "failure": {
+        "classification": "Shared GC0 Stage1 deadline exceeded",
+        "completed_stages": [],
+        "error": "stage deadline exceeded",
+        "failure_sha256": "e29bba14fd8ae40843faab818305a354c57bc807816aca9cbd785ae02ea7c558",
+        "matrix_log_sha256": "3aa3dcd8932b73012c5bf2ffc153f8d7cdfa8d50a3e9c0a56604710320d898e5",
+        "source": {
+          "clean_commit": true,
+          "commit": "d2334624197b5fc14aaca93bb916683fb1afcb79",
+          "source_file_count": 1126,
+          "source_scope": "compiler-runtime-headers-build-harness-v1",
+          "source_sha256": "6d262b29f0f883c2fd7357e0fcc2ba9964ea6be31e39ca7539eec5c9b00e7a86"
+        },
+        "timeout_s": 2400
+      },
+      "phase_telemetry": {
+        "clock_ok_counts": {
+          "1": 441
+        },
+        "codegen_complete_counts": {
+          "1": 441
+        },
+        "numeric_fields_per_record": 13,
+        "raw_summary_records": 441,
+        "record_scope": "Raw valid phase-summary records from the original artifact stream; not deduplicated completed-module counts or proof of worker/Stage1 success.",
+        "route_counts": {
+          "indexed-assembly": 441
+        },
+        "target_counts": {
+          "aarch64-unknown-linux-gnu": 441
+        }
+      },
+      "resources": {
+        "last_elapsed_s": 2400.180812658,
+        "peak_sampled_tree_rss_bytes": 5548265472,
+        "sample_count": 11065,
+        "samples_sha256": "aee09f40c16450b3f6e4546c988285e057818b2c108787e9cd8b5e84bb891097"
+      },
+      "stage1_log_member": "shared/stage1.log",
+      "stage1_log_sha256": "5f796c0ead860904ab053ee54389d72df850b23a9ab051b9095efce9b1771e9a"
+    },
+    "linux-x86_64": {
+      "failure": {
+        "classification": "Shared GC0 Stage1 deadline exceeded",
+        "completed_stages": [],
+        "error": "stage deadline exceeded",
+        "failure_sha256": "e29bba14fd8ae40843faab818305a354c57bc807816aca9cbd785ae02ea7c558",
+        "matrix_log_sha256": "e9ce622fd990418b36645520b620ef9e9f92f4988045711d0a1319c95c2da409",
+        "source": {
+          "clean_commit": true,
+          "commit": "d2334624197b5fc14aaca93bb916683fb1afcb79",
+          "source_file_count": 1126,
+          "source_scope": "compiler-runtime-headers-build-harness-v1",
+          "source_sha256": "6d262b29f0f883c2fd7357e0fcc2ba9964ea6be31e39ca7539eec5c9b00e7a86"
+        },
+        "timeout_s": 2400
+      },
+      "phase_telemetry": {
+        "clock_ok_counts": {
+          "1": 452
+        },
+        "codegen_complete_counts": {
+          "1": 452
+        },
+        "numeric_fields_per_record": 13,
+        "raw_summary_records": 452,
+        "record_scope": "Raw valid phase-summary records from the original artifact stream; not deduplicated completed-module counts or proof of worker/Stage1 success.",
+        "route_counts": {
+          "indexed-assembly": 452
+        },
+        "target_counts": {
+          "x86_64-unknown-linux-gnu": 452
+        }
+      },
+      "resources": {
+        "last_elapsed_s": 2400.005791279,
+        "peak_sampled_tree_rss_bytes": 5216346112,
+        "sample_count": 10949,
+        "samples_sha256": "0681662aad90c7d2120a7d159f1d7beb10e9fc3d0191bfd1d510b8051834262d"
+      },
+      "stage1_log_member": "shared/stage1.log",
+      "stage1_log_sha256": "b29cb137e417fef5eed7d1d590f4fbb1ffeb5c8210539dd216cc7f46e8c217f4"
+    },
+    "macos-arm64": {
+      "failure": {
+        "bootstrap_returncode": 124,
+        "child_returncode": 143,
+        "classification": "Stage1 process timeout",
+        "elapsed_s": 2400.171466292,
+        "result_sha256": "9b3a971809bc21bc22a5776f1e63aeb66f6149ae884858e2afcf3dea080416b8",
+        "stage_output": null,
+        "timeout_s": 2400
+      },
+      "phase_telemetry": {
+        "clock_ok_counts": {
+          "1": 405
+        },
+        "codegen_complete_counts": {
+          "1": 405
+        },
+        "numeric_fields_per_record": 13,
+        "raw_summary_records": 405,
+        "record_scope": "Raw valid phase-summary records from the original artifact stream; not deduplicated completed-module counts or proof of worker/Stage1 success.",
+        "route_counts": {
+          "indexed-native-sections": 405
+        },
+        "target_counts": {
+          "arm64-apple-darwin": 405
+        }
+      },
+      "resources": {
+        "budget_selection": "automatic",
+        "max_tree_rss_bytes": 2796290048,
+        "peak_process_count": 5,
+        "peak_tree_rss_bytes": 1710751744,
+        "sample_count": 6744
+      },
+      "stage1_log_member": "stage1.process.tqzo2m17/target.stderr",
+      "stage1_log_sha256": "a17a1b4d90ad6218a172722ce5780e87c36fe9b25943afd3f9e04425517e6d59"
+    },
+    "windows-x86_64": {
+      "failure": {
+        "classification": "Shared GC0 Stage1 deadline exceeded",
+        "completed_stages": [],
+        "error": "stage deadline exceeded",
+        "failure_sha256": "0ae3b274641bcb68560609df917227d776d05b3e9fb4303f06889a74777e8303",
+        "matrix_log_sha256": "ec56ef77915182d57573485728aade4a08c05b8001a05cbb6b58f356c10ff0bd",
+        "source": {
+          "clean_commit": true,
+          "commit": "d2334624197b5fc14aaca93bb916683fb1afcb79",
+          "source_file_count": 1126,
+          "source_scope": "compiler-runtime-headers-build-harness-v1",
+          "source_sha256": "3e1dc6a178d212e24ab336c24c17284c288ed4fb0c67d059b33b53ff1dc2dce6"
+        },
+        "timeout_s": 2400
+      },
+      "phase_telemetry": {
+        "clock_ok_counts": {
+          "1": 411
+        },
+        "codegen_complete_counts": {
+          "1": 411
+        },
+        "numeric_fields_per_record": 13,
+        "raw_summary_records": 411,
+        "record_scope": "Raw valid phase-summary records from the original artifact stream; not deduplicated completed-module counts or proof of worker/Stage1 success.",
+        "route_counts": {
+          "indexed-assembly": 411
+        },
+        "target_counts": {
+          "x86_64-pc-windows-msvc": 411
+        }
+      },
+      "resources": {
+        "last_elapsed_s": 2400.248331,
+        "peak_sampled_tree_rss_bytes": 6562906112,
+        "sample_count": 9930,
+        "samples_sha256": "d68ba6a5369baa6f04b25e150ef40e4e5da876026608e50d0cdbd2753522f136"
+      },
+      "stage1_log_member": "shared/stage1.log",
+      "stage1_log_sha256": "aa1eb91078d3f2b0b825b2477ca5ee25a7bb3b7d5ce38cc1b535b53df545c1a3"
+    }
+  }
+}

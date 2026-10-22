@@ -7,10 +7,10 @@ Organized by subsystem; paths are relative to the repository root.
 
 | Path | Role |
 |---|---|
-| [pcc/pcc.py](../../pcc/pcc.py), [pcc/cli_core.py](../../pcc/cli_core.py) | CLI entry points |
-| [pcc/cli_bootstrap.py](../../pcc/cli_bootstrap.py) | Bootstrap-stage CLI used by `pcc1`/`pcc2`/`pcc3` |
+| [pcc/pcc.py](../../pcc/pcc.py), [pcc/driver/cli_core.py](../../pcc/driver/cli_core.py) | CLI entry points |
+| [pcc/driver/cli_bootstrap.py](../../pcc/driver/cli_bootstrap.py) | Bootstrap-stage CLI used by `pcc1`/`pcc2`/`pcc3` |
 | [pcc/api.py](../../pcc/api.py) | `build(...)` / `module(...)` Python API for the C path |
-| [pcc/project.py](../../pcc/project.py) | Directory source collection, `--sources-from-make`, TU selection |
+| [pcc/driver/project.py](../../pcc/driver/project.py) | Directory source collection, `--sources-from-make`, TU selection |
 | [scripts/bootstrap.sh](../../scripts/bootstrap.sh) | macOS arm64 three-stage bootstrap entry |
 | [scripts/pcc_multi.py](../../scripts/pcc_multi.py) | Experimental multi-file Python entry |
 
@@ -18,34 +18,34 @@ Organized by subsystem; paths are relative to the repository root.
 
 | Path | Role |
 |---|---|
-| [pcc/parse/c_parser.py](../../pcc/parse/c_parser.py) | C parser (PLY; bump cache version on grammar/lexer changes) |
-| [pcc/preprocessor.py](../../pcc/preprocessor.py) | Preprocessing |
-| [pcc/evaluater/c_evaluator.py](../../pcc/evaluater/c_evaluator.py) | C preprocess/parse/IR/optimize/execute pipeline |
-| [pcc/codegen/c_codegen.py](../../pcc/codegen/c_codegen.py) | Main C semantic lowering (home of the signedness invariants) |
+| [pcc/frontends/c/parse/c_parser.py](../../pcc/frontends/c/parse/c_parser.py) | C parser (PLY; bump cache version on grammar/lexer changes) |
+| [pcc/frontends/c/preprocessor.py](../../pcc/frontends/c/preprocessor.py) | Preprocessing |
+| [pcc/frontends/c/evaluator/c_evaluator.py](../../pcc/frontends/c/evaluator/c_evaluator.py) | C preprocess/parse/IR/optimize/execute pipeline |
+| [pcc/frontends/c/codegen/c_codegen.py](../../pcc/frontends/c/codegen/c_codegen.py) | Main C semantic lowering (home of the signedness invariants) |
 | [utils/fake_libc_include/](../../utils/fake_libc_include) | Fake libc headers (host ABI mismatches surface here) |
 
 ## Python frontend (Chapters 5–6)
 
 | Path | Role |
 |---|---|
-| [pcc/parse/py_parse.py](../../pcc/parse/py_parse.py), [pcc/parse/py_lift.py](../../pcc/parse/py_lift.py) | Python parsing and lifting |
-| [pcc/py_frontend/py_ast.py](../../pcc/py_frontend/py_ast.py), `pipeline.py`, `type_infer.py` | AST, pipeline, type inference |
-| [pcc/py_frontend/codegen/layer1.py](../../pcc/py_frontend/codegen/layer1.py) | Thin lowering facade |
-| `pcc/py_frontend/codegen/*_lowering.py` | The lowering mixins (where the behavior lives) |
-| `pcc/py_frontend/codegen/native_*.py` | Native module lowering (gc, threading, asyncio, os, math, ...) |
-| [pcc/fallback_routes.py](../../pcc/fallback_routes.py), [pcc/fallback_explainer.py](../../pcc/fallback_explainer.py) | Fallback routing and explanation |
+| [pcc/frontends/python/py_parse.py](../../pcc/frontends/python/py_parse.py), [pcc/frontends/python/py_lift.py](../../pcc/frontends/python/py_lift.py) | Python parsing and lifting |
+| [pcc/frontends/python/py_ast.py](../../pcc/frontends/python/py_ast.py), `pipeline.py`, `type_infer.py` | AST, pipeline, type inference |
+| [pcc/frontends/python/codegen/layer1.py](../../pcc/frontends/python/codegen/layer1.py) | Thin lowering facade |
+| `pcc/frontends/python/codegen/*_lowering.py` | The lowering mixins (where the behavior lives) |
+| `pcc/frontends/python/codegen/native_*.py` | Native module lowering (gc, threading, asyncio, os, math, ...) |
+| [pcc/diagnostics/fallback_routes.py](../../pcc/diagnostics/fallback_routes.py), [pcc/diagnostics/fallback_explainer.py](../../pcc/diagnostics/fallback_explainer.py) | Fallback routing and explanation |
 
 ## Runtime (Chapters 7–11, 14)
 
 | Path | Role |
 |---|---|
-| [pcc/py_runtime/include/py_runtime.h](../../pcc/py_runtime/include/py_runtime.h) | Public header: object header, type tags, `PCC_GC_KIND_*` |
-| [pcc/py_runtime/src/py_internal.h](../../pcc/py_runtime/src/py_internal.h) | Runtime-internal layouts (e.g. `PyClassObject`) |
-| `pcc/py_runtime/src/*.c` | Transitional/host-C implementations and differential oracles; not member sources for the final production pcc-Python archive |
-| [pcc/py_runtime/Makefile](../../pcc/py_runtime/Makefile) | `PY_MODULES`, `FREESTANDING_PY_MODULES`, provenance, and production archive assembly |
-| `pcc/py_runtime/py/py_*.py` | Semantic pcc-Python: object, container, exception, and C-API behavior |
-| `pcc/py_runtime/py/freestanding_*.py` | Freestanding pcc-Python: allocator, threads, platform/libc-like substrate, and five-GC policy |
-| [pcc/py_runtime/py/freestanding_gc_object_slots.py](../../pcc/py_runtime/py/freestanding_gc_object_slots.py) | Unified production object-slot visitation contract |
+| [pcc/runtime/include/py_runtime.h](../../pcc/runtime/include/py_runtime.h) | Public header: object header, type tags, `PCC_GC_KIND_*` |
+| [pcc/runtime/src/py_internal.h](../../pcc/runtime/src/py_internal.h) | Runtime-internal layouts (e.g. `PyClassObject`) |
+| `pcc/runtime/src/*.c` | Transitional/host-C implementations and differential oracles; not member sources for the final production pcc-Python archive |
+| [pcc/runtime/Makefile](../../pcc/runtime/Makefile) | `PY_MODULES`, `FREESTANDING_PY_MODULES`, provenance, and production archive assembly |
+| `pcc/runtime/py/py_*.py` | Semantic pcc-Python: object, container, exception, and C-API behavior |
+| `pcc/runtime/py/freestanding_*.py` | Freestanding pcc-Python: allocator, threads, platform/libc-like substrate, and five-GC policy |
+| [pcc/runtime/py/freestanding_gc_object_slots.py](../../pcc/runtime/py/freestanding_gc_object_slots.py) | Unified production object-slot visitation contract |
 | [pcc/extern/](../../pcc/extern), [pcc/unsafe/](../../pcc/unsafe) | Python→C extern declarations; compiler-recognized intrinsics |
 | [docs/refs_docs/gc-research/](../../docs/refs_docs/gc-research) | Reference implementations for the five GCs (Lua, Go, OCaml, ZGC, CPython) |
 
@@ -53,7 +53,7 @@ Organized by subsystem; paths are relative to the repository root.
 
 | Path | Role |
 |---|---|
-| [pcc/llvm_capi/](../../pcc/llvm_capi) | In-repo LLVM-C builder (llvmlite as fallback and oracle) |
+| [pcc/ir/](../../pcc/ir) | In-repo LLVM-C builder (llvmlite as fallback and oracle) |
 | [pcc/backend/](../../pcc/backend) | Self backend (AArch64 Darwin, x86_64 Linux subsets) |
 
 ## Bootstrap and baselines (Chapter 15)
@@ -69,9 +69,9 @@ Organized by subsystem; paths are relative to the repository root.
 
 | Path | Role |
 |---|---|
-| [pcc/package/](../../pcc/package), [pcc/capi_abi.py](../../pcc/capi_abi.py), [pcc/capi_surface.py](../../pcc/capi_surface.py) | Package path and C-API surface |
-| `pcc/py_runtime/py/py_capi_*_runtime.py`, `py_extension_loader_runtime.py` | Production pcc-Python C-API ABI and extension-loader owners |
-| [pcc/py_runtime/src/py_capi_shim.c](../../pcc/py_runtime/src/py_capi_shim.c), `py_extension_loader.c` | Host-C oracle/transitional implementations, not production pcc-Python archive owners |
+| [pcc/package/](../../pcc/package), [pcc/frontends/c/capi_abi.py](../../pcc/frontends/c/capi_abi.py), [pcc/frontends/c/capi_surface.py](../../pcc/frontends/c/capi_surface.py) | Package path and C-API surface |
+| `pcc/runtime/py/py_capi_*_runtime.py`, `py_extension_loader_runtime.py` | Production pcc-Python C-API ABI and extension-loader owners |
+| [pcc/runtime/src/py_capi_shim.c](../../pcc/runtime/src/py_capi_shim.c), `py_extension_loader.c` | Host-C oracle/transitional implementations, not production pcc-Python archive owners |
 
 ## GUI and application execution (Chapter 20)
 

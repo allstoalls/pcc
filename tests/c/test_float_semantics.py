@@ -1,7 +1,5 @@
 import os
 import sys
-import subprocess
-import tempfile
 
 this_dir = os.path.dirname(os.path.abspath(__file__))
 # tests/{c,python}/<file>.py -> repo root is two levels up. This used to
@@ -9,45 +7,22 @@ this_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(os.path.dirname(this_dir))
 sys.path.insert(0, parent_dir)
 
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.parse.c_parser import CParser
-from pcc.codegen.c_codegen import LLVMCodeGenerator, postprocess_ir_text
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.frontends.c.parse.c_parser import CParser
+from pcc.frontends.c.codegen.c_codegen import (
+    CCodeGenerator,
+    postprocess_ir_text,
+)
+
+from tests.owned_c_execution import compile_and_run_owned_c
 
 
 def _generate_ir(source):
     processed = CEvaluator._system_cpp(source, base_dir=parent_dir)
     ast = CParser().parse(processed)
-    cg = LLVMCodeGenerator()
+    cg = CCodeGenerator()
     cg.generate_code(ast)
     return postprocess_ir_text(str(cg.module))
-
-
-def _compile_and_run(source):
-    with tempfile.TemporaryDirectory(prefix="pcc_float_semantics_") as tmpdir:
-        ir_path = os.path.join(tmpdir, "float_semantics.ll")
-        obj_path = os.path.join(tmpdir, "float_semantics.o")
-        bin_path = os.path.join(tmpdir, "float_semantics_bin")
-
-        with open(ir_path, "w") as f:
-            f.write(_generate_ir(source))
-
-        r = subprocess.run(
-            ["cc", "-c", "-w", ir_path, "-o", obj_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        assert r.returncode == 0, r.stderr
-
-        r = subprocess.run(
-            ["cc", obj_path, "-o", bin_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        assert r.returncode == 0, r.stderr
-
-        return subprocess.run([bin_path], capture_output=True, text=True, timeout=30)
 
 
 def test_float_size_matches_native_abi():
@@ -57,7 +32,7 @@ def test_float_size_matches_native_abi():
         }
     """
 
-    r = _compile_and_run(source)
+    r = compile_and_run_owned_c(source)
     assert r.returncode == 0, r.stderr
 
 
@@ -76,7 +51,7 @@ def test_nan_comparisons_follow_c_semantics():
         }
     """
 
-    r = _compile_and_run(source)
+    r = compile_and_run_owned_c(source)
     assert r.returncode == 0, r.stderr
 
 
@@ -95,7 +70,7 @@ def test_huge_val_macros_match_infinity():
         }
     """
 
-    r = _compile_and_run(source)
+    r = compile_and_run_owned_c(source)
     assert r.returncode == 0, r.stderr
 
 

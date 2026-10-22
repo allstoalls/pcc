@@ -1,0 +1,491 @@
+--- a/pcc/frontends/python/codegen/class_gen.py
++++ b/pcc/frontends/python/codegen/class_gen.py
+@@ -2075,6 +2075,7 @@
+         # variable names.
+         self._base_arr_pool: dict[tuple[str, ...], ir.GlobalVariable] = {}
+         self._class_defs: list[ClassDef] = []
++        self._class_init_outline_sites: list[tuple[str, str, int, int, int, int, int]] = []
+         self._dataclass_init_args = {}
+         self._dataclass_generated_init = {}
+         self._external_method_overrides = None
+@@ -4721,6 +4722,450 @@
+ 
+     # ------------------------------------------------------ module init
+ 
++    def prepare_class_init_outlines(self) -> None:
++        """Retain direct source positions before closure hoisting changes body."""
++        self._class_init_outline_sites = []
++        for ordinal, statement in enumerate(self.parent.ast_module.body):
++            if not _is_ast_node(statement, ClassDef):
++                continue
++            span = statement.span
++            if span is None:
++                continue
++            self._class_init_outline_sites.append((
++                statement.name, span.file, span.line, span.col,
++                span.end_line, span.end_col, ordinal,
++            ))
++
++    def _class_init_outline_ordinal(self, cd: ClassDef) -> int:
++        # Empty capture tuples still denote a function-local class.  The
++        # module copy is a declaration, never an extra runtime definition.
++        if cd.name in self.parent._hoisted_class_capture_params:
++            return -1
++        span = cd.span
++        if span is None:
++            return -1
++        found = -1
++        for site in self._class_init_outline_sites:
++            if (
++                site[0] == cd.name and site[1] == span.file
++                and site[2] == span.line and site[3] == span.col
++                and site[4] == span.end_line and site[5] == span.end_col
++            ):
++                if found >= 0:
++                    return -1
++                found = site[6]
++        return found
++
++    def _class_init_outline_literal(self, expr: Expr) -> bool:
++        # A closed syntax subset avoids sharing a caller's import/lexical
++        # resolution decisions.  The body still performs every allocation.
++        pending = [expr]
++        while pending:
++            current = pending.pop()
++            if _is_ast_node(current, (NoneLit, StrLit)):
++                continue
++            if not _is_ast_node(current, TupleExpr):
++                return False
++            pending.extend(current.elems)
++        return True
++
++    def _class_init_outline_is_closed(self, cd: ClassDef, info: ClassInfo) -> bool:
++        if (
++            cd.decorators or cd.keywords or info.runtime_decorators
++            or info.metaclass_name is not None or info.expanded_cd is not None
++            or info.owning_module is not None or info.valueclass
++            or info.dataclass_generated_init or info.dataclass_init_args is not None
++            or info.struct_sequence or info.enum_members or info.enum_string_members
++            or info.protocol_members
++        ):
++            return False
++        # An ordinary base may itself have a dynamic default, so it need not
++        # qualify for outlining.  Its object is reloaded from the same global
++        # on every invocation.  Imported/special/metaclass ancestry stays inline.
++        ordinal = self._class_init_outline_ordinal(cd)
++        if ordinal < 0:
++            return False
++        pending = [(base, ordinal) for base in info.bases_ast]
++        visited = set()
++        while pending:
++            base, upper_ordinal = pending.pop()
++            if not _is_ast_node(base, Name):
++                return False
++            if base.ident == "object":
++                if self.parent._iterator_builtin_is_shadowed("object"):
++                    return False
++                continue
++            base_ordinal = -1
++            for site in self._class_init_outline_sites:
++                if site[0] == base.ident:
++                    if base_ordinal >= 0:
++                        return False
++                    base_ordinal = site[6]
++            if base_ordinal < 0 or base_ordinal >= upper_ordinal:
++                return False
++            if base.ident in visited:
++                continue
++            visited.add(base.ident)
++            base_info = self.classes.get(base.ident)
++            if (
++                base_info is None or base_info is info
++                or base_info.owning_module is not None
++                or base_info.metaclass_name is not None
++                or base_info.valueclass or base_info.expanded_cd is not None
++                or base_info.dataclass_generated_init
++                or base_info.dataclass_init_args is not None
++                or base_info.struct_sequence or base_info.enum_members
++                or base_info.enum_string_members or base_info.protocol_members
++                or base_info.runtime_decorators
++            ):
++                return False
++            pending.extend((ancestor, base_ordinal) for ancestor in base_info.bases_ast)
++        for statement in cd.body:
++            if _is_ast_node(statement, Pass):
++                continue
++            if _is_ast_node(statement, ExprStmt):
++                if not _is_ast_node(statement.expr, StrLit):
++                    return False
++                continue
++            if _is_ast_node(statement, Assign):
++                if (
++                    len(statement.targets) != 1
++                    or not _is_ast_node(statement.targets[0], Name)
++                    or statement.annotation is not None or not statement.has_value
++                    or not self._class_init_outline_literal(statement.value)
++                ):
++                    return False
++                continue
++            if not _is_ast_node(statement, FuncDef):
++                return False
++            if statement.decorators or statement.is_async or statement.manual_pointer_abi:
++                return False
++            # Arg.annotation contains normalized inferred Type metadata.  It
++            # is not an indication that source had an evaluated annotation.
++            types = [statement.return_ty]
++            for argument in statement.args:
++                types.append(argument.annotation)
++                if argument.has_default and (
++                    argument.default is None
++                    or not self._class_init_outline_literal(argument.default)
++                ):
++                    return False
++            for declared_ty in types:
++                if declared_ty is None:
++                    continue
++                if _is_ast_node(declared_ty, (RawPointerType, ValueArrayType)):
++                    return False
++                if self.parent._is_valueclass_payload_type(declared_ty):
++                    return False
++        for declared_ty in info.field_types.values():
++            if _is_ast_node(declared_ty, (RawPointerType, ValueArrayType)):
++                return False
++            if self.parent._is_valueclass_payload_type(declared_ty):
++                return False
++        return True
++
++    def _maybe_emit_class_init_outline(self, cd: ClassDef, info: ClassInfo) -> bool:
++        parent = self.parent
++        if parent.current_func_def is not None:
++            return False
++        ordinal = self._class_init_outline_ordinal(cd)
++        if ordinal < 0 or not self._class_init_outline_is_closed(cd, info):
++            return False
++        target = parent._current_try_err_block()
++        cpy_target = parent._cpy_operand_cleanup_block
++        if cpy_target is not None and cpy_target is not target:
++            # A scalar failure result cannot distinguish two different outer
++            # cleanup programs.  Keep such sites on their existing inline path.
++            return False
++        suffix = module_symbol_suffix(parent.module.name or "mod")
++        if (
++            "continuation" in suffix or "__gen_resume" in suffix
++            or "__vthread_resume" in suffix
++        ):
++            # Those spellings carry special stackmap call classification.
++            return False
++        name = "__pcc_class_init_body_" + suffix + "_" + str(ordinal)
++        helper = parent.module.globals.get(name)
++        fnty = ir.FunctionType(_I32, [], var_arg=False)
++        if helper is None:
++            helper = ir.Function(parent.module, fnty, name=name)
++            helper.linkage = "internal"
++            helper.attributes.add("noinline")
++            self._emit_class_init_outline_body(cd, info, helper)
++        elif (
++            not isinstance(helper, ir.Function)
++            or helper.module is not parent.module
++            or str(helper.function_type) != str(fnty)
++            or helper.linkage != "internal" or "noinline" not in helper.attributes
++            or not helper.blocks
++        ):
++            raise L1CodegenError("incompatible class-init outline declaration: " + name)
++        if target is None:
++            target = parent._ensure_fn_err_exit()
++        status = parent.builder.call(helper, [], name=self._fresh("class.init.status"))
++        ok = parent.builder.icmp_signed(
++            "==", status, ir.Constant(_I32, 1), name=self._fresh("class.init.ok"),
++        )
++        continuation = parent.current_function.append_basic_block(
++            name=self._fresh("class.init.done"),
++        )
++        # The body already appended its original source frame and unwound its
++        # owners.  A direct status edge also propagates bridge-only failures.
++        parent.builder.cbranch(ok, continuation, target)
++        parent.builder.position_at_end(continuation)
++        return True
++
++    def _emit_class_init_outline_body(
++        self,
++        cd: ClassDef,
++        info: ClassInfo,
++        helper: ir.Function,
++    ) -> None:
++        """Emit an admitted module-class definition in its own IR function.
++
++        The caller owns eligibility and the internal noinline i32 ()
++        declaration. This is a machine-code boundary, not a Python function
++        activation: source frames and temporary rooting remain module-mode.
++        """
++        parent = self.parent
++        if helper.module is not parent.module or helper.blocks:
++            raise L1CodegenError("class outline requires an empty same-module helper")
++
++        saved_builder = parent.builder
++        saved_function = parent.current_function
++        saved_func_def = parent.current_func_def
++        saved_entry_block = parent._current_entry_block
++        saved_alloca_function = parent._entry_alloca_insert_before_function
++        saved_alloca_index = parent._entry_alloca_insert_index
++        saved_edge_function = parent._entry_inline_edge_anchor_function
++        saved_edge_record = parent._entry_inline_edge_anchor_record
++        saved_di_scope = parent._di_scope
++        saved_env = parent.env
++        saved_env_class_hint = parent.env_class_hint
++        saved_env_class_object_hint = parent.env_class_object_hint
++        saved_env_list_elem_class_hint = parent.env_list_elem_class_hint
++        saved_box_int_locals = parent._box_int_locals
++        saved_exact_int_flags = parent._exact_int_env_flags
++        saved_planned_exact_int_names = parent._planned_exact_int_local_names
++        saved_planned_object_names = parent._planned_object_local_names
++        saved_ir_builder_flags = parent._ir_builder_env_flags
++        saved_threading_flags = parent._threading_env_flags
++        saved_threading_list_flags = parent._threading_list_elem_flags
++        saved_weak_dict_flags = parent._weak_dict_env_flags
++        saved_weakref_flags = parent._weakref_env_flags
++        saved_native_file_flags = parent._native_file_env_flags
++        saved_native_fileinput_flags = parent._native_fileinput_env_flags
++        saved_native_re_local_aliases = parent._native_re_compile_local_aliases
++        saved_literal_dict_bindings = parent._literal_dict_expr_bindings
++        saved_virtual_literal_dict_bindings = parent._virtual_literal_dict_expr_bindings
++        saved_cpy_env_flags = parent._cpy_env_flags
++        saved_cpy_values = parent._cpy_values
++        saved_owned_cpy_values = parent._owned_cpy_values
++        saved_async_body_depth = parent._async_body_depth
++        saved_owned_names = parent._owned_local_names
++        saved_owned_has_value = parent._owned_local_has_value
++        saved_owned_flags = parent._owned_local_flag_slots
++        saved_owned_allocas = parent._owned_local_flag_allocas
++        saved_for_target_owned_names = parent._for_target_owned_names
++        saved_rooted_names = parent._gc_rooted_local_names
++        saved_rooted_order = parent._gc_rooted_local_order
++        saved_borrowed_rooted_names = parent._borrowed_gc_rooted_local_names
++        saved_pinned_rooted_names = parent._pinned_gc_rooted_local_names
++        saved_except_binding_names = parent._except_binding_names
++        saved_param_names = parent._current_param_names
++        saved_lambda_shadow_names = parent._lambda_lexical_shadow_names
++        saved_global_names = parent._current_global_names
++        saved_loop_stack = parent.loop_stack
++        saved_class = parent.current_class
++        saved_method_kind = parent.current_method_kind
++        saved_try_error = parent._try_err_block
++        saved_cpy_cleanup = parent._cpy_operand_cleanup_block
++        saved_active_handlers = parent._active_handler_excs
++        saved_handled_scopes = parent._handled_exception_scopes
++        saved_finally_stack = parent._finally_stack
++        saved_emitting_finally = parent._emitting_finally
++        saved_generator_stack = parent._generator_ctx_stack
++        saved_generator_with_names = parent._generator_with_context_names
++        saved_for_join_stack = parent._for_join_stmt_stack
++        saved_return_cleanup_roots = parent._return_cleanup_roots
++        saved_container_root_names = parent._container_temp_root_slot_names
++        saved_result_sinks = parent._slot_call_result_sinks
++        saved_cleanup_function = parent._slot_call_cleanup_function
++        saved_cleanup_blocks = parent._slot_call_cleanup_blocks
++        # These contexts are lazily installed by the existing class/lambda
++        # lowerers. Their inactive value is None, including after restoration.
++        saved_namespace_context = getattr(parent, "_class_namespace_context", None)
++        saved_abort_context = getattr(parent, "_class_definition_abort_context", None)
++        saved_lambda_adapter_scope = getattr(parent, "_lambda_adapter_root_scope", None)
++        saved_prefer_native = parent._prefer_native_callable_values
++        saved_last_call_arg_owned = getattr(parent, "_last_call_arg_owned_temp", False)
++        saved_fresh_ctor_value = parent._last_fresh_direct_native_ctor_value
++        saved_trace_stmt_index = parent._codegen_current_stmt_index
++        saved_trace_stmt_kind = parent._codegen_current_stmt_kind
++        saved_trace_expr_kind = parent._codegen_current_expr_kind
++
++        try:
++            entry = helper.append_basic_block(name="entry")
++            parent.builder = ir.IRBuilder(entry)
++            parent.current_function = helper
++            parent.current_func_def = None
++            parent._current_entry_block = entry
++            parent._entry_alloca_insert_before_function = None
++            parent._entry_alloca_insert_index = -1
++            parent._entry_inline_edge_anchor_function = None
++            parent._entry_inline_edge_anchor_record = None
++            # Module statements currently carry no subprogram locations.
++            # Do not inherit a caller's DISubprogram or mutate its builder's
++            # debug_location when restoring this source-only code boundary.
++            parent._di_scope = parent._di_file
++            parent.env = {}
++            parent.env_class_hint = {}
++            parent.env_class_object_hint = {}
++            parent.env_list_elem_class_hint = {}
++            parent._box_int_locals = parent._should_box_python_ints()
++            parent._exact_int_env_flags = {}
++            parent._planned_exact_int_local_names = set()
++            parent._planned_object_local_names = set()
++            parent._ir_builder_env_flags = {}
++            parent._threading_env_flags = {}
++            parent._threading_list_elem_flags = {}
++            parent._weak_dict_env_flags = {}
++            parent._weakref_env_flags = {}
++            parent._native_file_env_flags = {}
++            parent._native_fileinput_env_flags = {}
++            parent._native_re_compile_local_aliases = {}
++            parent._literal_dict_expr_bindings = {}
++            parent._virtual_literal_dict_expr_bindings = set()
++            parent._cpy_env_flags = {}
++            parent._cpy_values = set()
++            parent._owned_cpy_values = set()
++            parent._async_body_depth = 0
++            parent._owned_local_names = set()
++            parent._owned_local_has_value = set()
++            parent._owned_local_flag_slots = {}
++            parent._owned_local_flag_allocas = {}
++            parent._for_target_owned_names = set()
++            parent._gc_rooted_local_names = set()
++            parent._gc_rooted_local_order = []
++            parent._borrowed_gc_rooted_local_names = set()
++            parent._pinned_gc_rooted_local_names = set()
++            parent._except_binding_names = set()
++            parent._current_param_names = set()
++            parent._lambda_lexical_shadow_names = set()
++            parent._current_global_names = set()
++            parent.loop_stack = []
++            parent.current_class = None
++            parent.current_method_kind = None
++            parent._try_err_block = None
++            parent._cpy_operand_cleanup_block = None
++            parent._active_handler_excs = []
++            parent._handled_exception_scopes = []
++            parent._finally_stack = []
++            parent._emitting_finally = False
++            parent._generator_ctx_stack = []
++            parent._generator_with_context_names = []
++            parent._for_join_stmt_stack = []
++            parent._return_cleanup_roots = []
++            parent._container_temp_root_slot_names = []
++            parent._slot_call_result_sinks = []
++            parent._slot_call_cleanup_function = None
++            parent._slot_call_cleanup_blocks = {}
++            parent._class_namespace_context = None
++            parent._class_definition_abort_context = None
++            parent._lambda_adapter_root_scope = None
++            parent._prefer_native_callable_values = False
++            parent._last_call_arg_owned_temp = False
++            parent._last_fresh_direct_native_ctor_value = None
++            parent._codegen_current_stmt_index = -1
++            parent._codegen_current_stmt_kind = ""
++            parent._codegen_current_expr_kind = ""
++
++            # Keep module-owned registries in place: error/root/traceback
++            # records are keyed by their physical function or value owner.
++            # The new i32 function's existing error epilogue returns zero.
++            parent._ensure_fn_err_exit()
++            self._emit_class_init(cd, info)
++            if not parent._builder_block_is_terminated():
++                # Class construction itself retires its lexical LIFO roots.
++                # This handles any persistent helper-owned registrations;
++                # it must not replace or duplicate the class cleanup chains.
++                parent._emit_owned_local_cleanup()
++                parent.builder.ret(ir.Constant(_I32, 1))
++            # Deliberately no _instrument_python_activation call: an outline
++            # must not consume an additional Python recursion activation.
++        finally:
++            parent.builder = saved_builder
++            parent.current_function = saved_function
++            parent.current_func_def = saved_func_def
++            parent._current_entry_block = saved_entry_block
++            parent._entry_alloca_insert_before_function = saved_alloca_function
++            parent._entry_alloca_insert_index = saved_alloca_index
++            parent._entry_inline_edge_anchor_function = saved_edge_function
++            parent._entry_inline_edge_anchor_record = saved_edge_record
++            parent._di_scope = saved_di_scope
++            parent.env = saved_env
++            parent.env_class_hint = saved_env_class_hint
++            parent.env_class_object_hint = saved_env_class_object_hint
++            parent.env_list_elem_class_hint = saved_env_list_elem_class_hint
++            parent._box_int_locals = saved_box_int_locals
++            parent._exact_int_env_flags = saved_exact_int_flags
++            parent._planned_exact_int_local_names = saved_planned_exact_int_names
++            parent._planned_object_local_names = saved_planned_object_names
++            parent._ir_builder_env_flags = saved_ir_builder_flags
++            parent._threading_env_flags = saved_threading_flags
++            parent._threading_list_elem_flags = saved_threading_list_flags
++            parent._weak_dict_env_flags = saved_weak_dict_flags
++            parent._weakref_env_flags = saved_weakref_flags
++            parent._native_file_env_flags = saved_native_file_flags
++            parent._native_fileinput_env_flags = saved_native_fileinput_flags
++            parent._native_re_compile_local_aliases = saved_native_re_local_aliases
++            parent._literal_dict_expr_bindings = saved_literal_dict_bindings
++            parent._virtual_literal_dict_expr_bindings = saved_virtual_literal_dict_bindings
++            parent._cpy_env_flags = saved_cpy_env_flags
++            parent._cpy_values = saved_cpy_values
++            parent._owned_cpy_values = saved_owned_cpy_values
++            parent._async_body_depth = saved_async_body_depth
++            parent._owned_local_names = saved_owned_names
++            parent._owned_local_has_value = saved_owned_has_value
++            parent._owned_local_flag_slots = saved_owned_flags
++            parent._owned_local_flag_allocas = saved_owned_allocas
++            parent._for_target_owned_names = saved_for_target_owned_names
++            parent._gc_rooted_local_names = saved_rooted_names
++            parent._gc_rooted_local_order = saved_rooted_order
++            parent._borrowed_gc_rooted_local_names = saved_borrowed_rooted_names
++            parent._pinned_gc_rooted_local_names = saved_pinned_rooted_names
++            parent._except_binding_names = saved_except_binding_names
++            parent._current_param_names = saved_param_names
++            parent._lambda_lexical_shadow_names = saved_lambda_shadow_names
++            parent._current_global_names = saved_global_names
++            parent.loop_stack = saved_loop_stack
++            parent.current_class = saved_class
++            parent.current_method_kind = saved_method_kind
++            parent._try_err_block = saved_try_error
++            parent._cpy_operand_cleanup_block = saved_cpy_cleanup
++            parent._active_handler_excs = saved_active_handlers
++            parent._handled_exception_scopes = saved_handled_scopes
++            parent._finally_stack = saved_finally_stack
++            parent._emitting_finally = saved_emitting_finally
++            parent._generator_ctx_stack = saved_generator_stack
++            parent._generator_with_context_names = saved_generator_with_names
++            parent._for_join_stmt_stack = saved_for_join_stack
++            parent._return_cleanup_roots = saved_return_cleanup_roots
++            parent._container_temp_root_slot_names = saved_container_root_names
++            parent._slot_call_result_sinks = saved_result_sinks
++            parent._slot_call_cleanup_function = saved_cleanup_function
++            parent._slot_call_cleanup_blocks = saved_cleanup_blocks
++            parent._class_namespace_context = saved_namespace_context
++            parent._class_definition_abort_context = saved_abort_context
++            parent._lambda_adapter_root_scope = saved_lambda_adapter_scope
++            parent._prefer_native_callable_values = saved_prefer_native
++            parent._last_call_arg_owned_temp = saved_last_call_arg_owned
++            parent._last_fresh_direct_native_ctor_value = saved_fresh_ctor_value
++            parent._codegen_current_stmt_index = saved_trace_stmt_index
++            parent._codegen_current_stmt_kind = saved_trace_stmt_kind
++            parent._codegen_current_expr_kind = saved_trace_expr_kind
++
++
+     def emit_module_init(self) -> None:
+         """Emit the one-shot ``_pcc_py_module_init`` function that
+         populates every class global.
+@@ -4765,7 +5210,8 @@
+                 ):
+                     continue
+                 info = self.classes[cd.name]
+-                self._emit_class_init(cd, info)
++                if not self._maybe_emit_class_init_outline(cd, info):
++                    self._emit_class_init(cd, info)
+ 
+             self.parent.builder.ret_void()
+         finally:
+@@ -4777,7 +5223,8 @@
+         info = self.classes.get(cd.name)
+         if info is None:
+             return
+-        self._emit_class_init(cd, info)
++        if not self._maybe_emit_class_init_outline(cd, info):
++            self._emit_class_init(cd, info)
+ 
+     def emit_local_class_statement_init(self, cd: ClassDef) -> None:
+         """Construct and bind a function-local class at its source position."""
+--- a/pcc/frontends/python/codegen/generation_lowering.py
++++ b/pcc/frontends/python/codegen/generation_lowering.py
+@@ -290,6 +290,7 @@
+         # by an alias-Assign — ``<inner_name> = <hoisted_name>`` —
+         # so direct calls ``inner_name(arg)`` continue to route
+         # through the existing user-function call path.
++        self.class_lowering.prepare_class_init_outlines()
+         _codegen_log(self, debug_codegen, "hoist begin")
+         hoisted = hoist_nested_funcdefs(self)
+         _codegen_log(self, debug_codegen, "hoist end " + str(len(hoisted)))

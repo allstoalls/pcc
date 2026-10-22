@@ -9,8 +9,8 @@ def test_gc_viewer_json_output_summarizes_current_runtime_schema(tmp_path, capsy
     log = tmp_path / "runtime.jsonl"
     log.write_text(
         "\n".join([
-            '{"schema":"pcc.runtime_log.v1","category":"alloc","event":"alloc_object","value0":32,"value1":5}',
-            '{"schema":"pcc.runtime_log.v1","category":"gc","event":"collect_stop","value0":1,"value1":0}',
+            '{"schema":"pcc.diagnostics.runtime_log.v1","category":"alloc","event":"alloc_object","value0":32,"value1":5}',
+            '{"schema":"pcc.diagnostics.runtime_log.v1","category":"gc","event":"collect_stop","value0":1,"value1":0}',
         ]) + "\n",
         encoding="utf-8",
     )

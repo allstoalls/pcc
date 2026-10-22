@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend import pipeline_pass_driver
+from pcc.frontends.python import pipeline
+from pcc.frontends.python import pipeline_pass_driver
 
 
 def test_pipeline_pass_driver_facade_has_one_policy_owner():

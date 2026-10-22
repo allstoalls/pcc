@@ -129,7 +129,7 @@ def test_explicit_target_components_preserve_linux_and_darwin_aliases(triple, id
 def test_unsupported_windows_arch_is_rejected_before_object_emission_or_publication(
     tmp_path, monkeypatch
 ):
-    from pcc.evaluater.c_evaluator import CEvaluator
+    from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
 
     evaluator = object.__new__(CEvaluator)
     output = tmp_path / "retained.o"

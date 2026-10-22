@@ -58,7 +58,7 @@ def _pcc1_env(runtime_archive: Path) -> dict:
 
 def test_pcc1_compiles_and_runs_function_definitions(
     tmp_path,
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
 ):
     pcc1 = find_current_pcc1(REPO)
     if pcc1 is None:
@@ -66,7 +66,7 @@ def test_pcc1_compiles_and_runs_function_definitions(
             "no current pcc1 binary for the native function-emit gate"
         )
 
-    env = _pcc1_env(pcc_py_runtime_archive)
+    env = _pcc1_env(pcc_runtime_archive)
     for name, source, expected in _CASES:
         src = tmp_path / (name + ".py")
         src.write_text(source, encoding="utf-8")

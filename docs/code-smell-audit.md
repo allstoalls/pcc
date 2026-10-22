@@ -77,16 +77,16 @@
 
 | 行数 | 文件 |
 |---|---|
-| 11766 | `pcc/cli_bootstrap.py` |
-| 7414 | `pcc/codegen/c_codegen.py` |
-| 7151 | `pcc/py_frontend/codegen/class_gen.py` |
-| 6331 | `pcc/py_frontend/type_infer.py` |
-| 6288 | `pcc/py_frontend/codegen/unsafe_lowering.py` |
+| 11766 | `pcc/driver/cli_bootstrap.py` |
+| 7414 | `pcc/frontends/c/codegen/c_codegen.py` |
+| 7151 | `pcc/frontends/python/codegen/class_gen.py` |
+| 6331 | `pcc/frontends/python/type_infer.py` |
+| 6288 | `pcc/frontends/python/codegen/unsafe_lowering.py` |
 | 6129 | `pcc/backend/self_backend_precise_stackmaps.py` |
-| 5361 | `pcc/py_runtime/py/py_gc_backend.py` |
+| 5361 | `pcc/runtime/py/py_gc_backend.py` |
 | 4880 | `pcc/backend/self_backend_parse.py` |
-| 4648 | `pcc/cli_bootstrap_array_core.py` |
-| 4370 | `pcc/capi_surface.py` |
+| 4648 | `pcc/driver/cli_bootstrap_array_core.py` |
+| 4370 | `pcc/frontends/c/capi_surface.py` |
 
 **总量:** 154 个文件 >800 行。`cli_bootstrap.py` 同时是 broad except (506 处中占 ~40 处) 和超长 if/elif 链 (40 处) 的重灾区。
 
@@ -157,7 +157,7 @@
 
 | 方法数 | 属性数 | 类 | 文件 |
 |---|---|---|---|
-| 280 | 5 | `LLVMCodeGenerator` | `codegen/c_codegen.py` |
+| 280 | 5 | `CCodeGenerator` | `codegen/c_codegen.py` |
 | 164 | 1 | `CParser` | `parse/c_parser.py` |
 | 160 | 1 | `CParserActions` | `parse/c_parser_actions.py` |
 | 136 | 1 | `IndexedFunctionKernel` | `backend/self_backend_kernel.py` |
@@ -168,7 +168,7 @@
 | 73 | 0 | `Parser` | `parse/py_parse.py` |
 | 69 | 0 | `_Lifter` | `py_frontend/parser.py` |
 
-**解读:** `LLVMCodeGenerator` (280 方法) 是架构级坏味道 — 它承载了 LLVM 后端的全部 lowering, 应与 owned self 后端对齐拆分。注意其中部分为 parser generator 生成 (CParser/CParserActions 来自 pycparser), 可排除。
+**解读:** `CCodeGenerator` (280 方法) 是架构级坏味道 — 它承载了 LLVM 后端的全部 lowering, 应与 owned self 后端对齐拆分。注意其中部分为 parser generator 生成 (CParser/CParserActions 来自 pycparser), 可排除。
 
 ---
 
@@ -309,7 +309,7 @@
 2. `cli_bootstrap.py` broad except 逐处收窄或记录理由
 
 ### 阶段 4 (P1): 架构级
-1. `LLVMCodeGenerator` (280 方法) 按 lowering 阶段拆分 mixin
+1. `CCodeGenerator` (280 方法) 按 lowering 阶段拆分 mixin
 2. 超长参数列表引入参数对象
 
 ### 阶段 5 (P2, 持续): 卫生

@@ -29,9 +29,9 @@ def _source() -> str:
 
 
 def _generate_ir(source: str) -> str:
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen import layer1
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen import layer1
 
     ast_mod = parse_and_lift(source, "<value-array-projection>", "value_array_mod")
     typed = type_infer.infer_module(ast_mod)
@@ -39,8 +39,8 @@ def _generate_ir(source: str) -> str:
     return str(cg.generate(typed))
 
 
-def test_value_array_uses_nested_aggregate_abi_on_llvm_and_self(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+def test_value_array_uses_nested_aggregate_abi_on_self(tmp_path):
+    from pcc.frontends.python.pipeline import compile_python
 
     source = _source()
     ir_text = _generate_ir(source)
@@ -85,8 +85,8 @@ def test_value_array_uses_nested_aggregate_abi_on_llvm_and_self(tmp_path):
     assert proc.stdout == "7.0\n"
 
 
-def test_value_array_checked_index_and_element_escape_match_host_llvm_self(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+def test_value_array_checked_index_and_element_escape_match_host_default_and_explicit_self(tmp_path):
+    from pcc.frontends.python.pipeline import compile_python
 
     source = textwrap.dedent("""
         from typing import Any
@@ -150,7 +150,7 @@ def test_value_array_checked_index_and_element_escape_match_host_llvm_self(tmp_p
         timeout=30,
     )
     outputs.append(host.stdout)
-    for backend in ("llvm", "self"):
+    for backend in (None, "self"):
         exe = tmp_path / f"value_array_checked_index_{backend}"
         compile_python(
             str(src),
@@ -181,7 +181,7 @@ def test_value_array_checked_index_and_element_escape_match_host_llvm_self(tmp_p
 
 
 def test_value_array_itself_cannot_escape_to_any():
-    from pcc.py_frontend.codegen.errors import L1CodegenError
+    from pcc.frontends.python.codegen.errors import L1CodegenError
 
     source = textwrap.dedent("""
         from typing import Any

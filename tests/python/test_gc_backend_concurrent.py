@@ -9,7 +9,7 @@ from tests.runtime_build_cache import cached_pcc_python_runtime, cached_threaded
 
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 
 
 def _cc() -> str:
@@ -66,10 +66,21 @@ def test_concurrent_backend_starts_worker_and_assists_allocations(tmp_path):
                     return 4;
                 }
 
-                for (int i = 0; i < 300; i++) {
+                /* The worker begins a cycle once debt reaches the
+                 * threshold; allocation that outruns it during the mark
+                 * (debt past four thresholds) makes the mutator assist. A
+                 * short burst can end before the worker's next poll, so
+                 * allocate until the first assist, within a bound. As at
+                 * the loop back-edges of compiled code, an application gate
+                 * sweeps each mark the worker completes; the worker begins
+                 * no cycle while one waits for that sweep. */
+                for (int i = 0;
+                     i < 2000000 && pcc_gc_telemetry(CMS_MUTATOR_ASSISTS) == 0;
+                     i++) {
                     PyObject *o = pcc_gc_alloc(64, PY_TYPE_LIST, 0);
                     if (o == 0) return 5;
                     pcc_gc_release(o);
+                    if ((i & 63) == 0) pcc_gc_safepoint();
                 }
 
                 printf("%lld\\n", (long long)pcc_gc_telemetry(CMS_WORKER_STARTS));
@@ -659,7 +670,11 @@ def test_concurrent_backend_worker_traces_positive_allocation_work(tmp_path):
     assert build.returncode == 0, build.stderr
 
     env = os.environ.copy()
-    env["PCC_GC_DEBT_THRESHOLD"] = "1048576"
+    # The worker begins a cycle once debt reaches the threshold: these
+    # 64-byte tickets make one due. A mutator assists only past four
+    # thresholds of debt during a mark, which they never reach, so the
+    # worker does all the marking.
+    env["PCC_GC_DEBT_THRESHOLD"] = "64"
     result = subprocess.run(
         [str(exe)],
         capture_output=True,
@@ -692,6 +707,10 @@ def test_concurrent_backend_worker_reaches_mark_termination_without_mutator_gc_s
                 CMS_WORKER_DRAINS = 13
             };
 
+            /* Set by the worker when it completes a mark: the next
+             * application gate sweeps it, and no cycle begins before. */
+            extern int32_t pcc_gc_backend4_auto_step_pending;
+
             static int wait_for_worker_sweep_debt(void) {
                 for (int i = 0; i < 200; i++) {
                     if (pcc_gc_has_tracing_sweep() != 0) return 1;
@@ -704,6 +723,19 @@ def test_concurrent_backend_worker_reaches_mark_termination_without_mutator_gc_s
             static int wait_for_worker_drain(void) {
                 for (int i = 0; i < 200; i++) {
                     if (pcc_gc_telemetry(CMS_WORKER_DRAINS) > 0) return 1;
+                    pcc_thread_safepoint();
+                    usleep(1000);
+                }
+                return 0;
+            }
+
+            static int wait_for_worker_completed_mark(void) {
+                for (int i = 0; i < 200; i++) {
+                    if (__atomic_load_n(
+                            &pcc_gc_backend4_auto_step_pending, __ATOMIC_ACQUIRE
+                        ) != 0) {
+                        return 1;
+                    }
                     pcc_thread_safepoint();
                     usleep(1000);
                 }
@@ -730,6 +762,12 @@ def test_concurrent_backend_worker_reaches_mark_termination_without_mutator_gc_s
             if (ticket == 0) return 6;
             pcc_gc_release(ticket);
             if (!wait_for_worker_drain()) return 7;
+            /* The list's last store under GC1 shaded it, so the first GC2
+             * mark keeps it (floating garbage). As at a loop back-edge of
+             * compiled code, an application gate sweeps that mark; the next
+             * ticket then begins the mark that finds the list dead. */
+            if (!wait_for_worker_completed_mark()) return 9;
+            pcc_gc_safepoint();
 
             PyObject *ticket2 = pcc_gc_alloc(64, PY_TYPE_INT, 0);
             if (ticket2 == 0) return 8;
@@ -762,7 +800,11 @@ def test_concurrent_backend_worker_reaches_mark_termination_without_mutator_gc_s
     assert build.returncode == 0, build.stderr
 
     env = os.environ.copy()
-    env["PCC_GC_DEBT_THRESHOLD"] = "1048576"
+    # The worker begins a cycle once debt reaches the threshold: these
+    # 64-byte tickets make one due. A mutator assists only past four
+    # thresholds of debt during a mark, which they never reach, so the
+    # worker does all the marking.
+    env["PCC_GC_DEBT_THRESHOLD"] = "64"
     result = subprocess.run(
         [str(exe)],
         capture_output=True,

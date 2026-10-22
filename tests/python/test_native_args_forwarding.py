@@ -66,7 +66,7 @@ def test_direct_and_fixed_regression(tmp_path):
 
 
 def test_runtime_splat_tuple_materialization_is_helper_call(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "p.py"
     ll = tmp_path / "p.ll"

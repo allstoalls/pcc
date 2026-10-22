@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 
-from pcc.py_frontend.pipeline_self_backend_emit import (
+from pcc.frontends.python.pipeline_self_backend_emit import (
     pack_admission_waves,
     run_emit_worker_pool,
 )

@@ -1,0 +1,93 @@
+{
+  "all_other_v1_postimages_unchanged": true,
+  "apply_after": [
+    {
+      "bytes": 91488,
+      "path": "stage-bridge.patch",
+      "sha256": "7f58e96dc709967fe0db4c74e9b1ed4b8ed4f647e18509b2dd27e9ab091d5809"
+    },
+    {
+      "bytes": 4890,
+      "path": "codec-packing.patch",
+      "sha256": "adb01ee9202dc2f2b4b4b288a9ce3dd971448e43cbd95f2811145cc7e5ecb4f1"
+    }
+  ],
+  "base_commit": "a7282a82ef885412e90143e1cede90dcfd8c0d81",
+  "files": [
+    {
+      "mode": "100644",
+      "path": "pcc/frontends/python/pipeline_indexed_handoff.py",
+      "postimage_bytes": 22018,
+      "postimage_sha256": "cbf7443ca0296a88d9f553e5f4c81742f0422e504068572793c46dcf30f49af4",
+      "preimage_bytes": 21439,
+      "preimage_sha256": "563575b64dd33f69f1c162fa4e919a0c5282b20cc7355fb379571809225703f8"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/python/test_pipeline_indexed_handoff.py",
+      "postimage_bytes": 24972,
+      "postimage_sha256": "fab5615628d8aca181a268a1a48e3c3e803d187abe422c2a8519bc24ea818c14",
+      "preimage_bytes": 21524,
+      "preimage_sha256": "9fba483d3d81a36b5e4527358114c4cb7aa1278fb8fcf6c219fc636b0132493a"
+    }
+  ],
+  "focused_test_static_counts": {
+    "tests/python/test_host_indexed_process_split.py": 20,
+    "tests/python/test_pipeline_indexed_handoff.py": 29,
+    "tests/python/test_self_backend_indexed_codec_host_packing.py": 26
+  },
+  "focused_test_static_total": 75,
+  "original_manifest": {
+    "bytes": 6501,
+    "path": "manifest.json",
+    "sha256": "51337cf453dfea498feab59c8a368bb698e0ebeb276ddfc8298ce84830dbbc74"
+  },
+  "original_packet_preservation_commit": "56d79e05a25b7ce8ae90f6387f61d3ef95314bec",
+  "patch": {
+    "bytes": 7487,
+    "path": "publication-successor.patch",
+    "sha256": "4c75756fd2e3b934bf58a4627210ac2613d066e0fa1cb52a09262743782a4538"
+  },
+  "public_files": [
+    "publication-successor.patch",
+    "README.md",
+    "manifest.json"
+  ],
+  "qualification": {
+    "gc_modes": "UNRUN",
+    "host_tests": "UNRUN",
+    "native": "UNRUN",
+    "object_equality": "UNRUN",
+    "performance": "UNRUN",
+    "split_compile": "UNRUN",
+    "stage1": "UNRUN"
+  },
+  "readme": {
+    "bytes": 2639,
+    "path": "README.md",
+    "sha256": "6cdb718f0038192f9f6b826dd6dbca3f4858dc0a41b2ca49f472922d5266f027"
+  },
+  "schema": "pcc.unapplied-host-indexed-stage-successor.v2",
+  "source_review": {
+    "helper": "clear under the private-root/cooperating-publisher and prior-process-retirement contracts",
+    "known_v1_unsupported_apis_removed": [
+      "os.link",
+      "os.lstat",
+      "os.path.lexists",
+      "tempfile.mkstemp"
+    ],
+    "native_execution_proven": false,
+    "tests": "independently source-clear including stale receipt temporary reuse and symlink refusal; UNRUN"
+  },
+  "status": "UNAPPLIED_SOURCE_ONLY_ALL_EXECUTION_UNRUN",
+  "unchanged_existing_preimages_also_verified_at": "db1830cf83174428c48607819ae98e84f887c9b9",
+  "unchanged_policy": [
+    "global tree cap",
+    "47-component actual indexed shape",
+    "MAX envelope",
+    "margins",
+    "one exclusive retry",
+    "worker exit/reap before input retirement",
+    "no denied diagnostic reconstruction"
+  ]
+}

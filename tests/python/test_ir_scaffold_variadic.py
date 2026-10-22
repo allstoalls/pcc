@@ -2,10 +2,10 @@
 methods.
 
 Covered:
-- ``builder.call(fn, [args])`` → ``user_pcc_llvm_capi_ir_IRBuilder_call<N>`` per arity
-- ``builder.gep(ptr, [indices])`` → ``user_pcc_llvm_capi_ir_IRBuilder_gep<N>``
-- ``builder.phi(ty)`` → ``user_pcc_llvm_capi_ir_IRBuilder_phi(builder, ty)``
-- ``builder.landingpad(ty)`` → ``user_pcc_llvm_capi_ir_IRBuilder_landingpad(builder, ty)``
+- ``builder.call(fn, [args])`` → ``user_pcc_ir_ir_IRBuilder_call<N>`` per arity
+- ``builder.gep(ptr, [indices])`` → ``user_pcc_ir_ir_IRBuilder_gep<N>``
+- ``builder.phi(ty)`` → ``user_pcc_ir_ir_IRBuilder_phi(builder, ty)``
+- ``builder.landingpad(ty)`` → ``user_pcc_ir_ir_IRBuilder_landingpad(builder, ty)``
 
 Negative cases:
 - Non-literal args list to ``call`` / ``gep`` raises with a clear
@@ -27,12 +27,12 @@ _PTR = r"(?:ptr|i8\s*\*)"
 
 
 def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     # These cases exercise methods on an owned builder. A parameter merely
     # named "builder" is an unknown user receiver and must not be scaffolded.
     if re.search(r"(?m)^def f\(builder(?:,|\))", source):
-        source = "from pcc.llvm_capi.compat import ir\n" + source
+        source = "from pcc.ir.compat import ir\n" + source
         source = re.sub(r"(?m)^def f\(builder(?:, )?", "def f(", source)
         source = re.sub(
             r"(?m)^(def f\([^\n]*\):\n)",
@@ -72,7 +72,7 @@ def test_call_zero_args():
         """
     )
     ir_text = _compile_to_ll(program, "v_call0", mode="on")
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_call0" in ir_text
+    assert "@user_pcc_ir_ir_IRBuilder_call0" in ir_text
     body = _function_body(ir_text, "f")
     assert body is not None and "py_cpy_" not in body
 
@@ -85,7 +85,7 @@ def test_call_three_args():
         """
     )
     ir_text = _compile_to_ll(program, "v_call3", mode="on")
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_call3" in ir_text
+    assert "@user_pcc_ir_ir_IRBuilder_call3" in ir_text
     body = _function_body(ir_text, "f")
     assert body is not None and "py_cpy_" not in body
 
@@ -99,11 +99,11 @@ def test_call_eight_args_has_runtime_provider():
         """
     )
     ir_text = _compile_to_ll(program, "v_call8", mode="on")
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_call8" in ir_text
+    assert "@user_pcc_ir_ir_IRBuilder_call8" in ir_text
     body = _function_body(ir_text, "f")
     assert body is not None and "py_cpy_" not in body
     assert "def IRBuilder_call8(" in (
-        _REPO_ROOT / "pcc" / "llvm_capi" / "ir.py"
+        _REPO_ROOT / "pcc" / "ir" / "ir.py"
     ).read_text(encoding="utf-8")
 
 
@@ -115,7 +115,7 @@ def test_call_with_name_kwarg_still_lowers():
         """
     )
     ir_text = _compile_to_ll(program, "v_call_named", mode="on")
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_call1" in ir_text
+    assert "@user_pcc_ir_ir_IRBuilder_call1" in ir_text
 
 
 @pytest.mark.parametrize(
@@ -141,7 +141,7 @@ def test_call_passes_the_ssa_name_to_the_native_builder(case, call_text, extern)
     assert body is not None, ir_text
     call_line = next(
         line for line in body.splitlines()
-        if "@user_pcc_llvm_capi_ir_IRBuilder_" + extern + "(" in line
+        if "@user_pcc_ir_ir_IRBuilder_" + extern + "(" in line
     )
     # Static str objects hold their bytes hex-escaped.
     escaped = "".join("\\%02X" % byte for byte in b"resultname")
@@ -151,15 +151,19 @@ def test_call_passes_the_ssa_name_to_the_native_builder(case, call_text, extern)
     )
     assert name_global is not None, ir_text
     name_handle = call_line.rsplit("ptr ", 1)[1].rstrip(")").strip()
-    handle_def = next(
-        line for line in body.splitlines()
-        if line.strip().startswith(name_handle + " = ")
-    )
+    # The static str reaches the call directly or through an identity cast.
+    if name_handle.startswith("@"):
+        handle_def = name_handle
+    else:
+        handle_def = next(
+            line for line in body.splitlines()
+            if line.strip().startswith(name_handle + " = ")
+        )
     assert "@" + name_global.group(1) in handle_def, (call_line, handle_def)
     # builder, fn, one argument (or the dynamic list), name
     arity = 4
     decl = re.search(
-        r"declare[^\n]*@user_pcc_llvm_capi_ir_IRBuilder_" + extern + r"\(([^)]*)\)",
+        r"declare[^\n]*@user_pcc_ir_ir_IRBuilder_" + extern + r"\(([^)]*)\)",
         ir_text,
     )
     assert decl is not None and len(decl.group(1).split(",")) == arity, ir_text
@@ -181,7 +185,7 @@ def test_call_dynamic_args_list_uses_dyn_fallback():
         """
     )
     ir_text = _compile_to_ll(program, "v_call_dyn", mode="on")
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_call_dyn" in ir_text, (
+    assert "@user_pcc_ir_ir_IRBuilder_call_dyn" in ir_text, (
         "non-literal args must lower via call_dyn fallback:\n"
         + ir_text
     )
@@ -197,7 +201,7 @@ def test_gep_two_indices():
         """
     )
     ir_text = _compile_to_ll(program, "v_gep2", mode="on")
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_gep2" in ir_text
+    assert "@user_pcc_ir_ir_IRBuilder_gep2" in ir_text
     body = _function_body(ir_text, "f")
     assert body is not None and "py_cpy_" not in body
 
@@ -224,7 +228,7 @@ def test_gep_passes_the_ssa_name_to_the_native_builder(case, gep_text, extern, a
     assert body is not None, ir_text
     gep_line = next(
         line for line in body.splitlines()
-        if "@user_pcc_llvm_capi_ir_IRBuilder_" + extern + "(" in line
+        if "@user_pcc_ir_ir_IRBuilder_" + extern + "(" in line
     )
     escaped = "".join("\\%02X" % byte for byte in b"gepname")
     name_global = re.search(
@@ -233,14 +237,17 @@ def test_gep_passes_the_ssa_name_to_the_native_builder(case, gep_text, extern, a
     )
     assert name_global is not None, ir_text
     name_handle = gep_line.rsplit("ptr ", 1)[1].rstrip(")").strip()
-    handle_def = next(
-        line for line in body.splitlines()
-        if line.strip().startswith(name_handle + " = ")
-    )
+    if name_handle.startswith("@"):
+        handle_def = name_handle
+    else:
+        handle_def = next(
+            line for line in body.splitlines()
+            if line.strip().startswith(name_handle + " = ")
+        )
     assert "@" + name_global.group(1) in handle_def, (gep_line, handle_def)
     # builder, ptr, indices (or the dynamic list), name
     decl = re.search(
-        r"declare[^\n]*@user_pcc_llvm_capi_ir_IRBuilder_" + extern + r"\(([^)]*)\)",
+        r"declare[^\n]*@user_pcc_ir_ir_IRBuilder_" + extern + r"\(([^)]*)\)",
         ir_text,
     )
     assert decl is not None and len(decl.group(1).split(",")) == arity, ir_text
@@ -254,7 +261,7 @@ def test_gep_zero_indices():
         """
     )
     ir_text = _compile_to_ll(program, "v_gep0", mode="on")
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_gep0" in ir_text
+    assert "@user_pcc_ir_ir_IRBuilder_gep0" in ir_text
 
 
 def test_gep_dynamic_indices_inbounds_uses_exported_helper():
@@ -267,10 +274,10 @@ def test_gep_dynamic_indices_inbounds_uses_exported_helper():
     ir_text = _compile_to_ll(program, "v_gep_dyn_inbounds", mode="on")
     body = _function_body(ir_text, "f")
     assert body is not None
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_gep_dyn_inbounds" in body, body
+    assert "@user_pcc_ir_ir_IRBuilder_gep_dyn_inbounds" in body, body
     assert "py_cpy_" not in body, body
 
-    helper_source = (_REPO_ROOT / "pcc" / "llvm_capi" / "ir.py").read_text(
+    helper_source = (_REPO_ROOT / "pcc" / "ir" / "ir.py").read_text(
         encoding="utf-8"
     )
     assert "def IRBuilder_gep_dyn_inbounds" in helper_source
@@ -286,7 +293,7 @@ def test_phi_one_arg():
         """
     )
     ir_text = _compile_to_ll(program, "v_phi", mode="on")
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_phi" in ir_text
+    assert "@user_pcc_ir_ir_IRBuilder_phi" in ir_text
     body = _function_body(ir_text, "f")
     assert body is not None and "py_cpy_" not in body
 
@@ -301,14 +308,14 @@ def test_switch_lowers_to_irbuilder_scaffold():
     ir_text = _compile_to_ll(program, "v_switch", mode="on")
     body = _function_body(ir_text, "f")
     assert body is not None
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_switch" in body, body
+    assert "@user_pcc_ir_ir_IRBuilder_switch" in body, body
     assert "py_cpy_" not in body, body
 
 
 def test_switch_add_case_lowers_to_switchinstr_scaffold():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi.compat import ir
+        from pcc.ir.compat import ir
 
         def f(value, target):
             builder = ir.IRBuilder()
@@ -319,14 +326,14 @@ def test_switch_add_case_lowers_to_switchinstr_scaffold():
     ir_text = _compile_to_ll(program, "v_switch_add_case", mode="on")
     body = _function_body(ir_text, "f")
     assert body is not None
-    assert "@user_pcc_llvm_capi_ir_SwitchInstr_add_case" in body, body
+    assert "@user_pcc_ir_ir_SwitchInstr_add_case" in body, body
     assert "py_cpy_" not in body, body
 
 
 def test_switch_add_case_constant_i64_uses_i64_scaffold():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi.compat import ir
+        from pcc.ir.compat import ir
 
         _I64 = ir.IntType(64)
 
@@ -340,7 +347,7 @@ def test_switch_add_case_constant_i64_uses_i64_scaffold():
     body = _function_body(ir_text, "f")
     assert body is not None
     assert (
-        "@user_pcc_llvm_capi_ir_scaffold_SwitchInstr_add_case_i64" in body
+        "@user_pcc_ir_ir_scaffold_SwitchInstr_add_case_i64" in body
     ), body
     assert "py_cpy_" not in body, body
 
@@ -356,7 +363,7 @@ def test_append_basic_block_zero_args_with_builder():
     )
     ir_text = _compile_to_ll(program, "v_abb_0_b", mode="on")
     assert (
-        "@user_pcc_llvm_capi_ir_scaffold_IRBuilder_append_basic_block"
+        "@user_pcc_ir_ir_scaffold_IRBuilder_append_basic_block"
         in ir_text
     )
     body = _function_body(ir_text, "f")
@@ -372,7 +379,7 @@ def test_append_basic_block_with_name_arg():
     )
     ir_text = _compile_to_ll(program, "v_abb_named_b", mode="on")
     assert (
-        "@user_pcc_llvm_capi_ir_scaffold_IRBuilder_append_basic_block"
+        "@user_pcc_ir_ir_scaffold_IRBuilder_append_basic_block"
         in ir_text
     )
 
@@ -382,7 +389,7 @@ def test_append_basic_block_on_function_receiver():
     builder. The unambiguous-method match catches this."""
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi.compat import ir
+        from pcc.ir.compat import ir
 
         def f(module, fn_type):
             some_function = ir.Function(module, fn_type)
@@ -393,7 +400,7 @@ def test_append_basic_block_on_function_receiver():
     body = _function_body(ir_text, "f")
     assert body is not None
     assert (
-        "@user_pcc_llvm_capi_ir_scaffold_Function_append_basic_block"
+        "@user_pcc_ir_ir_scaffold_Function_append_basic_block"
         in body
     ), body
     assert "py_cpy_" not in body, body
@@ -402,7 +409,7 @@ def test_append_basic_block_on_function_receiver():
 def test_add_incoming_on_phi_receiver():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi.compat import ir
+        from pcc.ir.compat import ir
 
         def f(ty, val, blk):
             builder = ir.IRBuilder()
@@ -413,14 +420,14 @@ def test_add_incoming_on_phi_receiver():
     ir_text = _compile_to_ll(program, "v_addinc_phi", mode="on")
     body = _function_body(ir_text, "f")
     assert body is not None
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_add_incoming" in body, body
+    assert "@user_pcc_ir_ir_IRBuilder_add_incoming" in body, body
     assert "py_cpy_" not in body, body
 
 
 def test_as_pointer_on_type_receiver():
     program = textwrap.dedent(
         """
-        from pcc.llvm_capi.compat import ir
+        from pcc.ir.compat import ir
 
         def f():
             ty = ir.IntType(64)
@@ -430,7 +437,7 @@ def test_as_pointer_on_type_receiver():
     ir_text = _compile_to_ll(program, "v_aspt", mode="on")
     body = _function_body(ir_text, "f")
     assert body is not None
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_as_pointer" in body, body
+    assert "@user_pcc_ir_ir_IRBuilder_as_pointer" in body, body
     assert "py_cpy_" not in body, body
 
 
@@ -444,7 +451,7 @@ def test_landingpad_one_arg():
         """
     )
     ir_text = _compile_to_ll(program, "v_landingpad", mode="on")
-    assert "@user_pcc_llvm_capi_ir_IRBuilder_landingpad" in ir_text
+    assert "@user_pcc_ir_ir_IRBuilder_landingpad" in ir_text
     body = _function_body(ir_text, "f")
     assert body is not None and "py_cpy_" not in body
 
@@ -471,7 +478,7 @@ def test_int_optional_params_reach_the_native_builder_boxed(case, call_text, ext
     assert body is not None, ir_text
     call_line = next(
         line for line in body.splitlines()
-        if "@user_pcc_llvm_capi_ir_IRBuilder_" + extern + "(" in line
+        if "@user_pcc_ir_ir_IRBuilder_" + extern + "(" in line
     )
     align_handle = call_line.rsplit("ptr ", 1)[1].rstrip(")").strip()
     handle_def = next(

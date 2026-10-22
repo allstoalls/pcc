@@ -1,7 +1,7 @@
 """Differential test: pcc-compiled musl string functions vs host libc.
 
 LIBC-P2-MEM-STR / LIBC-P3-HARD-SINGLETONS vendor musl 1.2.5 string, stdlib
-and ctype functions (pcc/py_runtime/vendor/musl-1.2.5/, sha256-pinned in
+and ctype functions (tests/fixtures/libc/musl-1.2.5/, sha256-pinned in
 VENDOR.json)
 and compiles them WITH PCC so the static link owns the symbols instead of
 importing libSystem's.
@@ -167,7 +167,7 @@ def _repo_root() -> Path:
 
 
 REPO = _repo_root()
-VENDOR = REPO / "pcc" / "py_runtime" / "vendor" / "musl-1.2.5" / "string"
+VENDOR = REPO / "tests" / "fixtures" / "libc" / "musl-1.2.5" / "string"
 
 
 def _run(binary: Path) -> str:

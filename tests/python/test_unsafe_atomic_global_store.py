@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 def _compile_object(tmp_path: Path, emitter: str) -> Path:

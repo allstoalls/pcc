@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python, count_py_cpy_fallback_calls
+from pcc.frontends.python.pipeline import compile_python, count_py_cpy_fallback_calls
 
 
 def test_shutil_rmtree_uses_owned_runtime(tmp_path):
@@ -33,10 +33,10 @@ def test_shutil_rmtree_uses_owned_runtime(tmp_path):
 
 
 def test_shutil_rmtree_native_tree_and_error_paths(
-    tmp_path, monkeypatch, pcc_py_runtime_archive
+    tmp_path, monkeypatch, pcc_runtime_archive
 ):
     monkeypatch.setenv("PCC_RUNTIME_CC", "pcc")
-    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_py_runtime_archive))
+    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_runtime_archive))
 
     tree = tmp_path / "tree"
     nested = tree / "nested"

@@ -3,7 +3,7 @@
 ``import a.b.c; a.b.c.X`` (a 3+-level dotted package access) compiled fine but
 RAN with ``AttributeError`` on the intermediate ``a.b`` under
 ``--backend self --python-libpython=off``. The native module export resolution
-(``_native_module_expr_export_info`` in pcc/py_frontend/codegen/native_modules.py)
+(``_native_module_expr_export_info`` in pcc/frontends/python/codegen/native_modules.py)
 only handled a one-level module expression (``a.b.X`` — ``Attr`` whose ``.obj``
 is a ``Name``); a deeper chain (``a.b.c`` — ``Attr`` whose ``.obj`` is itself an
 ``Attr``) fell through to the runtime ``py_obj_getattr`` chain, which has no

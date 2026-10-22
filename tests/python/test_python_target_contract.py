@@ -5,11 +5,11 @@ import subprocess
 
 import pytest
 
-from pcc import python_target
-from pcc.py_frontend.codegen.control_flow_lowering import ControlFlowLoweringMixin
-from pcc.py_frontend.codegen.native_system import NativeSystemLoweringMixin
-from pcc.py_frontend.parser import parse
-from pcc.py_stdlib import platform, sys, sysconfig
+from pcc.driver import python_target
+from pcc.frontends.python.codegen.control_flow_lowering import ControlFlowLoweringMixin
+from pcc.frontends.python.codegen.native_system import NativeSystemLoweringMixin
+from pcc.frontends.python.parser import parse
+from pcc.stdlib import platform, sys, sysconfig
 from tests.python.python_target_canary import PYTHON_TARGET_SOURCE, PYTHON_TARGET_STDOUT
 
 
@@ -108,12 +108,12 @@ def test_runtime_sysconfig_version_is_independent_of_package_selection(
 def test_provider_closure_admits_target_constants_only(
     tmp_path, monkeypatch, expansion
 ):
-    from pcc.py_frontend import pipeline_dependency_closure as closure
+    from pcc.frontends.python import pipeline_dependency_closure as closure
 
     source = tmp_path / "consumer.py"
     source.write_text(
-        "from pcc.python_target import PYTHON_TARGET_VERSION_PARTS\n"
-        "from pcc.cli_core import cli_main\n"
+        "from pcc.driver.python_target import PYTHON_TARGET_VERSION_PARTS\n"
+        "from pcc.driver.cli_core import cli_main\n"
     )
     sources = [str(source)]
     modules = ["consumer"]
@@ -124,15 +124,15 @@ def test_provider_closure_admits_target_constants_only(
         closure._expand_required_native_builtin_providers(sources, modules, seen)
     else:
         closure._expand_recursive_stdlib(sources, modules, seen)
-    assert "pcc.python_target" in modules
-    assert "pcc.cli_core" not in modules
-    assert seen["pcc.python_target"] == python_target.__file__
+    assert "pcc.driver.python_target" in modules
+    assert "pcc.driver.cli_core" not in modules
+    assert seen["pcc.driver.python_target"] == python_target.__file__
 
 
 def test_host_pcc_emits_native_python_target_contract_with_c_runtime(
     tmp_path, monkeypatch
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     # This is the cheap host->native semantic gate; fresh pcc1/runtime ownership
     # and bootstrap are separate release gates using the identical program.

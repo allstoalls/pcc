@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pcc.llvm_capi.compat import ir_c as ir
-from pcc.c_codegen_libc_bridge import lookup_codegen_signature, registry_to_codegen_map
+from pcc.ir.compat import ir_c as ir
+from pcc.frontends.c.c_codegen_libc_bridge import lookup_codegen_signature, registry_to_codegen_map
 
 
 def test_printf_is_vararg():

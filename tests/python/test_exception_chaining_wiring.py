@@ -5,9 +5,9 @@ from pathlib import Path
 
 
 def test_exception_accessor_symbols_are_wired_in_c_py_and_abi():
-    py_src = Path("pcc/py_runtime/py/py_exc_objects.py").read_text(encoding="utf-8")
-    header = Path("pcc/py_runtime/include/py_runtime.h").read_text(encoding="utf-8")
-    abi = Path("pcc/py_frontend/codegen/runtime_abi.py").read_text(encoding="utf-8")
+    py_src = Path("pcc/runtime/py/py_exc_objects.py").read_text(encoding="utf-8")
+    header = Path("pcc/runtime/include/py_runtime.h").read_text(encoding="utf-8")
+    abi = Path("pcc/frontends/python/codegen/runtime_abi.py").read_text(encoding="utf-8")
 
     assert '@c_abi_export("py_exc_get_cause")' in py_src
     assert '@c_abi_export("py_exc_get_context")' in py_src
@@ -19,21 +19,21 @@ def test_exception_accessor_symbols_are_wired_in_c_py_and_abi():
 
 
 def test_source_aware_traceback_contract_is_mirrored_and_outermost_first():
-    py_src = Path("pcc/py_runtime/py/py_exc_traceback.py").read_text(
+    py_src = Path("pcc/runtime/py/py_exc_traceback.py").read_text(
         encoding="utf-8"
     )
-    header = Path("pcc/py_runtime/include/py_runtime.h").read_text(
+    header = Path("pcc/runtime/include/py_runtime.h").read_text(
         encoding="utf-8"
     )
-    abi = Path("pcc/py_frontend/codegen/runtime_abi.py").read_text(
+    abi = Path("pcc/frontends/python/codegen/runtime_abi.py").read_text(
         encoding="utf-8"
     )
-    lowering = Path("pcc/py_frontend/codegen/exception_lowering.py").read_text(
+    lowering = Path("pcc/frontends/python/codegen/exception_lowering.py").read_text(
         encoding="utf-8"
     )
 
     assert "const char *source_line;" in Path(
-        "pcc/py_runtime/src/py_internal.h"
+        "pcc/runtime/src/py_internal.h"
     ).read_text(encoding="utf-8")
     assert "void py_exc_append_frame_source(PyObject *exc," in header
     assert '"py_exc_append_frame_source": (' in abi
@@ -46,7 +46,7 @@ def test_source_aware_traceback_contract_is_mirrored_and_outermost_first():
 
 
 def test_nested_unhandled_traceback_is_outermost_first_with_source(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source_path = tmp_path / "nested_traceback_order.py"
     source_path.write_text(
@@ -99,7 +99,7 @@ def test_nested_unhandled_traceback_is_outermost_first_with_source(tmp_path):
 
 
 def test_unhandled_implicit_chain_keeps_the_original_failure(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source_path = tmp_path / "implicit_exception_chain.py"
     source_path.write_text(
@@ -140,19 +140,19 @@ def test_unhandled_implicit_chain_keeps_the_original_failure(tmp_path):
 
 
 def test_runtime_contract_error_names_its_helper_in_an_innermost_frame():
-    py_traceback = Path("pcc/py_runtime/py/py_exc_traceback.py").read_text(
+    py_traceback = Path("pcc/runtime/py/py_exc_traceback.py").read_text(
         encoding="utf-8"
     )
-    header = Path("pcc/py_runtime/include/py_runtime.h").read_text(
+    header = Path("pcc/runtime/include/py_runtime.h").read_text(
         encoding="utf-8"
     )
-    abi = Path("pcc/py_frontend/codegen/runtime_abi.py").read_text(
+    abi = Path("pcc/frontends/python/codegen/runtime_abi.py").read_text(
         encoding="utf-8"
     )
-    dispatch_py = Path("pcc/py_runtime/py/py_obj_ops_dispatch.py").read_text(
+    dispatch_py = Path("pcc/runtime/py/py_obj_ops_dispatch.py").read_text(
         encoding="utf-8"
     )
-    func_py = Path("pcc/py_runtime/py/py_func.py").read_text(encoding="utf-8")
+    func_py = Path("pcc/runtime/py/py_func.py").read_text(encoding="utf-8")
 
     assert "PyObject *py_runtime_error_if_unset(" in header
     assert '"py_runtime_error_if_unset": (_PYOBJ, [_CSTR, _CSTR], False)' in abi
@@ -168,16 +168,18 @@ def test_runtime_contract_error_names_its_helper_in_an_innermost_frame():
         assert '"py_tuple_new"' in source
         assert "bound method call could not allocate its argument tuple" in source
     assert 'cstr("py_func_bind_signature")' in func_py
-    assert "entry_name = load_ptr(fn, 72)" in func_py
+    # The call body keeps the callee in owned slot 64; offset 72 is its name.
+    assert "pcc_gc_store_root(ptr_add(slots, 64), callable_obj)" in func_py
+    assert "entry_name = load_ptr(load_ptr(slots, 64), 72)" in func_py
 
 
 def test_call_boundaries_set_or_preserve_the_callee_owned_exception():
-    dispatch_py = Path("pcc/py_runtime/py/py_obj_ops_dispatch.py").read_text(
+    dispatch_py = Path("pcc/runtime/py/py_obj_ops_dispatch.py").read_text(
         encoding="utf-8"
     )
-    func_py = Path("pcc/py_runtime/py/py_func.py").read_text(encoding="utf-8")
+    func_py = Path("pcc/runtime/py/py_func.py").read_text(encoding="utf-8")
     capi_py = Path(
-        "pcc/py_runtime/py/py_capi_object_call_runtime.py"
+        "pcc/runtime/py/py_capi_object_call_runtime.py"
     ).read_text(encoding="utf-8")
 
     for source in (dispatch_py,):
@@ -235,11 +237,11 @@ def test_call_boundaries_set_or_preserve_the_callee_owned_exception():
 
 
 def test_c_extension_pointer_slots_guard_silent_null_at_the_callback_boundary():
-    port = Path("pcc/py_runtime/py/py_capi_cext_runtime.py").read_text(
+    port = Path("pcc/runtime/py/py_capi_cext_runtime.py").read_text(
         encoding="utf-8"
     )
     number_port = Path(
-        "pcc/py_runtime/py/py_capi_number_runtime.py"
+        "pcc/runtime/py/py_capi_number_runtime.py"
     ).read_text(encoding="utf-8")
 
     callback_contracts = (
@@ -290,7 +292,7 @@ def test_c_extension_pointer_slots_guard_silent_null_at_the_callback_boundary():
 
 
 def test_c_extension_status_slots_guard_failure_before_owned_cleanup():
-    port = Path("pcc/py_runtime/py/py_capi_cext_runtime.py").read_text(
+    port = Path("pcc/runtime/py/py_capi_cext_runtime.py").read_text(
         encoding="utf-8"
     )
     messages = (
@@ -322,9 +324,9 @@ def test_c_extension_status_slots_guard_failure_before_owned_cleanup():
 
 def test_user_protocol_dunder_calls_guard_silent_null_before_cleanup():
     protocol_py = Path(
-        "pcc/py_runtime/py/py_protocol_runtime.py"
+        "pcc/runtime/py/py_protocol_runtime.py"
     ).read_text(encoding="utf-8")
-    dunder_py = Path("pcc/py_runtime/py/py_dunder.py").read_text(
+    dunder_py = Path("pcc/runtime/py/py_dunder.py").read_text(
         encoding="utf-8"
     )
 
@@ -365,7 +367,7 @@ def test_user_protocol_dunder_calls_guard_silent_null_before_cleanup():
 
 
 def test_class_descriptor_callbacks_guard_silent_null_before_cleanup():
-    class_py = Path("pcc/py_runtime/py/py_class.py").read_text(encoding="utf-8")
+    class_py = Path("pcc/runtime/py/py_class.py").read_text(encoding="utf-8")
     for source in (class_py,):
         assert "require_result" in source
         assert "class callback argument tuple allocation failed" in source
@@ -384,11 +386,11 @@ def test_class_descriptor_callbacks_guard_silent_null_before_cleanup():
 
 
 def test_format_and_copy_protocols_guard_silent_null_before_cleanup():
-    format_py = Path("pcc/py_runtime/py/py_format_runtime.py").read_text(
+    format_py = Path("pcc/runtime/py/py_format_runtime.py").read_text(
         encoding="utf-8"
     )
     copy_py = Path(
-        "pcc/py_runtime/py/py_pickle_copy_runtime.py"
+        "pcc/runtime/py/py_pickle_copy_runtime.py"
     ).read_text(encoding="utf-8")
 
     for source in (format_py,):
@@ -400,25 +402,24 @@ def test_format_and_copy_protocols_guard_silent_null_before_cleanup():
         assert "copy callback argument tuple allocation failed" in source
         assert "copy callback returned NULL without setting an exception" in source
 
-    for source, call, guard, cleanup in ((
-            format_py,
-            "result = py_obj_call(method, args, global_load_ptr(\"py_None\"))",
-            "_format_require_result(",
-            "py_decref(args)",
-        ), (
-            copy_py,
-            "result = py_func_call(method, full_args)",
-            "_copy_require_result(",
-            "py_decref(full_args)",
-        )):
-        call_pos = source.index(call)
-        guard_pos = source.index(guard, call_pos)
-        cleanup_pos = source.index(cleanup, call_pos)
-        assert call_pos < guard_pos < cleanup_pos
+    # The format callback runs in a slot body: its result is checked there,
+    # and the wrapper drops the argument slots only after the body returns.
+    body = format_py.split("def _format_callback_body(", 1)[1].split("\ndef ", 1)[0]
+    call_pos = body.index("py_obj_call(\n        load_ptr(slots, _FORMAT_METHOD * C_POINTER_SIZE),")
+    guard_pos = body.index('cstr("format callback returned NULL without setting an exception")', call_pos)
+    assert call_pos < guard_pos
+    wrapper = format_py.split("def _call_object_format(", 1)[1].split("\ndef ", 1)[0]
+    assert wrapper.index("_format_callback_body(slots, tokens, borrowed)") < wrapper.index(
+        "_format_callback_drop(slots, tokens, _FORMAT_ARGS)"
+    )
+    call_pos = copy_py.index("result = py_func_call(method, full_args)")
+    guard_pos = copy_py.index("_copy_require_result(", call_pos)
+    cleanup_pos = copy_py.index("py_decref(full_args)", call_pos)
+    assert call_pos < guard_pos < cleanup_pos
 
 
 def test_weakref_callback_is_explicit_unraisable_owned_result_boundary():
-    py_source = Path("pcc/py_runtime/py/py_weakref.py").read_text(
+    py_source = Path("pcc/runtime/py/py_weakref.py").read_text(
         encoding="utf-8"
     )
 
@@ -438,7 +439,7 @@ def test_weakref_callback_is_explicit_unraisable_owned_result_boundary():
 
 
 def test_splat_call_boundaries_attribute_silent_null_before_cleanup():
-    py_source = Path("pcc/py_runtime/py/py_call_splat_runtime.py").read_text(
+    py_source = Path("pcc/runtime/py/py_call_splat_runtime.py").read_text(
         encoding="utf-8"
     )
 

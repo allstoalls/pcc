@@ -4,9 +4,9 @@ import os
 import subprocess
 import textwrap
 
-from pcc.py_frontend import parser, type_infer
-from pcc.py_frontend.py_ast import Assign, BytesLit, BytesType, Name
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python import parser, type_infer
+from pcc.frontends.python.py_ast import Assign, BytesLit, BytesType, Name
+from pcc.frontends.python.pipeline import compile_python
 
 
 def test_parser_preserves_bytes_literal_as_byteslit():
@@ -30,7 +30,7 @@ def test_type_infer_preserves_bytes_type():
     assert isinstance(second.value.ty, BytesType)
 
 
-def test_runtime_bytes_len_getitem_and_slice_native(tmp_path, pcc_py_runtime_archive):
+def test_runtime_bytes_len_getitem_and_slice_native(tmp_path, pcc_runtime_archive):
     src = tmp_path / "bytes_probe.c"
     exe = tmp_path / "bytes_probe"
     src.write_text(
@@ -80,9 +80,9 @@ def test_runtime_bytes_len_getitem_and_slice_native(tmp_path, pcc_py_runtime_arc
         [
             os.environ.get("CC", "cc"),
             "-I",
-            str(pcc_py_runtime_archive.parent / "include"),
+            str(pcc_runtime_archive.parent / "include"),
             str(src),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(exe),

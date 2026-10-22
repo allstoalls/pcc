@@ -7,9 +7,10 @@ import sys
 import pytest
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="interposes Darwin kevent")
-def test_empty_nonblocking_io_poll_avoids_kevent(tmp_path: Path, pcc_py_runtime_archive):
-    archive = pcc_py_runtime_archive
+# interposes Darwin kevent
+@pytest.mark.pcc_gate(probe=lambda: not (sys.platform != "darwin"))
+def test_empty_nonblocking_io_poll_avoids_kevent(tmp_path: Path, pcc_runtime_archive):
+    archive = pcc_runtime_archive
     root = Path(__file__).resolve().parents[2]
     source = tmp_path / "empty_io.c"
     source.write_text('''#include "py_runtime.h"
@@ -32,7 +33,7 @@ int main(void) {
 ''')
     executable = tmp_path / "empty_io"
     built = subprocess.run([
-        "clang", "-std=c11", "-I" + str(root / "pcc/py_runtime/include"),
+        "clang", "-std=c11", "-I" + str(root / "pcc/runtime/include"),
         str(source), str(archive), "-pthread", "-o", str(executable),
     ], capture_output=True, text=True, timeout=30)
     assert built.returncode == 0, built.stdout + built.stderr

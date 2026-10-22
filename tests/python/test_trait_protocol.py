@@ -1,4 +1,4 @@
-from pcc.trait_protocol import Trait, check_trait
+from pcc.library.trait_protocol import Trait, check_trait
 
 
 def test_trait_reports_missing_method():

@@ -108,7 +108,7 @@ py_virtual_thread_start      : VirtualThread -> SchedulerQueue
 py_virtual_thread_run_once   : SchedulerQueue -> VirtualThread
 ```
 
-The code representation is `pcc/runtime_effects.py`:
+The code representation is `pcc/diagnostics/contracts/runtime_effects.py`:
 
 ```text
 RuntimeResource
@@ -214,7 +214,7 @@ raw memory copy that is immediately followed by explicit slot registration/repai
 
 Codex action:
 
-When touching `pcc/py_runtime/src/*.c`, `pcc/py_runtime/py/*.py`, or codegen that
+When touching `pcc/runtime/src/*.c`, `pcc/runtime/py/*.py`, or codegen that
 emits stores, search for raw slot stores and classify them. Do not replace all
 raw stores blindly; constructors and collector internals may be correct raw
 paths.
@@ -449,7 +449,7 @@ claim_boundary: <what was proved and not proved>
 
 ## Phase 1: taxonomy only
 
-Add `pcc/runtime_effects.py`.
+Add `pcc/diagnostics/contracts/runtime_effects.py`.
 
 Represent:
 
@@ -480,7 +480,7 @@ No runtime behavior changes.
 ## Phase 2: ABI coverage checker
 
 Compare selected entries in
-`pcc.py_frontend.codegen.runtime_abi.RUNTIME_SIGNATURES` with
+`pcc.frontends.python.codegen.runtime_abi.RUNTIME_SIGNATURES` with
 `RUNTIME_ABI_ARROWS`.
 
 The first coverage gate should not require every telemetry helper. It should
@@ -494,8 +494,8 @@ calls. Do not change emitted IR in this phase.
 Primary hook files:
 
 ```text
-pcc/py_frontend/codegen/ownership_lowering.py
-pcc/py_frontend/codegen/native_virtual_thread.py
+pcc/frontends/python/codegen/ownership_lowering.py
+pcc/frontends/python/codegen/native_virtual_thread.py
 ```
 
 The recorder should observe calls such as:
@@ -525,8 +525,8 @@ GPU kernel arguments cannot be host buffers without explicit transfer
 Only after the checker exists, audit raw slot writes and raw slot reads in:
 
 ```text
-pcc/py_runtime/src/*.c
-pcc/py_runtime/py/*.py
+pcc/runtime/src/*.c
+pcc/runtime/py/*.py
 ```
 
 Classify each raw write/read as:

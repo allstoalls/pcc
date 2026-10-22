@@ -1,7 +1,7 @@
-from pcc.ast import c_ast
-from pcc.parse.c_parser import CParser
-from pcc.passes import PassContext
-from pcc.passes.ssa_adce import SSAADCEPass
+from pcc.frontends.c.ast import c_ast
+from pcc.frontends.c.parse.c_parser import CParser
+from pcc.frontends.c.passes import PassContext
+from pcc.frontends.c.passes.ssa_adce import SSAADCEPass
 
 
 _PARSER = CParser(lex_optimize=True, yacc_debug=False, yacc_optimize=True)

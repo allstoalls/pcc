@@ -19,8 +19,8 @@ import pytest
 
 _PREFIX = '''
 import sys
-from pcc.py_frontend.py_ast import ClassType, IntType, Module
-from pcc.py_frontend.export_meta import encode_type, encode_type_memo
+from pcc.frontends.python.py_ast import ClassType, IntType, Module
+from pcc.frontends.python.export_meta import encode_type, encode_type_memo
 
 class _InferCtx:
     def __init__(self, module: Module, external_exports):
@@ -71,15 +71,15 @@ run(int(sys.argv[1]))
 '''
 
 
+# requires explicit immutable PCC_RUNTIME_ARCHIVE
+@pytest.mark.pcc_gate(env="PCC_RUNTIME_ARCHIVE")
 def test_native_preload_encoding_preserves_alias_ids_and_nested_types(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     archive_name = os.environ.get("PCC_RUNTIME_ARCHIVE")
-    if not archive_name:
-        pytest.skip("requires explicit immutable PCC_RUNTIME_ARCHIVE")
     repo = Path(__file__).resolve().parents[2]
     source_root = Path(os.environ.get("PCC_PRELOAD_FUNCTION_SOURCE_ROOT", str(repo))).resolve()
-    source_path = source_root / "pcc/py_frontend/type_infer.py"
+    source_path = source_root / "pcc/frontends/python/type_infer.py"
     source = source_path.read_text(encoding="utf-8")
     functions = [node for node in ast.parse(source).body if isinstance(node, ast.FunctionDef)
                  and node.name == "build_unique_external_class_preload"]
@@ -88,15 +88,15 @@ def test_native_preload_encoding_preserves_alias_ids_and_nested_types(tmp_path):
     assert body
     consumer = tmp_path / "preload_encoding.py"
     consumer.write_text(_PREFIX + body + "\n" + _SUFFIX, encoding="utf-8")
-    modules = ("pcc.py_frontend.py_ast", "pcc.py_frontend.export_meta")
+    modules = ("pcc.frontends.python.py_ast", "pcc.frontends.python.export_meta")
     paths = [repo / (name.replace(".", "/") + ".py") for name in modules]
     archive = Path(archive_name).resolve(strict=True)
     hashes = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in [source_path, *paths, archive]}
     output = tmp_path / "preload_encoding"
     compile_python_multi(
         [str(consumer), *(str(p) for p in paths)], str(output),
-        entry_module="pcc.py_frontend.preload_encoding",
-        module_names=["pcc.py_frontend.preload_encoding", *modules],
+        entry_module="pcc.frontends.python.preload_encoding",
+        module_names=["pcc.frontends.python.preload_encoding", *modules],
         libpython_mode="off", ir_scaffold_mode="on", backend="self",
         recursive_stdlib=False, target_triple="arm64-apple-darwin23.6.0",
         runtime_archive=str(archive),

@@ -31,8 +31,8 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-from pcc.package_environment import DEFAULT_PYTHON_SEMANTIC_TARGET
-from pcc.package_schema import distribution_filename_fields
+from pcc.package.environment import DEFAULT_PYTHON_SEMANTIC_TARGET
+from pcc.package.schema import distribution_filename_fields
 
 from .install import (
     _ARTIFACT_SUFFIXES,

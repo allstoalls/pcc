@@ -31,7 +31,7 @@ def _compile_to_ll(
     recursive: bool = True,
     libpython_mode: str | None = None,
 ) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -55,7 +55,7 @@ def test_pure_python_stdlib_pulled_into_closure_when_recursive(tmp_path):
     routing — making ``import keyword`` in user code skip
     ``py_cpy_import`` once shlex is in the closure — is a separate
     integration step (TODO: B.1 part 2)."""
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         _collect_multi_source_relative_closure,
     )
 
@@ -73,7 +73,7 @@ def test_pure_python_stdlib_pulled_into_closure_when_recursive(tmp_path):
 
 def test_recursive_off_does_not_expand(tmp_path):
     """recursive_stdlib=False (default) keeps closure shallow."""
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         _collect_multi_source_relative_closure,
     )
 
@@ -94,7 +94,7 @@ def test_recursive_stdlib_does_not_expand_native_textwrap(tmp_path):
     ``textwrap.py`` implementation and its unsupported regex initialization
     into a strict recursive closure.
     """
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         _collect_multi_source_relative_closure,
     )
 
@@ -131,7 +131,7 @@ def test_recursive_off_keeps_existing_libpython_path():
 
 def test_plain_emit_only_does_not_auto_expand_stdlib_closure(tmp_path):
     """A module IR probe stays single-file unless closure output is requested."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "probe.py"
     out = tmp_path / "probe.ll"
@@ -159,7 +159,7 @@ def test_plain_emit_only_does_not_auto_expand_stdlib_closure(tmp_path):
 
 def test_no_libpython_auto_recursive_stdlib_scans_multi_file_closure(tmp_path):
     """Strict multi-file compile should notice stdlib imports in siblings."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     pkg = tmp_path / "pkg"
     pkg.mkdir()
@@ -190,7 +190,7 @@ def test_no_libpython_auto_recursive_stdlib_scans_multi_file_closure(tmp_path):
 def test_recursive_stdlib_stops_at_function_bodies(tmp_path):
     """Only imports reachable while initializing a module are eager closure
     dependencies; imports in deferred function bodies remain deferred."""
-    from pcc.py_frontend.pipeline import _stdlib_absolute_imports_in
+    from pcc.frontends.python.pipeline import _stdlib_absolute_imports_in
 
     src = tmp_path / "module_scope.py"
     src.write_text(
@@ -219,7 +219,7 @@ def test_recursive_stdlib_stops_at_function_bodies(tmp_path):
 
 
 def test_fast_import_discovery_matches_initialization_boundary(tmp_path):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     src = tmp_path / "initialization_scope.py"
     src.write_text(
@@ -257,19 +257,19 @@ def test_fast_import_discovery_matches_initialization_boundary(tmp_path):
 
 
 def test_recursive_stdlib_filters_scaffold_before_dependency_expansion():
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
-    source = _REPO_ROOT / "pcc" / "py_frontend" / "codegen" / "stmt_misc_lowering.py"
+    source = _REPO_ROOT / "pcc" / "frontends" / "python" / "codegen" / "stmt_misc_lowering.py"
     _, modules = pipeline._prepare_multi_source_compile_closure(
         [str(source)],
-        ["pcc.py_frontend.codegen.stmt_misc_lowering"],
+        ["pcc.frontends.python.codegen.stmt_misc_lowering"],
         recursive_stdlib=True,
         ir_scaffold_mode="on",
     )
 
-    assert "pcc.llvm_capi.ir" in modules
-    assert "pcc.llvm_capi.compat" not in modules
-    assert "pcc.llvm_capi.binding" not in modules
+    assert "pcc.ir.ir" in modules
+    assert "pcc.ir.compat" not in modules
+    assert "pcc.ir.binding" not in modules
     assert "ctypes" not in modules
     assert "ctypes.util" not in modules
 
@@ -288,8 +288,8 @@ def test_native_stdlib_discovery_does_not_invoke_full_parser(
     tmp_path, monkeypatch, source
 ):
     """Import discovery is lexical metadata, not a second frontend parse."""
-    from pcc.parse import py_lift
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import py_lift
+    from pcc.frontends.python import pipeline
 
     src = tmp_path / "native_import.py"
     src.write_text(source, encoding="utf-8")
@@ -312,7 +312,7 @@ def test_native_stdlib_discovery_does_not_invoke_full_parser(
     ],
 )
 def test_native_stdlib_discovery_ignores_non_import_text(tmp_path, source):
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     src = tmp_path / "not_an_absolute_import.py"
     src.write_text(source, encoding="utf-8")
@@ -325,7 +325,7 @@ def test_recursive_stdlib_uses_compiled_export_after_native_lowering_declines(
 ):
     """A builtin module's specialized lowering gets first refusal, then its
     recursively compiled export is used instead of libpython."""
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     src = tmp_path / "class_body_regex.py"
     out = tmp_path / "class_body_regex.ll"
@@ -342,7 +342,7 @@ def test_recursive_stdlib_uses_compiled_export_after_native_lowering_declines(
     )
 
     compile_python_multi(
-        [str(src), str(_REPO_ROOT / "pcc" / "py_stdlib" / "re.py")],
+        [str(src), str(_REPO_ROOT / "pcc" / "ir" / "support" / "re.py")],
         str(out),
         emit_llvm_only=True,
         entry_module="class_body_regex",
@@ -358,7 +358,7 @@ def test_recursive_stdlib_uses_compiled_export_after_native_lowering_declines(
 
 
 def test_dynamic_getattr_on_compiled_module_uses_native_registry(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     provider = tmp_path / "provider.py"
     main = tmp_path / "main.py"
@@ -391,7 +391,7 @@ def test_dynamic_getattr_on_compiled_module_uses_native_registry(tmp_path):
 
 
 def test_builtin_object_and_complex_type_values_stay_native(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "object_type_value.py"
     out = tmp_path / "object_type_value.ll"
@@ -416,7 +416,7 @@ def test_builtin_object_and_complex_type_values_stay_native(tmp_path):
 
 
 def test_builtin_super_type_value_stays_native(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "super_type_value.py"
     out = tmp_path / "super_type_value.ll"
@@ -439,7 +439,7 @@ def test_builtin_super_type_value_stays_native(tmp_path):
 
 
 def test_strict_function_value_uses_native_function_object(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "native_function_value.py"
     out = tmp_path / "native_function_value.ll"
@@ -468,7 +468,7 @@ def test_strict_function_value_uses_native_function_object(tmp_path):
 
 
 def test_os_curdir_default_value_stays_native(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "os_curdir_default.py"
     out = tmp_path / "os_curdir_default.ll"
@@ -503,7 +503,7 @@ def test_cycle_detection(tmp_path):
 
     sys.path.insert(0, str(tmp_path))
     try:
-        from pcc.py_frontend.pipeline import (
+        from pcc.frontends.python.pipeline import (
             _collect_multi_source_relative_closure,
         )
 

@@ -1,0 +1,91 @@
+{
+  "actual_predecessor_failure": {
+    "collected": 27,
+    "failed": 1,
+    "host_result_sha256": "9655da48f08abec07e7876a69fa52a84844879a7461f1f885ff8bc27ed1d464b",
+    "passed": 0,
+    "qualification_sha256": "8c2ed55e5e8ddd42d398531c3bbee9ca5adb25d4cceaaa09e526c871c75824d7",
+    "receipt_commit": "79011c00553de17cfdb0f7e8169842a7b2e73ae8",
+    "scope": "production FunctionAttributes membership TypeError during helper reuse",
+    "unrun": 26
+  },
+  "artifacts": {
+    "README.md": {
+      "bytes": 4553,
+      "mode": "100644",
+      "sha256": "b02aebcf5355e27ad0998ba3badce98a13ee0d5d8a0b4d5ec6043d825dc87e79"
+    },
+    "successor.patch": {
+      "bytes": 3067,
+      "mode": "100644",
+      "sha256": "468ccd9adf98a167d20305dcacb65e0f500899825bb564cb232c05d90313e2c9"
+    }
+  },
+  "base_pcc_git_tree": "d234174fbac80575ea822f6100f65fe914dd4498",
+  "base_production_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "base_source_container_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "changed_files": {
+    "pcc/frontends/python/codegen/class_gen.py": {
+      "base_bytes": 343221,
+      "base_sha256": "d4ec2c4ccc6a9123ed502108fbaf32cdc1dd1a979169ba4628506cb902f4b53e",
+      "mode": "100644",
+      "postimage_bytes": 367383,
+      "postimage_sha256": "cbd36884dbb5d118e0da4148ed50b26223ddbfe7f75a6ad3604d2a697f9be8af",
+      "v4_postimage_bytes": 367376,
+      "v4_postimage_sha256": "6aa9e4222f4822d764db192c57dec23ff8b6a06aa7f132b5090c6e84c99e56de"
+    },
+    "pcc/frontends/python/codegen/generation_lowering.py": {
+      "base_bytes": 50484,
+      "base_sha256": "0982b9b0209b8785552b75cd552c3e18837ff39f92c289cf53df373eaa140904",
+      "mode": "100644",
+      "postimage_bytes": 50542,
+      "postimage_sha256": "30d38936b4f4dbc1259de9993557c7ccfeca491f3f0546820382185858d56c5b",
+      "v4_postimage_bytes": 50542,
+      "v4_postimage_sha256": "30d38936b4f4dbc1259de9993557c7ccfeca491f3f0546820382185858d56c5b"
+    },
+    "tests/python/test_class_init_outlining.py": {
+      "base_bytes": null,
+      "base_sha256": null,
+      "mode": "100644",
+      "postimage_bytes": 19666,
+      "postimage_sha256": "e442fbdd4a6d93e8817ff65efb1c60c48019f1c8ddb760ec4cfb8150ac9a5afa",
+      "v4_postimage_bytes": 17910,
+      "v4_postimage_sha256": "89fbde057cdc8950195d7d607eeb0e8786f90b4d1c0143fdc977149f11c9b28e"
+    }
+  },
+  "execution": {
+    "actual_heavy_module": "UNRUN",
+    "collection": "UNRUN",
+    "compiler_native_closed_world": "UNRUN",
+    "focused_host": "UNRUN",
+    "native": "UNRUN",
+    "performance": "UNRUN"
+  },
+  "intended_host_nodes": 29,
+  "patch_relation": "incremental delta from V4; apply archived V1 production/tests, V4 successor, then V5 successor",
+  "predecessor_commit": "313582e25cbc83056022291379ba53b4cb370d3a",
+  "predecessor_manifest_sha256": "1ce720584d908e2d050be614e5b3c49fb9a170104d01a2db67a89c79e8088161",
+  "predecessor_patch_sha256": "f89c5c84572dfb1cd5026e2226b4c3c9e9d701d9196e9c2d94a63849e123a103",
+  "proposed_guard": {
+    "address_space_bytes": 4294967296,
+    "execution_owner": "coordinator",
+    "minimum_free_bytes": 4294967296,
+    "nproc": 0,
+    "seconds": 300
+  },
+  "review": "independent source review complete for exact production/test delta; no PCC execution performed",
+  "schema": 1,
+  "source_api_evidence": {
+    "pcc/ir/compat.py": {
+      "bytes": 538,
+      "mode": "100644",
+      "sha256": "018a67baba9127ba8fc1f6a1f0c7236c85be75a0c73664e4dd35acfa360a0cf2"
+    },
+    "pcc/ir/ir.py": {
+      "bytes": 151427,
+      "mode": "100644",
+      "sha256": "821d3c0232a8daeae7c63d927586b80f6775f6aa03c3147aa7e6b462707ed39b"
+    }
+  },
+  "status": "UNAPPLIED_SOURCE_REVIEW_CLEAR_EXECUTION_UNRUN"
+}

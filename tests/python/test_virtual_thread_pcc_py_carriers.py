@@ -20,12 +20,12 @@ from tests.runtime_build_cache import cached_threaded_pcc_python_runtime
 
 
 REPO = Path(__file__).resolve().parents[2]
-RUNTIME = REPO / "pcc" / "py_runtime"
+RUNTIME = REPO / "pcc" / "runtime"
 RUNTIME_SOURCE = RUNTIME / "py" / "py_virtual_thread_runtime.py"
 
 
 @pytest.fixture(scope="session")
-def threaded_pcc_py_runtime_archive() -> Path:
+def threaded_pcc_runtime_archive() -> Path:
     archive = (
         cached_threaded_pcc_python_runtime() / "libpy_runtime_pcc_py.a"
     )
@@ -96,7 +96,7 @@ def test_scheduler_global_intrinsics_stay_literal_and_runtime_compiles(
 @pytest.mark.xdist_group(name="pcc_py_vthread_carriers")
 def test_threaded_pcc_python_archive_runs_persistent_carriers_and_pin_metrics(
     tmp_path: Path,
-    threaded_pcc_py_runtime_archive: Path,
+    threaded_pcc_runtime_archive: Path,
 ) -> None:
     probe = tmp_path / "pcc_py_carriers_probe.c"
     exe = tmp_path / "pcc_py_carriers_probe"
@@ -239,7 +239,7 @@ def test_threaded_pcc_python_archive_runs_persistent_carriers_and_pin_metrics(
             "-std=c11",
             f"-I{RUNTIME / 'include'}",
             str(probe),
-            str(threaded_pcc_py_runtime_archive),
+            str(threaded_pcc_runtime_archive),
             "-pthread",
             "-o",
             str(exe),
@@ -318,7 +318,7 @@ PCC1_APP = textwrap.dedent(
 @pytest.mark.parametrize("gc_backend", ("0", "1", "2", "3", "4"))
 def test_current_pcc1_self_no_libpython_multicarrier_gc_matrix(
     tmp_path: Path,
-    threaded_pcc_py_runtime_archive: Path,
+    threaded_pcc_runtime_archive: Path,
     gc_backend: str,
 ) -> None:
     pcc1 = find_current_pcc1(REPO)
@@ -333,7 +333,7 @@ def test_current_pcc1_self_no_libpython_multicarrier_gc_matrix(
     env.update(
         {
             "PCC_GC_BACKEND": gc_backend,
-            "PCC_RUNTIME_ARCHIVE": str(threaded_pcc_py_runtime_archive),
+            "PCC_RUNTIME_ARCHIVE": str(threaded_pcc_runtime_archive),
             "PCC_WITH_THREADS": "1",
         }
     )

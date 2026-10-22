@@ -11,7 +11,7 @@ import pytest
 
 
 def _compile_to_ll(tmp_path: Path, source: str, name: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / f"{name}.py"
     out = tmp_path / f"{name}.ll"
@@ -620,11 +620,11 @@ def test_exact_int_rebind_pins_replacement_before_releasing_previous_value(
 def test_exact_int_branch_and_zero_iteration_runtime_behavior(
     tmp_path,
     monkeypatch,
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
-    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_py_runtime_archive))
+    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_runtime_archive))
     src = tmp_path / "typed_exact_control_flow_run.py"
     exe = tmp_path / "typed_exact_control_flow_run.out"
     src.write_text(
@@ -884,7 +884,7 @@ def test_typed_list_i64_runtime_helpers_match_c_fast_path():
     import pcc
 
     repo_root = Path(pcc.__file__).resolve().parents[1]
-    py_list_src = repo_root / "pcc" / "py_runtime" / "py" / "py_list.py"
+    py_list_src = repo_root / "pcc" / "runtime" / "py" / "py_list.py"
     text = py_list_src.read_text(encoding="utf-8")
     for helper in (
         "py_list_get_i64",
@@ -906,7 +906,7 @@ def test_typed_list_i64_runtime_helpers_match_c_fast_path():
 
 def test_unsafe_i64_typed_list_int_loop_runs_without_libpython(tmp_path, monkeypatch):
     _enable_unsafe_i64(monkeypatch)
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "typed_list_int_loop_run.py"
     exe = tmp_path / "typed_list_int_loop_run.out"
@@ -932,7 +932,7 @@ def test_unsafe_i64_typed_list_int_loop_falls_back_for_heap_int_elements(
     monkeypatch,
 ):
     _enable_unsafe_i64(monkeypatch)
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "typed_list_heap_int_loop_run.py"
     exe = tmp_path / "typed_list_heap_int_loop_run.out"
@@ -1021,7 +1021,7 @@ def test_unsafe_i64_typed_float_loop_low_ir_can_be_disabled_as_layer1_oracle(
 
 def test_unsafe_i64_typed_float_loop_runs_without_libpython(tmp_path, monkeypatch):
     _enable_unsafe_i64(monkeypatch)
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "typed_float_loop_run.py"
     exe = tmp_path / "typed_float_loop_run.out"
@@ -1088,7 +1088,7 @@ def test_unsafe_i64_typed_int_unboxed_loop_runs_without_libpython(
     monkeypatch,
 ):
     _enable_unsafe_i64(monkeypatch)
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "typed_loop_run.py"
     exe = tmp_path / "typed_loop_run.out"
@@ -1150,7 +1150,7 @@ def test_typed_int_annotations_default_to_boxed_tagged_abi(tmp_path):
 
 
 def test_typed_int_direct_call_defaults_to_boxed_tagged_shape_and_runs(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     ir_text = _compile_to_ll(tmp_path, _TYPED_DIRECT_CALL, "typed_direct_call_tagged")
     add_body = _fn_body(ir_text, "add")
@@ -1206,7 +1206,7 @@ def test_for_range_induction_keeps_raw_i64_lane_under_boxed_int_mode(tmp_path):
 
 
 def test_for_range_raw_lane_reboxes_before_dyn_and_typed_calls(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     ir_text = _compile_to_ll(tmp_path, _TYPED_RANGE_ESCAPE, "typed_range_escape")
     body = _fn_body(ir_text, "last")
@@ -1259,7 +1259,7 @@ def test_tagged_int_mul_uses_inline_overflow_fast_path(tmp_path):
 
 
 def test_tagged_int_mul_fast_path_runs_without_libpython(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "typed_tagged_mul_run.py"
     exe = tmp_path / "typed_tagged_mul_run.out"
@@ -1289,7 +1289,7 @@ def test_unsafe_i64_typed_int_direct_call_uses_low_ir_and_runs_without_libpython
     monkeypatch,
 ):
     _enable_unsafe_i64(monkeypatch)
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     ir_text = _compile_to_ll(tmp_path, _TYPED_DIRECT_CALL, "typed_direct_call")
     body = _fn_body(ir_text, "bench")
@@ -1319,7 +1319,7 @@ def test_unsafe_i64_typed_int_direct_call_uses_low_ir_and_runs_without_libpython
 
 def test_typed_int_abi_decision_stays_off_runtime_cache():
     root = Path(__file__).absolute().parents[2]
-    source = (root / "pcc/py_frontend/codegen/typed_int_abi.py").read_text(
+    source = (root / "pcc/frontends/python/codegen/typed_int_abi.py").read_text(
         encoding="utf-8"
     )
     match = re.search(

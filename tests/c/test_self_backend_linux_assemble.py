@@ -174,8 +174,9 @@ def test_unlowered_intrinsic_fails_fast_instead_of_emitting_call():
     """An un-lowered `llvm.*` intrinsic must raise BackendUnavailable at
     emit time — the previous behavior emitted a literal `call llvm.foo`,
     which ASSEMBLES (dotted ELF symbols are legal) and only fails at
-    link time. (smul.with.overflow used to hit this; it now lowers
-    natively, so the probe uses ctpop.)"""
+    link time. (smul.with.overflow and later ctpop used to hit this; both
+    lower natively now, so the probe uses bitreverse, which has no x86-64
+    lowering.)"""
     from pcc.backend import BackendUnavailable
 
     ir = """
@@ -183,11 +184,11 @@ target triple = "x86_64-unknown-linux-gnu"
 
 define i64 @main() {
 entry:
-  %r = call i64 @llvm.ctpop.i64(i64 7)
+  %r = call i64 @llvm.bitreverse.i64(i64 7)
   ret i64 %r
 }
 
-declare i64 @llvm.ctpop.i64(i64)
+declare i64 @llvm.bitreverse.i64(i64)
 """.strip()
     with pytest.raises(BackendUnavailable, match="no native lowering"):
         emit_x86_64_linux_asm(ir)

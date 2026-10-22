@@ -63,7 +63,7 @@ pcc/
 ## 2. pcc_py AST (frozen v0.1)
 
 ```python
-# pcc/py_frontend/py_ast.py
+# pcc/frontends/python/py_ast.py
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Union
@@ -318,7 +318,7 @@ constructs fresh nodes (no `__setattr__` on frozen).
 ## 3. Runtime Library C ABI (frozen v0.1)
 
 ```c
-/* pcc/py_runtime/include/py_runtime.h */
+/* pcc/runtime/include/py_runtime.h */
 #ifndef PY_RUNTIME_H
 #define PY_RUNTIME_H
 
@@ -551,7 +551,7 @@ marshalling, direct.
 ## 6. LLVM C API Binding Surface (Phase 6C.2)
 
 ```python
-# pcc/llvm_capi/binding.py
+# pcc/ir/binding.py
 from .core import LLVMContextRef, LLVMModuleRef
 
 class Module:

@@ -1,0 +1,496 @@
+{
+  "draft_source_sha256": "caeab928da58dfd33e7377338e565f0151d639dfb2d7227c2d2386dd3da049a3",
+  "evidence": {
+    "api_snapshots": [
+      {
+        "bytes": 14364,
+        "kind": "run",
+        "sha256": "d71509b07d47dc22774a13ad1824a1e72669678130173e500f8d0768ceee4fac"
+      },
+      {
+        "bytes": 24172,
+        "kind": "jobs",
+        "sha256": "d5da632092610dc90d19e3debd304b03889401620f19e863fc908b8103934e77"
+      },
+      {
+        "bytes": 4277,
+        "kind": "artifacts",
+        "sha256": "98d002dec44574a74d284101963fdd12f7730a772c714e4bcc0f1726645164f7"
+      }
+    ],
+    "artifacts": [
+      {
+        "api_digest": "sha256:b8a720579524cbf3fbb9e62f113285784306ad13ac2bf622552d52e50d635267",
+        "api_digest_matches": true,
+        "api_size_in_bytes": 312456,
+        "api_size_matches": true,
+        "artifact_id": 11660008173,
+        "artifact_name": "bootstrap-macos-arm64",
+        "bytes": 312456,
+        "created_at": "2026-10-10T04:43:02Z",
+        "expires_at": "2026-10-17T04:43:01Z",
+        "member_count": 6,
+        "sha256": "b8a720579524cbf3fbb9e62f113285784306ad13ac2bf622552d52e50d635267",
+        "zip_crc": "PASS",
+        "zip_crc_scope": "All ZIP members read fully by Python zipfile.testzip"
+      },
+      {
+        "api_digest": "sha256:7f816c116d13e1e741ce5507b90b37bb3e4ae50bed80343150da91f4c03f008b",
+        "api_digest_matches": true,
+        "api_size_in_bytes": 1100943,
+        "api_size_matches": true,
+        "artifact_id": 11659948832,
+        "artifact_name": "bootstrap-windows-x86_64",
+        "bytes": 1100943,
+        "created_at": "2026-10-10T04:50:08Z",
+        "expires_at": "2027-01-08T04:02:23Z",
+        "member_count": 200,
+        "sha256": "7f816c116d13e1e741ce5507b90b37bb3e4ae50bed80343150da91f4c03f008b",
+        "zip_crc": "PASS",
+        "zip_crc_scope": "All ZIP members read fully by Python zipfile.testzip"
+      },
+      {
+        "api_digest": "sha256:d05f4cb1e0aaee4a8cf284c38041601958960019d54200e6c3d6f225674bfcb7",
+        "api_digest_matches": true,
+        "api_size_in_bytes": 1197208,
+        "api_size_matches": true,
+        "artifact_id": 11659938679,
+        "artifact_name": "bootstrap-linux-aarch64",
+        "bytes": 1197208,
+        "created_at": "2026-10-10T04:48:10Z",
+        "expires_at": "2027-01-08T04:02:23Z",
+        "member_count": 199,
+        "sha256": "d05f4cb1e0aaee4a8cf284c38041601958960019d54200e6c3d6f225674bfcb7",
+        "zip_crc": "PASS",
+        "zip_crc_scope": "All ZIP members read fully by Python zipfile.testzip"
+      },
+      {
+        "api_digest": "sha256:50bbd3bc4ef233f2cdf5d8a77754c7be1024f0913c062821ba4547c2494470c2",
+        "api_digest_matches": true,
+        "api_size_in_bytes": 168247,
+        "api_size_matches": true,
+        "artifact_id": 11659325474,
+        "artifact_name": "macos-pcc0-regression-receipts",
+        "bytes": 168247,
+        "created_at": "2026-10-10T04:16:03Z",
+        "expires_at": "2026-10-17T04:16:02Z",
+        "member_count": 178,
+        "sha256": "50bbd3bc4ef233f2cdf5d8a77754c7be1024f0913c062821ba4547c2494470c2",
+        "zip_crc": "PASS",
+        "zip_crc_scope": "All ZIP members read fully by Python zipfile.testzip"
+      },
+      {
+        "api_digest": "sha256:6e9e162b8648651234b4155ee963b4c4bc139d879b9ff4c9ccd40823c6d678ab",
+        "api_digest_matches": true,
+        "api_size_in_bytes": 1129947,
+        "api_size_matches": true,
+        "artifact_id": 11659107936,
+        "artifact_name": "bootstrap-linux-x86_64",
+        "bytes": 1129947,
+        "created_at": "2026-10-10T04:46:15Z",
+        "expires_at": "2027-01-08T04:02:23Z",
+        "member_count": 198,
+        "sha256": "6e9e162b8648651234b4155ee963b4c4bc139d879b9ff4c9ccd40823c6d678ab",
+        "zip_crc": "PASS",
+        "zip_crc_scope": "All ZIP members read fully by Python zipfile.testzip"
+      }
+    ],
+    "job_logs": [
+      {
+        "bytes": 2162529,
+        "job_id": 114126775688,
+        "sha256": "e35b73f245d223ae5edbbe6da7ae19f8219c1018f88c7565268afc614cf10e6a"
+      },
+      {
+        "bytes": 31980,
+        "job_id": 114126775801,
+        "sha256": "a7474bc4d00bf2942901ff9628646659ee7fdbfc1eed2236ae81da2a8c953e18"
+      },
+      {
+        "bytes": 31958,
+        "job_id": 114126775817,
+        "sha256": "61d7503210030546bbbf2a69d49b7e6aca8ee5ee59b1826f43056cf5a260500c"
+      },
+      {
+        "bytes": 22025,
+        "job_id": 114126775828,
+        "sha256": "332d21c6237c38d5296d8d248cdc99760196f851698d03c8895bbaf549d52df9"
+      },
+      {
+        "bytes": 22599,
+        "job_id": 114126775877,
+        "sha256": "8b19463eed505c59d327e20a64699cf117481a7c71bbd0e1776679f81d4fb08e"
+      }
+    ]
+  },
+  "focused_macos_pcc0": {
+    "clock_scope": "real host/native clock epoch; simulated suspend; emitted native worker-state reader",
+    "groups": [
+      {
+        "errors": 0,
+        "failures": 0,
+        "group": "clock",
+        "junit_gzip_sha256": "e423f037a6190e9cad8646d3fa4255209cb3a48936edce4bfe50ea84bd30bb5b",
+        "junit_xml_sha256": "dda4fe8be87e09dcd7b5dbf011f0e189d96f336e4a6a2a3e6eb687fd1961efac",
+        "pytest_cases": 2,
+        "skipped": 0,
+        "status": "PASS"
+      },
+      {
+        "errors": 0,
+        "failures": 0,
+        "group": "native-worker-clock",
+        "junit_gzip_sha256": "bb7f28940dc1c188ac05ed58a2e70258a407abfc1b128f0ed1bc1e1c402b23d0",
+        "junit_xml_sha256": "793fab1530fa9395c30f7b7b9d926f71a16c4e562ad573dba6770b3a1db2bcb6",
+        "pytest_cases": 1,
+        "skipped": 0,
+        "status": "PASS"
+      },
+      {
+        "errors": 0,
+        "failures": 0,
+        "group": "root-joins",
+        "junit_gzip_sha256": "64ff15a0c71423a08f1c5036e1bd667806185194930e3c0663727bd9283dae62",
+        "junit_xml_sha256": "98e9c4338ef98876a4bfbae1a6425ab2f26564770a213e3a9692f643d26d021d",
+        "pytest_cases": 5,
+        "skipped": 0,
+        "status": "PASS"
+      },
+      {
+        "errors": 0,
+        "failures": 0,
+        "group": "time",
+        "junit_gzip_sha256": "202c1cb08fc40ee8bf4974d5082abe618bd2587409fac9402191ba0b70e4306e",
+        "junit_xml_sha256": "f779c9fb39a7d60fa278f4d2951699253b9019537e8e75fd356b88dd3968a431",
+        "pytest_cases": 1,
+        "skipped": 0,
+        "status": "PASS"
+      },
+      {
+        "errors": 0,
+        "failures": 0,
+        "group": "worker-handles",
+        "junit_gzip_sha256": "ab197c99f83b560e01d9a897096279711aab95b7e9c1e41f912a41eb6ff45050",
+        "junit_xml_sha256": "6e64054f613ce9288e765e0a3b87bb067ca985ac844ed530c6dc60f5196abede",
+        "pytest_cases": 2,
+        "skipped": 0,
+        "status": "PASS"
+      }
+    ],
+    "job_id": 114126775817,
+    "limitation": "Focused existing pcc0 programs do not prove every changed program shape, native closure of the new x86 numeric-data batching path, completed Stage1, or pcc1 Stage2 worker dispatch.",
+    "pytest_cases": 11,
+    "runtime_archive_sha256": "f98025a75e6ce2f8e7cfd55a64c7fc55370912d4e5240accc549300c333bde5e",
+    "runtime_build": "PASS; separate from the 11 pytest cases",
+    "scope": "host pcc0 self/off emitted execution; Stage1 is a separate job",
+    "status": "PASS"
+  },
+  "interpretation_limits": [
+    "This receipt binds saved evidence; it does not rerun CI or recompute runner source trees.",
+    "Deadline termination is an observed failure mode, not evidence that no latent semantic defect exists.",
+    "Repository-head identity and per-platform reported source-tree digests are distinct evidence; neither is silently substituted for the other.",
+    "The absence of pcc1 in the preserved macOS artifact is not a forensic inventory of the full runner filesystem."
+  ],
+  "jobs": [
+    {
+      "completed_at": "2026-10-10T04:43:07Z",
+      "conclusion": "failure",
+      "failed_steps": [
+        {
+          "name": "Build current pcc1",
+          "number": 7
+        }
+      ],
+      "head_sha": "bf1bf82d8242a60a85a06322ceee97fab5346cc0",
+      "html_url": "https://github.com/ikshengmin/pcc/actions/runs/38022657272/job/114126775688",
+      "id": 114126775688,
+      "name": "macOS arm64 native pcc1 and installed wheel",
+      "skipped_steps": [
+        {
+          "name": "Build, install, and execute the native wheel",
+          "number": 9
+        },
+        {
+          "name": "Run pcc1 package parity hard gate",
+          "number": 10
+        },
+        {
+          "name": "Post Set up uv",
+          "number": 18
+        },
+        {
+          "name": "Post Set up Python",
+          "number": 19
+        }
+      ],
+      "started_at": "2026-10-10T04:02:30Z",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-10-10T04:50:11Z",
+      "conclusion": "failure",
+      "failed_steps": [
+        {
+          "name": "Qualify all five GC self-host chains",
+          "number": 7
+        }
+      ],
+      "head_sha": "bf1bf82d8242a60a85a06322ceee97fab5346cc0",
+      "html_url": "https://github.com/ikshengmin/pcc/actions/runs/38022657272/job/114126775801",
+      "id": 114126775801,
+      "name": "Native wheel / windows-x86_64",
+      "skipped_steps": [
+        {
+          "name": "Build this machine's native wheel",
+          "number": 9
+        },
+        {
+          "name": "Install and execute the Linux wheel inside Docker",
+          "number": 10
+        },
+        {
+          "name": "Install and execute the Windows wheel inside Docker",
+          "number": 11
+        },
+        {
+          "name": "Install wheel and execute native output on the runner",
+          "number": 12
+        },
+        {
+          "name": "Post Set up Python",
+          "number": 23
+        }
+      ],
+      "started_at": "2026-10-10T04:02:25Z",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-10-10T04:16:05Z",
+      "conclusion": "success",
+      "failed_steps": [],
+      "head_sha": "bf1bf82d8242a60a85a06322ceee97fab5346cc0",
+      "html_url": "https://github.com/ikshengmin/pcc/actions/runs/38022657272/job/114126775817",
+      "id": 114126775817,
+      "name": "macOS arm64 focused pcc0 native regressions",
+      "skipped_steps": [],
+      "started_at": "2026-10-10T04:02:30Z",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-10-10T04:48:12Z",
+      "conclusion": "failure",
+      "failed_steps": [
+        {
+          "name": "Qualify all five GC self-host chains",
+          "number": 7
+        }
+      ],
+      "head_sha": "bf1bf82d8242a60a85a06322ceee97fab5346cc0",
+      "html_url": "https://github.com/ikshengmin/pcc/actions/runs/38022657272/job/114126775828",
+      "id": 114126775828,
+      "name": "Native wheel / linux-aarch64",
+      "skipped_steps": [
+        {
+          "name": "Install Windows publication test tools",
+          "number": 5
+        },
+        {
+          "name": "Verify Windows RSS publication with a held reader",
+          "number": 6
+        },
+        {
+          "name": "Build this machine's native wheel",
+          "number": 9
+        },
+        {
+          "name": "Install and execute the Linux wheel inside Docker",
+          "number": 10
+        },
+        {
+          "name": "Install and execute the Windows wheel inside Docker",
+          "number": 11
+        },
+        {
+          "name": "Install wheel and execute native output on the runner",
+          "number": 12
+        },
+        {
+          "name": "Post Set up Python",
+          "number": 23
+        }
+      ],
+      "started_at": "2026-10-10T04:02:27Z",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-10-10T04:46:17Z",
+      "conclusion": "failure",
+      "failed_steps": [
+        {
+          "name": "Qualify all five GC self-host chains",
+          "number": 7
+        }
+      ],
+      "head_sha": "bf1bf82d8242a60a85a06322ceee97fab5346cc0",
+      "html_url": "https://github.com/ikshengmin/pcc/actions/runs/38022657272/job/114126775877",
+      "id": 114126775877,
+      "name": "Native wheel / linux-x86_64",
+      "skipped_steps": [
+        {
+          "name": "Install Windows publication test tools",
+          "number": 5
+        },
+        {
+          "name": "Verify Windows RSS publication with a held reader",
+          "number": 6
+        },
+        {
+          "name": "Build this machine's native wheel",
+          "number": 9
+        },
+        {
+          "name": "Install and execute the Linux wheel inside Docker",
+          "number": 10
+        },
+        {
+          "name": "Install and execute the Windows wheel inside Docker",
+          "number": 11
+        },
+        {
+          "name": "Install wheel and execute native output on the runner",
+          "number": 12
+        },
+        {
+          "name": "Post Set up Python",
+          "number": 23
+        }
+      ],
+      "started_at": "2026-10-10T04:02:25Z",
+      "status": "completed"
+    }
+  ],
+  "qualification_limits": [
+    {
+      "detail": "Attempted on four jobs; none completed successfully.",
+      "gate": "Full Stage1 on macOS arm64, Linux x86_64, Linux aarch64 and Windows x86_64",
+      "status": "FAILED_DEADLINE"
+    },
+    {
+      "detail": "No completed Stage1; Linux and Windows failure receipts have empty completed-stage arrays.",
+      "gate": "pcc1 fixed-point and all five GC self-host chains",
+      "status": "UNRUN_AFTER_STAGE1_FAILURE"
+    },
+    {
+      "detail": "Downstream wheel steps are skipped in terminal job metadata.",
+      "gate": "Native wheels and installed-wheel execution",
+      "status": "SKIPPED"
+    },
+    {
+      "detail": "The downstream hard gate is skipped in terminal job metadata.",
+      "gate": "macOS pcc1 package parity hard gate",
+      "status": "SKIPPED"
+    },
+    {
+      "detail": "No qualifying result is established by this run.",
+      "gate": "Full async qualification",
+      "status": "UNRUN"
+    },
+    {
+      "detail": "No qualifying result is established by this run.",
+      "gate": "Gateway qualification",
+      "status": "UNRUN"
+    },
+    {
+      "detail": "The focused pcc0 regression pass does not establish this changed-shape closure.",
+      "gate": "New x86 numeric-data batching native closure",
+      "status": "UNRUN"
+    }
+  ],
+  "reported_source_trees": [
+    {
+      "artifact_name": "bootstrap-windows-x86_64",
+      "clean_commit": true,
+      "commit": "bf1bf82d8242a60a85a06322ceee97fab5346cc0",
+      "observation_kind": "Source tree digest reported in artifact; not independently recomputed from an absent runner source tree",
+      "source_file_count": 1126,
+      "source_scope": "compiler-runtime-headers-build-harness-v1",
+      "source_sha256": "b5b877e52ace902b73e70de43a774798dcadf5295e4a8bb919ad14e0641d4277"
+    },
+    {
+      "artifact_name": "bootstrap-linux-aarch64",
+      "clean_commit": true,
+      "commit": "bf1bf82d8242a60a85a06322ceee97fab5346cc0",
+      "observation_kind": "Source tree digest reported in artifact; not independently recomputed from an absent runner source tree",
+      "source_file_count": 1126,
+      "source_scope": "compiler-runtime-headers-build-harness-v1",
+      "source_sha256": "a7a3de61ac06e5dc922ed0dea4fe5e66907baf7831948ba33de73c7fc4cfe469"
+    },
+    {
+      "artifact_name": "bootstrap-linux-x86_64",
+      "clean_commit": true,
+      "commit": "bf1bf82d8242a60a85a06322ceee97fab5346cc0",
+      "observation_kind": "Source tree digest reported in artifact; not independently recomputed from an absent runner source tree",
+      "source_file_count": 1126,
+      "source_scope": "compiler-runtime-headers-build-harness-v1",
+      "source_sha256": "a7a3de61ac06e5dc922ed0dea4fe5e66907baf7831948ba33de73c7fc4cfe469"
+    }
+  ],
+  "result": {
+    "focused_macos_pcc0_pytest_cases_passed": 11,
+    "jobs_failed": 4,
+    "jobs_passed": 1,
+    "stage1_jobs_failed_deadline": 4,
+    "workflow": "FAIL"
+  },
+  "run": {
+    "conclusion": "failure",
+    "created_at": "2026-10-10T04:02:23Z",
+    "event": "push",
+    "head_branch": "master",
+    "head_sha": "bf1bf82d8242a60a85a06322ceee97fab5346cc0",
+    "html_url": "https://github.com/ikshengmin/pcc/actions/runs/38022657272",
+    "id": 38022657272,
+    "name": "Package platform and pcc1 wheel gates",
+    "run_attempt": 1,
+    "run_number": 21,
+    "run_started_at": "2026-10-10T04:02:23Z",
+    "status": "completed",
+    "updated_at": "2026-10-10T04:50:12Z"
+  },
+  "schema": "pcc.public-ci-qualification.v1",
+  "source_identity_note": "Windows reports a different source-tree SHA-256 from both Linux jobs despite the same commit, scope, file count and clean-commit flag. The cause is not established by these saved receipts. No comparable whole-source-tree digest is supplied by the macOS Stage1 artifact.",
+  "stage1_failures": [
+    {
+      "artifact_name": "bootstrap-macos-arm64",
+      "elapsed_s": 2400.3158901250004,
+      "pcc1_output_in_preserved_artifact": false,
+      "pcc1_output_observation": "No pcc1 output is present in the six-member preserved artifact; no completed Stage1 is established.",
+      "returncode": 143,
+      "stage": "Stage1",
+      "status": "TIMEOUT",
+      "timeout_s": 2400.0
+    },
+    {
+      "artifact_name": "bootstrap-windows-x86_64",
+      "completed_stages": [],
+      "error": "stage deadline exceeded",
+      "stage": "Stage1",
+      "status": "DEADLINE_EXCEEDED"
+    },
+    {
+      "artifact_name": "bootstrap-linux-aarch64",
+      "completed_stages": [],
+      "error": "stage deadline exceeded",
+      "stage": "Stage1",
+      "status": "DEADLINE_EXCEEDED"
+    },
+    {
+      "artifact_name": "bootstrap-linux-x86_64",
+      "completed_stages": [],
+      "error": "stage deadline exceeded",
+      "stage": "Stage1",
+      "status": "DEADLINE_EXCEEDED"
+    }
+  ],
+  "status": "COMPLETED_WITH_STAGE1_TIMEOUTS"
+}

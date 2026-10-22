@@ -6,13 +6,13 @@ import sys
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 @pytest.mark.parametrize("kind", ["bytes", "bytearray"])
 @pytest.mark.parametrize("statement", ["data += b''", "data = data + b''"])
 def test_byte_concat_releases_replaced_buffers(
-    tmp_path, pcc_py_runtime_archive, kind, statement,
+    tmp_path, pcc_runtime_archive, kind, statement,
 ):
     source = tmp_path / "concat.py"
     source.write_text(f'''
@@ -31,7 +31,7 @@ main()
 ''', encoding="utf-8")
     output = tmp_path / "concat"
     compile_python(str(source), str(output), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         result = subprocess.run([str(output)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(gc)))
@@ -42,7 +42,7 @@ main()
             assert growth < 262144, (kind, statement, growth)
 
 
-def test_byte_concat_copies_both_payloads_and_preserves_family(tmp_path, pcc_py_runtime_archive):
+def test_byte_concat_copies_both_payloads_and_preserves_family(tmp_path, pcc_runtime_archive):
     source = tmp_path / "concat_payload.py"
     source.write_text('''import gc
 def main():
@@ -64,7 +64,7 @@ main()
     assert expected.returncode == 0, expected.stderr
     output = tmp_path / "concat_payload"
     compile_python(str(source), str(output), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         result = subprocess.run([str(output)], capture_output=True, text=True, timeout=15,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(gc)))

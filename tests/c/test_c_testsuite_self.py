@@ -4,8 +4,11 @@ from functools import lru_cache
 
 import pytest
 
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.project import TranslationUnit
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.driver.project import TranslationUnit
+from tests.owned_c_corpus import run_owned_c_corpus
+from tests.corpus_execution_phases import ExecutionPhases
+from tests.corpus_manifest import runtime_cases_except
 from tests.c_testsuite_cases import (
     PccCompileResult,
     _default_timeout,
@@ -16,16 +19,25 @@ from tests.c_testsuite_cases import (
     run_pcc,
 )
 from tests.self_backend_c_testsuite_common import (
+    C_TESTSUITE_MANIFEST,
     REPO_ROOT,
     assert_result_triplet_matches,
     c_testsuite_case_path,
     exact_match_cases,
 )
 
-# The self backend now clears the full broad 220-case runtime exact-match
-# manifest, so keep the repository-scale gate at full width instead of a
-# curated prefix bucket.
+# Retain the complete runtime exact-match manifest for the owned product lane.
+# Historical host-linked passes do not qualify this newly owned route.
 C_TESTSUITE_SELF_BACKEND_EXACT_MATCH_CASES = exact_match_cases()
+C_TESTSUITE_SELF_BACKEND_RETURNCODE_CASES = C_TESTSUITE_MANIFEST.get(
+    "runtime_returncode_match_only", []
+)
+C_TESTSUITE_SELF_BACKEND_COMPARISON_CASES = (
+    C_TESTSUITE_SELF_BACKEND_EXACT_MATCH_CASES
+    + tuple(runtime_cases_except(
+        C_TESTSUITE_MANIFEST, {"runtime_exact_match", "runtime_returncode_match_only"}
+    ))
+)
 
 pytestmark = pytest.mark.integration
 
@@ -62,24 +74,27 @@ def _run_backend(
         timeout = _default_timeout()
     config = case_config(case_path)
     unit = TranslationUnit(case_path.name, str(case_path), _read_case_source(case_path))
+    phases = ExecutionPhases()
     try:
-        result = CEvaluator(
+        evaluator = CEvaluator(
             backend=backend,
             allow_unimplemented_backend=allow_unimplemented_backend,
-        ).run_translation_units_with_system_cc(
+        )
+        result = run_owned_c_corpus(evaluator,
             [unit],
             base_dir=str(case_path.parent),
             include_dirs=[str(case_path.parent)],
             cpp_args=config.cpp_args,
             timeout=timeout,
+            on_stage=phases.begin,
         )
-        return PccCompileResult(result.returncode, result.stdout, result.stderr)
+        return phases.complete(result)
     except Exception as exc:
-        return PccCompileResult(1, "", str(exc))
+        return phases.fail(exc)
 
 
 @pytest.mark.parametrize(
-    "filename", _case_params(C_TESTSUITE_SELF_BACKEND_EXACT_MATCH_CASES)
+    "filename", _case_params(C_TESTSUITE_SELF_BACKEND_COMPARISON_CASES)
 )
 def test_c_testsuite_self_backend_matches_native_llvm_and_expected(filename):
     case_path = c_testsuite_case_path(filename)
@@ -88,6 +103,10 @@ def test_c_testsuite_self_backend_matches_native_llvm_and_expected(filename):
     native_result = run_native(case_path, REPO_ROOT)
     llvm_result = _run_llvm_backend(case_path)
     self_result = _run_self_backend(case_path)
+
+    native_result.require_execution("host reference")
+    llvm_result.require_execution("default owned pcc")
+    self_result.require_execution("explicit owned self")
 
     assert_result_triplet_matches(
         filename, "self", self_result, "native", native_result
@@ -102,4 +121,33 @@ def test_c_testsuite_self_backend_matches_native_llvm_and_expected(filename):
         assert self_result.stdout == expected_output, (
             f"{filename} output vs .expected mismatch:\n"
             f"expected={expected_output!r}\nself={self_result.stdout!r}"
+        )
+
+
+if C_TESTSUITE_SELF_BACKEND_RETURNCODE_CASES:
+
+    @pytest.mark.parametrize(
+        "filename", _case_params(C_TESTSUITE_SELF_BACKEND_RETURNCODE_CASES)
+    )
+    def test_c_testsuite_self_backend_returncode_matches_native_and_llvm(filename):
+        case_path = c_testsuite_case_path(filename)
+        assert case_path.is_file(), f"missing c-testsuite case: {case_path}"
+
+        native_result = run_native(case_path, REPO_ROOT)
+        llvm_result = _run_llvm_backend(case_path)
+        self_result = _run_self_backend(case_path)
+
+        native_result.require_execution("host reference")
+        llvm_result.require_execution("default owned pcc")
+        self_result.require_execution("explicit owned self")
+
+        assert self_result.returncode == native_result.returncode, (
+            f"{filename} return code mismatch:\n"
+            f"native={native_result.returncode}\nself={self_result.returncode}\n"
+            f"self stderr:\n{self_result.stderr}"
+        )
+        assert self_result.returncode == llvm_result.returncode, (
+            f"{filename} return code mismatch:\n"
+            f"llvm={llvm_result.returncode}\nself={self_result.returncode}\n"
+            f"self stderr:\n{self_result.stderr}"
         )

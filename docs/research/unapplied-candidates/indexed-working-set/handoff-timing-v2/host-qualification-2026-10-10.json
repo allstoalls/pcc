@@ -1,0 +1,119 @@
+{
+  "base_and_postimage_origins_after": "PASS",
+  "base_closure": {
+    "all_hashes_match_remote_Git_trees": true,
+    "bytes": 44723952,
+    "files": 3881,
+    "full_repository_checkout": false,
+    "included_complete_trees": {
+      ".github": "9777da775e28c0013255cfba4bdc887e9f3a4c29",
+      "pcc": "e0fe5ee61793cc74d4b1564d4cb6787c13d884a4",
+      "scripts": "ab4e15e430c82fb7d89691d164d163333fad68f3",
+      "tests": "60aba90b58a7d254704fa58981ee873b6f2791e4"
+    },
+    "omitted": "docs/research, unrelated vendor and other non-compilation trees",
+    "root_files": [
+      ".python-version",
+      "AGENTS.md",
+      "README.md",
+      "conftest.py",
+      "pyproject.toml",
+      "run.py",
+      "uv.lock"
+    ],
+    "source_composition": "Exact published cc5 closure: retained 8aa files plus the two published test corrections. Ordinary destination files only; no runtime import overlay."
+  },
+  "base_commit": "cc5eaa9118399c3ef63e3c2423b7fbfb403dc651",
+  "bootstrap_receipt_sha256": "6d5c7dc6a120b619db1ee3a80b40e4779668d22ce69d96d78aaae10a398a9860",
+  "by_selector": {
+    "tests/python/test_host_indexed_process_split.py": 20,
+    "tests/python/test_indexed_handoff_timing.py": 39,
+    "tests/python/test_pipeline_indexed_handoff.py": 29,
+    "tests/python/test_self_backend_indexed_codec_host_packing.py": 26
+  },
+  "candidate_pcc_tree": "665372c8ef77c0905d8fde7fc47860f242683ca0",
+  "changes": [
+    {
+      "bytes": 6525,
+      "mode": "100644",
+      "path": "pcc/backend/indexed_phase_timing.py",
+      "post_sha256": "7e675c79124c80c38153c90650a7b0ab9c3d815d43f405765c7f32f5c4341bbe",
+      "pre_sha256": "b2123e4546245e39d0dc937bc7da2e22d3fa3d57e6f351946b1912663714b7ca"
+    },
+    {
+      "bytes": 8361,
+      "mode": "100644",
+      "path": "pcc/backend/self_backend_indexed_emit.py",
+      "post_sha256": "57c5f91684c24cc505fbd843618a1cf903b53d1e7d7e78dbffe540509dffc0d8",
+      "pre_sha256": "de3d9c409616020b0d2b0d85dbf3284186f742cdc8b93aec189a0d779070241e"
+    },
+    {
+      "bytes": 40520,
+      "mode": "100644",
+      "path": "pcc/frontends/python/worker_process_pool.py",
+      "post_sha256": "19e23c768d23a054351460a479542fa98e1c597c434d146d9e5735f58c1ca97a",
+      "pre_sha256": "4d94844cfc920a9dd98d1e4bf435780e64404370008def8dd571f858636b8524"
+    },
+    {
+      "bytes": 16217,
+      "mode": "100644",
+      "path": "tests/python/test_indexed_handoff_timing.py",
+      "post_sha256": "fb434e6806ad7b20ac4d36d3cebeda2f5803bf9406ad34c7571ad87ff952fb2a",
+      "pre_sha256": null
+    }
+  ],
+  "codegen_checksum": "9fa12f82889bbe22aad8523844aefb52a6852432828f946035b698013b9f2a8b",
+  "counts": {
+    "collected": 114,
+    "errors": 0,
+    "failed": 0,
+    "passed": 114,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  },
+  "execution_count": 1,
+  "guard": {
+    "cleanup": "CLEAN",
+    "denied_events": 0,
+    "echild": true,
+    "elapsed_s": 2.8128800249978667,
+    "free_floor_bytes": 4294967296,
+    "growth_limit_bytes": 536870912,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "lock_released": true,
+    "returncode": 0,
+    "root_reaped": true,
+    "status": "COMPLETE",
+    "timeout_s": 300
+  },
+  "guard_receipt_sha256": "229de81928e54fb38ccfcd6182fb260ecfd0a63a693e76c4988903ad96935d4a",
+  "import_roots": "PASS",
+  "limits": [
+    "Only fake-clock, supplied-error, AST, mock process and small owned host-arena contracts executed.",
+    "Real timed FE/BE child execution, native closure, emitted runtime, full async/gateway, pcc1, Stage1 and end-to-end performance remain UNRUN for this timing candidate.",
+    "The simultaneous cc5 real CI results bind the unchanged preceding production, not this candidate.",
+    "The existing 13 phase fields and production algorithm are not replaced; extra diagnostic overhead is not a speedup."
+  ],
+  "payload_sha256": "9cb50516f6738f139936d205aec1f0fa6203dacbc0797c98c5e798e6ddc8a795",
+  "preserved_current_tests": {
+    "tests/python/test_indexed_handoff_closed_world.py": "1d48b533b50517c47ff8f2efbdb8ea6d9e5b2900de4b3ec85e146472d304f010",
+    "tests/python/test_native_float_callback_movement.py": "2c31c7c6e1fac812978727fa0832f26b135be6673cdadd4bf48e15e0cfdd2906"
+  },
+  "qualification_sha256": "934879611c3d26de1b475554347a8f4fad903d7436d255aa7809a61d1f26895a",
+  "schema": "pcc.indexed-handoff-timing.host-qualification.v1",
+  "scope": "114 exact main host cases: 39 fake-clock/error/AST timing contracts plus 75 existing mock handoff/codec/split contracts; 44 subreports counted separately. No actual child, PCC compilation, native execution, runtime build or performance measurement.",
+  "source_before_after": "PASS",
+  "source_manifest_sha256": "c5346934c60d4da24b9400b95c8a057bbfcdd1210843f76f0d62b68e7a8fc600",
+  "status": "PASS",
+  "subtest_counts": {
+    "collected": 44,
+    "errors": 0,
+    "failed": 0,
+    "passed": 44,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  }
+}

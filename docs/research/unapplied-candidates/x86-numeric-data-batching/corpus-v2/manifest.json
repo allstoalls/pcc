@@ -1,0 +1,75 @@
+{
+  "base_source_inventory_sha256": "568c44d837939cde5ab4da2c2f0115ab30f978716bc423a40e07d9cf2bdc0185",
+  "candidate_pcc_tree": "930263bf204e578796c72dab5d4aa31fd7ab27ae",
+  "codegen_checksum": "ce75a8770afcdad0679e4fb854f4bb6752fec786ae7558bf07fa46ec52152eb6",
+  "driver_sha256": "30b93c704469b6368ec6d5d1625c3d832cc74f824a9a75f6c63a96cdd04c9633",
+  "frontend_compilation": false,
+  "historical_compiler_checksum": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+  "historical_input_cfg": {
+    "blocks": 48161,
+    "functions": 231,
+    "instructions": 219614
+  },
+  "input_scope": "Sealed historical pre-class-outline c_ast Windows assembly, not current frontend output or current CI frequency evidence.",
+  "inputs": {
+    "assembly": {
+      "bytes": 76565862,
+      "sha256": "8ad079c23208ef05f5385e975d45421ac5c50f882a14b68d942cf9134567f919"
+    },
+    "host_qualification": {
+      "bytes": 7683,
+      "sha256": "3a65e08bfbe400cc9a6a3d8ae53a7ffbb623f78012d5c148cbb9cec4f5bde1d5"
+    },
+    "host_result": {
+      "bytes": 4430,
+      "sha256": "63325b954a9c581ccfdfd62a2d2ded32a712a64ce58542d0be4c3d8d911e9b31"
+    },
+    "reference_object": {
+      "bytes": 12228800,
+      "sha256": "4d910a121adc58f3f57f9d5041abcb406ff9ad3c6a5748581c6671d6cdcfcb6a"
+    },
+    "reference_qualification": {
+      "bytes": 8103,
+      "sha256": "4864338559a67bcd79b003832fbbad6983bf35160ded8741253c58f5d9f1ab9b"
+    },
+    "reference_result": {
+      "bytes": 47568,
+      "sha256": "6afb6237c6075a64b54c7076e53cfb1fea7e3aff220282586a704293fe927ef4"
+    }
+  },
+  "limits": {
+    "exclusive_shared_lock": true,
+    "free_reserve_bytes": 4294967296,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "max_output_growth_bytes": 536870912,
+    "runs": 1,
+    "seconds": 300
+  },
+  "native_execution": false,
+  "original_per_scalar_parser_sha256": "cc71a7b5b5c5db56d665fc83afe670b021c20f76403fb5a381a085cdf37cf84d",
+  "performance_claim": false,
+  "public_files": [
+    "check_corpus.py",
+    "README.md",
+    "manifest.json"
+  ],
+  "readme_sha256": "ec9ea3abaaefcae1c5c2d06392fcd1a3d269a354d8da3ec6e3e12d3972a00903",
+  "retained_output_budget_bytes": 16777216,
+  "schema": "pcc.x86-numeric-data-batching-corpus.v2",
+  "screening_thresholds": {
+    "minimum_record_reduction_percent": 50
+  },
+  "source_file_sha256": {
+    "pcc/backend/coff_x86_64.py": "15939bf25b6b8cffd853ac82cd99fbbe1708a3e8d3c8b7bf6599578a8bc440f5",
+    "pcc/backend/elf_x86_64.py": "79db187fd9c19106d9730627dad5cf171daafd0429afd8a537179eb6df319b0c",
+    "pcc/backend/target_objects.py": "5ea98a6c8b37ff5b0555865164df73ea14a4b58e50e2e3abdc4833cb0a57e4a8",
+    "pcc/backend/x86_64_asm_driver.py": "a85b7b1fcfa7cb6fec61e08b1cb8a95096cb03b9ebe38778d2d0de1472fc88b4",
+    "pcc/backend/x86_64_encode.py": "b5f50803d5fee0da05accbd0e331cdfe5a6a6a6505a50480b10aef570b363a82"
+  },
+  "source_inventory_sha256": "7430a30766c11a59e7185758b725b289388ae131498ce6a8a568bdf10ff773ba",
+  "source_packet_manifest_sha256": "80beb3da8ae30e96a4531356e0aa87c2d594d3a041a6c6d318f6e44332a71da7",
+  "status": "UNRUN_REVIEW_PENDING",
+  "supersedes_unrun_manifest_sha256": "cee63291d3734215c1ebcf0b2c6ff9de387d76d6c5ea7511226b5df3bb04c12a",
+  "target": "x86_64-pc-windows-msvc"
+}

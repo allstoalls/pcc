@@ -1,0 +1,57 @@
+{
+  "candidate_files": {
+    "pcc/frontends/python/codegen/_l1_codegen_static_methods.py": "49d41a9aef23e7c3df10d10d97ef1d2e3d8267fe6a6def75f230a0520942c451",
+    "pcc/frontends/python/codegen/call_object_lowering.py": "162c0a78aae28546fd4326f870e68295bb7b4c8555fa27ce648e5e17fbcd1bde",
+    "pcc/frontends/python/codegen/host_contract.py": "23c09a811bf9e82a5804d6296a8662b3250f2464268f65ea2445b394b2d18dae",
+    "pcc/frontends/python/codegen/native_gc.py": "8a6ab5e74edad2b6eace79b532789f3ed78fec0f9ef6edd81ae6c65124149e2d",
+    "pcc/frontends/python/pipeline.py": "8fe68eeee47d158d63a7955fdb896d0e4652a7ef9faea45fc5eb618326572fed",
+    "pcc/frontends/python/pipeline_dependency_closure.py": "22b39e63ab3291ad257ebe06f817715ade0cc711439b5698a2a0122b5d35d0cd",
+    "pcc/frontends/python/pipeline_import_policy.py": "ad5938c11e4e3a6df52488f4ef1829ae0f8cfc9b5c248c1403a8fe50c74436ca",
+    "pcc/frontends/python/pipeline_self_backend_emit.py": "e546211e4681c4d27dfe1acbe4628f4585b3afe5811d96560d9a7c19f05afb26",
+    "pcc/frontends/python/pipeline_self_backend_link.py": "8e8bf9eeda886ea949df2c0fcb55106a50a26be904b4b1ff55a9f81c6dc84cf7",
+    "pcc/stdlib/gc.py": "80c3ed3e1d4ae50ab7f1fd97f161d0fd49cb54cb69ffbab0cd107938f6577646",
+    "tests/owned_ir_validation.py": "3e1a944b4ee8582b435e72c4b3dff66c674ed9056a6d3c685b9ac728649ec4ec",
+    "tests/python/test_slot_call_status_reporting.py": "cd8bec179c52c61e6f4e08505298f12b34c3bd79971e8a2bb0cc38ecbf686d5b",
+    "tests/python/test_slot_call_status_reporting_native.py": "f3915510ed44ed2c5e5f8a73f88b22c004ec11a439bd1c5705b3f6ece420fe65",
+    "tests/runtime_fixture_provenance.py": "3d3956a512ecfefb2410a983a83f16b841abe38eeb6a427a851fb9008c9105eb"
+  },
+  "candidate_source_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "canonical_source_inventory_sha256": "5643f83014b0ff2801adb0d3f204dd63541ef9eda6a7d13dc688dc6565b25ea1",
+  "canonical_status_owner_sha256": "5fa765ad62b9e9b60b046a1e9aa11492e02245d53ca3c1a37a7c5d2839709329",
+  "comparison_scope": "same candidate compiler/runtime with only the former inline method restored for the reference arm",
+  "driver_sha256": "fbb57fb92c79b5706aa7b906261c5c147552923cc66e876b50a8cd3d301d796b",
+  "execution_status": "UNRUN",
+  "fresh_exception_native_scope": "UNRUN; unchanged C harness retains established C-owner capability gap",
+  "independent_review_status": "PENDING",
+  "limits_per_compile_arm": {
+    "address_space_bytes": 4294967296,
+    "exclusive_shared_lock": true,
+    "hard_nproc": 0,
+    "minimum_free_bytes": 4294967296,
+    "output_reservation_bytes": 536870912,
+    "seconds_total": 300
+  },
+  "native_execution": "UNRUN; separately admitted launcher required",
+  "production_base_commit": "818187ba7dfff54df589b93bc10594f87786fe22",
+  "program_pass_mode": "off (preserved native fixture configuration)",
+  "program_sha256": "1f9407b70ea3b765c4bba302dea9ecca7d363f5ddeef7b5af4b301f657e8adc6",
+  "proposed_native_scope": [
+    0,
+    1
+  ],
+  "readme_sha256": "a78af2118140f001b3b0fee8cf4c2058ee10055c375792e46ab3c198629a5005",
+  "runtime_required": {
+    "archive_sha256": "a6645f903e03f6766ecc7466b76f2993318582d287a393831aa5522158421915",
+    "codegen_checksum": "17e126ba45ec048242e47739bd39bf8c564ea4e8ad03a27a416588af0cfd1137",
+    "member_count": 191,
+    "provenance_sha256": "09f686fc222b14991749e890c9d60823f2a68fcbfd5e3ff2e7669b7c8288052c",
+    "refcount": "atomic",
+    "result_identity": "explicit --runtime-result-sha256, final coordinator seal required",
+    "result_sha256": "c4c77819b3b44712c52d6732338dede4cc04a38ba332c74ba5d9ac00bc911238",
+    "target": "x86_64-unknown-linux-gnu",
+    "threads": true
+  },
+  "schema": "pcc.cold-slot-native-callsite-compile.v2",
+  "successor_scope": "Replace an ineffective guessed-name substring assertion with actual post-generation module-owned reporter-key absence in the inline-reference arm; all source/program/runtime identities and limits unchanged.",
+  "supersedes_unexecuted_packet_manifest_sha256": "f37c4830347e4eac1f5636f93072d27bff34bb2052489e7119c245ba60a6d2ec"
+}

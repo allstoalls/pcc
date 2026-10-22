@@ -15,7 +15,7 @@ import tarfile
 import zipfile
 from pathlib import Path
 
-from pcc.package_schema import capability_profile
+from pcc.package.schema import capability_profile
 
 _LIBPYTHON_PATTERNS = (
     re.compile(r"(?:^|[\s/:=,-])libpython\d+(?:\.\d+)*", re.IGNORECASE),
@@ -33,7 +33,17 @@ _CPYTHON_EXTENSION_ABI_RE = re.compile(
 
 
 def _decode_probe(data: bytes) -> str:
-    return data.decode("utf-8", errors="ignore")
+    # The libpython patterns are ASCII, and pcc's native regex subset rejects
+    # other text. A non-ASCII character becomes a space when it is whitespace
+    # and an inert control character otherwise, so every match boundary of
+    # the decoded artifact is unchanged.
+    text = data.decode("utf-8", errors="ignore")
+    if text.isascii():
+        return text
+    return "".join(
+        character if character.isascii() else (" " if character.isspace() else "\x01")
+        for character in text
+    )
 
 
 def _libpython_edges(text: str) -> tuple[str, ...]:

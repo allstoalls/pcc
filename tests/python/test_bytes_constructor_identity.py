@@ -5,9 +5,9 @@ import subprocess
 
 
 def test_bytes_constructor_shares_bytes_but_copies_mutable_buffers(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
-    archive = pcc_py_runtime_archive
+    archive = pcc_runtime_archive
     source = tmp_path / "bytes_identity.py"
     source.write_text('''import gc
 def main():

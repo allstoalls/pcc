@@ -1,4 +1,4 @@
-from pcc.pattern_decision_tree import PatternCase, build_decision_tree
+from pcc.library.pattern_decision_tree import PatternCase, build_decision_tree
 
 
 def test_decision_tree_deduplicates():

@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 _REPO_ROOT = Path(__file__).absolute().parents[2]
-_MODULE = "pcc.py_frontend.codegen.hoist_free_names"
+_MODULE = "pcc.frontends.python.codegen.hoist_free_names"
 
 
 def _load_probe_module():
@@ -21,12 +21,17 @@ def _load_probe_module():
 
 
 def test_compiled_free_name_analysis_stays_in_closed_world(tmp_path):
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         compile_contextual_per_module_fallback_counts,
     )
 
     probe = _load_probe_module()
-    srcs, mods = probe._tightened_closure(str(_REPO_ROOT / "pcc" / "__main__.py"))
+    # The public CLI is now a two-module lazy entry, so its shallow closure
+    # does not contain this analysis module. Build the actual subject's
+    # same-package import context and require membership before compiling.
+    entry = _REPO_ROOT / "pcc/frontends/python/codegen/hoist_free_names.py"
+    srcs, mods = probe._tightened_closure(str(entry))
+    assert _MODULE in mods
     ir_dir = tmp_path / "ir"
     ir_dir.mkdir()
     counts = compile_contextual_per_module_fallback_counts(
@@ -39,7 +44,7 @@ def test_compiled_free_name_analysis_stays_in_closed_world(tmp_path):
     )
     assert counts == {_MODULE: 0}
 
-    ir = (ir_dir / "pcc_py_frontend_codegen_hoist_free_names.ll").read_text(
+    ir = (ir_dir / "pcc_frontends_python_codegen_hoist_free_names.ll").read_text(
         encoding="utf-8"
     )
     assert not re.search(r"\bcall [^\n]*@py_obj_call\(", ir)
@@ -56,7 +61,7 @@ def test_span_ty_fields_can_never_carry_expressions():
     import inspect
     from dataclasses import fields, is_dataclass
 
-    from pcc.py_frontend import py_ast
+    from pcc.frontends.python import py_ast
 
     seen = 0
     for name in dir(py_ast):

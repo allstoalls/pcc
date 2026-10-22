@@ -12,7 +12,9 @@ def test_gc_safepoint_polls_thread_gate_in_c_and_pcc_python_runtime():
     py_body = py_src.split('@c_abi_export("pcc_gc_safepoint")', 1)[1]
     py_body = py_body.split('@c_abi_export("pcc_gc_collect")', 1)[0]
     assert "pcc_gc_note_safepoint()" in py_body
-    assert "pcc_thread_safepoint()" in py_body
+    # Compiled-code polls are application gates (095b286f0): GC4 relocates
+    # only while every other mutator is parked at one.
+    assert "pcc_thread_safepoint_gate()" in py_body
 
 
 def test_gc_alloc_polls_thread_gate_without_non_threaded_gc_step():
@@ -75,7 +77,7 @@ def test_python_codegen_ir_contains_loop_and_entry_thread_safepoints(
     tmp_path,
     monkeypatch,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     monkeypatch.setenv("PCC_WITH_THREADS", "1")
     src = tmp_path / "loop_safepoints.py"
@@ -101,11 +103,12 @@ def test_python_codegen_ir_contains_loop_and_entry_thread_safepoints(
     )
     ir_text = out_ll.read_text(encoding="utf-8")
     assert "@pcc_thread_stop_requested = external global i32" in ir_text
+    # The slow path parks at an application gate (095b286f0).
     assert (
-        "declare external void @pcc_thread_safepoint()" in ir_text
-        or "declare void @pcc_thread_safepoint()" in ir_text
+        "declare external void @pcc_thread_safepoint_gate()" in ir_text
+        or "declare void @pcc_thread_safepoint_gate()" in ir_text
     )
-    assert ir_text.count("@pcc_thread_safepoint()") >= 4
+    assert ir_text.count("@pcc_thread_safepoint_gate()") >= 4
     stop_loads = [
         line.strip()
         for line in ir_text.splitlines()
@@ -122,10 +125,10 @@ def test_python_codegen_ir_contains_loop_and_entry_thread_safepoints(
 def test_python_codegen_compiled_hot_loop_parks_via_generated_acquire_poll(
     tmp_path,
     monkeypatch,
-    threaded_pcc_py_runtime_archive: Path,
+    threaded_pcc_runtime_archive: Path,
 ):
     """A generated infinite loop must be the worker's only STW entry path."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     monkeypatch.setenv("PCC_WITH_THREADS", "1")
     monkeypatch.delenv("PCC_SELF_LINK", raising=False)
@@ -228,7 +231,7 @@ def test_python_codegen_compiled_hot_loop_parks_via_generated_acquire_poll(
         ir_scaffold_mode="on",
         libpython_mode="off",
         backend="self",
-        runtime_archive=str(threaded_pcc_py_runtime_archive),
+        runtime_archive=str(threaded_pcc_runtime_archive),
     )
     result = subprocess.run(
         [str(exe)], capture_output=True, text=True, timeout=20
@@ -237,14 +240,15 @@ def test_python_codegen_compiled_hot_loop_parks_via_generated_acquire_poll(
     assert result.stdout.strip() == "generated-stop-poll-ok"
 
 
-def test_python_codegen_zero_thread_env_disables_implicit_safepoints(
+def test_python_codegen_zero_poll_env_disables_implicit_safepoints(
     tmp_path,
     monkeypatch,
 ):
-    """A conventional ``PCC_WITH_THREADS=0`` must mean disabled."""
-    from pcc.py_frontend.pipeline import compile_python
+    """``PCC_IMPLICIT_THREAD_SAFEPOINTS=0`` (runtime poll owners) means no polls."""
+    from pcc.frontends.python.pipeline import compile_python
 
-    monkeypatch.setenv("PCC_WITH_THREADS", "0")
+    monkeypatch.delenv("PCC_WITH_THREADS", raising=False)
+    monkeypatch.setenv("PCC_IMPLICIT_THREAD_SAFEPOINTS", "0")
     src = tmp_path / "no_implicit_safepoints.py"
     out_ll = tmp_path / "no_implicit_safepoints.ll"
     src.write_text(
@@ -1260,7 +1264,7 @@ def test_colored_generation_aging_has_bounded_c_and_strict_graph_tenures():
         "pcc_thread_safepoint(",
         "pcc_py_gc_minor_graph_lock(",
         "pcc_stop_the_world(",
-        "pcc_runtime_log",
+        "pcc_diagnostics_runtime_log",
         "malloc(",
         "free(",
         "py_decref(",
@@ -1290,7 +1294,7 @@ def test_colored_generation_aging_has_bounded_c_and_strict_graph_tenures():
     )
 
     pipeline_src = (
-        REPO_ROOT / "pcc" / "py_frontend" / "pipeline.py"
+        REPO_ROOT / "pcc" / "frontends" / "python" / "pipeline.py"
     ).read_text(encoding="utf-8")
     freestanding_config = pipeline_src.split("if freestanding_module:", 1)[
         1
@@ -1347,8 +1351,7 @@ def test_generational_owner_referent_promotion_uses_bounded_logical_slot_worklis
     assert "store_i64(node, 56, next_cursor)" in strict_drain
     strict_nodes = (
         REPO_ROOT
-        / "pcc"
-        / "py_runtime"
+        / "pcc" / "runtime"
         / "py"
         / "freestanding_gc_object_nodes.py"
     ).read_text(encoding="utf-8")
@@ -1432,7 +1435,8 @@ def test_incremental_trace_cext_claim_unlocks_callback_and_revalidates_commit():
     # The colour/flag commit moved with the callback into the completion
     # helper, so assert it there rather than dropping it.
     for token in (
-        "(cext_flags & ~56) | 32",
+        # GRAY -> BLACK through the header-preserving CAS (cd49ce610).
+        "pcc_gc_set_mark_color(cext_obj, 32)",
         "pcc_gc_gray_count_decrement_acq_rel()",
         'global_store_ptr("pcc_gc_trace_cext_pending_obj", null())',
     ):

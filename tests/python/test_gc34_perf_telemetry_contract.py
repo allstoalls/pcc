@@ -56,7 +56,7 @@ TARGET_CASES = [
 
 @pytest.fixture(scope="module")
 def gc_advantage_binary(tmp_path_factory):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     outdir = tmp_path_factory.mktemp("gc34_perf_telemetry")
     exe = outdir / "gc_advantage_matrix.out"

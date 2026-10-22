@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from pcc.py_stdlib import io
-from pcc.py_stdlib import math
-from pcc.py_stdlib import os as pcc_os
-from pcc.py_stdlib import re
+from pcc.stdlib import io
+from pcc.stdlib import math
+from pcc.stdlib import os as pcc_os
+from pcc.stdlib import re
 
 
 def test_os_path_string_helpers():

@@ -31,7 +31,7 @@ main()
 
 
 def test_conditionally_owned_return_keeps_caller_source_alive(tmp_path, pcc_diagnostic_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "owned_return.py"
     source.write_text(_SOURCE)
@@ -48,7 +48,7 @@ def test_conditionally_owned_return_keeps_caller_source_alive(tmp_path, pcc_diag
 
 
 def test_conditional_return_transfers_exactly_one_owner(tmp_path, pcc_diagnostic_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "return_finalizers.py"
     source.write_text('''

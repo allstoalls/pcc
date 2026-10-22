@@ -1,6 +1,6 @@
 import json
 
-from pcc.gc_analyzer import parse_gc_json_lines, summarize_gc_events
+from pcc.diagnostics.gc_analyzer import parse_gc_json_lines, summarize_gc_events
 
 
 def test_gc_analyzer_counts_gc_events():

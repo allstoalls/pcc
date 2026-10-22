@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def test_bootstrap_subprocess_wrapper_enforces_configured_timeout(monkeypatch):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     calls = []
     def fake_run(args, *, check, timeout):
@@ -23,7 +23,7 @@ def test_bootstrap_subprocess_wrapper_enforces_configured_timeout(monkeypatch):
 
 
 def test_bootstrap_cli_parses_observability_flags():
-    from pcc.cli_bootstrap import parse_bootstrap_cli_args
+    from pcc.driver.cli_bootstrap import parse_bootstrap_cli_args
 
     parsed, status, err = parse_bootstrap_cli_args([
         "--diagnostic-format", "json",
@@ -40,7 +40,7 @@ def test_bootstrap_cli_parses_observability_flags():
 
 
 def test_bootstrap_cli_writes_profile_json_on_success(monkeypatch, tmp_path):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     src = tmp_path / "prog.py"
     src.write_text("print('ok')\n", encoding="utf-8")
@@ -69,7 +69,7 @@ def test_bootstrap_cli_writes_profile_json_on_success(monkeypatch, tmp_path):
 
 
 def test_bootstrap_cli_without_output_compiles_to_temp_and_runs(monkeypatch, tmp_path):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     src = tmp_path / "prog.py"
     src.write_text("print('ok')\n", encoding="utf-8")
@@ -90,7 +90,7 @@ def test_bootstrap_cli_without_output_compiles_to_temp_and_runs(monkeypatch, tmp
 
 
 def test_bootstrap_cli_without_output_reuses_run_cache(monkeypatch, tmp_path):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     src = tmp_path / "prog.py"
     src.write_text("print('ok')\n", encoding="utf-8")
@@ -111,8 +111,8 @@ def test_bootstrap_cli_without_output_reuses_run_cache(monkeypatch, tmp_path):
 
 
 def test_cli_core_without_output_cache_separates_link_args(monkeypatch, tmp_path):
-    import pcc.cli_core as cli
-    import pcc.py_frontend.pipeline as pipeline
+    import pcc.driver.cli_core as cli
+    import pcc.frontends.python.pipeline as pipeline
 
     src = tmp_path / "prog.py"
     src.write_text("print('ok')\n", encoding="utf-8")
@@ -139,8 +139,8 @@ def test_cli_core_forwards_python_link_args_in_executable_and_emit_modes(
     monkeypatch,
     tmp_path,
 ):
-    import pcc.cli_core as cli
-    import pcc.py_frontend.pipeline as pipeline
+    import pcc.driver.cli_core as cli
+    import pcc.frontends.python.pipeline as pipeline
 
     src = tmp_path / "prog.py"
     src.write_text("print('ok')\n", encoding="utf-8")
@@ -183,7 +183,7 @@ def test_cli_core_forwards_python_link_args_in_executable_and_emit_modes(
 
 
 def test_python_entry_infers_project_root_for_tests_dir(monkeypatch, tmp_path):
-    import pcc.cli_core as cli
+    import pcc.driver.cli_core as cli
 
     project = tmp_path / "project"
     tests = project / "tests"
@@ -200,7 +200,7 @@ def test_python_entry_infers_project_root_for_tests_dir(monkeypatch, tmp_path):
 
 
 def test_bootstrap_cli_formats_hard_error_as_json(monkeypatch, tmp_path, capsys):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     src = tmp_path / "bad.py"
     src.write_text("print('bad')\n", encoding="utf-8")
@@ -231,7 +231,7 @@ def test_bootstrap_cli_formats_hard_error_as_json(monkeypatch, tmp_path, capsys)
 
 
 def test_bootstrap_cli_pytest_mode_uses_pcc1_native_runner(monkeypatch, tmp_path):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     test_dir = tmp_path / "tests"
     test_dir.mkdir()
@@ -271,7 +271,7 @@ def test_bootstrap_cli_pytest_mode_uses_pcc1_native_runner(monkeypatch, tmp_path
 
 
 def test_bootstrap_cli_pytest_mode_defaults_to_tests(monkeypatch, tmp_path):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     calls = []
 
@@ -300,7 +300,7 @@ def test_bootstrap_cli_pytest_mode_defaults_to_tests(monkeypatch, tmp_path):
 
 
 def test_bootstrap_cli_pytest_mode_reports_failure(monkeypatch, capsys):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     def fake_run(cmd, *, check, timeout=None):
         raise subprocess.CalledProcessError(1, cmd)
@@ -314,7 +314,7 @@ def test_bootstrap_cli_pytest_mode_reports_failure(monkeypatch, capsys):
 
 
 def test_bootstrap_cli_pytest_mode_honors_integration_marker(monkeypatch, tmp_path):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     test_dir = tmp_path / "tests"
     test_dir.mkdir()
@@ -350,7 +350,7 @@ def test_bootstrap_cli_pytest_mode_honors_integration_marker(monkeypatch, tmp_pa
 
 
 def test_bootstrap_cli_pytest_mode_honors_literal_skipif(monkeypatch, tmp_path):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     test_dir = tmp_path / "tests"
     test_dir.mkdir()
@@ -387,8 +387,8 @@ def test_bootstrap_cli_pytest_mode_honors_literal_skipif(monkeypatch, tmp_path):
 
 
 def test_bootstrap_cli_c_dispatch_uses_full_cli_in_process(monkeypatch):
-    import pcc.cli_bootstrap as cli
-    import pcc.cli_core as core
+    import pcc.driver.cli_bootstrap as cli
+    import pcc.driver.cli_core as core
 
     calls = []
 
@@ -400,11 +400,11 @@ def test_bootstrap_cli_c_dispatch_uses_full_cli_in_process(monkeypatch):
     status = cli.bootstrap_cli_main(["hello.c", "--cpp-arg=-DTEST=1"])
 
     assert status == 0
-    assert calls == [["--backend", "self", "hello.c", "--cpp-arg=-DTEST=1"]]
+    assert calls == [["hello.c", "--cpp-arg=-DTEST=1"]]
 
 
 def test_bootstrap_cli_capi_symbol_tables_match_representative_symbols():
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     assert cli._native_known_capi_header("PyLong_FromLong") == "longobject.h"
     assert cli._native_known_capi_header("PyObject_CallNoArgs") == "abstract.h"
@@ -424,7 +424,7 @@ def test_bootstrap_cli_capi_symbol_tables_match_representative_symbols():
 
 
 def test_bootstrap_array_core_split_module_keeps_native_report_shape(capsys):
-    from pcc.cli_bootstrap_array_core import _run_native_package_array_core_from_pcc1
+    from pcc.driver.cli_bootstrap_array_core import _run_native_package_array_core_from_pcc1
 
     status = _run_native_package_array_core_from_pcc1([
         "--literal",
@@ -442,7 +442,7 @@ def test_bootstrap_array_core_split_module_keeps_native_report_shape(capsys):
 
 
 def test_bootstrap_cli_routes_array_core_to_split_native_module(monkeypatch):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     calls = []
 

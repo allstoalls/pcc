@@ -9,8 +9,8 @@ single ``_emit_cpython_dict_items`` insert them -- the same shape as CPython's
 dict display, which pushes all operands and then runs one ``BUILD_MAP``.  So
 an unhashable key raises only after the later operands have run.
 
-The gap blocked ``pcc.passes.ast_utils`` and
-``pcc.py_frontend.codegen.builtin_type_attr_lowering`` in the C-frontend
+The gap blocked ``pcc.frontends.c.passes.ast_utils`` and
+``pcc.frontends.python.codegen.builtin_type_attr_lowering`` in the C-frontend
 self-host closure.
 
 CPython is the oracle, for the values, for duplicate-key precedence, and for
@@ -93,7 +93,7 @@ main()
 
 
 def _build_and_run(tmp_path: Path, name: str, source: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / (name + ".py")
     exe = tmp_path / (name + ".out")
@@ -146,16 +146,16 @@ def test_native_dict_literal_runs_all_operands_before_insertion(tmp_path):
 
 def test_the_two_closure_modules_lower_under_strict_no_libpython():
     """The modules the restriction blocked, compiled the way pcc1 compiles."""
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
     repo_root = Path(__file__).resolve().parents[2]
     for rel, mod in (
-        ("pcc/passes/ast_utils.py", "pcc.passes.ast_utils"),
+        ("pcc/frontends/c/passes/ast_utils.py", "pcc.frontends.c.passes.ast_utils"),
         (
-            "pcc/py_frontend/codegen/builtin_type_attr_lowering.py",
-            "pcc.py_frontend.codegen.builtin_type_attr_lowering",
+            "pcc/frontends/python/codegen/builtin_type_attr_lowering.py",
+            "pcc.frontends.python.codegen.builtin_type_attr_lowering",
         ),
     ):
         path = repo_root / rel

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pcc.py_frontend import parser
-from pcc.py_frontend.py_ast import Import
+from pcc.frontends.python import parser
+from pcc.frontends.python.py_ast import Import
 
 
 def test_os_io_re_math_import_shapes():

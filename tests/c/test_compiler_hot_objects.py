@@ -1,4 +1,4 @@
-from pcc.compiler_hot_objects import HotObjectCandidate, rank_hot_objects, recommend_slots
+from pcc.support.compiler_hot_objects import HotObjectCandidate, rank_hot_objects, recommend_slots
 
 
 def test_hot_object_ranking():

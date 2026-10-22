@@ -96,7 +96,7 @@ Nine parts, eighteen chapters. Three paths:
 The book corresponds to the pcc repository as of June 2026 (after 0.1.5, with
 all five GC bootstrap gates green on the mainline). The code will keep
 evolving, so source references always use **file path plus identifier name**
-(e.g. `pcc_gc_store_ptr()` in [pcc/py_runtime/src/py_gc_backend.c](../../pcc/py_runtime/src/py_gc_backend.c)), never
+(e.g. `pcc_gc_store_ptr()` in [pcc/runtime/src/py_gc_backend.c](../../pcc/runtime/src/py_gc_backend.c)), never
 line numbers. Where the book and the code disagree, the code wins — which is
 precisely the reading habit this book hopes to teach.
 

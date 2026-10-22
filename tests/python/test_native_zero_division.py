@@ -127,7 +127,7 @@ def _named_calls(node: ast.AST, name: str) -> list[ast.Call]:
 
 def test_i64_floor_division_has_one_behavior_owner():
     root = Path(__file__).absolute().parents[2]
-    codegen = root / "pcc" / "py_frontend" / "codegen"
+    codegen = root / "pcc" / "frontends" / "python" / "codegen"
     helper_tree = ast.parse(
         (codegen / "expr_helper_lowering.py").read_text(encoding="utf-8")
     )

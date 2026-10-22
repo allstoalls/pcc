@@ -6,9 +6,16 @@ not a byte concatenation of the tables emitted by its input units.
 """
 
 from .precise_stackmap import (
-    ARCH_AARCH64, ARCH_X86_64, decode_stack_map, function_address_offsets,
-    function_id, merge_stack_map_payloads, scoped_stable_id, _scan_stack_map_payload,
-    FUNCTION_SIZE, RECORD_SIZE,
+    ARCH_AARCH64,
+    ARCH_X86_64,
+    FUNCTION_SIZE,
+    RECORD_SIZE,
+    _scan_stack_map_payload,
+    function_address_offsets,
+    function_id,
+    merge_stack_map_payloads,
+    scoped_stable_id,
+    validate_stack_map_payload,
 )
 
 
@@ -24,18 +31,18 @@ def _stack_table(inputs, arch, error):
     payloads = []
     targets = {}
     for data, records in inputs:
-        table = decode_stack_map(data, expected_arch=arch, final_image=False)
+        validate_stack_map_payload(data, expected_arch=arch, final_image=False)
         offsets = function_address_offsets(data)
         by_offset = {offset: (symbol, old, name) for offset, symbol, old, name in records}
         if len(by_offset) != len(records) or set(by_offset) != set(offsets):
             raise error("stack-map addresses and relocations disagree")
         scoped = bytearray(data)
         _count, spans, _table_start, _table_count = _scan_stack_map_payload(data)
-        for fn, offset, span in zip(table.functions, offsets, spans):
+        for offset, span in zip(offsets, spans):
             symbol, old_name, name = by_offset[offset]
             if data[offset:offset + 8] != b"\0" * 8:
                 raise error("relocatable stack-map address must be zero")
-            if fn.function_id != function_id(old_name):
+            if span[0] != function_id(old_name):
                 raise error("stack-map function id differs from target symbol")
             identity = function_id(name)
             if identity in targets:
@@ -47,14 +54,17 @@ def _stack_table(inputs, arch, error):
                 # v2 has a 32-byte function header followed by fixed-size
                 # 32-byte safepoint records. Scope those IDs too: uniqueness
                 # is across the entire table, not just within a function.
-                for ordinal, record in enumerate(fn.records):
-                    record_id = scoped_stable_id("relocatable-safepoint", name,
-                                                 str(record.safepoint_id))
+                record_count = (span[2] - start - FUNCTION_SIZE) // RECORD_SIZE
+                for ordinal in range(record_count):
                     position = start + FUNCTION_SIZE + ordinal * RECORD_SIZE
+                    old_id = int.from_bytes(data[position:position + 8], "little")
+                    record_id = scoped_stable_id(
+                        "relocatable-safepoint", name, str(old_id)
+                    )
                     scoped[position:position + 8] = record_id.to_bytes(8, "little")
         payloads.append(bytes(scoped))
     payload, offsets = merge_stack_map_payloads(tuple(payloads))
-    decode_stack_map(payload, expected_arch=arch, final_image=False)
+    validate_stack_map_payload(payload, expected_arch=arch, final_image=False)
     return payload, [(offset, targets[fid]) for fid, offset in offsets]
 
 

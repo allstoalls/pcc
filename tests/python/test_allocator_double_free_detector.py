@@ -26,14 +26,13 @@ import subprocess
 import textwrap
 from pathlib import Path
 
-from pcc.py_frontend.codegen import runtime_abi
+from pcc.frontends.python.codegen import runtime_abi
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME = REPO_ROOT / "pcc" / "runtime"
 ALLOCATOR = (RUNTIME / "py" / "freestanding_allocator.py").read_text(encoding="utf-8")
 TELEMETRY = (RUNTIME / "py" / "py_gc_telemetry.py").read_text(encoding="utf-8")
 HEADER = (RUNTIME / "include" / "py_runtime.h").read_text(encoding="utf-8")
-BOOTSTRAP = (REPO_ROOT / "scripts" / "bootstrap.sh").read_text(encoding="utf-8")
 
 DOUBLE_FREE_MESSAGE = "pcc runtime: object cell freed twice"
 METRIC = 118
@@ -105,15 +104,20 @@ def test_the_new_globals_are_registered_for_the_freestanding_closure() -> None:
 
 
 def test_a_bootstrap_stage_smoke_runs_the_ownership_audit() -> None:
-    assert "BOOTSTRAP_SMOKE_REFCOUNT_PROBE_MODE" in BOOTSTRAP
-    assert 'PCC_GC_REFCOUNT_PROVENANCE_PROBE=${BOOTSTRAP_SMOKE_REFCOUNT_PROBE_MODE}' in BOOTSTRAP
+    from scripts import bootstrap
+
+    options = bootstrap.Options({})
+    assert options.smoke_refcount_probe_mode == "2"
+    assert options.smoke_refcount_audit == "1"
     # Both audit reports have to fail the stage, not only the refcount one.
-    assert "refcount operation on an unmanaged pointer" in BOOTSTRAP
-    assert "object cell freed twice" in BOOTSTRAP
+    assert set(bootstrap._OWNERSHIP_FAULT_MESSAGES) == {
+        "refcount operation on an unmanaged pointer",
+        "object cell freed twice",
+    }
 
 
 def test_an_ordinary_program_reports_no_double_free(tmp_path) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -207,7 +211,7 @@ def _double_free_program(metric: int) -> str:
 
 
 def _compile_and_run(tmp_path, probe_mode: str, metric: int = METRIC):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "double_free.py"
     exe = tmp_path / "double_free.out"
@@ -244,65 +248,39 @@ def test_the_audit_mode_reports_the_second_free_on_stderr(tmp_path) -> None:
     assert DOUBLE_FREE_MESSAGE in result.stderr, result.stderr
 
 
-def _audit_reclassification_block() -> str:
-    """Slice the real audit block out of bootstrap.sh.
+def _run_audit_block(returncode: int, stderr_text: str) -> int:
+    """Drive the shipped reclassification rule (a Python function now)."""
 
-    The script executes at top level, so it cannot be sourced.  Cutting the
-    block out of the shipped text keeps this a test of the actual lines: the
-    nested guard closes with an eight-space ``fi``, so the first four-space
-    ``fi`` ends the block.
-    """
-    lines = BOOTSTRAP.splitlines()
-    start = next(
-        i for i, line in enumerate(lines)
-        if line.startswith('    if [[ "${BOOTSTRAP_SMOKE_REFCOUNT_AUDIT}"')
-    )
-    end = next(i for i in range(start + 1, len(lines)) if lines[i] == "    fi")
-    return "\n".join(lines[start:end + 1])
+    from scripts import bootstrap
 
-
-def _run_audit_block(tmp_path, returncode: int, stderr_text: str) -> int:
-    smoke_err = tmp_path / "smoke.stderr"
-    smoke_err.write_text(stderr_text, encoding="utf-8")
-    script = tmp_path / "harness.sh"
-    script.write_text(
-        "\n".join([
-            "BOOTSTRAP_SMOKE_REFCOUNT_AUDIT=1",
-            'out_exe="/nonexistent/stage"',
-            f'smoke_err="{smoke_err}"',
-            f"smoke_returncode={returncode}",
-            _audit_reclassification_block(),
-            'echo "RESULT=${smoke_returncode}"',
-        ]),
-        encoding="utf-8",
-    )
-    result = subprocess.run(
-        ["bash", str(script)], capture_output=True, text=True, timeout=60
-    )
-    assert result.returncode == 0, result.stderr
-    line = [
-        row for row in result.stdout.splitlines() if row.startswith("RESULT=")
-    ][-1]
-    return int(line.removeprefix("RESULT="))
+    return bootstrap.audit_rerun_returncode(returncode, stderr_text, audit="1")
 
 
 _AUDIT_STDERR = "pcc runtime: object cell freed twice (x)\n"
 
 
-def test_a_passing_smoke_with_an_audit_hit_becomes_the_audit_code(tmp_path) -> None:
-    assert _run_audit_block(tmp_path, 0, _AUDIT_STDERR) == 97
+def test_a_passing_smoke_with_an_audit_hit_becomes_the_audit_code() -> None:
+    assert _run_audit_block(0, _AUDIT_STDERR) == 97
 
 
-def test_a_failing_smoke_keeps_its_own_exit_code(tmp_path) -> None:
+def test_a_failing_smoke_keeps_its_own_exit_code() -> None:
     # A segfault or a link failure is a different class from an ownership
     # audit; stage gating and CI tell them apart by exit code.  Reclassifying
     # it as 97 hid the real failure.
-    assert _run_audit_block(tmp_path, 139, _AUDIT_STDERR) == 139
-    assert _run_audit_block(tmp_path, 1, _AUDIT_STDERR) == 1
+    assert _run_audit_block(139, _AUDIT_STDERR) == 139
+    assert _run_audit_block(1, _AUDIT_STDERR) == 1
 
 
-def test_a_clean_smoke_is_untouched(tmp_path) -> None:
-    assert _run_audit_block(tmp_path, 0, "nothing interesting\n") == 0
+def test_a_clean_smoke_is_untouched() -> None:
+    assert _run_audit_block(0, "nothing interesting\n") == 0
+
+
+def test_the_audit_rule_can_be_disabled() -> None:
+    from scripts import bootstrap
+
+    assert (
+        bootstrap.audit_rerun_returncode(0, _AUDIT_STDERR, audit="0") == 0
+    )
 
 
 def test_the_double_free_report_length_matches_its_literal() -> None:

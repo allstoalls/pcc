@@ -3,12 +3,12 @@ import platform
 import subprocess
 import sys
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLATFORM_SOURCE = (
-    REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_platform_socket.py"
+    REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_platform_socket.py"
 )
 
 
@@ -246,7 +246,7 @@ def test_platform_socket_has_only_named_darwin_boundary(tmp_path):
 
 def test_linux_platform_socket_uses_raw_syscalls(tmp_path, monkeypatch):
     from pcc.backend.self_backend_dispatch import emit_self_asm
-    from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+    from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
     monkeypatch.setattr(
         UnsafeIntrinsicMixin, "_target_sys_platform_text", lambda self: "linux"
@@ -273,10 +273,10 @@ def test_linux_platform_socket_uses_raw_syscalls(tmp_path, monkeypatch):
 
 
 def test_runtime_archive_routes_socket_consumers_to_python_owner(
-    pcc_py_runtime_archive,
+    pcc_runtime_archive,
 ):
     undefined = subprocess.run(
-        ["nm", "-A", "-u", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-u", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -304,7 +304,7 @@ def test_runtime_archive_routes_socket_consumers_to_python_owner(
 
     plan = subprocess.run(
         ["make", "-B", "-n", "libpy_runtime_pcc_py.a"],
-        cwd=REPO_ROOT / "pcc" / "py_runtime",
+        cwd=REPO_ROOT / "pcc" / "runtime",
         capture_output=True,
         text=True,
         timeout=30,

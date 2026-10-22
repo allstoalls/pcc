@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from pcc.fallback_explainer import FallbackExplainer, explain_import
+from pcc.diagnostics.fallback_explainer import FallbackExplainer, explain_import
 
 
 def test_fallback_explainer_json():

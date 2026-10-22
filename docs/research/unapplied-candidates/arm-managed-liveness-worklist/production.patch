@@ -1,0 +1,183 @@
+--- a/pcc/backend/self_backend_precise_stackmaps.py
++++ b/pcc/backend/self_backend_precise_stackmaps.py
+@@ -4290,45 +4290,144 @@
+                 set_bit(uses, block_id, tracked_id)
+         block_id += 1
+ 
+-    changed = True
+     word_mask = (1 << 30) - 1
+-    while changed:
+-        changed = False
+-        block_id = block_count - 1
+-        while block_id >= 0:
+-            # This backward union analysis is monotone: live-in/live-out can
+-            # only grow from their initial seeds. Carrying the previous row
+-            # preserves the PHI seeds and has the same least fixed point as
+-            # rebuilding an empty row, with no extra dense matrix.
+-            scratch.copy_prefix_from_unchecked(
+-                live_out, block_id * word_count, word_count,
+-            )
+-            successor_position = 0
+-            successor_count = kernel.cfg_successor_count(block_id)
+-            while successor_position < successor_count:
+-                successor = kernel.cfg_successor_id(
+-                    block_id,
+-                    successor_position,
+-                )
+-                if successor < 0 or successor >= block_count:
+-                    _fail(func, f"unknown CFG successor id {successor}")
+-                scratch.or_prefix_from_unchecked(
++    if word_count == 0:
++        # No dense row can change. Keep the original full validation path
++        # without allocating a predecessor index or queue for this domain.
++        changed = True
++        while changed:
++            changed = False
++            block_id = block_count - 1
++            while block_id >= 0:
++                # This backward union analysis is monotone: live-in/live-out can
++                # only grow from their initial seeds. Carrying the previous row
++                # preserves the PHI seeds and has the same least fixed point as
++                # rebuilding an empty row, with no extra dense matrix.
++                scratch.copy_prefix_from_unchecked(
++                    live_out, block_id * word_count, word_count,
++                )
++                successor_position = 0
++                successor_count = kernel.cfg_successor_count(block_id)
++                while successor_position < successor_count:
++                    successor = kernel.cfg_successor_id(
++                        block_id,
++                        successor_position,
++                    )
++                    if successor < 0 or successor >= block_count:
++                        _fail(func, f"unknown CFG successor id {successor}")
++                    scratch.or_prefix_from_unchecked(
++                        live_in,
++                        successor * word_count,
++                        word_count,
++                    )
++                    successor_position += 1
++                if scratch.converge_liveness_row_unchecked(
++                    uses,
++                    definitions,
++                    live_out,
+                     live_in,
+-                    successor * word_count,
++                    block_id * word_count,
+                     word_count,
+-                )
+-                successor_position += 1
+-            if scratch.converge_liveness_row_unchecked(
+-                uses,
+-                definitions,
+-                live_out,
+-                live_in,
+-                block_id * word_count,
+-                word_count,
+-                word_mask,
+-            ):
+-                changed = True
+-            block_id -= 1
++                    word_mask,
++                ):
++                    changed = True
++                block_id -= 1
++
++    else:
++        # The first B FIFO pops are exactly the old reverse-order sweep.
++        # Build each reverse edge at that predecessor's first visit. A link
++        # not built yet belongs to a block still pending in the initial
++        # queue, which will read the latest successor IN when it first runs.
++        # Thereafter every changing successor can notify that predecessor.
++        queue_start = 0
++        pending_start = block_count
++        predecessor_head_start = block_count * 2
++        predecessor_links_start = block_count * 3
++        work = CompilerIntArena(max(1, predecessor_links_start))
++        try:
++            block_id = block_count - 1
++            while block_id >= 0:
++                work.append(block_id)
++                block_id -= 1
++            block_id = 0
++            while block_id < block_count:
++                work.append(1)
++                block_id += 1
++            block_id = 0
++            while block_id < block_count:
++                work.append(-1)
++                block_id += 1
++            queue_head = 0
++            queue_tail = 0
++            queue_count = block_count
++            initial_pops_remaining = block_count
++            while queue_count:
++                block_id = work.get_unchecked(queue_start + queue_head)
++                queue_head += 1
++                if queue_head == block_count:
++                    queue_head = 0
++                queue_count -= 1
++                work.set_unchecked(pending_start + block_id, 0)
++                build_predecessors = initial_pops_remaining > 0
++                if build_predecessors:
++                    initial_pops_remaining -= 1
++                scratch.copy_prefix_from_unchecked(
++                    live_out, block_id * word_count, word_count,
++                )
++                successor_position = 0
++                successor_count = kernel.cfg_successor_count(block_id)
++                while successor_position < successor_count:
++                    successor = kernel.cfg_successor_id(
++                        block_id,
++                        successor_position,
++                    )
++                    if successor < 0 or successor >= block_count:
++                        _fail(func, f"unknown CFG successor id {successor}")
++                    if build_predecessors:
++                        # Each appended pair is (predecessor, next offset).
++                        # Store scalar indices, never raw addresses: appends
++                        # may grow the arena while the fixed spans stay put.
++                        link_offset = len(work)
++                        work.append2(
++                            block_id,
++                            work.get_unchecked(predecessor_head_start + successor),
++                        )
++                        work.set_unchecked(
++                            predecessor_head_start + successor, link_offset,
++                        )
++                    scratch.or_prefix_from_unchecked(
++                        live_in,
++                        successor * word_count,
++                        word_count,
++                    )
++                    successor_position += 1
++                if scratch.converge_liveness_row_unchecked(
++                    uses,
++                    definitions,
++                    live_out,
++                    live_in,
++                    block_id * word_count,
++                    word_count,
++                    word_mask,
++                ):
++                    link_offset = work.get_unchecked(
++                        predecessor_head_start + block_id,
++                    )
++                    while link_offset >= 0:
++                        predecessor = work.get_unchecked(link_offset)
++                        if not work.get_unchecked(pending_start + predecessor):
++                            # Pending membership bounds the ring to B slots.
++                            # Clearing it before evaluation permits self-loop
++                            # rescheduling; duplicate CFG edges stay harmless.
++                            work.set_unchecked(pending_start + predecessor, 1)
++                            work.set_unchecked(queue_start + queue_tail, predecessor)
++                            queue_tail += 1
++                            if queue_tail == block_count:
++                                queue_tail = 0
++                            queue_count += 1
++                        link_offset = work.get_unchecked(link_offset + 1)
++        finally:
++            work.close()
+ 
+     result: PackedManagedLiveness = PackedManagedLiveness()
+     current_live_state = CompilerIntArena(1)

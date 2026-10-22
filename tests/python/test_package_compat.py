@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from pcc.package_compat import (
+from pcc.package.compat import (
     LEVEL_C_EXTENSION_ABI,
     LEVEL_NOLIBPYTHON_PYTHON,
     get_package_target,

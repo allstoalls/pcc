@@ -38,6 +38,7 @@ from .macho_obj import (
     Relocation,
     Section,
     TextSymbol,
+    new_relocation,
 )
 from .macho_parallel import (
     ParallelLinkError,
@@ -63,10 +64,13 @@ from .native_object import (
 )
 from .precise_stackmap import (
     ARCH_AARCH64,
+    RUNTIME_TABLE_VERSION,
     PreciseStackMapError,
     _scan_stack_map_payload,
     function_address_offsets,
     merge_stack_map_payloads,
+    precise_stackmap_runtime_format,
+    transcode_runtime_table,
 )
 
 
@@ -165,6 +169,14 @@ class _InspectedLinkInput:
 # link consumes.
 
 
+def _symbol_is_weak_reference(symbol) -> bool:
+    if isinstance(symbol, PackedNativeSymbol):
+        return symbol.weak_reference
+    if isinstance(symbol, NativeSymbol):
+        return symbol.weak_reference
+    return bool(symbol["n_desc"] & spec.N_WEAK_REF)
+
+
 def _symbol_name(symbol) -> str:
     if isinstance(symbol, PackedNativeSymbol):
         return symbol.name
@@ -254,6 +266,31 @@ def _section_addr(section, section_index: int, addrs: tuple[int, ...]) -> int:
     return section["addr"]
 
 
+def _normalized_section_target_value(
+    stored, target_offset, target_addr, target_size, width, target_section_index,
+):
+    """Shared absolute-first interpretation of a native section target."""
+    if target_offset is not None:
+        if stored:
+            raise NativeObjectError(
+                "section-target relocation with target_offset must have "
+                "a zero-filled field"
+            )
+        target_value = target_addr + target_offset
+    elif target_addr <= stored < target_addr + target_size:
+        target_value = stored
+    elif 0 <= stored < target_size:
+        target_value = target_addr + stored
+    else:
+        raise NativeObjectError(
+            f"section-target value {stored} is outside section "
+            f"{target_section_index}"
+        )
+    if target_value >= 1 << (width * 8):
+        raise NativeObjectError("section-target value does not fit relocation width")
+    return target_value
+
+
 def _native_section_payload(
     native: NativeObject | PackedNativeObject,
     section_index: int,
@@ -297,26 +334,9 @@ def _native_section_payload(
         target_index = target_section_index - 1
         target_addr = addrs[target_index]
         target_size = native.sections[target_index].vm_size
-        if target_offset is not None:
-            if stored:
-                raise NativeObjectError(
-                    "section-target relocation with target_offset must have "
-                    "a zero-filled field"
-                )
-            target_value = target_addr + target_offset
-        elif target_addr <= stored < target_addr + target_size:
-            target_value = stored
-        elif 0 <= stored < target_size:
-            target_value = target_addr + stored
-        else:
-            raise NativeObjectError(
-                f"section-target value {stored} is outside section "
-                f"{target_section_index}"
-            )
-        if target_value >= 1 << (width * 8):
-            raise NativeObjectError(
-                "section-target value does not fit relocation width"
-            )
+        target_value = _normalized_section_target_value(
+            stored, target_offset, target_addr, target_size, width, target_section_index,
+        )
         # pcc's Layer 1 frontend does not lower ``bytearray`` slice assignment
         # yet, and this module must compile under pcc so an installed native
         # pcc1 can link without a host Python. Store the fixed-width field one
@@ -350,10 +370,87 @@ def _is_zerofill(section) -> bool:
 # here (vm space, no file payload).
 _S_THREAD_LOCAL_ZEROFILL = 0x12
 
+# Merged __TEXT,__text is split into sections of at most this many bytes, at
+# input boundaries. One input's code is whole functions, so a boundary never
+# falls inside fallthrough code. The executable linker can place a branch
+# thunk island only between output sections, and AArch64 b/bl reach +-128
+# MiB, so a single merged __text larger than that left call sites in its
+# middle out of reach of every island. Keep this below the executable
+# linker's island span.
+_TEXT_KEY = ("__TEXT", "__text")
+
+
+def _is_text_chunk_key(key: tuple[str, str]) -> bool:
+    """__TEXT,__text and the numbered chunks it is split into."""
+    return key[0] == "__TEXT" and key[1].startswith("__text")
+_TEXT_CHUNK_BYTES = 32 * 1024 * 1024
+
 
 def _align_up(value: int, align_log2: int) -> int:
     mask = (1 << align_log2) - 1
     return (value + mask) & ~mask
+
+
+def _place_merged_section(
+    merged: dict[tuple[str, str], _MergedSection],
+    order: list[tuple[str, str]],
+    key: tuple[str, str],
+    flags: int,
+    align_log2: int,
+    size: int,
+    text_chunk_index: int,
+    text_chunk_key: tuple[str, str],
+) -> tuple[tuple[str, str], _MergedSection, int, int, int, tuple[str, str]]:
+    """Place one input section using metadata, without retaining its payload.
+
+    The text-chunk decision precedes alignment, exactly as in the merge.
+    Zerofill commits its VM size here. For ordinary data, the caller commits
+    ``data_size`` after reading the actual payload; a failed or short read
+    must not be replaced by a declared-size advance.
+    """
+    zerofill = (flags & spec.SECTION_TYPE) in (
+        spec.S_ZEROFILL, _S_THREAD_LOCAL_ZEROFILL,
+    )
+    merged_key = key
+    if key == _TEXT_KEY and not zerofill:
+        current = merged.get(text_chunk_key)
+        if (
+            current is not None
+            and current.data_size > 0
+            and current.data_size + size > _TEXT_CHUNK_BYTES
+        ):
+            text_chunk_index += 1
+            text_chunk_key = ("__TEXT", "__text" + str(text_chunk_index))
+        merged_key = text_chunk_key
+    if merged_key not in merged:
+        merged[merged_key] = _MergedSection(merged_key[0], merged_key[1], flags)
+        order.append(merged_key)
+    target = merged[merged_key]
+    if (target.flags & spec.SECTION_TYPE) != (flags & spec.SECTION_TYPE):
+        raise LinkError(
+            f"{key} has conflicting section TYPES across inputs "
+            f"({target.flags:#x} vs {flags:#x})"
+        )
+    # Attributes are a union, not an identity: an input whose __text
+    # happens to contain no branch targets omits SOME_INSTRUCTIONS.
+    target.flags |= flags & spec.SECTION_ATTRIBUTES
+    target.align_log2 = max(target.align_log2, align_log2)
+    padding = 0
+    if zerofill:
+        base = _align_up(target.zerofill_size, align_log2)
+        target.zerofill_size = base + size
+    else:
+        base = _align_up(target.data_size, align_log2)
+        padding = base - target.data_size
+        if padding and target.data_size % 4 != 0 and (
+            target.flags & spec.S_ATTR_PURE_INSTRUCTIONS
+        ):
+            # An odd-sized inline-data tail needs data padding, not a
+            # partial AArch64 instruction, before the next text atom.
+            target.data_in_code.append(DataInCodeRegion(
+                offset=target.data_size, length=padding, kind=spec.DICE_KIND_DATA,
+            ))
+    return merged_key, target, base, padding, text_chunk_index, text_chunk_key
 
 
 def _relocation_symbol_name(
@@ -439,6 +536,7 @@ def _read_relocations(
     local_rename: dict[str, str],
     offset_bias: int = 0,
     symbol_names=None,
+    object_sections=None,
 ) -> list[Relocation]:
     """Relocations with ADDEND/SUBTRACTOR companions folded atomically.
 
@@ -506,16 +604,16 @@ def _read_relocations(
                     minuend = _relocation_symbol_name(
                         symbols, minuend_index, local_rename, context="packed native SUBTRACTOR minuend relocation",
                     )
-            out.append(Relocation(
-                offset=offset + offset_bias,
-                symbol=symbol_name,
-                type=relocation_type,
-                pcrel=pcrel,
-                length=length,
-                addend=addend,
-                section=target_section,
-                minuend=minuend,
-                target_offset=target_offset,
+            out.append(new_relocation(
+                offset + offset_bias,
+                symbol_name,
+                relocation_type,
+                pcrel,
+                length,
+                addend,
+                target_section,
+                minuend,
+                target_offset,
             ))
         return out
 
@@ -561,15 +659,47 @@ def _read_relocations(
             ))
         return out
 
-    raw = obj.relocations(section)
-    sections = obj.sections()
-    out: list[Relocation] = []
+    if object_sections is None:
+        object_sections = obj.sections()
+    return _folded_relocation_rows(
+        obj.relocations(section), object_sections, symbols, local_rename,
+        offset_bias=offset_bias, symbol_names=symbol_names,
+    )
+
+
+def _iter_folded_relocation_rows(
+    raw, sections, symbols, local_rename, *, offset_bias=0, symbol_names=None,
+):
+    """Fold the existing raw companion contract for one section's rows."""
+    for relocation in _folded_relocation_rows(
+        raw, sections, symbols, local_rename,
+        offset_bias=offset_bias, symbol_names=symbol_names,
+    ):
+        yield relocation
+
+
+def _folded_relocation_rows(
+    raw, sections, symbols, local_rename, *, offset_bias=0, symbol_names=None,
+) -> list:
+    """Fold one section's raw rows and their ADDEND/SUBTRACTOR companions.
+
+    ``symbol_names`` optionally holds every symbol's resolved relocation name
+    (same ``local_rename``); in-range extern rows read it instead of resolving
+    the symbol again. A list, not a generator, with relocation constants read
+    once and records built through ``new_relocation``: under pcc1 the resumed
+    generator, the keyword dataclass calls and the per-row ``spec`` lookups
+    were most of a prior-gate link's relocation reads.
+    """
+    reloc_unsigned = spec.ARM64_RELOC_UNSIGNED
+    reloc_addend = spec.ARM64_RELOC_ADDEND
+    reloc_subtractor = spec.ARM64_RELOC_SUBTRACTOR
+    out: list = []
     pending_addend = None
     pending_subtractor = None
     for entry in raw:
         if pending_subtractor is not None:
             if (
-                entry["r_type"] != spec.ARM64_RELOC_UNSIGNED
+                entry["r_type"] != reloc_unsigned
                 or not entry["r_extern"]
                 or entry["r_address"] != pending_subtractor["r_address"]
                 or entry["r_pcrel"]
@@ -579,28 +709,26 @@ def _read_relocations(
                     "SUBTRACTOR must be followed by a same-address, "
                     "same-width extern UNSIGNED entry"
                 )
-            out.append(Relocation(
-                offset=pending_subtractor["r_address"] + offset_bias,
-                symbol=_relocation_symbol_name(
+            out.append(new_relocation(
+                pending_subtractor["r_address"] + offset_bias,
+                _relocation_symbol_name(
                     symbols,
                     pending_subtractor["r_symbolnum"],
                     local_rename,
                     context="SUBTRACTOR relocation",
                 ),
-                type=spec.ARM64_RELOC_SUBTRACTOR,
-                pcrel=False,
-                length=pending_subtractor["r_length"],
-                addend=0,
-                minuend=_relocation_symbol_name(
+                reloc_subtractor, False, pending_subtractor["r_length"], 0, None,
+                _relocation_symbol_name(
                     symbols,
                     entry["r_symbolnum"],
                     local_rename,
                     context="SUBTRACTOR minuend relocation",
                 ),
+                None,
             ))
             pending_subtractor = None
             continue
-        if entry["r_type"] == spec.ARM64_RELOC_ADDEND:
+        if entry["r_type"] == reloc_addend:
             if pending_addend is not None:
                 raise LinkError("consecutive ADDEND relocation entries")
             if entry["r_extern"] or entry["r_pcrel"]:
@@ -618,13 +746,13 @@ def _read_relocations(
                 "ADDEND must be followed by a same-address, same-width "
                 "extern relocation"
             )
-        if entry["r_type"] == spec.ARM64_RELOC_SUBTRACTOR and entry["r_extern"]:
+        if entry["r_type"] == reloc_subtractor and entry["r_extern"]:
             if pending_addend is not None:
                 raise LinkError("ADDEND before SUBTRACTOR is not supported")
             pending_subtractor = entry
             continue
         if not entry["r_extern"]:
-            if entry["r_type"] != spec.ARM64_RELOC_UNSIGNED:
+            if entry["r_type"] != reloc_unsigned:
                 raise LinkError(
                     f"non-extern relocation type {entry['r_type']} at "
                     f"{entry['r_address']} is outside the proven subset"
@@ -640,11 +768,10 @@ def _read_relocations(
                     f"section-target relocation names section {index}"
                 )
             target = sections[index - 1]
-            out.append(Relocation(
-                offset=entry["r_address"] + offset_bias, symbol="",
-                type=entry["r_type"], pcrel=bool(entry["r_pcrel"]),
-                length=entry["r_length"], addend=0,
-                section=(target["segname_str"], target["sectname_str"]),
+            out.append(new_relocation(
+                entry["r_address"] + offset_bias, "",
+                entry["r_type"], bool(entry["r_pcrel"]), entry["r_length"], 0,
+                (target["segname_str"], target["sectname_str"]), None, None,
             ))
             pending_addend = None
             continue
@@ -654,18 +781,19 @@ def _read_relocations(
             else 0
         )
         pending_addend = None
-        out.append(Relocation(
-            offset=entry["r_address"] + offset_bias,
-            symbol=_relocation_symbol_name(
+        symbol_index = entry["r_symbolnum"]
+        if symbol_names is not None and 0 <= symbol_index < len(symbol_names):
+            symbol_name = symbol_names[symbol_index]
+        else:
+            symbol_name = _relocation_symbol_name(
                 symbols,
-                entry["r_symbolnum"],
+                symbol_index,
                 local_rename,
                 context="extern relocation",
-            ),
-            type=entry["r_type"],
-            pcrel=bool(entry["r_pcrel"]),
-            length=entry["r_length"],
-            addend=addend,
+            )
+        out.append(new_relocation(
+            entry["r_address"] + offset_bias, symbol_name, entry["r_type"],
+            bool(entry["r_pcrel"]), entry["r_length"], addend, None, None, None,
         ))
     if pending_addend is not None:
         raise LinkError("trailing ADDEND entry with nothing to modify")
@@ -746,19 +874,24 @@ def _inspect_link_input(
             )
 
     targeted: set[int] = set()
+    symbol_count = len(symbols)
     for section in obj.sections():
-        for entry in obj.relocations(section):
+        # Only extern/type/symbolnum are needed here; skip per-row dicts.
+        for info in obj.relocation_infos(section):
             if (
-                entry["r_extern"]
-                and entry["r_type"] != spec.ARM64_RELOC_ADDEND
+                (info >> spec.RELOC_EXTERN_SHIFT) & 0x1
+                and ((info >> spec.RELOC_TYPE_SHIFT) & 0xF) != spec.ARM64_RELOC_ADDEND
             ):
-                symbol_index = entry["r_symbolnum"]
-                _relocation_symbol_name(
-                    symbols,
-                    symbol_index,
-                    {},
-                    context=f"input {index} relocation",
-                )
+                symbol_index = info & spec.RELOC_SYMBOLNUM_MASK
+                # Only the index check matters here; resolving the name for
+                # every relocation was discarded work.
+                if not 0 <= symbol_index < symbol_count:
+                    _relocation_symbol_name(
+                        symbols,
+                        symbol_index,
+                        {},
+                        context=f"input {index} relocation",
+                    )
                 targeted.add(symbol_index)
     for symbol_index, symbol in enumerate(symbols):
         if (
@@ -814,11 +947,79 @@ def _coerce_link_objects(
         raise LinkError(f"parallel input parsing failed: {exc}") from exc
 
 
+def _merge_input_symbols(
+    index, symbols, targeted_indices, sections, section_addrs, local_rename,
+    bases, input_merged_key, external_definitions, merged, defined, referenced,
+    weak_references, strong_references,
+) -> None:
+    """Shared symbol provenance/order step after one input's sections."""
+    for symbol_index, sym in enumerate(symbols):
+        name = _symbol_name(sym)
+        sym_type = _symbol_type(sym)
+        if (sym_type & spec.N_TYPE) == spec.N_UNDF:
+            referenced.add(name)
+            if _symbol_is_weak_reference(sym):
+                weak_references.add(name)
+            else:
+                strong_references.add(name)
+            continue
+        if (sym_type & spec.N_TYPE) != spec.N_SECT:
+            raise LinkError(f"symbol {name!r} has an unsupported type")
+        if (
+            name[:1] in ("l", "L")
+            and symbol_index not in targeted_indices
+        ):
+            # Mach-O assembler-local temporaries that nothing references:
+            # they delimit atoms inside one input and mean nothing after
+            # the merge. `ld -r` drops them, and so does this — keeping
+            # them would make every multi-object link collide on `ltmp0`.
+            # Referenced L-labels (pcc emits cstring labels this way) are
+            # real targets and are kept.
+            continue
+        name = local_rename.get(name, name)
+        if sym_type & spec.N_EXT:
+            owner = external_definitions.owner(name)
+            if owner != SymbolDefinition(index, symbol_index):
+                raise LinkError(f"duplicate definition of {name!r}")
+        if name in defined:
+            raise LinkError(f"duplicate definition of {name!r}")
+        sec_index = _symbol_section_index(sym)
+        if sec_index not in bases:
+            raise LinkError(f"symbol {name!r} names section {sec_index}")
+        sec = sections[sec_index - 1]
+        key = _section_key(sec)
+        merged_key = input_merged_key.get(key, key)
+        # n_value is the section-relative address in an object file;
+        # subtract the section's own addr to get the payload offset.
+        if isinstance(sym, (NativeSymbol, PackedNativeSymbol)):
+            offset = sym.offset + bases[sec_index]
+        else:
+            offset = (
+                sym["n_value"]
+                - _section_addr(sec, sec_index, section_addrs)
+                + bases[sec_index]
+            )
+        merged[merged_key].symbols.append(TextSymbol(
+            name,
+            offset,
+            external=bool(sym_type & spec.N_EXT),
+            private_external=bool(sym_type & spec.N_PEXT),
+        ))
+        defined[name] = merged_key
+
+
 def link_relocatable_native(
     objects: list[LinkInput], *, _consume_inputs: bool = False,
     _source_view: bool = False,
+    compact_budget=None,
+    _final_executable: bool = False,
 ):
-    """Merge inputs into pcc's indexed object without a Mach-O round trip."""
+    """Merge inputs into pcc's indexed object without a Mach-O round trip.
+
+    ``_final_executable`` marks a merge whose result becomes an executable
+    image with no further merge, so its stack-map table takes the selected
+    runtime format; a relocatable result keeps version 2.
+    """
     if not _consume_inputs:
         objects = list(objects)
     if not objects:
@@ -828,11 +1029,21 @@ def link_relocatable_native(
     order: list[tuple[str, str]] = []
     defined: dict[str, tuple[str, str]] = {}
     referenced: set[str] = set()
+    weak_references: set[str] = set()
+    strong_references: set[str] = set()
     # Dedicated stack-map sections are semantic tables, not byte streams:
     # concatenating two versioned headers would produce an apparently valid
     # first table followed by trailing garbage.  Decode each input and rebuild
     # one deterministic table after all native symbols have been inspected.
     stack_map_payloads: list[bytes] = []
+    stack_map_snapshot_bytes = 0
+    input_raw_bytes = 0
+    # Merged bytes that do not share an input buffer: alignment padding and
+    # patched or sliced copies. A payload view of an input is already inside
+    # input_raw_bytes, so charging it again would count the inputs twice.
+    merged_private_bytes = 0
+    if compact_budget is not None:
+        input_raw_bytes = sum(_link_input_size_hint(value) for value in objects)
     stack_map_symbol_by_function_id: dict[int, str] = {}
     # (merged section, relocation, this input's section addresses). Defer
     # section targets so rewriting never searches or removes from the large
@@ -868,6 +1079,8 @@ def link_relocatable_native(
     ]
 
     local_renames = _local_symbol_renames(symbol_tables)
+    text_chunk_index = 0
+    text_chunk_key = _TEXT_KEY
 
     for index, obj in enumerate(parsed_objects):
 
@@ -876,12 +1089,26 @@ def link_relocatable_native(
         symbols = symbol_tables[index]
         local_rename = local_renames[index]
         relocation_symbol_names = None
-        if isinstance(obj, PackedNativeObject):
+        # Packed and Mach-O inputs resolve each symbol once, not per relocation.
+        if not isinstance(obj, NativeObject):
             relocation_symbol_names = [
                 _relocation_symbol_name(symbols, symbol_index, local_rename, context="packed native relocation")
                 for symbol_index in range(len(symbols))
             ]
         section_addrs = inspected_inputs[index].section_addrs
+        debug_bases, debug_sizes = {}, {}
+        debug_abbreviations = None
+        for debug_index, debug_section in enumerate(sections, start=1):
+            debug_key = _section_key(debug_section)
+            if debug_key[0] != "__DWARF":
+                continue
+            debug_sizes[debug_key[1]] = _section_size(debug_section)
+            existing = merged.get(debug_key)
+            debug_bases[debug_key[1]] = _align_up(
+                0 if existing is None else existing.data_size, _section_align(debug_section),
+            )
+            if debug_key[1] == "__debug_abbrev":
+                debug_abbreviations = _section_payload(obj, debug_section, debug_index, section_addrs)
 
         # LC_DATA_IN_CODE uses object-address offsets, not file offsets.
         # Assign every range to exactly one input section now so its start can
@@ -935,6 +1162,9 @@ def link_relocatable_native(
         # This input's own section addresses and their merged bases, keyed by
         # (segname, sectname): a stored address is rebased through them.
         input_section_addr: dict[tuple[str, str], tuple[int, int]] = {}
+        # This input's section keys mapped to the merged sections they joined;
+        # only __TEXT,__text can land in a later chunk.
+        input_merged_key: dict[tuple[str, str], tuple[str, str]] = {}
         for sec_index, sec in enumerate(sections, start=1):
             key = _section_key(sec)
             sec_flags = _section_flags(sec)
@@ -944,18 +1174,39 @@ def link_relocatable_native(
             if key == ("__DATA", "__pcc_stackmaps"):
                 if sec_flags != spec.S_REGULAR or sec_align < 3:
                     raise LinkError("input stack-map section has invalid flags/alignment")
-                payload = bytes(_section_payload(
-                    obj, sec, sec_index, section_addrs,
-                ))
                 try:
-                    _function_count, scanned, _tstart, _tcount = (
-                        _scan_stack_map_payload(payload)
-                    )
+                    if compact_budget is not None:
+                        # Keep the source, any temporary payload and the new
+                        # immutable snapshot in the known-buffer estimate.
+                        compact_budget.check_peak(
+                            input_raw_bytes + merged_private_bytes
+                            + stack_map_snapshot_bytes + 2 * sec_size,
+                            entries=len(stack_map_symbol_by_function_id),
+                            label="Mach-O input stack-map snapshot",
+                        )
+                    payload = bytes(_section_payload(
+                        obj, sec, sec_index, section_addrs,
+                    ))
+                    if compact_budget is None:
+                        _function_count, scanned, _tstart, _tcount = (
+                            _scan_stack_map_payload(payload)
+                        )
+                    else:
+                        _function_count, scanned, _tstart, _tcount = (
+                            _scan_stack_map_payload(
+                                payload, compact_budget=compact_budget,
+                            )
+                        )
                 except PreciseStackMapError as exc:
-                    raise LinkError(f"input stack-map section is malformed: {exc}") from exc
+                    sizes = getattr(compact_budget, "last_rejection", "")
+                    raise LinkError(
+                        f"input stack-map section is malformed: {exc}"
+                        + ("; " + sizes if sizes else "")
+                    ) from exc
                 stack_relocations = _read_relocations(
                     obj, sec, symbols, local_rename,
                     symbol_names=relocation_symbol_names,
+                    object_sections=sections,
                 )
                 relocation_by_offset = {
                     relocation.offset: relocation
@@ -1011,49 +1262,47 @@ def link_relocatable_native(
                     )
                     referenced.add(relocation.symbol)
                 stack_map_payloads.append(payload)
+                if compact_budget is not None:
+                    stack_map_snapshot_bytes += len(payload)
                 continue
-            if key not in merged:
-                merged[key] = _MergedSection(key[0], key[1], sec_flags)
-                order.append(key)
-            target = merged[key]
-            if (target.flags & spec.SECTION_TYPE) != (sec_flags & spec.SECTION_TYPE):
-                raise LinkError(
-                    f"{key} has conflicting section TYPES across inputs "
-                    f"({target.flags:#x} vs {sec_flags:#x})"
-                )
-            # Attributes are a union, not an identity: an input whose __text
-            # happens to contain no branch targets omits SOME_INSTRUCTIONS,
-            # and ld merges the attribute sets rather than refusing. The
-            # section TYPE (low byte) must still agree.
-            target.flags |= sec_flags & spec.SECTION_ATTRIBUTES
-            target.align_log2 = max(target.align_log2, sec_align)
+            (
+                merged_key, target, base, padding,
+                text_chunk_index, text_chunk_key,
+            ) = _place_merged_section(
+                merged, order, key, sec_flags, sec_align, sec_size,
+                text_chunk_index, text_chunk_key,
+            )
+            input_merged_key[key] = merged_key
             input_is_code = bool(sec_flags & spec.S_ATTR_PURE_INSTRUCTIONS)
             relocations_proven = isinstance(obj, PackedNativeObject)
-            if _is_zerofill(sec):
-                # No file payload: only the size accumulates. Symbols still
-                # need an offset, so the running vm size is the base.
-                base = _align_up(target.zerofill_size, sec_align)
-                target.zerofill_size = base + sec_size
-            else:
-                base = _align_up(target.data_size, sec_align)
-                padding = base - target.data_size
-                if padding and target.data_size % 4 != 0 and (
-                    target.flags & spec.S_ATTR_PURE_INSTRUCTIONS
-                ):
-                    # A preceding input may end in an odd-sized inline-data
-                    # tail.  The zeros needed to align the next text atom are
-                    # data as well, not a partial AArch64 instruction.
-                    target.data_in_code.append(DataInCodeRegion(
-                        offset=target.data_size,
-                        length=padding,
-                        kind=spec.DICE_KIND_DATA,
-                    ))
+            if not _is_zerofill(sec):
                 if padding:
                     target.data_parts.append(b"\0" * padding)
+                    merged_private_bytes += padding
                 payload = _section_payload(
                     obj, sec, sec_index, section_addrs,
                 )
+                if key == ("__DWARF", "__debug_info"):
+                    from .macho_dwarf import DwarfLinkError, patch_dwarf_info
+                    if debug_abbreviations is None:
+                        raise LinkError("DWARF info has no input abbreviation section")
+                    if compact_budget is not None:
+                        compact_budget.check_peak(
+                            input_raw_bytes + merged_private_bytes + stack_map_snapshot_bytes
+                            + len(payload) + len(debug_abbreviations) * 1024 + 8192,
+                            label="Mach-O DWARF offset repair",
+                        )
+                    payload = bytearray(payload)
+                    try:
+                        patch_dwarf_info(payload, debug_abbreviations, debug_bases, debug_sizes)
+                    except DwarfLinkError as error:
+                        raise LinkError("DWARF merge rejected: " + str(error)) from error
                 target.data_parts.append(payload)
+                # A memoryview, or a native section's own bytes, shares the
+                # input buffer; a bytearray or a bytes slice is a copy.
+                if not (isinstance(payload, memoryview)
+                        or (is_native and not isinstance(payload, bytearray))):
+                    merged_private_bytes += len(payload)
                 target.data_size = base + len(payload)
                 # Decode checked each record against this payload: shifted by
                 # base it stays inside the merged payload, inside the signed
@@ -1079,6 +1328,7 @@ def link_relocatable_native(
             for reloc in _read_relocations(
                 obj, sec, symbols, local_rename, offset_bias=base,
                 symbol_names=relocation_symbol_names,
+                object_sections=sections,
             ):
                 if reloc.section is None:
                     target.relocations.append(reloc)
@@ -1090,76 +1340,94 @@ def link_relocatable_native(
                     # record what it has to be rebased by once the merged
                     # layout is known.
                     rebases.append((
-                        target, reloc, input_section_addr,
+                        target, reloc, input_section_addr, input_merged_key,
                     ))
             if relocations_proven and target.proven_prefix_open:
                 target.proven_relocations = len(target.relocations)
             else:
                 target.proven_prefix_open = False
 
-        for symbol_index, sym in enumerate(symbols):
-            name = _symbol_name(sym)
-            sym_type = _symbol_type(sym)
-            if (sym_type & spec.N_TYPE) == spec.N_UNDF:
-                referenced.add(name)
-                continue
-            if (sym_type & spec.N_TYPE) != spec.N_SECT:
-                raise LinkError(f"symbol {name!r} has an unsupported type")
-            if (
-                name[:1] in ("l", "L")
-                and symbol_index not in relocation_target_indices[index]
-            ):
-                # Mach-O assembler-local temporaries that nothing references:
-                # they delimit atoms inside one input and mean nothing after
-                # the merge. `ld -r` drops them, and so does this — keeping
-                # them would make every multi-object link collide on `ltmp0`.
-                # Referenced L-labels (pcc emits cstring labels this way) are
-                # real targets and are kept.
-                continue
-            name = local_rename.get(name, name)
-            if sym_type & spec.N_EXT:
-                owner = external_definitions.owner(name)
-                if owner != SymbolDefinition(index, symbol_index):
-                    raise LinkError(f"duplicate definition of {name!r}")
-            if name in defined:
-                raise LinkError(f"duplicate definition of {name!r}")
-            sec_index = _symbol_section_index(sym)
-            if sec_index not in bases:
-                raise LinkError(f"symbol {name!r} names section {sec_index}")
-            sec = sections[sec_index - 1]
-            key = _section_key(sec)
-            # n_value is the section-relative address in an object file;
-            # subtract the section's own addr to get the payload offset.
-            if isinstance(sym, (NativeSymbol, PackedNativeSymbol)):
-                offset = sym.offset + bases[sec_index]
-            else:
-                offset = (
-                    sym["n_value"]
-                    - _section_addr(sec, sec_index, section_addrs)
-                    + bases[sec_index]
-                )
-            merged[key].symbols.append(TextSymbol(
-                name,
-                offset,
-                external=bool(sym_type & spec.N_EXT),
-                private_external=bool(sym_type & spec.N_PEXT),
-            ))
-            defined[name] = key
+        _merge_input_symbols(
+            index, symbols, relocation_target_indices[index], sections,
+            section_addrs, local_rename, bases, input_merged_key,
+            external_definitions, merged, defined, referenced,
+            weak_references, strong_references,
+        )
+
+    if _consume_inputs:
+        # The merge loop was the inputs' last use; only the payload views in
+        # data_parts still hold their buffers. Retire every other reference
+        # now, so each input's buffer is freed by the join that copies its
+        # last view instead of surviving until the merged object is built.
+        # Borrowed API inputs keep their existing lifetime and contents.
+        objects.clear()
+        indexed_objects.clear()
+        inspected_inputs.clear()
+        parsed_objects.clear()
+        symbol_tables.clear()
+        relocation_target_indices.clear()
+        obj = None
+        sections = None
+        symbols = None
+        sec = None
+        # The last ordinary section may still be a memoryview into its PCO.
+        # Drop this local too: data_parts must own every remaining view so
+        # the joins below really release the inputs before their budget credit.
+        payload = None
 
     # Keep each input payload once while calculating offsets. Growing the
     # merged bytearray for every object copies an ever-larger prefix in the
     # native runtime. Keep the joined bytes immutable until an actual section
     # rebase needs a write, so unchanged text is not copied into a bytearray
-    # here and back into bytes at the output boundary.
-    for section in merged.values():
+    # here and back into bytes at the output boundary. Every input spreads its
+    # payloads over the data sections but over at most a few consecutive text
+    # chunks, so joining the data sections first lets each text chunk's join
+    # free the inputs whose text ends in it: the peak is about one copy of the
+    # inputs plus one chunk, not two copies.
+    for key in sorted(merged, key=_is_text_chunk_key):
+        section = merged[key]
         section.data = b"".join(section.data_parts)
         section.data_parts.clear()
+    if _consume_inputs:
+        input_raw_bytes = 0
 
     if stack_map_payloads:
         try:
-            stack_payload, stack_address_offsets = merge_stack_map_payloads(
-                tuple(stack_map_payloads)
-            )
+            if compact_budget is None:
+                stack_payload, stack_address_offsets = merge_stack_map_payloads(
+                    tuple(stack_map_payloads)
+                )
+            else:
+                compact_budget.check_peak(
+                    input_raw_bytes
+                    + sum(len(section.data) for section in merged.values())
+                    + 3 * stack_map_snapshot_bytes,
+                    entries=len(stack_map_symbol_by_function_id),
+                    label="Mach-O merged stack-map buffers",
+                )
+                previous_retained_bytes = compact_budget.retained_bytes
+                compact_budget.retained_bytes = (
+                    previous_retained_bytes + input_raw_bytes
+                    + sum(len(section.data) for section in merged.values())
+                )
+                try:
+                    stack_payload, stack_address_offsets = merge_stack_map_payloads(
+                        tuple(stack_map_payloads), compact_budget=compact_budget,
+                    )
+                finally:
+                    compact_budget.retained_bytes = previous_retained_bytes
+            if _final_executable and precise_stackmap_runtime_format() == RUNTIME_TABLE_VERSION:
+                if compact_budget is not None:
+                    compact_budget.check_peak(
+                        input_raw_bytes
+                        + sum(len(section.data) for section in merged.values())
+                        + 4 * len(stack_payload),
+                        entries=len(stack_address_offsets),
+                        label="Mach-O runtime stack-map table",
+                    )
+                stack_payload, stack_address_offsets = transcode_runtime_table(
+                    stack_payload, stack_address_offsets,
+                )
         except PreciseStackMapError as exc:
             raise LinkError(f"merged stack-map table is invalid: {exc}") from exc
         # The merged payload owns its bytes. Input table snapshots can be
@@ -1186,6 +1454,7 @@ def link_relocatable_native(
     # An unresolved symbol is valid in an MH_OBJECT: preserve it for the
     # eventual final link rather than guessing a definition.
     unresolved = sorted(referenced - set(defined))
+    weak_unresolved = tuple(sorted(set(unresolved) & (weak_references - strong_references)))
 
     # Segment order decides every symbol's address; within a segment,
     # zerofill sections must come last (ld rejects content after zerofill).
@@ -1210,7 +1479,7 @@ def link_relocatable_native(
         for sym in section.symbols:
             symbol_at.setdefault((key, sym.offset), sym.name)
 
-    for target, entry, input_addrs in rebases:
+    for target, entry, input_addrs, input_keys in rebases:
         offset = entry.offset
         target_key = entry.section
         assert target_key is not None
@@ -1220,6 +1489,7 @@ def link_relocatable_native(
                 "same input does not contain"
             )
         old_addr, new_base = input_addrs[target_key]
+        merged_target_key = input_keys.get(target_key, target_key)
         if not isinstance(target.data, bytearray):
             target.data = bytearray(target.data)
         stored, = _struct.unpack_from("<Q", target.data, offset)
@@ -1229,7 +1499,10 @@ def link_relocatable_native(
         # zeroes the field, rather than keeping a section target with the
         # address baked in — which survives any later reordering, so pcc
         # does the same whenever a defined symbol sits exactly there.
-        owner = symbol_at.get((target_key, rebased))
+        # Debug consumers inspect MH_OBJECT addresses directly. Keep their
+        # section targets instead of replacing the address with a zero-valued
+        # external-symbol addend, which would overlap all function ranges.
+        owner = None if target.segname == "__DWARF" else symbol_at.get((merged_target_key, rebased))
         if owner is not None:
             _struct.pack_into("<Q", target.data, offset, 0)
             target.relocations.append(Relocation(
@@ -1246,7 +1519,7 @@ def link_relocatable_native(
                 pcrel=entry.pcrel,
                 length=entry.length,
                 addend=0,
-                section=entry.section,
+                section=merged_target_key,
                 target_offset=rebased,
             ))
 
@@ -1257,21 +1530,6 @@ def link_relocatable_native(
     defined = None
     referenced = None
     local_renames = None
-    if _consume_inputs:
-        # Payloads and source records have been copied into private merge
-        # buffers. Retire the transferred inputs and inspection projections
-        # before constructing the final object. Borrowed API inputs keep
-        # their existing lifetime and contents.
-        objects.clear()
-        indexed_objects.clear()
-        inspected_inputs.clear()
-        parsed_objects.clear()
-        symbol_tables.clear()
-        relocation_target_indices.clear()
-        obj = None
-        sections = None
-        symbols = None
-        sec = None
 
     out_sections = []
     proven_relocations = []
@@ -1284,9 +1542,13 @@ def link_relocatable_native(
         else:
             proven_relocations.append(m.proven_relocations)
         zero = m.zerofill_size if not m.data else 0
+        payload = bytes(m.data)
+        # A rebased section was a bytearray; bytes() copied it, so drop the
+        # bytearray now instead of keeping both until every section is built.
+        m.data = b""
         out_sections.append(Section(
             sectname=m.sectname, segname=m.segname,
-            data=bytes(m.data),
+            data=payload,
             align_log2=m.align_log2, flags=m.flags,
             symbols=tuple(sorted(m.symbols, key=lambda s: s.offset)),
             # This is a fresh merge buffer, independent of every caller input.
@@ -1299,12 +1561,19 @@ def link_relocatable_native(
         ))
     try:
         if _source_view:
+            if compact_budget is not None:
+                return OwnedMergedSourceView(
+                    out_sections, undefined=unresolved, weak_undefined=weak_unresolved,
+                    proven_relocations=tuple(proven_relocations),
+                    compact_budget=compact_budget,
+                )
             return OwnedMergedSourceView(
-                out_sections, undefined=unresolved,
+                out_sections, undefined=unresolved, weak_undefined=weak_unresolved,
                 proven_relocations=tuple(proven_relocations),
             )
         return NativeObject.from_sections(
-            out_sections, undefined=unresolved, _consume_relocations=True,
+            out_sections, undefined=unresolved, weak_undefined=weak_unresolved,
+            _consume_relocations=True,
         )
     except (MachOEmitError, NativeObjectError) as exc:
         raise LinkError(f"merged object is outside the proven subset: {exc}") from exc

@@ -613,3 +613,57 @@ candidates. The re lane is no longer the main numpy surface lever;
 engine-coverage growth (lookaround etc.) would move ~tens of markers at
 most. Data-ordered next lever: the No.3 generator-cpy frame design
 (single cause, 2 modules, incl. high-fan-in distutils/misc_util.py).
+
+
+## 2026-10-01: runtime literals reached through the C ABI
+
+The source15 native Context-isolation control returned the expected output but
+failed the provenance audit. This was an import-initialization failure, not a
+Context assignment failure. Source15 identity was
+`110277bc9286c45b57c6f3196557032536bf613d6cf31577f02292e2dd583949`;
+its normal owned archive was
+`c1133641c8d0658f2ee034f81b96b98d399ef14768d98e53875139d4284bb369`.
+The binary `native-changed-v15/context_owner` had SHA256
+`6abe115c5279ade33f671b8bacf9bf333c92a2a5ed7e7fe3f8a9adc9d106351c`.
+All paths in this update are under `build/remediation-20261001/`.
+
+With `PCC_GC_BACKEND=0 PCC_GC_REFCOUNT_PROVENANCE_PROBE=3`, the same binary
+aborted before main (owned child PID 30903). Its copied crash report and
+`context-owner-symbolized.json` identify `py_decref` called from
+`_normalize_compile_pattern+1288` during `self_backend_parse` regex setup.
+Reading the exact binary's BL instruction at +1284 and the matching runtime
+IR identifies release of the static string object for `"i"`. The object is
+immortal but was absent from the managed-pointer provenance index.
+
+The library contains `_pcc_py_static_literals_py_re_engine_runtime`, but only
+Python module initialization called it. Direct C ABI `py_re_compile_obj`
+entry does not import that module. The isolated named-group/inline-flag/
+verbose program now tracked by
+`test_runtime_regex_literals_have_provenance_on_every_backend` reproduced
+this with source15: return code zero, correct `INLINE_REGEX_OWNER_OK`, and
+unmanaged-pointer stderr. See `regex-literals-v15-red/behavior-focused.json`.
+This result is a failure, despite correct program output.
+
+`LiteralLoweringMixin._finalize_static_literal_init` now publishes the existing
+registration function through the standard constructor array for managed
+modules with actual C ABI exports. Existing owned emitters translate that
+array to each target's initializer pointers. No provenance probe is suppressed
+and no per-call registration is added to the exported hot functions.
+
+Source16 (`272025a0cde3db69273eee2370b9fa25ecf67d9757ba1e43d6e01a80d3c20294`)
+and its archive built successfully, but the first native regex link failed.
+Some optimized members had constructor references with no helper definition;
+others, including `py_re_engine_runtime`, retained their helper. The inliner's
+`_drop_dead_internal_callees` searched only surviving direct calls and deleted
+address-taken functions after inlining. It now counts complete global operand
+tokens, including initializer/callback references, while excluding string
+contents and comments. The callback, pointer-array and constructor regressions
+first failed and now pass; exact token/quoted-name boundaries are covered.
+
+The focused optimizer and production-pass constructor/object checks finished
+with **35 passed, 2 integration deselected** in
+`inline-address-taken-focused-fixed.log`. The earlier broad selection reached
+an unmarked native fixture and failed at a read-only cache lock after 15 tests;
+it is not green evidence. The native parser/simplifier cases are now explicitly
+marked integration and remain required later. Matching new-source archive
+link/execution and pcc1/bootstrap qualification are still pending at this update.

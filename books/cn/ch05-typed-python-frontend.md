@@ -1,6 +1,6 @@
 # 第 5 章 类型化 Python 前端
 
-pcc 的 Python 路径从一个文本文件开始,到一棵每个表达式都带类型标注的 AST 结束——低层化(lowering)成 LLVM IR 是第 6 章的事。本章讲这条前端链路的四级:手写词法与递归下降解析([pcc/parse/py_lex.py](../../pcc/parse/py_lex.py)、`py_parse.py`)、向冻结 AST 的提升([pcc/parse/py_lift.py](../../pcc/parse/py_lift.py) → [pcc/py_frontend/py_ast.py](../../pcc/py_frontend/py_ast.py))、流水线装配与模式裁决([pcc/py_frontend/pipeline.py](../../pcc/py_frontend/pipeline.py))、注解驱动的类型推断([pcc/py_frontend/type_infer.py](../../pcc/py_frontend/type_infer.py))。但机制只是一半;另一半是三个必须先想清楚的设计裁决:为什么 pcc 做的是 typed-subset 编译器而不是全 Python JIT;为什么不支持的习语默认大声失败(fail loudly)而不是静默回退(fallback);以及 `--ir-scaffold` 这个三态旗标到底在裁决什么。这三个问题的答案互相锁定,共同决定了前端每一层的形态。
+pcc 的 Python 路径从一个文本文件开始,到一棵每个表达式都带类型标注的 AST 结束——低层化(lowering)成 LLVM IR 是第 6 章的事。本章讲这条前端链路的四级:手写词法与递归下降解析([pcc/frontends/python/py_lex.py](../../pcc/frontends/python/py_lex.py)、`py_parse.py`)、向冻结 AST 的提升([pcc/frontends/python/py_lift.py](../../pcc/frontends/python/py_lift.py) → [pcc/frontends/python/py_ast.py](../../pcc/frontends/python/py_ast.py))、流水线装配与模式裁决([pcc/frontends/python/pipeline.py](../../pcc/frontends/python/pipeline.py))、注解驱动的类型推断([pcc/frontends/python/type_infer.py](../../pcc/frontends/python/type_infer.py))。但机制只是一半;另一半是三个必须先想清楚的设计裁决:为什么 pcc 做的是 typed-subset 编译器而不是全 Python JIT;为什么不支持的习语默认大声失败(fail loudly)而不是静默回退(fallback);以及 `--ir-scaffold` 这个三态旗标到底在裁决什么。这三个问题的答案互相锁定,共同决定了前端每一层的形态。
 
 ## 本章导读:受控的 Python 子集
 
@@ -30,11 +30,11 @@ pcc 没有选这条路,因为 pcc 的论题不是加速,是**拥有执行**(见�
 
 这个默认乍看对用户不友好——`auto` 模式明明就能编过去。坚持它的理由是:**静默回退会毒化下游每一个声明。** 一个"编译成功"的二进制如果悄悄链接了 libpython,那么 no-libpython 部署声明是假的;一个基准测试如果热路径其实跑在 CPython 桥上,那么性能数字测的是桥而不是 pcc;一个自举阶段如果静默 import 了宿主模块,那么不动点证据是假的。pcc 的七义务第一条要求所有兼容性声明模式标注(libpython ≠ no-libpython),而模式标注只有在"回退是一个可计数的离散事件"时才可执行——这正是回退棘轮 [tests/fallback_baseline.json](../../tests/fallback_baseline.json)(见第 14 章)的前提:你只能对被显式记录的事件做棘轮,不能对弥散在代码里的默认行为做棘轮。
 
-机制上,这个哲学落在 [pcc/py_frontend/pipeline.py](../../pcc/py_frontend/pipeline.py) 的 `_finalize_libpython_mode()`:当模式为 `off` 且检测到需要回退时,抛出 `PyPipelineError`,错误信息点名是哪个文件、列出原因清单,并明确告诉用户解锁方式是显式写 `--python-libpython=auto/on`。失败是大声的,出路也是显式的——回退从默认行为变成一次有据可查的用户决定。三个模式的完整语义见 5.4.3。
+机制上,这个哲学落在 [pcc/frontends/python/pipeline.py](../../pcc/frontends/python/pipeline.py) 的 `_finalize_libpython_mode()`:当模式为 `off` 且检测到需要回退时,抛出 `PyPipelineError`,错误信息点名是哪个文件、列出原因清单,并明确告诉用户解锁方式是显式写 `--python-libpython=auto/on`。失败是大声的,出路也是显式的——回退从默认行为变成一次有据可查的用户决定。三个模式的完整语义见 5.4.3。
 
 ### 5.1.3 同一条流水线,两代解析器
 
-前端目录里藏着一段谱系。[pcc/py_frontend/parser.py](../../pcc/py_frontend/parser.py) 是第一代解析器:用 CPython 标准库 `ast` 模块做骨干,把 `ast.AST` 节点提升成 pcc 的 AST。它实现快、覆盖全,但有一个致命属性:它本身依赖 libpython。当 pcc 开始编译自己的流水线时,这条 `import ast` 边把 libpython 拖回了 stage1 闭包。`pipeline.py` 中 `compile_python` 的注释记录了裁决:`pcc.parse.py_parse` + `pcc.parse.py_lift` 是自举安全(bootstrap-safe)的解析路径,"之前的 CPython-ast 逃生门在编译后的流水线里保留了一条 libpython import 边,所以自托管路径不再发射它"。`parser.py` 自己的注释则宣判了未来:一旦原生解析器成为硬默认,这个文件可以整体删除。今天它残存的价值是给若干源码形状分析测试当宿主侧工具。
+前端目录里藏着一段谱系。[pcc/frontends/python/parser.py](../../pcc/frontends/python/parser.py) 是第一代解析器:用 CPython 标准库 `ast` 模块做骨干,把 `ast.AST` 节点提升成 pcc 的 AST。它实现快、覆盖全,但有一个致命属性:它本身依赖 libpython。当 pcc 开始编译自己的流水线时,这条 `import ast` 边把 libpython 拖回了 stage1 闭包。`pipeline.py` 中 `compile_python` 的注释记录了裁决:`pcc.frontends.python.py_parse` + `pcc.frontends.python.py_lift` 是自举安全(bootstrap-safe)的解析路径,"之前的 CPython-ast 逃生门在编译后的流水线里保留了一条 libpython import 边,所以自托管路径不再发射它"。`parser.py` 自己的注释则宣判了未来:一旦原生解析器成为硬默认,这个文件可以整体删除。今天它残存的价值是给若干源码形状分析测试当宿主侧工具。
 
 这段谱系给本章定下基调:下面要讲的每一个文件——词法器、解析器、提升器——都既是 pcc 的前端,又是 pcc1 必须能编译、编译出来还必须能正确运行的**输入**。很多表观上过度防御的源码形态,都是这个双重身份留下的化石。
 
@@ -44,20 +44,20 @@ pcc 没有选这条路,因为 pcc 的论题不是加速,是**拥有执行**(见�
 
 ```text
 source.py
-   │  pcc/parse/py_lex.py     手写词法:INDENT/DEDENT、NAME、NUMBER、
+   │  pcc/frontends/python/py_lex.py     手写词法:INDENT/DEDENT、NAME、NUMBER、
    │                          STRING、OP、KEYWORD(最长优先匹配)
    ▼
 token 流
-   │  pcc/parse/py_parse.py   手写递归下降:Parser._parse_stmt 关键字
+   │  pcc/frontends/python/py_parse.py   手写递归下降:Parser._parse_stmt 关键字
    │                          分发 + 表达式优先级阶梯 → 窄 AST(_Module、
    │                          _FuncDef、_Call 等 _* dataclass)
    ▼
 窄 AST
-   │  pcc/parse/py_lift.py    _Lifter:窄 AST → 冻结 py_ast,一切表达式
+   │  pcc/frontends/python/py_lift.py    _Lifter:窄 AST → 冻结 py_ast,一切表达式
    │                          ty=DynType,哨兵编码(_yield/_list_comp/...)
    ▼
 py_ast.Module
-   │  pcc/py_frontend/type_infer.py   infer_module:构造新节点,填 ty
+   │  pcc/frontends/python/type_infer.py   infer_module:构造新节点,填 ty
    ▼
 带类型 Module  ──→  L1CodeGen.generate()(见第 6 章)──→ LLVM IR 文本
 ```
@@ -82,7 +82,7 @@ py_ast.Module
 
 ### 5.3.1 冻结契约
 
-[pcc/py_frontend/py_ast.py](../../pcc/py_frontend/py_ast.py) 是整个前端的枢纽,它的设计可以用三个词概括:冻结、带跨度、类型在节点上。
+[pcc/frontends/python/py_ast.py](../../pcc/frontends/python/py_ast.py) 是整个前端的枢纽,它的设计可以用三个词概括:冻结、带跨度、类型在节点上。
 
 所有节点是 `frozen=True` 的 dataclass——构造后不可变,任何"修改"都必须用 `dataclasses.replace` 构造新节点。这条纪律的直接受益者是类型推断:`infer_module` 是一个纯函数式的 pass,输入一棵树、输出一棵新树,旧树永远有效。文件 docstring 指向权威契约 [docs/plans/python-frontend-interfaces.md](../../docs/plans/python-frontend-interfaces.md) 第 2 节,那份文档冻结于 v0.1,目的是让多个并行工作的 agent 不能单方面改接口。
 
@@ -135,7 +135,7 @@ py_ast.Module
 compile_time_only        编译期擦除(typing 等)
 native_user_module       同闭包原生编译的用户模块
 builtin_native_dispatch  内建原生分发低层化
-native_stdlib            解析到 pcc/py_stdlib 原生替身
+native_stdlib            解析到 pcc/stdlib 原生替身
 cpython_fallback         无原生提供者;除非显式允许,否则触发硬失败
 ```
 
@@ -151,7 +151,7 @@ cpython_fallback         无原生提供者;除非显式允许,否则触发硬�
 
 `--ir-scaffold` 由 `_resolve_ir_scaffold_mode()` 解析,语义比名字深。它裁决的问题是:**当 pcc 编译的源码本身在构造 LLVM IR 时**——即 pcc 自己的 codegen 模块里的 `self.builder.call(...)`、`ir.IntType(64)` 这类调用点——这些调用如何低层化。这是自托管特有的问题:普通用户程序没有这种调用点,而 pcc1 要想脱离 libpython 运行,自己的 IR 构造层必须被封闭世界(closed-world)地编译。三态语义:
 
-- `on`(默认,源码注释称 Path A):`IRBuilder` 与 `ir.*` 调用点由 `ir_scaffold_lowering.py` mixin 直接低层化为对外部 IR 构建符号的原生调用;`pcc.extern`、`pcc.unsafe`、`pcc.llvm_capi`、`pcc.llvm_capi.compat` 这组脚手架导入(`_SCAFFOLD_IMPORT_MODULES`)被视为编译期构造,不计入回退;`_filter_ir_scaffold_closure()` 同时改写链接闭包——剔除 `compat.py` 与 LLVM-C 绑定 `binding.py`(留着它们就会把 libpython 拖回 self 后端路径),换入真正的符号提供者 `pcc.llvm_capi.ir`。尚未迁移的 builder 方法抛 `ScaffoldUnsupportedError`,错误点名缺失的方法名。
+- `on`(默认,源码注释称 Path A):`IRBuilder` 与 `ir.*` 调用点由 `ir_scaffold_lowering.py` mixin 直接低层化为对外部 IR 构建符号的原生调用;`pcc.extern`、`pcc.unsafe`、`pcc.ir`、`pcc.ir.compat` 这组脚手架导入(`_SCAFFOLD_IMPORT_MODULES`)被视为编译期构造,不计入回退;`_filter_ir_scaffold_closure()` 同时改写链接闭包——剔除 `compat.py` 与 LLVM-C 绑定 `binding.py`(留着它们就会把 libpython 拖回 self 后端路径),换入真正的符号提供者 `pcc.ir.ir`。尚未迁移的 builder 方法抛 `ScaffoldUnsupportedError`,错误点名缺失的方法名。
 - `off`:显式的兼容性逃生门,走旧低层化路径,builder 调用点照常动态分发(因此通常需要 libpython 允许);永不抛 `ScaffoldUnsupportedError`。`ScaffoldUnsupportedError` 的 docstring 把对比写得很直白:OFF 模式静默回退到 `py_cpy_*` 分发,错误面只存在于 ON 模式,**为的是逐文件迁移能精确看到还差哪些符号**。
 - `auto`:历史遗留的混合模式。今天 `_resolve_ir_scaffold_mode` 把空值与 `auto` 都归一化为 `on`——封闭世界已经是默认现实,`auto` 只作为 CLI 兼容拼写存在。
 
@@ -183,13 +183,13 @@ cpython_fallback         无原生提供者;除非显式允许,否则触发硬�
 
 把前面散落的失败面收拢,前端的错误分级是一个四层结构,每层有自己的类型、阶段与受众:
 
-**第一层:用户类型错误 → `PyFrontendError`。** 定义在 [pcc/py_frontend/types.py](../../pcc/py_frontend/types.py),dataclass 携带 `span`、`message`、可选 `hint`,`format()` 渲染 `file:line:col: error: ...` 加 hint 行。接口契约第 8 节把它定为强制约定:每个用户可见的编译失败必须是 `PyFrontendError`(或子类),不允许从用户输入冒出裸 `RuntimeError`。它表达的是"你的程序错了"。
+**第一层:用户类型错误 → `PyFrontendError`。** 定义在 [pcc/frontends/python/types.py](../../pcc/frontends/python/types.py),dataclass 携带 `span`、`message`、可选 `hint`,`format()` 渲染 `file:line:col: error: ...` 加 hint 行。接口契约第 8 节把它定为强制约定:每个用户可见的编译失败必须是 `PyFrontendError`(或子类),不允许从用户输入冒出裸 `RuntimeError`。它表达的是"你的程序错了"。
 
 **第二层:子集外但语义已知 → `DynType` 降级,而非错误。** 推断对不认识的形态不抛错,标 `DynType` 交给低层化;低层化对 `DynType` 发射运行时分发。这不是静默回退——是否允许由模式裁决:`--python-libpython=off` 下,若该降级最终需要 `py_cpy_*`,在 `_finalize_libpython_mode()` 处转化为**第三层:模式硬失败 → `PyPipelineError`**,带机制化的原因清单(5.4.1)。注意分层的妙处:`_binop_result` 返回 `TYPE_DYN` 时不知道也不需要知道最终模式;裁决推迟到拥有全部信息(生成的 IR、用户的模式选择)的位置。
 
 **第三层的自托管变体:`ScaffoldUnsupportedError`。** scaffold ON 模式下未迁移的 IRBuilder 方法点名报错(5.4.3),受众不是普通用户而是做逐文件迁移的开发者。
 
-**第四层:路线记录与解释。** [pcc/fallback_routes.py](../../pcc/fallback_routes.py) 把 5.4.2 的五个分类字符串转成用户可见事件:`FallbackRoute(module, classification, reason, native)`,`route_from_classification()` 给每个分类一句稳定的原因("no native provider found; libpython required unless disabled" 等),`explain_routes()` 渲染文本或 `pcc.fallback_routes.v1` schema 的 JSON。[pcc/fallback_explainer.py](../../pcc/fallback_explainer.py) 是更通用的收集器:`FallbackReason(feature, phase, reason, suggestion, source)`,`explain_import()` 对 `cpython_fallback` 生成带建议的解释("add pcc/py_stdlib port or enable --python-libpython=auto")。如实记录现状:这两个模块今天是带单元测试([tests/python/test_fallback_routes.py](../../tests/python/test_fallback_routes.py)、`test_fallback_explainer.py`)的稳定词汇表与渲染器,流水线的实时发射通道是 `_pcc_emit_import_log`(`PCC_LOG=import`)与 `--explain-fallback` 经 [pcc/compile_observability.py](../../pcc/compile_observability.py) 的 `ObservabilityOptions` 附到诊断注记;两侧共享同一套分类字符串,这套字符串才是真正的契约。
+**第四层:路线记录与解释。** [pcc/diagnostics/fallback_routes.py](../../pcc/diagnostics/fallback_routes.py) 把 5.4.2 的五个分类字符串转成用户可见事件:`FallbackRoute(module, classification, reason, native)`,`route_from_classification()` 给每个分类一句稳定的原因("no native provider found; libpython required unless disabled" 等),`explain_routes()` 渲染文本或 `pcc.diagnostics.fallback_routes.v1` schema 的 JSON。[pcc/diagnostics/fallback_explainer.py](../../pcc/diagnostics/fallback_explainer.py) 是更通用的收集器:`FallbackReason(feature, phase, reason, suggestion, source)`,`explain_import()` 对 `cpython_fallback` 生成带建议的解释("add pcc/stdlib port or enable --python-libpython=auto")。如实记录现状:这两个模块今天是带单元测试([tests/python/test_fallback_routes.py](../../tests/python/test_fallback_routes.py)、`test_fallback_explainer.py`)的稳定词汇表与渲染器,流水线的实时发射通道是 `_pcc_emit_import_log`(`PCC_LOG=import`)与 `--explain-fallback` 经 [pcc/diagnostics/compile_observability.py](../../pcc/diagnostics/compile_observability.py) 的 `ObservabilityOptions` 附到诊断注记;两侧共享同一套分类字符串,这套字符串才是真正的契约。
 
 分级的总效果:**每个失败都落在知道"为什么失败"的那一层,且失败本身是结构化数据。** 第 14 章的回退棘轮、第 18 章的声明卫生表,都建立在这个性质上。
 
@@ -211,7 +211,7 @@ cpython_fallback         无原生提供者;除非显式允许,否则触发硬�
 
 ### 5.7.2 `@property` 返回类型不传播:类型供应链的断点
 
-**症状。** 多文件封闭世界编译 [pcc/py_stdlib/pathlib.py](../../pcc/py_stdlib/pathlib.py) 触发 no-libpython 硬失败。最小形态(调查文档:`pcc-py-type-infer-property-return-type.md`):
+**症状。** 多文件封闭世界编译 [pcc/stdlib/pathlib.py](../../pcc/stdlib/pathlib.py) 触发 no-libpython 硬失败。最小形态(调查文档:`pcc-py-type-infer-property-return-type.md`):
 
 ```python
 @property
@@ -242,8 +242,8 @@ def suffix(self) -> str:
 
 ## 练习
 
-1. **读源码验证。** `pcc hello.py` 不带任何旗标时,两个关键模式的实际取值是什么?从 [pcc/py_frontend/pipeline.py](../../pcc/py_frontend/pipeline.py) 的 `_resolve_libpython_mode()` 与 `_resolve_ir_scaffold_mode()` 出发,解释空值分别归一化为 `off` 与 `on` 的代码路径,并对照 [README.md](../../README.md) 状态表确认文档与代码一致。
-2. **读源码验证。** 列出 [pcc/parse/py_lift.py](../../pcc/parse/py_lift.py) 的 `_Lifter` 可能构造的全部哨兵名字(从 `_e_Comp`、`_e_Yield`、`_e_Await`、`_e_Starred`、`_e_Assign`、`_e_Set` 入手)。任选其一,在 [pcc/py_frontend/codegen/](../../pcc/py_frontend/codegen) 下找到识别并改写它的低层化代码,写出防止 5.3.2 所述哨兵泄漏的不变式在该例中的具体形式。
+1. **读源码验证。** `pcc hello.py` 不带任何旗标时,两个关键模式的实际取值是什么?从 [pcc/frontends/python/pipeline.py](../../pcc/frontends/python/pipeline.py) 的 `_resolve_libpython_mode()` 与 `_resolve_ir_scaffold_mode()` 出发,解释空值分别归一化为 `off` 与 `on` 的代码路径,并对照 [README.md](../../README.md) 状态表确认文档与代码一致。
+2. **读源码验证。** 列出 [pcc/frontends/python/py_lift.py](../../pcc/frontends/python/py_lift.py) 的 `_Lifter` 可能构造的全部哨兵名字(从 `_e_Comp`、`_e_Yield`、`_e_Await`、`_e_Starred`、`_e_Assign`、`_e_Set` 入手)。任选其一,在 [pcc/frontends/python/codegen/](../../pcc/frontends/python/codegen) 下找到识别并改写它的低层化代码,写出防止 5.3.2 所述哨兵泄漏的不变式在该例中的具体形式。
 3. **分层论证。** `_binop_result()` 对不认识的操作数组合返回 `TYPE_DYN` 而不抛错,这与"默认大声失败"是否矛盾?描述一个 `TYPE_DYN` 最终升级为 `PyPipelineError` 硬失败的完整路径(提示:5.4.1 的两次回退检测),并论证为什么裁决放在 `_finalize_libpython_mode` 而不是 `_binop_result` 是正确的层。
 4. **设计权衡。** `_type_from_isinstance_arg()` 刻意不窄化 `isinstance(x, (A, B))` 的元组形式,因为前端没有并集类型。为 `py_ast` 设计一个最小的并集类型扩展:冻结契约要加什么节点?`_narrow_scope_for_isinstance`、`_is_assignable` 与第 6 章的低层化各要承担什么?最后论证:pcc 自己的自举闭包是否真的需要它——用 `rg` 在 [pcc/](../../pcc) 下统计元组形式 `isinstance` 的实际出现密度来支撑你的结论。
 5. **预测并验证。** 不看代码,先预测 `import typing`、`from . import sibling`、`import pcc.unsafe`、`import numpy` 四个导入在 5.4.2 五分类下的归属;再读 `_classify_python_import()`、`_SCAFFOLD_IMPORT_MODULES` 与 `_COMPILE_TIME_ONLY_IMPORT_MODULES` 验证,并用 `PCC_LOG=import` 实际编译一个小文件核对 JSON 日志(`pcc.import_log.v1`)与你的预测。

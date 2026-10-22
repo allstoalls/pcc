@@ -19,8 +19,8 @@ import pytest
 REPO = Path(__file__).absolute().parents[2]
 sys.path.insert(0, str(REPO))
 
-from pcc.parse.c_parser import CParser  # noqa: E402
-from pcc.parse.ast_normalize import normalize, diff  # noqa: E402
+from pcc.frontends.c.parse.c_parser import CParser  # noqa: E402
+from pcc.frontends.c.parse.ast_normalize import normalize, diff  # noqa: E402
 from tests.c_parse_oracle.corpus import CORPUS  # noqa: E402
 
 

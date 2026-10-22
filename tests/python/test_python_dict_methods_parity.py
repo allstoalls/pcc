@@ -19,7 +19,7 @@ from pathlib import Path
 
 
 def _compile(monkeypatch, src: Path, exe: Path) -> None:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     compile_python(
         str(src), str(exe),
@@ -116,7 +116,7 @@ def test_dict_keys_values_items(tmp_path, monkeypatch):
 
 
 def test_dict_items_for_loop_direct_lowering(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "dict_items_for.py"
     exe = tmp_path / "dict_items_for.out"
@@ -184,7 +184,7 @@ def test_dict_update(tmp_path, monkeypatch):
 
 
 def test_dict_union_operator_self_backend(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "dict_union.py"
     exe = tmp_path / "dict_union.out"
@@ -212,7 +212,7 @@ def test_dict_union_operator_self_backend(tmp_path, monkeypatch):
 
 
 def test_dict_union_optional_dict_pattern_self_backend(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "dict_union_optional.py"
     exe = tmp_path / "dict_union_optional.out"
@@ -244,7 +244,7 @@ def test_dict_union_optional_dict_pattern_self_backend(tmp_path, monkeypatch):
 
 
 def test_chained_assignment_to_dict_subscript_self_backend(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "dict_chain_subscript.py"
     exe = tmp_path / "dict_chain_subscript.out"

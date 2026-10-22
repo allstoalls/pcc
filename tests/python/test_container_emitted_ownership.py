@@ -12,7 +12,7 @@ import pytest
     ("result.append(value)", "entry"),
 ])
 def test_nullable_local_survives_container_store_and_reassignment(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, store, read,
+    tmp_path, pcc_runtime_archive, python_program_compiler, store, read,
 ):
     source = tmp_path / "nullable_container.py"
     source.write_text('''
@@ -40,7 +40,7 @@ main()
 '''.replace("STORE", store).replace("READ", read))
     binary = tmp_path / "nullable_container"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10,
                              env=dict(os.environ, PCC_GC_BACKEND=str(backend)))
@@ -61,8 +61,8 @@ main()
     'set().add(text.strip())\n    return 1',
     'result = []\n    result.append(Node.from_text(text.strip()))\n    return len(result)',
 ])
-def test_container_temporaries_are_released(tmp_path: Path, pcc_py_runtime_archive, body):
-    from pcc.py_frontend.pipeline import compile_python
+def test_container_temporaries_are_released(tmp_path: Path, pcc_runtime_archive, body):
+    from pcc.frontends.python.pipeline import compile_python
     source = tmp_path / "container_owners.py"
     source.write_text('''from pcc.extern import c_int64, extern
 live_bytes = extern("pcc_os_heap_in_use_bytes", (), c_int64)
@@ -92,7 +92,7 @@ main()
 '''.replace("BODY", body))
     binary = tmp_path / "container_owners"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND="0"),
                          capture_output=True, text=True, timeout=15)
     assert ran.returncode == 0, ran.stdout + ran.stderr
@@ -101,8 +101,8 @@ main()
     assert growth1 < 16384 and growth2 < 16384, (growth1, growth2)
 
 
-def test_literal_unwind_consumes_dynamic_string_temporary(tmp_path: Path, pcc_py_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+def test_literal_unwind_consumes_dynamic_string_temporary(tmp_path: Path, pcc_runtime_archive):
+    from pcc.frontends.python.pipeline import compile_python
     source = tmp_path / "literal_errors.py"
     source.write_text('''import gc
 from pcc.extern import c_int64, extern
@@ -130,7 +130,7 @@ main()
 ''')
     binary = tmp_path / "literal_errors"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
                              capture_output=True, text=True, timeout=20)
@@ -138,8 +138,8 @@ main()
         assert int(ran.stdout.strip()) < 16384, f"GC{backend}: " + ran.stdout
 
 
-def test_set_temporary_receiver_and_failure_cleanup_gc_backends(tmp_path, pcc_py_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+def test_set_temporary_receiver_and_failure_cleanup_gc_backends(tmp_path, pcc_runtime_archive):
+    from pcc.frontends.python.pipeline import compile_python
     source = tmp_path / "set_errors.py"
     source.write_text('''import gc
 from pcc.extern import extern, c_int64
@@ -177,7 +177,7 @@ main()
 ''')
     binary = tmp_path / "set_errors"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
                              capture_output=True, text=True, timeout=20)

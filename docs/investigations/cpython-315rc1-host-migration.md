@@ -1,4 +1,4 @@
-# Investigation: migrate pcc's default host to CPython 3.15.0rc1
+# Investigation: migrate pcc's default host to CPython 3.15 (rc1, then 3.15.0)
 
 ## Status
 
@@ -40,6 +40,7 @@ compatibility tests remain pending until the new interpreter is installed.
 ## Proposals
 
 - No.1 Install 3.15.0rc1 and atomically replace the project environment [CONFIRMED]
+- No.2 Move the host and oracle from 3.15.0rc1 to 3.15.0 [CONFIRMED]
 
 ## No.1 Install 3.15.0rc1 and atomically replace the project environment
 
@@ -92,3 +93,53 @@ The repository-default host and oracle are now exact CPython 3.15.0rc1.  No
 3.13/3.14 interpreter or package directory participates in `uv run`, Stage1,
 or the focused gates.  This closes host migration only; it does not relabel
 pcc1's current language subset as Python 3.15 compatibility.
+
+## No.2 Move the host and oracle from 3.15.0rc1 to 3.15.0
+
+### Code Change
+
+CPython 3.15.0 was released (`3.15.0 (main, Oct 14 2026, 00:56:12) [Clang
+23.1.3]`); the maintainer directed the local host to move on 2026-10-20.
+The uv 0.12.7 download catalogue predated it; `uv self update` installed uv
+0.13.3. `uv python install 3.15.0` retargets the
+`cpython-3.15-macos-aarch64-none` minor-version link, so every environment
+created with `--python 3.15` moves with it; 3.15.0rc1 stays installed.
+`024bfe68a` changes `.python-version`, AGENTS.md, the macOS CI interpreter,
+the worker-prior gate's identity and the replacement contract's exact
+oracle version. `1bc90dde1` then removes every per-job interpreter choice:
+uv reads `.python-version`, setup-python uses `python-version-file`, and the
+gate derives the exact `sys.version_info` from `.python-version` on all four
+platforms (Linux and Windows had run CPython 3.13.16). The Docker wheel
+checks keep `python:3.13` images: they install on the requires-python floor.
+
+Between the tags (331 commits) the public headers change only
+`patchlevel.h`, a `modsupport.h` macro semicolon and a MinGW ARM64 thread-id
+read; no file pcc derived (`_pydatetime.py`, `html`, `tomllib`) changed.
+Eleven fixes touch modules that pcc provides; netrc (gh-155468, an empty
+quoted token is not end of input) and configparser (gh-156353, whitespace
+delimiters) change observable behavior and are followed in `1e5c7cec5`.
+
+### CONFIRMED
+
+```text
+uv lock --check / uv sync --locked --dev   clean; sync installs nothing
+runtime archive, source 00b172c3d          rc1 d0c1738c... = 3.15.0 d0c1738c...
+                                           (cold builds; capi_syms identical)
+focused host files under 3.15.0            1105 passed
+oracle-delta program                       rc1 and 3.15.0 differ in exactly
+                                           four lines; providers = 3.15.0
+Stage1 under 3.15.0 (smac7, 406c1321a)     rc 0, 22 m 46 s (rc1 host: 22 m 24 s)
+                                           pcc1 bf8773cd..., runtime a4617931...
+worker-prior gate node, that pcc1          1 passed in 96.67 s (budget 400 s)
+```
+
+The two deselected host failures (`test_intent_constraints::
+test_every_obligation_has_constraints`, `test_native_sysconfig::
+test_sysconfig_get_config_var_dispatches_to_compiled_stdlib_provider`) fail
+identically at `00b172c3d` under rc1.
+
+### Open
+
+The first CI run with 3.15.0 on Linux and Windows is 39451814729 at
+`1bc90dde1`. The CPython conformance `Lib/test` checkout is
+`/Users/jiamo/pcc-conformance/cpython-v3.15.0` (tag `v3.15.0`, `d220409`).

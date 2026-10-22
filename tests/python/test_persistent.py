@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from pcc.persistent import PMap, PVector
+from pcc.library.persistent import PMap, PVector
 
 
 def test_pvector_updates_are_persistent():

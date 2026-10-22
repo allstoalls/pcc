@@ -1,0 +1,173 @@
+{
+  "activation": "PCC_HOST_INDEXED_PROCESS_SPLIT=1; host-only explicit opt-in; no workflow activation in this packet",
+  "base_commit": "a7282a82ef885412e90143e1cede90dcfd8c0d81",
+  "base_pcc_tree": "2d087588b3dce59d5f3ddceaa7af327b0f70f010",
+  "files": [
+    {
+      "mode": "100644",
+      "patch": "codec-packing.patch",
+      "path": "pcc/backend/self_backend_indexed_codec.py",
+      "postimage_bytes": 28242,
+      "postimage_sha256": "8b860c79e2d5a00f95a9d53f45b33d10c725c9607395377fefddc4f9c70b096c",
+      "preimage_bytes": 27666,
+      "preimage_sha256": "87bc72cbbab7029a1e7029b0831b54384d25803a6370f599714d99ca8b4a566c"
+    },
+    {
+      "mode": "100644",
+      "patch": "stage-bridge.patch",
+      "path": "pcc/backend/self_backend_indexed_emit.py",
+      "postimage_bytes": 7399,
+      "postimage_sha256": "8798a854da4953aa9a7d3709beb98f2c48a9871e52144ebc8199f33677b6c59b",
+      "preimage_bytes": 5617,
+      "preimage_sha256": "9747b3ed978590cb8189caea1a34aff2c45548416419126572d372d881a95ed5"
+    },
+    {
+      "mode": "100644",
+      "patch": "stage-bridge.patch",
+      "path": "pcc/frontends/python/pipeline.py",
+      "postimage_bytes": 169313,
+      "postimage_sha256": "3fe1b8ce03333ceff5eeccefd89184ea3bf2c4203ab0bf939a5767df1388e67c",
+      "preimage_bytes": 167309,
+      "preimage_sha256": "8fe68eeee47d158d63a7955fdb896d0e4652a7ef9faea45fc5eb618326572fed"
+    },
+    {
+      "mode": "100644",
+      "patch": "stage-bridge.patch",
+      "path": "pcc/frontends/python/pipeline_frontend_indexed_stage.py",
+      "postimage_bytes": 8310,
+      "postimage_sha256": "3322891f7857e64c262f5cda2e1aa0460be2c1cd9eafee6074ca12dc4c712c40",
+      "preimage_bytes": 0,
+      "preimage_sha256": null
+    },
+    {
+      "mode": "100644",
+      "patch": "stage-bridge.patch",
+      "path": "pcc/frontends/python/pipeline_frontend_parallel.py",
+      "postimage_bytes": 73694,
+      "postimage_sha256": "71e387b924ae14570f9271e2f61e9a1bdc5866c03d99c4ab270cb21d795636a7",
+      "preimage_bytes": 72369,
+      "preimage_sha256": "e4166c66f66418c62b94914f4afb0835ec45188b4d643a900ee1ee8530662207"
+    },
+    {
+      "mode": "100644",
+      "patch": "stage-bridge.patch",
+      "path": "pcc/frontends/python/pipeline_frontend_worker_execution.py",
+      "postimage_bytes": 57342,
+      "postimage_sha256": "09bae76b2eceda8832218209f309d1df470561b8dd333c284067dcf8479f7bb2",
+      "preimage_bytes": 55067,
+      "preimage_sha256": "699cf16413e750d9c50c2ebff63332a393f412f94d208a1e77fd472ab75a0f18"
+    },
+    {
+      "mode": "100644",
+      "patch": "stage-bridge.patch",
+      "path": "pcc/frontends/python/pipeline_indexed_handoff.py",
+      "postimage_bytes": 21439,
+      "postimage_sha256": "563575b64dd33f69f1c162fa4e919a0c5282b20cc7355fb379571809225703f8",
+      "preimage_bytes": 0,
+      "preimage_sha256": null
+    },
+    {
+      "mode": "100644",
+      "patch": "stage-bridge.patch",
+      "path": "pcc/frontends/python/worker_process_pool.py",
+      "postimage_bytes": 35081,
+      "postimage_sha256": "4d94844cfc920a9dd98d1e4bf435780e64404370008def8dd571f858636b8524",
+      "preimage_bytes": 33996,
+      "preimage_sha256": "070eca7616c96f3cb8aecf688cf2649a8b848a57795ac0855dc4f8aed9ff30b6"
+    },
+    {
+      "mode": "100644",
+      "patch": "stage-bridge.patch",
+      "path": "tests/python/test_host_indexed_process_split.py",
+      "postimage_bytes": 19067,
+      "postimage_sha256": "5094c460524058c9426053bae1f643c6b2465eebdfb779fbeeb82162147d70e0",
+      "preimage_bytes": 0,
+      "preimage_sha256": null
+    },
+    {
+      "mode": "100644",
+      "patch": "stage-bridge.patch",
+      "path": "tests/python/test_pipeline_indexed_handoff.py",
+      "postimage_bytes": 21524,
+      "postimage_sha256": "9fba483d3d81a36b5e4527358114c4cb7aa1278fb8fcf6c219fc636b0132493a",
+      "preimage_bytes": 0,
+      "preimage_sha256": null
+    },
+    {
+      "mode": "100644",
+      "patch": "codec-packing.patch",
+      "path": "tests/python/test_self_backend_indexed_codec_host_packing.py",
+      "postimage_bytes": 3585,
+      "postimage_sha256": "dab886521fe29d8d9f6da208361a3f3d1dcbe7359c8dd432e128d36e834f3dc2",
+      "preimage_bytes": 0,
+      "preimage_sha256": null
+    }
+  ],
+  "focused_test_static_counts": {
+    "tests/python/test_host_indexed_process_split.py": 20,
+    "tests/python/test_pipeline_indexed_handoff.py": 25,
+    "tests/python/test_self_backend_indexed_codec_host_packing.py": 26
+  },
+  "focused_test_static_total": 71,
+  "patches": [
+    {
+      "bytes": 91488,
+      "path": "stage-bridge.patch",
+      "sha256": "7f58e96dc709967fe0db4c74e9b1ed4b8ed4f647e18509b2dd27e9ab091d5809"
+    },
+    {
+      "bytes": 4890,
+      "path": "codec-packing.patch",
+      "sha256": "adb01ee9202dc2f2b4b4b288a9ce3dd971448e43cbd95f2811145cc7e5ecb4f1"
+    }
+  ],
+  "policy": {
+    "cancel_one_exclusive_retry_unchanged": true,
+    "denied_diagnostics_reconstructed": false,
+    "max_peak_envelope_unchanged": true,
+    "native_fitted_costs_reused": false,
+    "padding_unchanged": true,
+    "tree_cap_unchanged": true
+  },
+  "preimages_also_verified_at": "db1830cf83174428c48607819ae98e84f887c9b9",
+  "public_files": [
+    "stage-bridge.patch",
+    "codec-packing.patch",
+    "README.md",
+    "manifest.json"
+  ],
+  "qualification": {
+    "gc_modes": "UNRUN",
+    "host_tests": "UNRUN",
+    "native": "UNRUN",
+    "object_equality": "UNRUN",
+    "performance": "UNRUN",
+    "split_compile": "UNRUN",
+    "stage1": "UNRUN"
+  },
+  "readme": {
+    "bytes": 7733,
+    "path": "README.md",
+    "sha256": "fad88c1db9ca2e1ffab9b3954be7a1c3a081b12ab4facdd4401a71eb3a4287b0"
+  },
+  "review": {
+    "closed_findings": [
+      "require zero fallback before release",
+      "allow ordinary macOS temporary parent aliases",
+      "validate_handoff_input return order",
+      "fixed task-owned large temporary across frontend cancellation",
+      "repository test layout"
+    ],
+    "kind": "independent_source_only",
+    "limits": [
+      "six full PIDX hash reads plus decode and write",
+      "width bounds handoff module count, not disk bytes",
+      "new native closed-world modules and optional emitter parameters unqualified",
+      "no cross-module first-error ordering identity claim",
+      "host mock lifetime checks do not establish real child execution"
+    ],
+    "status": "source-clear on reviewed contracts and fixed-temporary successor; execution required"
+  },
+  "schema": "pcc.unapplied-host-indexed-stage.v1",
+  "status": "UNAPPLIED_SOURCE_ONLY_ALL_EXECUTION_UNRUN"
+}

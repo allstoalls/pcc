@@ -29,7 +29,7 @@ silently relabeled as machine measurements.
 ## 1. Why a logical model first
 
 The real virtual-thread scheduler lives in the C runtime
-(`pcc/py_runtime/src/pcc_threads.c`) and owns three waitsets:
+(`pcc/runtime/src/pcc_threads.c`) and owns three waitsets:
 
 | Waitset | Real runtime ops | Counter |
 |---|---|---|

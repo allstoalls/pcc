@@ -8,7 +8,7 @@ import pytest
 
 
 def test_factory_method_emits_without_a_generator_wrapper(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "factory_shape.py"
     source.write_text('''import pcc.virtual_thread as vt
@@ -39,7 +39,7 @@ print(vt.result(task))
     "slow()\n        return vt.completed(42)",
 ])
 def test_factory_boundaries_fail_closed(tmp_path, body):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     if body == "return vt.completed(42)":
         source_text = "import pcc.virtual_thread as vt\ndef invalid():\n    return vt.completed(42)\ninvalid()\n"
@@ -54,8 +54,8 @@ def test_factory_boundaries_fail_closed(tmp_path, body):
                        backend="self", libpython_mode="off", ir_scaffold_mode="on")
 
 
-def test_factory_fast_slow_and_error_paths_across_collectors(tmp_path, pcc_py_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+def test_factory_fast_slow_and_error_paths_across_collectors(tmp_path, pcc_runtime_archive):
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "factories.py"
     source.write_text('''import gc
@@ -109,7 +109,7 @@ print(vt.result(task))
     executable = tmp_path / "factories"
     compile_python(str(source), str(executable), backend="self",
                    libpython_mode="off", ir_scaffold_mode="on",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(executable)], capture_output=True, text=True,
             timeout=15, env=dict(os.environ, PCC_GC_BACKEND=str(backend)))

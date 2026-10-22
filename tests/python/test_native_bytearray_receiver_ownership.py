@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 @pytest.mark.parametrize("method,argument,growth,receiver", [
@@ -23,7 +23,7 @@ from pcc.py_frontend.pipeline import compile_python
     )),
 ])
 def test_bytearray_receiver_does_not_retain_old_buffers(
-    tmp_path, pcc_py_runtime_archive, method, argument, growth, receiver,
+    tmp_path, pcc_runtime_archive, method, argument, growth, receiver,
 ):
     target, annotation, initial = {
         "attribute": ("buffer.data", "object", "Buffer()"),
@@ -56,7 +56,7 @@ main()
 ''', encoding="utf-8")
     output = tmp_path / "receiver"
     compile_python(str(source), str(output), backend="self", libpython_mode="off",
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run(
             [str(output)], capture_output=True, text=True, timeout=20,

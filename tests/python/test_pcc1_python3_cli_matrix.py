@@ -8,7 +8,7 @@ import subprocess
 
 
 def _fake_execution(monkeypatch, tmp_path: Path):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     compile_calls: list[tuple[str, str]] = []
     run_calls: list[list[str]] = []
@@ -35,7 +35,7 @@ def _fake_execution(monkeypatch, tmp_path: Path):
 
 
 def test_parser_keeps_script_arguments_and_post_path_separator():
-    from pcc.cli_bootstrap import parse_bootstrap_cli_args
+    from pcc.driver.cli_bootstrap import parse_bootstrap_cli_args
 
     parsed, status, error = parse_bootstrap_cli_args(
         ["--backend=self", "program.py", "--", "-x", "value"]
@@ -114,7 +114,7 @@ def test_stdin_mode_materializes_all_input_and_uses_dash_argv0(
 def test_no_argument_interactive_request_fails_closed_without_compilation(
     monkeypatch, capsys
 ):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     monkeypatch.setattr(
         cli,
@@ -146,7 +146,7 @@ def test_script_exit_status_is_preserved(monkeypatch, tmp_path):
     assert cli.bootstrap_cli_main([str(source)]) == 7
 
 
-def test_runtime_strips_private_logical_argv_envelope(tmp_path, pcc_py_runtime_archive):
+def test_runtime_strips_private_logical_argv_envelope(tmp_path, pcc_runtime_archive):
     repo = Path(__file__).resolve().parents[2]
     harness = tmp_path / "argv_contract.c"
     executable = tmp_path / "argv_contract"
@@ -176,9 +176,9 @@ def test_runtime_strips_private_logical_argv_envelope(tmp_path, pcc_py_runtime_a
             "cc",
             "-std=c11",
             "-I",
-            str(repo / "pcc" / "py_runtime" / "include"),
+            str(repo / "pcc" / "runtime" / "include"),
             str(harness),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(executable),
@@ -197,7 +197,7 @@ def test_runtime_strips_private_logical_argv_envelope(tmp_path, pcc_py_runtime_a
 
 def test_runtime_port_validates_mode_and_invokes_program_args_hook():
     root = Path(__file__).resolve().parents[2]
-    source = (root / "pcc/py_runtime/py/py_process.py").read_text(
+    source = (root / "pcc/runtime/py/py_process.py").read_text(
         encoding="utf-8"
     )
     assert "if mode_value != 0:" in source
@@ -207,7 +207,7 @@ def test_runtime_port_validates_mode_and_invokes_program_args_hook():
 def test_module_tooling_requests_have_stable_no_cpython_diagnostics(
     monkeypatch, capsys
 ):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     monkeypatch.setattr(
         cli,
@@ -228,7 +228,7 @@ def test_module_tooling_requests_have_stable_no_cpython_diagnostics(
 def test_module_runner_reuses_cached_script_pipeline_with_module_argv0(
     monkeypatch, tmp_path
 ):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     source = tmp_path / "pkg" / "__main__.py"
     source.parent.mkdir()
@@ -252,7 +252,7 @@ def test_module_runner_reuses_cached_script_pipeline_with_module_argv0(
 def test_command_restart_keeps_original_mode_before_materialization(
     monkeypatch,
 ):
-    import pcc.cli_bootstrap as cli
+    import pcc.driver.cli_bootstrap as cli
 
     seen: list[list[str]] = []
     monkeypatch.setattr(

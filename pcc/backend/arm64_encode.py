@@ -563,6 +563,17 @@ def encode_emitted_move(line: str) -> int | None:
     destination_is_64 = destination_kind == _EMITTED_REG_X
 
     if mnemonic == "mov":
+        if rest.startswith("#"):
+            if destination_kind != _EMITTED_REG_W or destination_token == "wsp":
+                return None
+            immediate = _emitted_immediate_span(rest, 0, len(rest))
+            if immediate is None or immediate < -0x80000000 or immediate > 0xFFFFFFFF:
+                return None
+            try:
+                # Preserve the text lane's MOVZ-before-MOVN alias selection.
+                return _enc_mov_immediate(destination_number, immediate, False, line)
+            except EncodeError:
+                return None
         if "," in rest or " " in rest:
             return None
         source_code = _emitted_register_code(rest)
@@ -1285,6 +1296,8 @@ def append_emitted_instruction_record(
         fixed_word = 0xD65F03C0
     elif line == "  nop":
         fixed_word = encode_emitted_nop_parts()
+    elif line == "  svc #0":
+        fixed_word = 0xD4000001
     elif line == "  paciasp":
         fixed_word = 0xD503233F
     elif line == "  autiasp":
@@ -1295,6 +1308,41 @@ def append_emitted_instruction_record(
         records.append4(
             line_index, fixed_word, STRUCTURED_RELOCATION_NONE, -1
         )
+        return EMITTED_INSTRUCTION_SCALAR
+
+    if line.startswith("  sxtw "):
+        destination_end = line.find(", ", 7)
+        if destination_end < 0:
+            return EMITTED_INSTRUCTION_FALLBACK
+        source_start = destination_end + 2
+        destination = _emitted_register_code_span(line, 7, destination_end)
+        source = _emitted_register_code_span(line, source_start, len(line))
+        if (
+            destination < 0 or destination >> 6 != _EMITTED_REG_X
+            or source < 0 or source >> 6 != _EMITTED_REG_W
+            or line[7:destination_end] == "sp" or line[source_start:] == "wsp"
+        ):
+            return EMITTED_INSTRUCTION_FALLBACK
+        # SBFM Xd, Xn, #0, #31. Register 31 denotes ZR, never SP.
+        word = 0x93407C00 | ((source & 63) << 5) | (destination & 63)
+        records.append4(line_index, word, STRUCTURED_RELOCATION_NONE, -1)
+        return EMITTED_INSTRUCTION_SCALAR
+
+    if line.startswith("  mrs "):
+        destination_end = line.find(", ", 6)
+        if destination_end < 0:
+            return EMITTED_INSTRUCTION_FALLBACK
+        destination = _emitted_register_code_span(line, 6, destination_end)
+        system = line[destination_end + 2:]
+        if (
+            destination < 0 or destination >> 6 != _EMITTED_REG_X
+            or line[6:destination_end] == "sp"
+            or system not in ("nzcv", "tpidr_el0")
+        ):
+            return EMITTED_INSTRUCTION_FALLBACK
+        # Match the finite system-register family owned by the text encoder.
+        word = (0xD53B4200 if system == "nzcv" else 0xD53BD040) | (destination & 63)
+        records.append4(line_index, word, STRUCTURED_RELOCATION_NONE, -1)
         return EMITTED_INSTRUCTION_SCALAR
 
     if line.startswith("  adrp "):
@@ -1586,7 +1634,10 @@ def append_emitted_instruction_record(
         memory_start = register_end + 2
         if register_end < 0 or memory_start >= len(line):
             return EMITTED_INSTRUCTION_FALLBACK
-        register = _emitted_register_code_span(line, register_start, register_end)
+        if load_store_prefix == "  str " and line.startswith("q", register_start, register_end):
+            register = _emitted_register_code(line[register_start:register_end])
+        else:
+            register = _emitted_register_code_span(line, register_start, register_end)
         if register < 0 or line[memory_start] != "[" or line[-1] != "]":
             return EMITTED_INSTRUCTION_FALLBACK
         inner_start = memory_start + 1
@@ -1620,6 +1671,15 @@ def append_emitted_instruction_record(
                 return EMITTED_INSTRUCTION_FALLBACK
             immediate = parsed
         kind = register >> 6
+        if kind == _EMITTED_REG_Q:
+            if (
+                line[inner_start:base_end] == "xzr"
+                or immediate % 16 or immediate // 16 > 0xFFF
+            ):
+                return EMITTED_INSTRUCTION_FALLBACK
+            word = 0x3D800000 | ((immediate // 16) << 10) | ((base & 63) << 5) | (register & 63)
+            records.append4(line_index, word, STRUCTURED_RELOCATION_NONE, -1)
+            return EMITTED_INSTRUCTION_SCALAR
         vector = 0
         if load_store_size < 0:
             if kind == _EMITTED_REG_X:
@@ -1836,6 +1896,32 @@ def append_emitted_instruction_record(
             | (variable_shift_op2 << 10)
             | ((second & 63) << 5)
             | (first & 63)
+        )
+        records.append4(line_index, word, STRUCTURED_RELOCATION_NONE, -1)
+        return EMITTED_INSTRUCTION_SCALAR
+
+    if line.startswith("  lsl "):
+        first_end = line.find(", ", 6)
+        if first_end < 0:
+            return EMITTED_INSTRUCTION_FALLBACK
+        second_start = first_end + 2
+        second_end = line.find(", ", second_start)
+        if second_end < 0:
+            return EMITTED_INSTRUCTION_FALLBACK
+        first = _emitted_register_code_span(line, 6, first_end)
+        second = _emitted_register_code_span(line, second_start, second_end)
+        shift = _emitted_immediate_span(line, second_end + 2, len(line))
+        if (
+            first < 0 or first >> 6 != _EMITTED_REG_W
+            or second < 0 or second >> 6 != _EMITTED_REG_W
+            or line[6:first_end] == "wsp" or line[second_start:second_end] == "wsp"
+            or shift is None or shift < 0 or shift > 31
+        ):
+            return EMITTED_INSTRUCTION_FALLBACK
+        # UBFM Wd, Wn, #(32-shift)%32, #(31-shift).
+        word = (
+            0x53000000 | (((32 - shift) % 32) << 16)
+            | ((31 - shift) << 10) | ((second & 63) << 5) | (first & 63)
         )
         records.append4(line_index, word, STRUCTURED_RELOCATION_NONE, -1)
         return EMITTED_INSTRUCTION_SCALAR
@@ -2317,11 +2403,14 @@ class PackedAArch64TextBuilder:
         self.pc: int = 0
         self.active_data_start: int = -1
         self.active_data_kind: int = -1
+        self.layout_finalized: bool = False
         self.closed: bool = False
 
     def append_encoded(self, word: int, relocation_kind: int, symbol_id: int) -> None:
         if self.closed:
             raise EncodeError("text builder is closed")
+        if self.layout_finalized:
+            raise EncodeError("text layout is finalized")
         if word < 0 or word > 0xFFFFFFFF:
             raise EncodeError("structured instruction word is outside uint32")
         if relocation_kind == STRUCTURED_RELOCATION_NONE:
@@ -2365,6 +2454,8 @@ class PackedAArch64TextBuilder:
     def append_label(self, name: str) -> None:
         if self.closed:
             raise EncodeError("text builder is closed")
+        if self.layout_finalized:
+            raise EncodeError("text layout is finalized")
         if name in self.labels:
             raise EncodeError(f"duplicate label {name!r}")
         self.labels[name] = self.pc
@@ -2372,6 +2463,8 @@ class PackedAArch64TextBuilder:
     def append_line(self, raw: str) -> None:
         if self.closed:
             raise EncodeError("text builder is closed")
+        if self.layout_finalized:
+            raise EncodeError("text layout is finalized")
         line = raw.split(";")[0].split("//")[0].strip()
         if not line:
             return
@@ -2449,16 +2542,39 @@ class PackedAArch64TextBuilder:
         self.instruction_lines.append(line)
         self.pc += 4
 
+    def finalize_layout(self) -> None:
+        """Freeze the relaxed layout before any PC-based metadata is written."""
+        if self.closed:
+            raise EncodeError("text builder is closed")
+        if self.layout_finalized:
+            return
+        if self.active_data_start >= 0:
+            raise EncodeError("unterminated .data_region")
+        relaxed = _relax_conditional_branches(
+            self.entries, self.instruction_lines, self.data_chunks,
+            self.structured_relocations, self.structured_symbol_names,
+            self.labels, self.data_in_code,
+        )
+        if relaxed is not None:
+            entries, relocations, labels, regions = relaxed
+            added_words = (len(entries) - len(self.entries)) // 2
+            self.entries.close()
+            self.structured_relocations.close()
+            self.entries = entries
+            self.structured_relocations = relocations
+            self.labels = labels
+            self.data_in_code = regions
+            self.pc += 4 * added_words
+        self.layout_finalized = True
+
     def finish(self) -> AssembledText:
         try:
-            if self.closed:
-                raise EncodeError("text builder is closed")
-            if self.active_data_start >= 0:
-                raise EncodeError("unterminated .data_region")
+            self.finalize_layout()
             return _finalize_text_entries(
                 self.entries, self.instruction_lines, self.data_chunks,
                 self.structured_relocations, self.structured_symbol_names,
                 self.labels, self.data_in_code,
+                layout_finalized=True,
             )
         finally:
             self.close()
@@ -2548,9 +2664,27 @@ def _finalize_text_entries(
     structured_symbol_names: list[str] | tuple[str, ...],
     labels: dict[str, int],
     data_in_code: list[DataInCodeRegion],
+    *,
+    layout_finalized: bool = False,
 ) -> AssembledText:
     word_run = CompilerIntArena()
     try:
+        if not layout_finalized:
+            # The raw adapter has no append-time validation. Relaxation may
+            # replace a word or consume its fixup, so validate original input
+            # before that rewrite can hide a malformed word or record.
+            _validate_native_text_entries(
+                entries, data_chunks, structured_relocations,
+                structured_symbol_names,
+            )
+            relaxed = _relax_conditional_branches(
+                entries, instruction_lines, data_chunks, structured_relocations,
+                structured_symbol_names, labels, data_in_code,
+            )
+            if relaxed is not None:
+                entries.close()
+                structured_relocations.close()
+                entries, structured_relocations, labels, data_in_code = relaxed
         return _encode_text_entries_active(
             entries, instruction_lines, data_chunks, structured_relocations,
             structured_symbol_names, labels, data_in_code, word_run,
@@ -2559,6 +2693,279 @@ def _finalize_text_entries(
         word_run.close()
         entries.close()
         structured_relocations.close()
+
+
+def _validate_native_text_entries(
+    entries: CompilerIntArena,
+    data_chunks: list[bytes],
+    structured_relocations: CompilerIntArena,
+    structured_symbol_names: list[str] | tuple[str, ...],
+) -> None:
+    """Preserve the raw encoder's structural checks before branch rewriting.
+
+    Typed builders validate on append and finalize their layout separately.
+    Keep target resolution in the encoder: valid far branches must still be
+    relaxed, rather than rejected by a premature range check here.
+    """
+    relocation_index = 0
+    relocation_count = len(structured_relocations) // 3
+    offset = 0
+    entry_index = 0
+    while entry_index < len(entries) // 2:
+        kind = entries.get_unchecked(entry_index * 2)
+        word = entries.get_unchecked(entry_index * 2 + 1)
+        if kind == 1:
+            if word < 0 or word >= len(data_chunks):
+                raise EncodeError("text data index is outside its owner")
+            offset += len(data_chunks[word])
+            entry_index += 1
+            continue
+        if kind != 2:
+            raise EncodeError("text instruction index is outside its owner")
+        if offset % 4:
+            raise EncodeError("instruction at unaligned __text offset after data")
+        if word < 0 or word > 0xFFFFFFFF:
+            raise EncodeError("text word is outside u32 range")
+        if relocation_index < relocation_count:
+            relocation_offset = relocation_index * 3
+            relocation_entry = structured_relocations.get_unchecked(relocation_offset)
+            if relocation_entry < entry_index:
+                raise EncodeError("structured relocation records are not ordered")
+            if relocation_entry == entry_index:
+                relocation_kind = structured_relocations.get_unchecked(
+                    relocation_offset + 1
+                )
+                symbol_id = structured_relocations.get_unchecked(relocation_offset + 2)
+                if symbol_id < 0 or symbol_id >= len(structured_symbol_names):
+                    raise EncodeError("text relocation symbol is outside its owner")
+                if relocation_kind < 0:
+                    _validate_text_fixup_word(word, relocation_kind)
+                relocation_index += 1
+        offset += 4
+        entry_index += 1
+    if relocation_index != relocation_count:
+        raise EncodeError("structured relocation exceeds text entries")
+
+
+# b.cond, cbz and cbnz carry a 19-bit word displacement: +/-1 MiB.
+_CONDITIONAL_BRANCH_LIMIT = 1 << 18
+
+
+def _conditional_branch_target(line: str) -> str:
+    """Label operand of a textual ``b.cond``/``cbz``/``cbnz``, else ``""``."""
+    if line.startswith("b."):
+        if line.find(" ") != 4:
+            return ""
+        return line[5:].strip()
+    if line.startswith("cbz ") or line.startswith("cbnz "):
+        comma = line.rfind(",")
+        if comma < 0:
+            return ""
+        return line[comma + 1:].strip()
+    return ""
+
+
+def _inverted_skip_word(line: str) -> int:
+    """The opposite branch of ``line`` over the next instruction (+8 bytes)."""
+    parts = line.split(None, 1)
+    mnemonic = parts[0].lower()
+    if mnemonic.startswith("b."):
+        return 0x54000000 | (2 << 5) | (_cond(mnemonic[2:]) ^ 1)
+    operands = _split_operands(parts[1] if len(parts) > 1 else "")
+    register, wide = _reg(operands[0])
+    word = (0x34000000 if mnemonic == "cbnz" else 0x35000000) | (2 << 5) | register
+    if wide:
+        word |= 0x80000000
+    return word
+
+
+def _inverted_skip_fixup_word(word: int) -> int:
+    """Invert a BRANCH19 fixup's base word and aim it over the next word."""
+    if (word & 0xFF000010) == 0x54000000:
+        return (word & 0xFFFFFFF0) | ((word & 0xF) ^ 1) | (2 << 5)
+    return (word ^ 0x01000000) | (2 << 5)
+
+
+def _count_below(sorted_offsets: list[int], offset: int) -> int:
+    low = 0
+    high = len(sorted_offsets)
+    while low < high:
+        middle = (low + high) // 2
+        if sorted_offsets[middle] < offset:
+            low = middle + 1
+        else:
+            high = middle
+    return low
+
+
+def _relax_conditional_branches(
+    entries: CompilerIntArena,
+    instruction_lines: list[str],
+    data_chunks: list[bytes],
+    structured_relocations: CompilerIntArena,
+    structured_symbol_names: list[str] | tuple[str, ...],
+    labels: dict[str, int],
+    data_in_code: list[DataInCodeRegion],
+) -> tuple | None:
+    """Branch relaxation: reach a far label through one unconditional ``b``.
+
+    A conditional branch whose local target lies beyond +/-1 MiB becomes the
+    opposite condition over the next instruction followed by ``b target``
+    (+/-128 MiB).  Each relaxation moves every later offset by one word, which
+    can push another branch out of range, so relax to a fixed point.  Returns
+    None when every branch already reaches (the common case), else the
+    rebuilt ``(entries, structured_relocations, labels, data_in_code)``.
+    """
+    entry_count = len(entries) // 2
+    # Every entry is one word or one data chunk, so this bounds the section;
+    # a section within a branch's reach needs no scan.
+    size_bound = 4 * entry_count
+    for chunk in data_chunks:
+        size_bound += len(chunk)
+    if size_bound < 4 * _CONDITIONAL_BRANCH_LIMIT:
+        return None
+    relocation_count = len(structured_relocations) // 3
+    branch_entries: list[int] = []
+    branch_offsets: list[int] = []
+    target_offsets: list[int] = []
+    offset = 0
+    relocation_index = 0
+    entry_index = 0
+    while entry_index < entry_count:
+        kind = entries.get_unchecked(entry_index * 2)
+        payload = entries.get_unchecked(entry_index * 2 + 1)
+        if kind == 1:
+            offset += len(data_chunks[payload])
+            entry_index += 1
+            continue
+        target = ""
+        if kind == 0:
+            target = _conditional_branch_target(instruction_lines[payload])
+        else:
+            while (
+                relocation_index < relocation_count
+                and structured_relocations.get_unchecked(relocation_index * 3)
+                < entry_index
+            ):
+                relocation_index += 1
+            if (
+                relocation_index < relocation_count
+                and structured_relocations.get_unchecked(relocation_index * 3)
+                == entry_index
+                and structured_relocations.get_unchecked(relocation_index * 3 + 1)
+                == STRUCTURED_FIXUP_BRANCH19
+                and not (
+                    (payload & 0xFF000010) == 0x54000000 and (payload & 0xF) >= 14
+                )
+            ):
+                target = structured_symbol_names[
+                    structured_relocations.get_unchecked(relocation_index * 3 + 2)
+                ]
+        if target and target in labels:
+            if (labels[target] - offset) % 4:
+                raise EncodeError("misaligned branch target")
+            branch_entries.append(entry_index)
+            branch_offsets.append(offset)
+            target_offsets.append(labels[target])
+        offset += 4
+        entry_index += 1
+
+    branch_count = len(branch_entries)
+    relaxed = [0] * branch_count
+    relaxed_offsets: list[int] = []
+    changed = True
+    while changed:
+        changed = False
+        index = 0
+        while index < branch_count:
+            if relaxed[index] == 0:
+                at = branch_offsets[index]
+                at += 4 * _count_below(relaxed_offsets, at)
+                target_at = target_offsets[index]
+                target_at += 4 * _count_below(relaxed_offsets, target_at)
+                words = (target_at - at) >> 2
+                if words < -_CONDITIONAL_BRANCH_LIMIT or words >= _CONDITIONAL_BRANCH_LIMIT:
+                    relaxed[index] = 1
+                    changed = True
+            index += 1
+        if changed:
+            relaxed_offsets = []
+            index = 0
+            while index < branch_count:
+                if relaxed[index]:
+                    relaxed_offsets.append(branch_offsets[index])
+                index += 1
+    if not relaxed_offsets:
+        return None
+
+    new_entries = CompilerIntArena(max(1, entry_count + 2 * len(relaxed_offsets)))
+    new_relocations = CompilerIntArena(max(1, relocation_count + len(relaxed_offsets)))
+    try:
+        branch_index = 0
+        relocation_index = 0
+        entry_index = 0
+        while entry_index < entry_count:
+            kind = entries.get_unchecked(entry_index * 2)
+            payload = entries.get_unchecked(entry_index * 2 + 1)
+            relocation_kind = 0
+            symbol_id = -1
+            has_relocation = False
+            if (
+                relocation_index < relocation_count
+                and structured_relocations.get_unchecked(relocation_index * 3)
+                == entry_index
+            ):
+                has_relocation = True
+                relocation_kind = structured_relocations.get_unchecked(
+                    relocation_index * 3 + 1
+                )
+                symbol_id = structured_relocations.get_unchecked(
+                    relocation_index * 3 + 2
+                )
+                relocation_index += 1
+            while (
+                branch_index < branch_count
+                and branch_entries[branch_index] < entry_index
+            ):
+                branch_index += 1
+            if (
+                branch_index < branch_count
+                and branch_entries[branch_index] == entry_index
+                and relaxed[branch_index]
+            ):
+                if kind == 0:
+                    line = instruction_lines[payload]
+                    new_entries.append2(2, _inverted_skip_word(line))
+                    new_entries.append2(0, len(instruction_lines))
+                    instruction_lines.append("b " + _conditional_branch_target(line))
+                else:
+                    new_entries.append2(2, _inverted_skip_fixup_word(payload))
+                    new_relocations.append3(
+                        len(new_entries) // 2, STRUCTURED_FIXUP_BRANCH26, symbol_id,
+                    )
+                    new_entries.append2(2, 0x14000000)
+            else:
+                if has_relocation:
+                    new_relocations.append3(
+                        len(new_entries) // 2, relocation_kind, symbol_id,
+                    )
+                new_entries.append2(kind, payload)
+            entry_index += 1
+    except BaseException:
+        new_entries.close()
+        new_relocations.close()
+        raise
+    new_labels: dict[str, int] = {}
+    for name, label_offset in labels.items():
+        new_labels[name] = label_offset + 4 * _count_below(relaxed_offsets, label_offset)
+    new_regions: list[DataInCodeRegion] = []
+    for region in data_in_code:
+        new_regions.append(DataInCodeRegion(
+            region.offset + 4 * _count_below(relaxed_offsets, region.offset),
+            region.length,
+            region.kind,
+        ))
+    return new_entries, new_relocations, new_labels, new_regions
 
 
 def _encode_text_entries_active(
@@ -2922,16 +3329,20 @@ def _encode_one(line, at, labels, resolve_branch, relocations, undefined,
             size, opc = (3 if t64 else 2), (1 if mn == "ldur" else 0)
         return _enc_ldst_unscaled(size, opc, rt, base, imm)
 
-    if mn in ("ldar", "ldaxr", "stlr", "ldaxrb", "stlrb"):
+    if mn in ("ldar", "ldaxr", "stlr", "ldarb", "ldarh", "ldaxrb", "ldaxrh", "stlrb", "stlrh"):
         rt, t64 = _reg(ops[0])
         base, imm, mode = _mem(ops[1])
         if imm or mode:
             raise EncodeError(f"{mn} takes a bare [Xn] address: {line!r}")
-        if mn.endswith("b"):
-            # byte variants: size bits 00 instead of 10/11
+        if mn.endswith("b") or mn.endswith("h"):
+            # Byte/halfword variants use size bits 00/01 and a W data register.
             if t64:
                 raise EncodeError(f"{mn} takes a W register: {line!r}")
-            base_op = {"ldaxrb": 0x085FFC00, "stlrb": 0x089FFC00}[mn]
+            base_op = {
+                "ldarb": 0x08DFFC00, "ldarh": 0x48DFFC00,
+                "ldaxrb": 0x085FFC00, "ldaxrh": 0x485FFC00,
+                "stlrb": 0x089FFC00, "stlrh": 0x489FFC00,
+            }[mn]
             return base_op | (base << 5) | rt
         sf_bit = 0x40000000 if t64 else 0
         if mn == "ldar":
@@ -2940,7 +3351,7 @@ def _encode_one(line, at, labels, resolve_branch, relocations, undefined,
             return 0x885FFC00 | sf_bit | (base << 5) | rt
         return 0x889FFC00 | sf_bit | (base << 5) | rt
 
-    if mn in ("stlxr", "stlxrb"):
+    if mn in ("stlxr", "stlxrb", "stlxrh"):
         rs, s64 = _reg(ops[0])
         if s64:
             raise EncodeError(f"{mn} status register must be a W register: {line!r}")
@@ -2948,10 +3359,11 @@ def _encode_one(line, at, labels, resolve_branch, relocations, undefined,
         base, imm, mode = _mem(ops[2])
         if imm or mode:
             raise EncodeError(f"{mn} takes a bare [Xn] address: {line!r}")
-        if mn == "stlxrb":
+        if mn in ("stlxrb", "stlxrh"):
             if t64:
-                raise EncodeError(f"stlxrb takes a W data register: {line!r}")
-            return 0x0800FC00 | (rs << 16) | (base << 5) | rt
+                raise EncodeError(f"{mn} takes a W data register: {line!r}")
+            base_op = 0x0800FC00 if mn == "stlxrb" else 0x4800FC00
+            return base_op | (rs << 16) | (base << 5) | rt
         sf_bit = 0x40000000 if t64 else 0
         return 0x8800FC00 | sf_bit | (rs << 16) | (base << 5) | rt
 

@@ -18,7 +18,7 @@ Requirements: LLVM 20 (`clang`, `opt`), CPython 3.13, `make`.
 git clone <repo>
 cd pcc
 python -m venv .venv && source .venv/bin/activate
-# Pipeline auto-builds pcc/py_runtime/libpy_runtime.a on first use.
+# Pipeline auto-builds pcc/runtime/libpy_runtime.a on first use.
 ```
 
 Hello, world:

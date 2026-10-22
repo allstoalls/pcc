@@ -19,12 +19,12 @@ import zlib
 
 import pytest
 
-from pcc.py_stdlib._compression_stream import CompressionWriter
+from pcc.stdlib._compression_stream import CompressionWriter
 from tests.python.pcc1_gate import find_current_pcc1
 
 
 REPO = Path(__file__).resolve().parents[2]
-PCC_STDLIB = REPO / "pcc" / "py_stdlib"
+PCC_STDLIB = REPO / "pcc" / "ir" / "support"
 
 
 def test_compression_streaming_source_has_a_fixed_chunk_policy():
@@ -497,7 +497,7 @@ def _writer_probe_source(
 @pytest.mark.integration
 def test_stream_writers_match_cpython_under_current_pcc1(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ):
     payload = (bytes(range(251)) * 4097) + b"pcc-stream-tail"
     payload_path = tmp_path / "payload.bin"
@@ -517,7 +517,7 @@ def test_stream_writers_match_cpython_under_current_pcc1(
     environment = os.environ.copy()
     for name in ("LC_ALL", "PYTHONPATH", "PCC_PACKAGE_SITE"):
         environment.pop(name, None)
-    environment["PCC_RUNTIME_ARCHIVE"] = str(pcc_py_runtime_archive)
+    environment["PCC_RUNTIME_ARCHIVE"] = str(pcc_runtime_archive)
     environment["PCC_HOST_PYTHON"] = "/usr/bin/false"
     environment["PCC_HOST_PCC"] = "/usr/bin/false"
     build = subprocess.run(

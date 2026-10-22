@@ -3,13 +3,13 @@ from pathlib import Path
 import subprocess
 import textwrap
 
-from pcc.py_frontend.codegen.runtime_abi import RUNTIME_SIGNATURES
+from pcc.frontends.python.codegen.runtime_abi import RUNTIME_SIGNATURES
 
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_HEADER = REPO_ROOT / "pcc" / "py_runtime" / "include" / "py_runtime.h"
-PY_OBJ_PORT = REPO_ROOT / "pcc" / "py_runtime" / "py" / "py_obj.py"
-LAYER1_CODEGEN = REPO_ROOT / "pcc" / "py_frontend" / "codegen" / "layer1.py"
+RUNTIME_HEADER = REPO_ROOT / "pcc" / "runtime" / "include" / "py_runtime.h"
+PY_OBJ_PORT = REPO_ROOT / "pcc" / "runtime" / "py" / "py_obj.py"
+LAYER1_CODEGEN = REPO_ROOT / "pcc" / "frontends" / "python" / "codegen" / "layer1.py"
 
 
 BACKEND_REFCOUNT = 0
@@ -107,7 +107,7 @@ def test_gc_backend_kinds_are_algorithmic_not_project_branded():
 def test_pcc_python_refcount_backend_exports_gc_surface():
     py_obj = PY_OBJ_PORT.read_text(encoding="utf-8")
     root_operations = (
-        REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_gc_root_operations.py"
+        REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_gc_root_operations.py"
     ).read_text(encoding="utf-8")
     # pin/unpin (bodies unchanged) are owned by the strict root-operations
     # module, next to pcc_gc_take_pinned_slot; the rest stay in py_obj.
@@ -140,7 +140,7 @@ def test_pcc_python_refcount_backend_exports_gc_surface():
     }
     cache: dict[str, str] = {}
     for name, rel in late_surface.items():
-        path = REPO_ROOT / "pcc" / "py_runtime" / "py" / rel
+        path = REPO_ROOT / "pcc" / "runtime" / "py" / rel
         if rel not in cache:
             cache[rel] = path.read_text(encoding="utf-8")
         assert f'@c_abi_export("{name}")' in cache[rel], (
@@ -150,26 +150,23 @@ def test_pcc_python_refcount_backend_exports_gc_surface():
 
 def test_pcc_python_gc_backend_tracks_frame_stack_not_single_root_slot():
     py_gc_backend = (
-        REPO_ROOT / "pcc" / "py_runtime" / "py" / "py_gc_backend.py"
+        REPO_ROOT / "pcc" / "runtime" / "py" / "py_gc_backend.py"
     ).read_text(encoding="utf-8")
     mapped_roots = (
         REPO_ROOT
-        / "pcc"
-        / "py_runtime"
+        / "pcc" / "runtime"
         / "py"
         / "freestanding_gc_mapped_roots.py"
     ).read_text(encoding="utf-8")
     object_root_seeding = (
         REPO_ROOT
-        / "pcc"
-        / "py_runtime"
+        / "pcc" / "runtime"
         / "py"
         / "freestanding_gc_object_root_seeding.py"
     ).read_text(encoding="utf-8")
     mark_cycle = (
         REPO_ROOT
-        / "pcc"
-        / "py_runtime"
+        / "pcc" / "runtime"
         / "py"
         / "freestanding_gc_common_mark_cycle.py"
     ).read_text(encoding="utf-8")
@@ -216,7 +213,7 @@ def test_python_codegen_uses_gc_surface_for_owned_ref_release():
 
 
 def test_gc_backend_selector_runs_in_no_libpython_binary(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -247,6 +244,11 @@ def test_gc_backend_selector_runs_in_no_libpython_binary(tmp_path):
             print(pcc_gc_backend())
             print(pcc_gc_set_backend({BACKEND_INVALID}))
             print(pcc_gc_backend())
+            # Startup work pending under the selected collector (for example
+            # GC4 remembered roots under PCC_GC_BACKEND=4) is drained first,
+            # so the step below is the idle one this sequence measures.
+            while pcc_gc_step(1024) != 0:
+                pass
             pcc_gc_telemetry_reset()
             print(pcc_gc_telemetry(5))
             print(pcc_gc_step(7))
@@ -336,7 +338,7 @@ def test_gc_backend_selector_runs_in_no_libpython_binary(tmp_path):
 
 
 def test_tracing_gc_backend_preserves_owned_locals_and_frame_roots(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -402,7 +404,7 @@ def test_tracing_gc_backend_preserves_owned_locals_and_frame_roots(tmp_path):
 
 
 def test_tracing_gc_backend_traces_tuple_child_from_frame_root(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -457,7 +459,7 @@ def test_tracing_gc_backend_traces_tuple_child_from_frame_root(tmp_path):
 
 
 def test_tracing_gc_backend_traces_dict_and_instance_children(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -528,7 +530,7 @@ def test_tracing_gc_backend_traces_dict_and_instance_children(tmp_path):
 
 
 def test_tracing_gc_backend_traces_instance_class_child(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -594,7 +596,7 @@ def test_tracing_gc_backend_traces_instance_class_child(tmp_path):
 
 
 def test_tracing_gc_backend_traces_coroutine_children(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -648,7 +650,7 @@ def test_tracing_gc_backend_traces_coroutine_children(tmp_path):
 
 
 def test_generational_gc_surface_reports_young_allocations(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"
@@ -688,7 +690,7 @@ def test_generational_gc_surface_reports_young_allocations(tmp_path):
 
 
 def test_colored_relocating_gc_read_barrier_clears_candidate(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "prog.py"
     exe = tmp_path / "prog.out"

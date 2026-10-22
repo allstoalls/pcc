@@ -90,7 +90,7 @@ main()
 
 @pytest.mark.parametrize("backend", ["0", "3"])
 def test_owned_method_results_are_released(tmp_path, backend, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     monkeypatch.setenv("PCC_GC_BACKEND", backend)
     src = tmp_path / "prog.py"
@@ -101,7 +101,7 @@ def test_owned_method_results_are_released(tmp_path, backend, monkeypatch):
         str(exe),
         ir_scaffold_mode="on",
         libpython_mode="off",
-        backend="llvm",
+        backend="self",
     )
     native = subprocess.run(
         [str(exe)],

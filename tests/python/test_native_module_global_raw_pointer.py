@@ -20,10 +20,10 @@ from pathlib import Path
 import pytest
 
 
-def _run_pcc_program(tmp_path: Path, source: str, backend: str) -> str:
+def _run_pcc_program(tmp_path: Path, source: str, backend: str | None) -> str:
     src = tmp_path / "prog.py"
     src.write_text(source, encoding="utf-8")
-    exe = tmp_path / ("prog_" + backend)
+    exe = tmp_path / ("prog_" + (backend or "default"))
     env = os.environ.copy()
     env.pop("LC_ALL", None)
     build = subprocess.run(
@@ -55,7 +55,7 @@ _PROG = (
 )
 
 
-@pytest.mark.parametrize("backend", ["self", "llvm"])
+@pytest.mark.parametrize("backend", [pytest.param(None, id="default-self"), pytest.param("self", id="explicit-self")])
 def test_module_global_raw_pointer_not_pinned(tmp_path, backend):
     out = _run_pcc_program(tmp_path, _PROG, backend)
     lines = out.strip().splitlines()

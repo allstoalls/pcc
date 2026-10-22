@@ -16,7 +16,7 @@ from pathlib import Path
 from textwrap import dedent
 
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 _SOURCE = """
 def main() -> int:

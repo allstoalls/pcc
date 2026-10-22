@@ -27,7 +27,7 @@ def _build_c_probe(tmp_path: Path, archive: Path, name: str, src: str) -> Path:
     build = subprocess.run(
         [
             "clang", "-std=c11",
-            f"-I{REPO / 'pcc' / 'py_runtime' / 'include'}",
+            f"-I{REPO / 'pcc' / 'runtime' / 'include'}",
             str(cfile), str(archive), "-pthread", "-o", str(exe),
         ],
         capture_output=True,
@@ -40,11 +40,11 @@ def _build_c_probe(tmp_path: Path, archive: Path, name: str, src: str) -> Path:
 
 @pytest.mark.integration
 def test_lfq_spsc_ring_fifo_order_and_bounds(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ) -> None:
     exe = _build_c_probe(
         tmp_path,
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
         "spsc_probe",
         r"""
 #include <stdint.h>
@@ -87,11 +87,11 @@ int main(void) {
 
 @pytest.mark.integration
 def test_lfq_spsc_full_returns_error(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ) -> None:
     exe = _build_c_probe(
         tmp_path,
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
         "spsc_full_probe",
         r"""
 #include <stdint.h>
@@ -121,11 +121,11 @@ int main(void) {
 
 @pytest.mark.integration
 def test_iobuf_bucketed_pool_alloc_free_roundtrip(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ) -> None:
     exe = _build_c_probe(
         tmp_path,
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
         "iobuf_probe",
         r"""
 #include <stdint.h>
@@ -168,11 +168,11 @@ int main(void) {
 
 @pytest.mark.integration
 def test_iox_outcome_semantics(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ) -> None:
     exe = _build_c_probe(
         tmp_path,
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
         "iox_probe",
         r"""
 #include <stdint.h>
@@ -199,13 +199,13 @@ int main(void) {
 
 @pytest.mark.integration
 def test_socket_nonblock_recv_abi_and_wouldblock(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ) -> None:
     """Zero-allocation nonblocking recv: closed/invalid fd returns errno-style
     codes and EAGAIN maps to WouldBlock (-2) without any per-call allocation."""
     exe = _build_c_probe(
         tmp_path,
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
         "sock_nonblock_probe",
         r"""
 #include <stdint.h>
@@ -228,13 +228,13 @@ int main(void) {
 
 @pytest.mark.integration
 def test_uring_sq_cq_ring_logic(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ) -> None:
     """io_uring submission/completion queue index logic: sqe init, submit
     advancing SQ tail, cqe peek/advance in FIFO order with ring wraparound."""
     exe = _build_c_probe(
         tmp_path,
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
         "uring_probe",
         r"""
 #include <stdint.h>

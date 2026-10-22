@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from dataclasses import fields, replace
 
-from pcc.py_frontend import py_ast
-from pcc.py_frontend.codegen import expr_dispatch_lowering
-from pcc.py_frontend.codegen import stmt_dispatch_lowering
-from pcc.py_frontend.codegen.expr_dispatch_lowering import ExprDispatchLoweringMixin
-from pcc.py_frontend.codegen.stmt_dispatch_lowering import StmtDispatchLoweringMixin
-from pcc.py_frontend.pipeline_ast_wire import _py_ast_from_wire, _py_ast_to_wire
+from pcc.frontends.python import py_ast
+from pcc.frontends.python.codegen import expr_dispatch_lowering
+from pcc.frontends.python.codegen import stmt_dispatch_lowering
+from pcc.frontends.python.codegen.expr_dispatch_lowering import ExprDispatchLoweringMixin
+from pcc.frontends.python.codegen.stmt_dispatch_lowering import StmtDispatchLoweringMixin
+from pcc.frontends.python.pipeline_ast_wire import _py_ast_from_wire, _py_ast_to_wire
 
 
 def _span() -> py_ast.SourceSpan:

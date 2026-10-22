@@ -1,20 +1,4 @@
-"""Emit a target object file from LLVM IR text.
-
-This helper exists for build-time paths that already have valid LLVM IR
-but cannot safely hand that text to the host ``clang``. Some Linux
-toolchains still parse typed-pointer IR by default, while pcc's Python
-frontend emits opaque ``ptr`` IR.
-
-**pcc emits the object itself** on the targets it owns (AArch64 Mach-O
-today, through the self backend's assembler and object writer).  That is the
-default and it is what the pcc-Python runtime archive is built with: those
-170 members are the objects pcc1 links, so routing them through llvmlite
-would make an llvmlite-free pcc1 depend on llvmlite to exist at all.
-
-llvmlite remains available as the differential oracle, selected explicitly
-with ``PCC_IR_TO_OBJ_EMITTER=llvmlite``, and it is imported lazily so the default
-path never loads it.
-"""
+"""Emit a target object from pcc IR using its owned backend and object writer."""
 
 from __future__ import annotations
 
@@ -25,33 +9,18 @@ import re
 import sys
 import tempfile
 
-# NOT ``PCC_IR_TO_OBJ``: pcc/py_runtime/Makefile:24 already uses that name
+# NOT ``PCC_IR_TO_OBJ``: pcc/runtime/Makefile:24 already uses that name
 # for the *command* that runs this tool
 # (``PCC_IR_TO_OBJ ?= $(PYTHON) -m pcc.tools.ir_to_obj``), and
 # tests/test_runtime_archive_make_concurrency.py passes a path through it.
 # Reading it here would compare a path against "pcc"/"llvmlite".
 _EMITTER_ENV = "PCC_IR_TO_OBJ_EMITTER"
 _EMITTER_PCC = "pcc"
-_EMITTER_LLVMLITE = "llvmlite"
 _PCC_OWNED_TARGET_IDENTITIES = frozenset({"self-aarch64-darwin-v0", "self-x86_64-linux-v0", "self-aarch64-linux-v0", "self-x86_64-windows-v0"})
 
 
-class _LazyLLVM:
-    """llvmlite, imported on first attribute access.
-
-    A module-level ``from llvmlite import binding`` would put llvmlite on the
-    default object-emission path, which is the dependency this module exists
-    to avoid.  Every ``llvm.X`` site below is unchanged; only the moment of
-    import moves.
-    """
-
-    def __getattr__(self, name):
-        from llvmlite import binding as _binding
-
-        return getattr(_binding, name)
 
 
-llvm = _LazyLLVM()
 
 
 class ObjectEmissionContractError(ValueError):
@@ -62,99 +31,23 @@ _UNKNOWN_TARGET_TRIPLES = {"", "unknown-unknown-unknown"}
 _MODULE_ASM_RE = re.compile(r'^\s*module\s+asm\s+"', flags=re.MULTILINE)
 
 
-def _declared_module_triple(mod) -> str:
-    try:
-        triple = str(mod.triple or "").strip()
-    except Exception:
-        return ""
-    if triple in _UNKNOWN_TARGET_TRIPLES:
-        return ""
-    return triple
 
 
-def _module_triple(mod) -> str:
-    return _declared_module_triple(mod) or llvm.get_default_triple()
 
 
-def _target_triples_match(left: str, right: str) -> bool:
-    """Compare triples after LLVM has normalized aliases and omitted fields."""
-    return llvm.get_triple_parts(left) == llvm.get_triple_parts(right)
 
 
-def _resolve_target_triple(mod, requested: str | None) -> str:
-    declared = _declared_module_triple(mod)
-    if requested is not None:
-        target = str(requested)
-        if not target or target != target.strip():
-            raise ObjectEmissionContractError(
-                "explicit target triple must be non-empty and have no surrounding "
-                "whitespace"
-            )
-        if declared and not _target_triples_match(target, declared):
-            raise ObjectEmissionContractError(
-                "target triple mismatch: requested "
-                + repr(target)
-                + " but the module declares "
-                + repr(declared)
-            )
-        return target
-    return declared or llvm.get_default_triple()
 
 
-def _module_contains_inline_asm(mod) -> bool:
-    # Module-level assembly is not exposed as a ValueRef by llvmlite.  LLVM's
-    # normalized module spelling makes this anchored check unambiguous; inline
-    # assembly used as a call target is detected structurally below.
-    if _MODULE_ASM_RE.search(str(mod)) is not None:
-        return True
-    for fn in mod.functions:
-        for block in fn.blocks:
-            for instruction in block.instructions:
-                for operand in instruction.operands:
-                    if operand.value_kind == llvm.ValueKind.inline_asm:
-                        return True
-    return False
 
 
-def _validate_module_target_contract(mod, triple: str, tm) -> None:
-    target_layout = str(tm.target_data)
-    module_layout = str(mod.data_layout or "").strip()
-    if module_layout and module_layout != target_layout:
-        raise ObjectEmissionContractError(
-            "target data layout mismatch for "
-            + repr(triple)
-            + ": the module declares "
-            + repr(module_layout)
-            + " but the target machine requires "
-            + repr(target_layout)
-        )
-    mod.triple = triple
-    if not module_layout:
-        mod.data_layout = target_layout
 
 
-def _validate_inline_asm_parser_contract(mod, triple: str) -> None:
-    if not _module_contains_inline_asm(mod):
-        return
-    native_triple = llvm.get_default_triple()
-    target_arch = llvm.get_triple_parts(triple).Arch
-    native_arch = llvm.get_triple_parts(native_triple).Arch
-    if target_arch != native_arch:
-        raise ObjectEmissionContractError(
-            "foreign-target inline assembly is unsupported: target "
-            + repr(triple)
-            + " uses architecture "
-            + repr(target_arch)
-            + ", but this process initialized only the native "
-            + repr(native_arch)
-            + " assembly parser for "
-            + repr(native_triple)
-        )
 
 
 def _host_target_triple() -> str:
     """Use the frontend's host ABI identity without querying LLVM or cc."""
-    from pcc.py_frontend.pipeline_targets import host_target_triple
+    from pcc.frontends.python.pipeline_targets import host_target_triple
 
     triple = host_target_triple()
     if triple == "unknown-unknown-unknown":
@@ -169,7 +62,7 @@ def _resolve_triple_without_llvm(ir_text: str, target_triple: str | None) -> str
         parse_self_backend_target_triple,
     )
 
-    declared = parse_self_backend_target_triple(ir_text)
+    declared = parse_self_backend_target_triple(ir_text) if re.search(r'^\s*target\s+triple\s*=', ir_text, re.MULTILINE) else ""
     if declared.strip().lower() in _UNKNOWN_TARGET_TRIPLES:
         declared = ""
     if target_triple is not None:
@@ -253,14 +146,11 @@ def _pcc_owned_target_identity(triple: str) -> str | None:
 
 def _select_emitter(identity: str | None) -> str:
     requested = os.environ.get(_EMITTER_ENV, "").strip().lower()
-    if requested and requested not in (_EMITTER_PCC, _EMITTER_LLVMLITE):
+    if requested and requested not in (_EMITTER_PCC,):
         raise ObjectEmissionContractError(
             "unknown " + _EMITTER_ENV + " value " + repr(requested)
-            + "; expected " + repr(_EMITTER_PCC) + " or "
-            + repr(_EMITTER_LLVMLITE)
+            + "; expected " + repr(_EMITTER_PCC)
         )
-    if requested == _EMITTER_LLVMLITE:
-        return _EMITTER_LLVMLITE
     if identity is None:
         raise ObjectEmissionContractError(
             "target pcc does not own; pcc emits objects for "
@@ -294,27 +184,6 @@ def _emit_object_with_triple(
                 "optimization_level must be 0"
             )
         return _emit_object_pcc(ir_text, pcc_triple), pcc_triple, _EMITTER_PCC
-    llvm.initialize_all_targets()
-    llvm.initialize_all_asmprinters()
-    # Runtime modules use compiler-owned inline assembly for native syscall
-    # boundaries.  Target/printer registration alone is insufficient: LLVM's
-    # object streamer also needs the native assembly parser before it can lower
-    # those inline-asm call sites.
-    llvm.initialize_native_asmparser()
-    mod = llvm.parse_assembly(ir_text)
-    mod.verify()
-    triple = _resolve_target_triple(mod, target_triple)
-    target = llvm.Target.from_triple(triple)
-    tm = target.create_target_machine()
-    _validate_module_target_contract(mod, triple, tm)
-    _validate_inline_asm_parser_contract(mod, triple)
-    if optimization_level:
-        tuning = llvm.PipelineTuningOptions(speed_level=optimization_level, size_level=0)
-        builder = llvm.create_pass_builder(tm, tuning)
-        passes = builder.getModulePassManager()
-        passes.run(mod, builder)
-        mod.verify()
-    return tm.emit_object(mod), triple, _EMITTER_LLVMLITE
 
 
 def emit_object(ir_text: str, *, target_triple: str | None = None) -> bytes:
@@ -362,6 +231,14 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="archive member basename; defaults to the output basename",
     )
+    parser.add_argument(
+        "--runtime-threads", choices=("0", "1"), default=None,
+        help="archive thread configuration recorded in the runtime receipt",
+    )
+    parser.add_argument(
+        "--runtime-refcount", default=None,
+        help="archive refcount configuration recorded with --runtime-threads",
+    )
     args = parser.parse_args(argv)
 
     output_path = Path(args.output)
@@ -375,6 +252,8 @@ def main(argv: list[str] | None = None) -> int:
             args.source,
             args.runtime_root,
             args.member,
+            args.runtime_threads,
+            args.runtime_refcount,
         )
         if any(value is not None for value in provenance_arguments):
             if any(
@@ -384,6 +263,16 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError(
                     "--provenance, --source, and --runtime-root must be used together"
                 )
+        runtime_build_config = None
+        if args.runtime_threads is not None or args.runtime_refcount is not None:
+            if args.runtime_threads is None or args.runtime_refcount is None:
+                raise ValueError(
+                    "--runtime-threads and --runtime-refcount must be used together"
+                )
+            runtime_build_config = {
+                "threads": args.runtime_threads == "1",
+                "refcount": args.runtime_refcount.strip().lower() or "atomic",
+            }
         with open(args.input, "r", encoding="utf-8") as f:
             ir_text = f.read()
         obj, resolved_triple, resolved_emitter = _emit_object_with_triple(
@@ -415,6 +304,7 @@ def main(argv: list[str] | None = None) -> int:
                 object_bytes=obj,
                 output_path=pending_receipt,
                 member=args.member,
+                runtime_build_config=runtime_build_config,
             )
         os.replace(temporary_object, output_path)
         temporary_object = None

@@ -3,10 +3,10 @@
 from pathlib import Path
 import subprocess
 
+from tests.owned_c_execution import compile_owned_c_with_runtime
 
-def test_generator_frame_none_slots_survive_each_collector(tmp_path: Path, pcc_py_runtime_archive):
-    archive = pcc_py_runtime_archive
-    root = Path(__file__).resolve().parents[2]
+
+def test_generator_frame_none_slots_survive_each_collector(tmp_path: Path, pcc_runtime_archive):
     source = tmp_path / "frame_init.c"
     source.write_text('''#include "py_runtime.h"
 #include <stdint.h>
@@ -48,11 +48,7 @@ int main(int argc, char **argv) {
 }
 ''')
     executable = tmp_path / "frame_init"
-    built = subprocess.run([
-        "clang", "-std=c11", "-I" + str(root / "pcc/py_runtime/include"),
-        str(source), str(archive), "-pthread", "-o", str(executable),
-    ], capture_output=True, text=True, timeout=30)
-    assert built.returncode == 0, built.stdout + built.stderr
+    compile_owned_c_with_runtime(source, executable, runtime_archive=pcc_runtime_archive)
     for backend in range(5):
         ran = subprocess.run([str(executable), str(backend)], capture_output=True,
                              text=True, timeout=15)

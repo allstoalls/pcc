@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pcc.llvm_capi import ir
+from pcc.ir import ir
 
 
 def test_function_is_value_for_type_inference_and_builder_apis():

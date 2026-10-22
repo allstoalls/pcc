@@ -3,13 +3,14 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from functools import lru_cache
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-DOCKER_HARNESS = REPO_ROOT / "scripts" / "run_self_backend_linux_x86_64_docker.sh"
+DOCKER_HARNESS = REPO_ROOT / "scripts" / "run_self_backend_linux_x86_64_docker.py"
 CTESTSUITE_HARNESS = (
     REPO_ROOT / "scripts" / "run_self_backend_linux_x86_64_c_testsuite.py"
 )
@@ -55,7 +56,7 @@ def _run_linux_x86_64_harness(
         env = dict(os.environ)
         env["PCC_SELF_BACKEND_HOST_ARTIFACTS"] = str(host_artifacts.resolve())
     return subprocess.run(
-        [str(DOCKER_HARNESS), "bash", "-lc", shell_script],
+        [sys.executable, str(DOCKER_HARNESS), "bash", "-lc", shell_script],
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
@@ -216,7 +217,7 @@ def test_linux_x86_64_freestanding_python_start_is_static_zero_libc():
     object participates in the link."""
     result = _run_linux_x86_64_harness(rf"""
 set -euo pipefail
-src=pcc/py_runtime/py/freestanding_linux_start.py
+src=pcc/runtime/py/freestanding_linux_start.py
 ll=/tmp/pcc_zero_libc.ll
 asm=/tmp/pcc_zero_libc.generated.s
 obj=/tmp/pcc_zero_libc.from_python.o
@@ -295,7 +296,7 @@ def test_linux_x86_64_full_production_python_runtime_is_static_zero_libc():
     """
     script = r"""
 set -euo pipefail
-runtime_root="$PWD/pcc/py_runtime"
+runtime_root="$PWD/pcc/runtime"
 test -n "${PCC_HOST_TEST_ARTIFACTS:-}"
 
 python_bin="$(env -u LC_ALL uv run python -c 'import sys; print(sys.executable)')"
@@ -321,7 +322,7 @@ digest.update(
 for value in (
     os.environ["PCC_ACCEPT_TARGET"],
     "PCC_PYTHON_IR_PASS_TRANSPORT=text",
-    "PCC_WITH_THREADS=0",
+    "PCC_WITH_THREADS=1",
 ):
     digest.update(b"\0")
     digest.update(value.encode("utf-8"))
@@ -390,7 +391,7 @@ bad_members = [
     or record["producer_kind"] != "pcc-python-library-ir-to-obj"
     or record["object_emitter"] != "llvmlite-target-machine"
     or record["uses_host_cc"] is not False
-    or not str(record["source"]).startswith("pcc/py_runtime/py/")
+    or not str(record["source"]).startswith("pcc/runtime/py/")
     or not str(record["source"]).endswith(".py")
 ]
 if bad_members:
@@ -419,7 +420,7 @@ if test "$runtime_cache_state" != hit; then
     PCC="$pcc_bin" \
     PYTHON="$python_bin" \
     PCC_REPO_ROOT="$PWD" \
-    PCC_WITH_THREADS=0 \
+    PCC_WITH_THREADS=1 \
     "$archive" >"$work/runtime-build.log" 2>&1; then
     tail -200 "$work/runtime-build.log" >&2
     exit 1
@@ -836,8 +837,8 @@ from pcc.unsafe import (
 )
 
 
-pcc_runtime_log_event_code = extern(
-    "pcc_runtime_log_event_code",
+pcc_diagnostics_runtime_log_event_code = extern(
+    "pcc_diagnostics_runtime_log_event_code",
     (c_int32, c_int32, c_int64, c_int64, c_ptr),
     c_void,
 )
@@ -862,7 +863,7 @@ pcc_current_native_thread_token = extern(
 @c_abi_typed_export("main", "i32", ("i32", "ptr", "ptr"))
 def main(argc: int, argv: c_ptr, envp: c_ptr) -> int:
     write(1, cstr("L0\n"), 3)
-    pcc_runtime_log_event_code(1, 1, 40, 5, null())
+    pcc_diagnostics_runtime_log_event_code(1, 1, 40, 5, null())
     write(1, cstr("L1\n"), 3)
     write(1, cstr("A0\n"), 3)
     obj = pcc_gc_alloc(40, 5, 0)
@@ -1005,40 +1006,22 @@ fi
 def test_linux_x86_64_c_frontend_freestanding_libc_is_static_and_python_owned():
     """The public C CLI uses the strict pcc-Python libc and startup objects.
 
-    A cc wrapper copies only the final ``-nostdlib -static`` executable before
-    pcc removes its staging directory, allowing the gate to inspect the actual
-    CLI-produced artifact and link map.
+    Public output mode retains the exact owned executable and map. Compiler
+    tool wrappers reject external product delegation; file/readelf/nm remain
+    separately invoked artifact-inspection oracles.
     """
     result = _run_linux_x86_64_harness(r"""
 set -euo pipefail
-wrapper="$(mktemp -d /tmp/pcc-c-libc-cc.XXXXXX)"
-cat >"$wrapper/cc" <<'EOF'
+wrapper="$(mktemp -d /tmp/pcc-c-libc-owned.XXXXXX)"
+for tool in cc gcc clang as ld ar; do
+  cat >"$wrapper/$tool" <<'EOF'
 #!/bin/sh
-set -eu
-/usr/bin/cc "$@"
-out=""
-want_out=0
-seen_nostdlib=0
-seen_static=0
-seen_start=0
-for arg in "$@"; do
-  if [ "$want_out" = 1 ]; then
-    out="$arg"
-    want_out=0
-  elif [ "$arg" = "-o" ]; then
-    want_out=1
-  fi
-  [ "$arg" = "-nostdlib" ] && seen_nostdlib=1
-  [ "$arg" = "-static" ] && seen_static=1
-  [ "$arg" = "-Wl,-e,_start" ] && seen_start=1
-done
-if [ "$seen_nostdlib" = 1 ] && [ "$seen_static" = 1 ] && [ "$seen_start" = 1 ]; then
-  test -n "$out"
-  cp "$out" /tmp/pcc-c-libc-final
-  printf '%s\n' "$@" >/tmp/pcc-c-libc-link-args
-fi
+printf 'unexpected external compiler invocation: %s\n' "$0" >&2
+printf '%s\n' "$0" >>/tmp/pcc-c-libc-external-attempt
+exit 97
 EOF
-chmod +x "$wrapper/cc"
+  chmod +x "$wrapper/$tool"
+done
 
 cat >/tmp/pcc-c-libc-consumer.c <<'EOF'
 typedef unsigned long size_t;
@@ -1060,17 +1043,18 @@ int main(int argc, char **argv, char **envp) {
 EOF
 
 PATH="$wrapper:$PATH" \
+PCC_RUNTIME_BUILD=owned PCC_SELF_OBJ=pcc PCC_SELF_LINK=pcc \
+PCC_IR_TO_OBJ_EMITTER=pcc PCC_PYTHON_LIBPYTHON=off \
 PCC_PYTHON_IR_PASSES=off \
 env -u LC_ALL uv run pcc \
   --backend=self \
   --verbose \
   --freestanding-libc \
   --link-arg=-Wl,-Map,/tmp/pcc-c-libc.map \
-  /tmp/pcc-c-libc-consumer.c bridge
-
-grep -Fx -- '-nostdlib' /tmp/pcc-c-libc-link-args >/dev/null
-grep -Fx -- '-static' /tmp/pcc-c-libc-link-args >/dev/null
-grep -Fx -- '-Wl,-e,_start' /tmp/pcc-c-libc-link-args >/dev/null
+  -o /tmp/pcc-c-libc-final \
+  /tmp/pcc-c-libc-consumer.c
+PATH="$wrapper:$PATH" /tmp/pcc-c-libc-final bridge
+test ! -e /tmp/pcc-c-libc-external-attempt
 file /tmp/pcc-c-libc-final | grep -F 'statically linked' >/dev/null
 if readelf -l /tmp/pcc-c-libc-final | grep -q 'INTERP'; then
   echo 'unexpected PT_INTERP' >&2
@@ -1081,9 +1065,32 @@ if readelf -d /tmp/pcc-c-libc-final 2>&1 | grep -q '(NEEDED)'; then
   exit 1
 fi
 test -z "$(nm -u /tmp/pcc-c-libc-final)"
-grep -F 'libpcc_freestanding_c.a(freestanding_allocator.o)' /tmp/pcc-c-libc.map >/dev/null
-grep -F 'libpcc_freestanding_c.a(freestanding_mem_str.o)' /tmp/pcc-c-libc.map >/dev/null
-grep -F 'libpcc_freestanding_c.a(freestanding_platform_env.o)' /tmp/pcc-c-libc.map >/dev/null
+grep -F 'libpy_runtime_pcc_py.a(freestanding_allocator.o)' /tmp/pcc-c-libc.map >/dev/null
+grep -F 'libpy_runtime_pcc_py.a(freestanding_mem_str.o)' /tmp/pcc-c-libc.map >/dev/null
+grep -F 'libpy_runtime_pcc_py.a(freestanding_platform_env.o)' /tmp/pcc-c-libc.map >/dev/null
+uv run python - <<'PYMAP'
+import hashlib
+from pathlib import Path
+import re
+from pcc.backend.elf_x86_64 import read_archive_payloads
+
+ownership = Path("/tmp/pcc-c-libc.map").read_text()
+assert ownership.startswith("# pcc owned ELF link map v1\n")
+assert "# entry _start\n" in ownership
+image = Path("/tmp/pcc-c-libc-final").read_bytes()
+assert "# image sha256=" + hashlib.sha256(image).hexdigest() + "\n" in ownership
+for member in ("freestanding_allocator.o", "freestanding_mem_str.o", "freestanding_platform_env.o"):
+    selected = re.search(
+        r"^(.+libpy_runtime_pcc_py\.a)\(" + re.escape(member)
+        + r"\) archive_sha256=([0-9a-f]{64}) member_sha256=([0-9a-f]{64})$",
+        ownership, re.MULTILINE,
+    )
+    assert selected is not None, member
+    archive = Path(selected.group(1)).read_bytes()
+    assert hashlib.sha256(archive).hexdigest() == selected.group(2)
+    payload = dict(read_archive_payloads(archive))[member]
+    assert hashlib.sha256(payload).hexdigest() == selected.group(3)
+PYMAP
 if grep -E 'vendor_|libc[.]a|/build_py/.*[.]c' /tmp/pcc-c-libc.map >/dev/null; then
   echo 'non-pcc-Python libc owner entered final link' >&2
   exit 1
@@ -1223,7 +1230,7 @@ def test_linux_x86_64_docker_syscall6_differential_clang_vs_self_backend():
     result = _run_linux_x86_64_harness(rf"""
 set -euo pipefail
 env -u LC_ALL uv run python - <<'PYEOF'
-from pcc.llvm_capi import ir
+from pcc.ir import ir
 from pcc.backend.self_backend_dispatch import emit_self_asm
 
 MSG = b"pcc syscall6 ok\n"

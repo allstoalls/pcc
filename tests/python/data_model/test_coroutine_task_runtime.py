@@ -6,7 +6,7 @@ import textwrap
 from pathlib import Path
 
 
-def test_coroutine_and_task_done_result_runtime(tmp_path, pcc_py_runtime_archive):
+def test_coroutine_and_task_done_result_runtime(tmp_path, pcc_runtime_archive):
     src = tmp_path / "coro_task_probe.c"
     exe = tmp_path / "coro_task_probe"
     src.write_text(
@@ -58,8 +58,8 @@ def test_coroutine_and_task_done_result_runtime(tmp_path, pcc_py_runtime_archive
     subprocess.run(
         [
             os.environ.get("CC", "cc"),
-            "-I", str(pcc_py_runtime_archive.parent / "include"),
-            str(src), str(pcc_py_runtime_archive),
+            "-I", str(pcc_runtime_archive.parent / "include"),
+            str(src), str(pcc_runtime_archive),
             "-lm", "-o", str(exe),
         ],
         check=True,
@@ -69,7 +69,7 @@ def test_coroutine_and_task_done_result_runtime(tmp_path, pcc_py_runtime_archive
 
 
 def test_coroutine_pointer_results_guard_silent_null_before_cleanup():
-    py_source = Path("pcc/py_runtime/py/py_coroutine.py").read_text(
+    py_source = Path("pcc/runtime/py/py_coroutine.py").read_text(
         encoding="utf-8"
     )
     messages = (

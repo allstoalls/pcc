@@ -21,7 +21,7 @@ _BUILD.mkdir(parents=True, exist_ok=True)
 
 
 def _compile_to_ll(source: str, name: str, *, mode: str) -> str:
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / f"{name}.py"
     out = _BUILD / f"{name}.ll"
@@ -78,7 +78,7 @@ def test_readline_seek_tell_flush_use_native_file_runtime():
 
 def _run_native_vs_python3(tmp_path, program: str, name: str) -> None:
     """Compile no-libpython, run, and diff against real python3."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / f"{name}.py"
     exe = tmp_path / f"{name}.out"

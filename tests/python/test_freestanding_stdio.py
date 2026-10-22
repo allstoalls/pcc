@@ -4,109 +4,57 @@ import struct
 import subprocess
 import sys
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
+from tests.owned_runtime_c_fixture import (
+    runtime_ir, runtime_member, object_symbols, link_c_harness,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-STDIO_SOURCE = REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_stdio.py"
+STDIO_SOURCE = REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_stdio.py"
 ALLOCATOR_SOURCE = (
-    REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_allocator.py"
+    REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_allocator.py"
 )
 
 
 def _compile_stdio_ir(tmp_path: Path) -> Path:
-    out = tmp_path / "freestanding_stdio.ll"
-    pipeline.compile_python(
-        str(STDIO_SOURCE),
-        str(out),
-        emit_llvm_only=True,
-        libpython_mode="off",
-        python_library=True,
-    )
-    return out
+    return runtime_ir(STDIO_SOURCE, tmp_path / "freestanding_stdio.ll")
 
 
 def _build_stdio_object(tmp_path: Path) -> Path:
-    llvm_ir = _compile_stdio_ir(tmp_path)
-    obj = tmp_path / "freestanding_stdio.o"
-    build = subprocess.run(
-        ["clang", "-c", str(llvm_ir), "-o", str(obj)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert build.returncode == 0, build.stdout + build.stderr
-    return obj
+    return runtime_member(tmp_path, "freestanding_stdio")
 
 
 def _build_stdio_self_object(tmp_path: Path) -> Path:
-    from pcc.backend.self_backend_dispatch import emit_self_asm
-
-    llvm_ir = _compile_stdio_ir(tmp_path)
-    asm = tmp_path / "freestanding_stdio_self.s"
-    obj = tmp_path / "freestanding_stdio_self.o"
-    asm.write_text(
-        emit_self_asm(llvm_ir.read_text(encoding="utf-8")),
-        encoding="utf-8",
-    )
-    build = subprocess.run(
-        ["clang", "-c", str(asm), "-o", str(obj)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert build.returncode == 0, build.stdout + build.stderr
-    return obj
+    # Admission verifies every member was emitted by the owned object writer.
+    return runtime_member(tmp_path, "freestanding_stdio")
 
 
 def _build_allocator_object(tmp_path: Path) -> Path:
-    llvm_ir = tmp_path / "freestanding_allocator.ll"
-    pipeline.compile_python(
-        str(ALLOCATOR_SOURCE),
-        str(llvm_ir),
-        emit_llvm_only=True,
-        libpython_mode="off",
-        python_library=True,
-    )
-    obj = tmp_path / "freestanding_allocator.o"
-    build = subprocess.run(
-        ["clang", "-c", str(llvm_ir), "-o", str(obj)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert build.returncode == 0, build.stdout + build.stderr
-    return obj
+    return runtime_member(tmp_path, "freestanding_allocator")
 
 
 def test_remove_owns_file_and_empty_directory_semantics(tmp_path):
     obj = _build_stdio_object(tmp_path)
-    symbols = subprocess.run(
-        ["nm", "-g", str(obj)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    symbols = object_symbols(obj, undefined=False)
     assert symbols.returncode == 0, symbols.stdout + symbols.stderr
     decorated_remove = "_remove" if sys.platform == "darwin" else "remove"
     assert any(line.endswith(" T " + decorated_remove) for line in symbols.stdout.splitlines())
 
-    undefined = subprocess.run(
-        ["nm", "-u", str(obj)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    undefined = object_symbols(obj, undefined=True)
     assert undefined.returncode == 0, undefined.stdout + undefined.stderr
     if sys.platform == "darwin":
         assert set(undefined.stdout.split()) == {
             "___error",
             "_close",
             "_environ",
+            "_fcntl",
             "_free",
             "_lseek",
             "_malloc",
             "_open",
+            "_pcc_errno_get",
+            "_pcc_errno_set",
             "_pipe",
             "_posix_spawn",
             "_posix_spawn_file_actions_addclose",
@@ -124,6 +72,8 @@ def test_remove_owns_file_and_empty_directory_semantics(tmp_path):
             "free",
             "malloc",
             "pcc_initial_envp",
+            "pcc_errno_get",
+            "pcc_errno_set",
         }
 
     file_path = tmp_path / "remove-file.txt"
@@ -152,12 +102,7 @@ int main(int argc, char **argv) {
 """,
         encoding="utf-8",
     )
-    link = subprocess.run(
-        ["clang", "-fno-builtin", str(harness), str(obj), "-o", str(executable)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    link = link_c_harness(harness, executable, defines=())
     assert link.returncode == 0, link.stdout + link.stderr
     run = subprocess.run(
         [
@@ -178,32 +123,15 @@ int main(int argc, char **argv) {
 
 
 def test_default_runtime_archive_selects_freestanding_stdio_object():
-    runtime_dir = REPO_ROOT / "pcc" / "py_runtime"
-    plan = subprocess.run(
-        ["make", "-B", "-n", "libpy_runtime_pcc_py.a"],
-        cwd=runtime_dir,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert plan.returncode == 0, plan.stdout + plan.stderr
-    archive_line = next(
-        line
-        for line in plan.stdout.splitlines()
-        if "ar rcs libpy_runtime_pcc_py.a.tmp" in line
-    )
-    assert "build_py/freestanding_stdio.o" in archive_line
+    from pcc.frontends.python.owned_runtime_build import runtime_modules
+    from pcc.frontends.python.pipeline_targets import host_target_triple
+    assert "freestanding_stdio" in runtime_modules(str(REPO_ROOT / "pcc/runtime"), host_target_triple())
 
 
 def test_basic_file_lifecycle_matches_c_stdio_contract(tmp_path):
     obj = _build_stdio_object(tmp_path)
     allocator = _build_allocator_object(tmp_path)
-    symbols = subprocess.run(
-        ["nm", "-g", str(obj)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    symbols = object_symbols(obj, undefined=False)
     assert symbols.returncode == 0, symbols.stdout + symbols.stderr
     prefix = "_" if sys.platform == "darwin" else ""
     for symbol in (
@@ -268,20 +196,7 @@ int main(int argc, char **argv) {
 """,
         encoding="utf-8",
     )
-    link = subprocess.run(
-        [
-            "clang",
-            "-fno-builtin",
-            str(harness),
-            str(obj),
-            str(allocator),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    link = link_c_harness(harness, executable, defines=())
     assert link.returncode == 0, link.stdout + link.stderr
     run = subprocess.run(
         [str(executable), str(file_path)],
@@ -463,21 +378,7 @@ int main(int argc, char **argv) {
         timeout=30,
     )
     assert oracle_link.returncode == 0, oracle_link.stdout + oracle_link.stderr
-    owned_link = subprocess.run(
-        [
-            "clang",
-            "-fno-builtin",
-            "-DPCC_OWNED_STDIO=1",
-            str(harness),
-            str(obj),
-            str(allocator),
-            "-o",
-            str(owned_executable),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    owned_link = link_c_harness(harness, owned_executable, defines=('PCC_OWNED_STDIO=1',))
     assert owned_link.returncode == 0, owned_link.stdout + owned_link.stderr
 
     results = {}
@@ -545,7 +446,7 @@ int main(int argc, char **argv) {
 
 
 def test_linux_stdio_seek_is_owned_by_raw_syscall_intrinsic(tmp_path, monkeypatch):
-    from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+    from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
     monkeypatch.setattr(
         UnsafeIntrinsicMixin, "_target_sys_platform_text", lambda self: "linux"
@@ -554,17 +455,11 @@ def test_linux_stdio_seek_is_owned_by_raw_syscall_intrinsic(tmp_path, monkeypatc
         UnsafeIntrinsicMixin, "_target_machine_text", lambda self: "x86_64"
     )
     llvm_ir = tmp_path / "freestanding_stdio_linux.ll"
-    pipeline.compile_python(
-        str(STDIO_SOURCE),
-        str(llvm_ir),
-        emit_llvm_only=True,
-        libpython_mode="off",
-        python_library=True,
-        target_triple="x86_64-unknown-linux-gnu",
-    )
+    runtime_ir(STDIO_SOURCE, llvm_ir, "x86_64-unknown-linux-gnu")
     text = llvm_ir.read_text(encoding="utf-8")
-    assert "define i32 @fseek(" in text
-    assert "define i64 @ftell(" in text
+    import re
+    assert re.search(r"define (?:external )?i32 @fseek\(", text)
+    assert re.search(r"define (?:external )?i64 @ftell\(", text)
     assert "@lseek" not in text
     assert "unsafe.seek_file.syscall" in text
     assert 'asm sideeffect "syscall"' in text
@@ -573,12 +468,7 @@ def test_linux_stdio_seek_is_owned_by_raw_syscall_intrinsic(tmp_path, monkeypatc
 def test_owned_integer_string_formatting_and_fprintf(tmp_path):
     obj = _build_stdio_object(tmp_path)
     allocator = _build_allocator_object(tmp_path)
-    symbols = subprocess.run(
-        ["nm", "-g", str(obj)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    symbols = object_symbols(obj, undefined=False)
     assert symbols.returncode == 0, symbols.stdout + symbols.stderr
     prefix = "_" if sys.platform == "darwin" else ""
     for symbol in ("snprintf", "vsnprintf", "fprintf"):
@@ -640,20 +530,7 @@ int main(int argc, char **argv) {
 """,
         encoding="utf-8",
     )
-    link = subprocess.run(
-        [
-            "clang",
-            "-fno-builtin",
-            str(harness),
-            str(obj),
-            str(allocator),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    link = link_c_harness(harness, executable, defines=())
     assert link.returncode == 0, link.stdout + link.stderr
     run = subprocess.run(
         [str(executable), str(output_path)],
@@ -694,20 +571,7 @@ int main(void) {
 """,
         encoding="utf-8",
     )
-    link = subprocess.run(
-        [
-            "clang",
-            "-fno-builtin",
-            str(harness),
-            str(obj),
-            str(allocator),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    link = link_c_harness(harness, executable, defines=())
     assert link.returncode == 0, link.stdout + link.stderr
     run = subprocess.run(
         [str(executable)],
@@ -751,20 +615,7 @@ int main(void) {
 """,
         encoding="utf-8",
     )
-    link = subprocess.run(
-        [
-            "clang",
-            "-fno-builtin",
-            str(harness),
-            str(obj),
-            str(allocator),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    link = link_c_harness(harness, executable, defines=())
     assert link.returncode == 0, link.stdout + link.stderr
     run = subprocess.run(
         [str(executable)],
@@ -793,12 +644,7 @@ int main(void) {
 """,
         encoding="utf-8",
     )
-    link = subprocess.run(
-        ["clang", "-fno-builtin", str(harness), str(obj), "-o", str(executable)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    link = link_c_harness(harness, executable, defines=())
     assert link.returncode == 0, link.stdout + link.stderr
     run = subprocess.run(
         [str(executable)],
@@ -852,20 +698,7 @@ int main(void) {
 """,
         encoding="utf-8",
     )
-    link = subprocess.run(
-        [
-            "clang",
-            "-fno-builtin",
-            str(harness),
-            str(obj),
-            str(allocator),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    link = link_c_harness(harness, executable, defines=())
     assert link.returncode == 0, link.stdout + link.stderr
     run = subprocess.run(
         [str(executable)],
@@ -901,12 +734,7 @@ int main(void) {
 """,
         encoding="utf-8",
     )
-    link = subprocess.run(
-        ["clang", "-fno-builtin", str(harness), str(obj), "-o", str(executable)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    link = link_c_harness(harness, executable, defines=())
     assert link.returncode == 0, link.stdout + link.stderr
     run = subprocess.run(
         [str(executable)],
@@ -968,20 +796,7 @@ int main(int argc, char **argv) {
 """,
         encoding="utf-8",
     )
-    link = subprocess.run(
-        [
-            "clang",
-            "-fno-builtin",
-            str(harness),
-            str(obj),
-            str(allocator),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    link = link_c_harness(harness, executable, defines=())
     assert link.returncode == 0, link.stdout + link.stderr
     run = subprocess.run(
         [str(executable), str(first_path), str(second_path)],
@@ -1037,22 +852,7 @@ int main(void) {
 """,
         encoding="utf-8",
     )
-    link = subprocess.run(
-        [
-            "clang",
-            "-fno-builtin",
-            "-I",
-            str(REPO_ROOT / "pcc" / "py_runtime" / "include"),
-            str(harness),
-            str(obj),
-            str(allocator),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    link = link_c_harness(harness, executable, defines=())
     assert link.returncode == 0, link.stdout + link.stderr
     run = subprocess.run(
         [str(executable)],
@@ -1066,12 +866,7 @@ int main(void) {
 def test_fgetc_preserves_unsigned_bytes_and_eof_state(tmp_path):
     obj = _build_stdio_object(tmp_path)
     allocator = _build_allocator_object(tmp_path)
-    symbols = subprocess.run(
-        ["nm", "-g", str(obj)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    symbols = object_symbols(obj, undefined=False)
     assert symbols.returncode == 0, symbols.stdout + symbols.stderr
     decorated = ("_" if sys.platform == "darwin" else "") + "fgetc"
     assert any(line.endswith(" T " + decorated) for line in symbols.stdout.splitlines())
@@ -1103,20 +898,7 @@ int main(int argc, char **argv) {
 """,
         encoding="utf-8",
     )
-    link = subprocess.run(
-        [
-            "clang",
-            "-fno-builtin",
-            str(harness),
-            str(obj),
-            str(allocator),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    link = link_c_harness(harness, executable, defines=())
     assert link.returncode == 0, link.stdout + link.stderr
     run = subprocess.run(
         [str(executable), str(file_path)],
@@ -1130,12 +912,7 @@ int main(int argc, char **argv) {
 def test_standard_stream_globals_are_owned_and_stderr_writes_fd_two(tmp_path):
     obj = _build_stdio_object(tmp_path)
     allocator = _build_allocator_object(tmp_path)
-    symbols = subprocess.run(
-        ["nm", "-g", str(obj)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    symbols = object_symbols(obj, undefined=False)
     assert symbols.returncode == 0, symbols.stdout + symbols.stderr
     if sys.platform == "darwin":
         required = {"___stdinp", "___stdoutp", "___stderrp"}
@@ -1173,20 +950,7 @@ int main(void) {
 """,
         encoding="utf-8",
     )
-    link = subprocess.run(
-        [
-            "clang",
-            "-fno-builtin",
-            str(harness),
-            str(obj),
-            str(allocator),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    link = link_c_harness(harness, executable, defines=())
     assert link.returncode == 0, link.stdout + link.stderr
     run = subprocess.run(
         [str(executable)],

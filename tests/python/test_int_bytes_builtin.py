@@ -68,7 +68,7 @@ _EXPECTED = [
 
 
 def test_int_bytes_forms_match_cpython(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "int_bytes_prog.py"
     src.write_text(_PROGRAM, encoding="utf-8")

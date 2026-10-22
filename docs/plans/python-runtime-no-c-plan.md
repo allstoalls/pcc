@@ -6,7 +6,7 @@ closed for the current runtime module set
 stable enough that runtime source migration is no longer blocked on
 basic Python frontend bring-up  
 **Problem statement:** pcc-Python runtime modules are increasingly
-ported to `pcc/py_runtime/py/`. The current migration gate is to keep
+ported to `pcc/runtime/py/`. The current migration gate is to keep
 the normal no-libpython archive free of hand-written runtime C, while
 leaving C sources available for cc-C / pcc-C comparison archives and the
 optional compatibility fallback.
@@ -522,7 +522,7 @@ Tasks:
 
 ### C4: Existing Python Runtime Modules Off `py_mem_*`
 
-Status: complete for active `pcc/py_runtime/py` modules.
+Status: complete for active `pcc/runtime/py` modules.
 
 Done:
 
@@ -546,14 +546,14 @@ Done:
 
 Tasks:
 
-- keep a regression grep that `pcc/py_runtime/py` has no `py_mem_*`
+- keep a regression grep that `pcc/runtime/py` has no `py_mem_*`
   users outside historical probes
-- keep a regression grep that active `pcc/py_runtime/py` modules have
+- keep a regression grep that active `pcc/runtime/py` modules have
   no `py_subs_*` helper calls
 
 ### C5: Sentinel And Exception Table Globals
 
-Status: complete for active `pcc/py_runtime/py` modules.
+Status: complete for active `pcc/runtime/py` modules.
 
 Done:
 
@@ -571,7 +571,7 @@ Done:
 
 Tasks:
 
-- add a CI-style grep that fails if active `pcc/py_runtime/py` files
+- add a CI-style grep that fails if active `pcc/runtime/py` files
   reintroduce `py_mem_*` or `py_subs_*`
 - keep the archive-symbol test verifying that `py_substrate.o` in
   `libpy_runtime_pcc_py.a` defines the stable symbols from
@@ -615,8 +615,8 @@ Moved or targeted functions:
 
 Validation gates:
 
-- `make -C pcc/py_runtime libpy_runtime.a`
-- `make -C pcc/py_runtime PCC='env -u LC_ALL uv run pcc' libpy_runtime_pcc_py.a`
+- `make -C pcc/runtime libpy_runtime.a`
+- `make -C pcc/runtime PCC='env -u LC_ALL uv run pcc' libpy_runtime_pcc_py.a`
 - `env -u LC_ALL uv run pytest tests/test_py_runtime_pcc_emit.py -q -n0`
 - `env -u LC_ALL uv run pytest tests/test_runtime_oracle_diff.py -q -n0`
 - targeted `tests/py_corpus/run_pcc.py` filters for string behavior
@@ -789,7 +789,7 @@ no-libpython archive gate closed.
 
 Completed:
 
-- `pcc.py_frontend.type_infer` no longer imports top-level `TYPE_*`
+- `pcc.frontends.python.type_infer` no longer imports top-level `TYPE_*`
   singleton constants from `types.py`; it builds local AST type values
   instead, avoiding CPython-backed module globals in the no-libpython
   stack compile.

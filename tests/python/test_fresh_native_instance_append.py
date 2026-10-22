@@ -5,14 +5,16 @@ from pathlib import Path
 import subprocess
 import textwrap
 
+import pytest
+
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
 
 
 def _generate_ir(source: str, module_name: str = "fresh_append") -> str:
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend import type_infer
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python import type_infer
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
     lifted = parse_and_lift(source, "<fresh-native-instance-append>", module_name)
     typed = type_infer.infer_module(lifted)
@@ -24,6 +26,59 @@ def _function_body(ir_text: str, module_name: str, function_name: str) -> str:
     start = ir_text.index(marker)
     start = ir_text.rfind("define ", 0, start)
     return ir_text[start : ir_text.index("\n}", start) + 2]
+
+
+ROOT_JOIN_SOURCE = '''class Unit:
+    def __init__(self, name, path, content):
+        self.name = name
+        self.path = path
+        self.content = content
+def read(path, enabled):
+    if enabled:
+        with open(path, "r") as f:
+            return [Unit(path, path, f.read())], path
+    units = []
+    with open(path, "r") as f:
+        units.append(Unit(path, path, f.read()))
+    return units, path
+'''
+
+
+@pytest.mark.parametrize("target", ("arm64-apple-darwin", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "x86_64-pc-windows-msvc"))
+def test_fresh_append_receiver_reload_keeps_error_root_states_equal(target):
+    from pcc.backend.owned_object_emit import emit_owned_object
+
+    text = _generate_ir(ROOT_JOIN_SOURCE, "append_root_join")
+    assert len(emit_owned_object(text, target)) > 0
+
+
+def test_native_file_with_marks_its_target_bound_before_the_body():
+    text = _generate_ir(ROOT_JOIN_SOURCE, "append_root_join")
+    body = _function_body(text, "append_root_join", "read")
+    marks_bound = any("store i1 1" in line and ".bound.f.owned" in line for line in body.splitlines())
+    assert marks_bound, "with open binding remained unbound in its body"
+
+
+@pytest.mark.integration
+def test_fresh_append_inside_with_runs_both_branches_all_collectors(tmp_path, monkeypatch, pcc_runtime_archive, python_program_compiler):
+    payload = tmp_path / "payload.txt"
+    payload.write_text("native value")
+    source = tmp_path / "append_root_join.py"
+    source.write_text(ROOT_JOIN_SOURCE + '''import sys
+def main(path):
+    for enabled in (False, True):
+        units, folder = read(path, enabled)
+        assert folder == path and len(units) == 1
+        assert units[0].content == "native value"
+    print("APPEND_WITH_ROOT_JOIN_OK")
+main(sys.argv[1])
+''')
+    binary = tmp_path / "append_root_join"
+    monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
+    python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off", ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
+    for backend in range(5):
+        result = subprocess.run([str(binary), str(payload)], env=dict(os.environ, PCC_GC_BACKEND=str(backend), PCC_GC_REFCOUNT_PROVENANCE_PROBE="2"), capture_output=True, text=True, timeout=20)
+        assert result.returncode == 0 and result.stdout == "APPEND_WITH_ROOT_JOIN_OK\n" and result.stderr == "", (backend, result.returncode, result.stdout, result.stderr)
 
 
 def test_direct_fresh_instance_append_uses_trusted_store_after_root_reloads():
@@ -153,13 +208,13 @@ def test_non_proven_constructor_append_cases_stay_on_generic_store():
 
 
 def test_trusted_append_keeps_all_gc_barriers_and_borrowed_item_accounting():
-    py_obj = (REPO_ROOT / "pcc/py_runtime/py/py_obj.py").read_text(
+    py_obj = (REPO_ROOT / "pcc/runtime/py/py_obj.py").read_text(
         encoding="utf-8"
     )
-    py_list = (REPO_ROOT / "pcc/py_runtime/py/py_list.py").read_text(
+    py_list = (REPO_ROOT / "pcc/runtime/py/py_list.py").read_text(
         encoding="utf-8"
     )
-    runtime_abi = (REPO_ROOT / "pcc/py_frontend/codegen/runtime_abi.py").read_text(
+    runtime_abi = (REPO_ROOT / "pcc/frontends/python/codegen/runtime_abi.py").read_text(
         encoding="utf-8"
     )
 
@@ -215,9 +270,9 @@ def test_trusted_append_keeps_all_gc_barriers_and_borrowed_item_accounting():
 def test_fresh_instance_append_preserves_identity_finalizer_and_weakref_all_gcs(
     tmp_path: Path,
     monkeypatch,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "fresh_append_gc_matrix.py"
     source.write_text(
@@ -281,7 +336,7 @@ def test_fresh_instance_append_preserves_identity_finalizer_and_weakref_all_gcs(
         encoding="utf-8",
     )
     expected = ["True", "7", "1", "True", "0", "8", "1"]
-    runtimes = (("pcc-python", pcc_py_runtime_archive),)
+    runtimes = (("pcc-python", pcc_runtime_archive),)
     monkeypatch.delenv("PCC_GC_BACKEND", raising=False)
     for runtime_name, runtime_archive in runtimes:
         executable = tmp_path / ("fresh_append_" + runtime_name + ".out")

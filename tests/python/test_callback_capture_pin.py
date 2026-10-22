@@ -48,9 +48,9 @@ def capture_pin_program(tmp_path_factory):
     runtime_value = os.environ.get("PCC_RUNTIME_ARCHIVE", "")
     assert runtime_value, "select an explicit matching runtime; no implicit build"
     runtime = Path(runtime_value).resolve(strict=True)
-    verify_runtime_archive_manifest(runtime, runtime_root=ROOT / "pcc/py_runtime")
+    verify_runtime_archive_manifest(runtime, runtime_root=ROOT / "pcc/runtime")
     constants = {}
-    tree = ast.parse((ROOT / "pcc/py_runtime/py/py_abi_constants.py").read_text())
+    tree = ast.parse((ROOT / "pcc/runtime/py/py_abi_constants.py").read_text())
     for statement in tree.body:
         if isinstance(statement, ast.Assign) and isinstance(statement.value, ast.Constant):
             for target in statement.targets:
@@ -71,7 +71,7 @@ def capture_pin_program(tmp_path_factory):
                        PCC_PY_FRONTEND_IR_CACHE="0", PCC_SELF_BACKEND_OBJECT_CACHE="0")
     identities = {str(path): _sha(path) for path in (source, runtime)}
     built = _run([sys.executable, "-P", "-m", "pcc", "--backend", "self", "--no-cache", "-O0",
-                  "--cpp-arg=-I" + str(ROOT / "pcc/py_runtime/include"),
+                  "--cpp-arg=-I" + str(ROOT / "pcc/runtime/include"),
                   "--emit-obj", str(obj), str(source)], environment, directory, "compile-host-owned")
     assert built.returncode == 0, built.stdout + built.stderr
     linked = _run([sys.executable, "-P", "-m", "pcc.backend.owned_link_driver", "--target",

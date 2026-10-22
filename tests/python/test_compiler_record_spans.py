@@ -194,7 +194,7 @@ def test_record_span_independent_cursors_keep_their_snapshots():
 
 
 def test_record_span_native_self_backend_executes_aggregate_handles(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python_multi
+    from pcc.frontends.python.pipeline import compile_python_multi
 
     repo = Path(__file__).resolve().parents[2]
     consumer = tmp_path / "span_canary.py"

@@ -93,14 +93,14 @@ def test_first_install_command_never_builds_over_an_existing_entry(
 
 
 def test_copied_runtime_preserves_static_abi_exports(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     frozen = tmp_path / "frozen"
-    ports = frozen / "pcc/py_runtime/py"
+    ports = frozen / "pcc/runtime/py"
     ports.mkdir(parents=True)
     (ports / "probe.py").write_text(
         "__pcc_runtime_port__ = True\n"
-        "from pcc.py_runtime.py.py_abi_constants import PY_FLAG_IMMORTAL\n"
+        "from pcc.runtime.py.py_abi_constants import PY_FLAG_IMMORTAL\n"
         "from pcc.unsafe import define_global_header\n"
         'define_global_header("installed_runtime_header", 1, 0, PY_FLAG_IMMORTAL)\n'
     )
@@ -325,8 +325,8 @@ def bootstrap_evidence(tmp_path):
         "returncode": 0,
         "cwd": str(source),
         "command": [
-            "/bin/bash",
-            str(source / "scripts/bootstrap.sh"),
+            sys.executable,
+            str(source / "scripts/bootstrap.py"),
             "--out-dir",
             str(output_root),
             "--backend",
@@ -389,11 +389,11 @@ def test_bootstrap_rejects_changed_bound_evidence(tmp_path, changed):
     if changed == "source":
         manifest_path = first / "source-manifest.json"
         manifest = json.loads(manifest_path.read_text())
-        source = first / "source-snapshot/pcc/cli_core.py"
+        source = first / "source-snapshot/pcc/driver/cli_core.py"
         source.chmod(0o644)
         source.write_text("changed = True\n")
         source.chmod(0o444)
-        manifest["files"]["pcc/cli_core.py"] = digest(source)
+        manifest["files"]["pcc/driver/cli_core.py"] = digest(source)
         manifest["bootstrap_source_sha256"] = ab._source_manifest_identity(
             manifest["files"]
         )

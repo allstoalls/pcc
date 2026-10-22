@@ -1,5 +1,5 @@
 """GC1/2 native counter regression: ordinary raw-scaffold diagnostic source.
-Use native pcc1 -o, explicit candidate runtime, PCC_WITH_THREADS=0. Each shape
+Use native pcc1 -o, explicit candidate runtime (always threaded). Each shape
 runs in a fresh process. No collector threshold or gray counter is overwritten.
 All allocation precedes the state window. A raw status write/exit avoids any
 managed allocation after a failing counter check. 000/exit0 means pass.

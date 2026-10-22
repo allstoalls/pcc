@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend.codegen.runtime_abi import (
+from pcc.frontends.python import pipeline
+from pcc.frontends.python.codegen.runtime_abi import (
     FREESTANDING_GC_RUNTIME_GLOBALS,
     RUNTIME_SIGNATURES,
 )
-from pcc.py_frontend.codegen.freestanding_abi_constants import ABI_CONSTANTS
+from pcc.frontends.python.codegen.freestanding_abi_constants import ABI_CONSTANTS
 from pcc.backend import precise_stackmap
 from pcc.backend.precise_stackmap import (
     ARCH_AARCH64,
@@ -33,7 +33,7 @@ from tests.runtime_build_cache import cached_threaded_pcc_python_runtime
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 MAPPED_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_mapped_roots.py"
 ROOT_OPS_SOURCE = RUNTIME_DIR / "py" / "freestanding_gc_root_operations.py"
 PROMOTION_SOURCE = (
@@ -47,6 +47,10 @@ PUBLIC_SYMBOLS = {
     "pcc_gc_trace_continuation_roots",
     "pcc_gc_rewrite_continuation_roots",
     "pcc_gc_consume_precise_stackmap",
+    "pcc_gc_register_precise_stackmap_table",
+    "pcc_gc_precise_stack_diff",
+    "pcc_gc_precise_stack_diff_if_requested",
+    "pcc_gc_visit_precise_frame",
 }
 INTERNAL_SYMBOLS = {
     "pcc_gc_visit_mapped_root_slot",
@@ -62,6 +66,22 @@ STACKMAP_HELPER_SYMBOLS = {
     "pcc_gc_stackmap_u32",
     "pcc_gc_stackmap_u64_strictly_after",
     "pcc_gc_stackmap_validate_location",
+    "pcc_gc_registered_roots_hold",
+    "pcc_gc_stack_diff_note_mapped",
+    "pcc_gc_stack_diff_mapped_holds",
+    "pcc_gc_stack_diff_unmapped_registered",
+    "pcc_gc_stack_diff_registered_in_range",
+    "pcc_gc_stackmap_index_swap",
+    "pcc_gc_stackmap_index_sift",
+    "pcc_gc_stackmap_index_ready",
+    "pcc_gc_stackmap_find_function",
+    "pcc_gc_stackmap_roots_mode",
+    "pcc_gc_stackmap_visit_stack_roots",
+    "pcc_gc_stackmap_payload_size",
+    "pcc_gc_stackmap_runtime_table_valid",
+    "pcc_gc_stackmap_visit_runtime_record",
+    "pcc_gc_stack_diff_write_text",
+    "pcc_gc_stack_diff_write_decimal",
 }
 ROOT_OPS_PROVIDER_SYMBOLS = {
     "pcc_gc_mark_root_gray_if_known",
@@ -69,26 +89,40 @@ ROOT_OPS_PROVIDER_SYMBOLS = {
 }
 PROMOTION_PROVIDER_SYMBOLS = {"pcc_gc_promote_cached_frame_slot"}
 PROVIDER_SYMBOLS = ROOT_OPS_PROVIDER_SYMBOLS | PROMOTION_PROVIDER_SYMBOLS
+# py_subs_exc_cache_slot is not raw-only: codegen reads the builtin exception
+# cache slots through it (name, iterator, numeric and generator lowering).
 RAW_ONLY_CROSS_OBJECT_SYMBOLS = PROVIDER_SYMBOLS | INTERNAL_SYMBOLS | {
     "pcc_gc_root_map_is_borrowed",
     "pcc_gc_root_slot_count_from_map",
-    "py_subs_exc_cache_slot",
 }
 RAW_FUNCTION_IMPORTS = {
     "pcc_gc_backend",
+    "malloc",
     "pcc_gc_mark_root_gray_if_known",
+    "pcc_gc_pointer_is_managed",
     "pcc_gc_promote_cached_frame_slot",
     "pcc_gc_resolve_root_slot_unlocked",
     "pcc_gc_root_map_is_borrowed",
     "pcc_gc_root_slot_count_from_map",
+    "pcc_platform_getenv",
     "pcc_py_gc_minor_graph_lock",
     "pcc_py_gc_minor_graph_unlock",
     "py_subs_exc_cache_slot",
+    "realloc",
+    "write",
 }
 RAW_GLOBAL_IMPORTS = {
     "pcc_gc_continuation_root_head",
     "pcc_gc_frame_head",
+    "pcc_gc_precise_stackmap_table",
     "pcc_gc_scheduler_root_head",
+    "pcc_gc_stack_diff_capacity",
+    "pcc_gc_stack_diff_count",
+    "pcc_gc_stack_diff_values",
+    "pcc_gc_stackmap_index",
+    "pcc_gc_stackmap_index_count",
+    "pcc_gc_stackmap_location_base",
+    "pcc_gc_stackmap_roots_setting",
 }
 # Not GC state: the managed runtime's builtin type root table, which the
 # visitor walks for the builtin class statics it keeps alive.
@@ -120,6 +154,11 @@ def test_mapped_roots_stackmap_constants_match_producer_abi():
         ABI_CONSTANTS["stackmap.location.owned"]
         == precise_stackmap.LOCATION_OWNED
     )
+    for part in ("header", "function", "record", "live_set", "location", "rare"):
+        assert (
+            ABI_CONSTANTS["stackmap.runtime." + part + "_size"]
+            == getattr(precise_stackmap, "RUNTIME_" + part.upper() + "_SIZE")
+        )
     source = MAPPED_SOURCE.read_text(encoding="utf-8")
     assert "_PCC_STACKMAP_" not in source
     for name in (
@@ -132,6 +171,12 @@ def test_mapped_roots_stackmap_constants_match_producer_abi():
         "stackmap.location.stack_indirect",
         "stackmap.location.managed",
         "stackmap.location.owned",
+        "stackmap.runtime.header_size",
+        "stackmap.runtime.function_size",
+        "stackmap.runtime.record_size",
+        "stackmap.runtime.live_set_size",
+        "stackmap.runtime.location_size",
+        "stackmap.runtime.rare_size",
     ):
         assert f'abi_constant("{name}")' in source
 
@@ -271,6 +316,8 @@ int main(void) {
     obj->length = 0;
     obj->capacity = 0;
     obj->items = NULL;
+    /* Relocation skips an owner until its initialization is published. */
+    pcc_gc_publish_initialized((PyObject *)obj);
     int64_t stable = pcc_gc_object_id((PyObject *)obj);
     pcc_gc_store_root(&slots[0], (PyObject *)obj);
     pcc_gc_register_continuation_root(frame_map, slots);
@@ -300,6 +347,7 @@ def _registered_scan_harness_source() -> str:
 #include <stdio.h>
 
 extern int64_t pcc_gc_visit_registered_root_slots(int64_t mode, int64_t resolve);
+extern int64_t pcc_gc_visit_builtin_exception_cache_slots(int64_t mode, int64_t resolve);
 
 int main(void) {
     if (pcc_gc_set_backend(PCC_GC_KIND_INCREMENTAL_TRICOLOR) != 0) return 2;
@@ -311,8 +359,12 @@ int main(void) {
     pcc_gc_frame_enter(frame_map, frame_slots);
     pcc_gc_register_continuation_root(continuation_map, continuation_slots);
     pcc_gc_scheduler_root_register(&scheduler_root);
-    printf("registered:%lld\n",
-           (long long)pcc_gc_visit_registered_root_slots(1, 0));
+    /* The builtin exception and type caches are visited too; their size
+       follows the runtime's builtin tables, so report them separately. */
+    int64_t builtin = pcc_gc_visit_builtin_exception_cache_slots(1, 0);
+    printf("registered:%lld builtin:%lld\n",
+           (long long)(pcc_gc_visit_registered_root_slots(1, 0) - builtin),
+           (long long)builtin);
     pcc_gc_scheduler_root_unregister(&scheduler_root);
     pcc_gc_unregister_continuation_root(continuation_slots);
     pcc_gc_frame_leave(frame_slots);
@@ -434,6 +486,8 @@ int main(void) {{
     obj->length = 0;
     obj->capacity = 0;
     obj->items = NULL;
+    /* Relocation skips an owner until its initialization is published. */
+    pcc_gc_publish_initialized((PyObject *)obj);
     int64_t stable = pcc_gc_object_id((PyObject *)obj);
     pcc_gc_store_root(&frame[3], (PyObject *)obj);
     pcc_gc_register_continuation_root(frame_map, &frame[3]);
@@ -498,10 +552,10 @@ def _run_ok(implementation: Path, env: dict[str, str]) -> str:
 
 def test_archive_owns_mapped_visitor_gc0_to_gc4(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ):
     symbols_result = subprocess.run(
-        ["nm", "-A", "-g", str(pcc_py_runtime_archive)],
+        ["nm", "-A", "-g", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -524,7 +578,7 @@ def test_archive_owns_mapped_visitor_gc0_to_gc4(
         tmp_path,
         "mapped_pcc_python",
         _mapped_harness_source(),
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
     )
     for backend in range(5):
         output = _run_ok(implementation, {**os.environ, "PCC_GC_BACKEND": str(backend)})
@@ -533,13 +587,13 @@ def test_archive_owns_mapped_visitor_gc0_to_gc4(
 
 def test_backend4_precise_stackmap_consumer_rewrites_exact_frame_location(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ):
     implementation = _link_harness(
         tmp_path,
         "precise_stackmap_pcc_python",
         _precise_stackmap_harness_source(),
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
     )
     result = subprocess.run(
         [str(implementation)],
@@ -554,7 +608,7 @@ def test_backend4_precise_stackmap_consumer_rewrites_exact_frame_location(
         tmp_path,
         "mapped_relocation_pcc_python",
         _relocation_harness_source(),
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
     )
     assert _run_ok(relocation_implementation, dict(os.environ)) == "relocate:1,1,1,1\n"
 
@@ -562,7 +616,7 @@ def test_backend4_precise_stackmap_consumer_rewrites_exact_frame_location(
         tmp_path,
         "mapped_registered_scan_pcc_python",
         _registered_scan_harness_source(),
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
     )
     registered_result = subprocess.run(
         [str(registered_scan)], capture_output=True, text=True, timeout=30
@@ -570,7 +624,14 @@ def test_backend4_precise_stackmap_consumer_rewrites_exact_frame_location(
     assert registered_result.returncode == 0, (
         registered_result.stdout + registered_result.stderr
     )
-    assert registered_result.stdout == "registered:26\n"
+    # Frame (2 slots), continuation (1) and scheduler (1) roots, each once,
+    # plus at least every builtin exception cache slot.
+    registered, builtin = (
+        int(field.split(":")[1]) for field in registered_result.stdout.split()
+    )
+    assert registered == 4, registered_result.stdout
+    from pcc.runtime.py.py_abi_constants import PY_EXC_N_BUILTIN
+    assert builtin >= PY_EXC_N_BUILTIN, registered_result.stdout
 
 
 def test_mapped_root_visitor_survives_threaded_registry_mutation(

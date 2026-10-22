@@ -1,0 +1,152 @@
+{
+  "actual_counts": {
+    "collected": 36,
+    "errors": 0,
+    "failed": 0,
+    "passed": 36,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0
+  },
+  "base_pcc_git_tree": "dc63c2a946f533f7b31ce63db2f759a044fdc37f",
+  "candidate_artifact_commit": "7966254275e86fad4416b24c749a3442d9ea16c0",
+  "candidate_manifest_sha256": "a844845996dc7ec68a33a6c2975fa8ea1c2e1abe32e2f58bed9df7ebb073d552",
+  "candidate_pcc_git_tree": "ee02ba6bf0d79e9706c1791aa650093f5f91c338",
+  "candidate_source_manifest_sha256": "568c44d837939cde5ab4da2c2f0115ab30f978716bc423a40e07d9cf2bdc0185",
+  "changed_paths": [
+    {
+      "base_bytes": 13995,
+      "base_sha256": "f564767a154adae848e53f1286833c08b618c9b6311a688096bfdd5548be1aeb",
+      "mode": "100644",
+      "path": "pcc/backend/coff_x86_64.py",
+      "post_bytes": 14262,
+      "post_sha256": "15939bf25b6b8cffd853ac82cd99fbbe1708a3e8d3c8b7bf6599578a8bc440f5"
+    },
+    {
+      "base_bytes": 0,
+      "base_sha256": null,
+      "mode": "100644",
+      "path": "pcc/backend/indexed_phase_timing.py",
+      "post_bytes": 3161,
+      "post_sha256": "b2123e4546245e39d0dc937bc7da2e22d3fa3d57e6f351946b1912663714b7ca"
+    },
+    {
+      "base_bytes": 101726,
+      "base_sha256": "16054b9b562f3e5e4adf70fb459e2e1b5fe58f5eeb6af9f8d9fa6ad8f8b801d8",
+      "mode": "100644",
+      "path": "pcc/backend/self_backend_aarch64_darwin.py",
+      "post_bytes": 103437,
+      "post_sha256": "fe3c14c169ab9b1af2852c7a0753c2d956826dd27d827eb1a96649ec5a759233"
+    },
+    {
+      "base_bytes": 2779,
+      "base_sha256": "1b042b1297c67713513a764f8f47dea08b6afaed6b83f0f963034a90cca77837",
+      "mode": "100644",
+      "path": "pcc/backend/self_backend_prepare.py",
+      "post_bytes": 3151,
+      "post_sha256": "bf2a466eef5af72406fcb902e215c607b1c3f4665c0cada8ad1dd677899d4f1e"
+    },
+    {
+      "base_bytes": 133440,
+      "base_sha256": "9c515249d01aa01a0baa6913f7e51c28d80555c90685160b9e5590a755677ec5",
+      "mode": "100644",
+      "path": "pcc/backend/self_backend_x86_64_linux.py",
+      "post_bytes": 134423,
+      "post_sha256": "4d866d533c945debc79ca793eb1273999054b083ad7a84e48f2a04617d4c894e"
+    },
+    {
+      "base_bytes": 2472,
+      "base_sha256": "43328564860270186bd597549c39a70d891715d388613353c1667f1f2265aba6",
+      "mode": "100644",
+      "path": "pcc/backend/target_objects.py",
+      "post_bytes": 3710,
+      "post_sha256": "5ea98a6c8b37ff5b0555865164df73ea14a4b58e50e2e3abdc4833cb0a57e4a8"
+    },
+    {
+      "base_bytes": 51742,
+      "base_sha256": "a2109b4670c369de7ac28bca5af991a6dbf93e9ea070d918a4eecabe6f4314e2",
+      "mode": "100644",
+      "path": "pcc/frontends/python/pipeline_frontend_worker_execution.py",
+      "post_bytes": 55067,
+      "post_sha256": "699cf16413e750d9c50c2ebff63332a393f412f94d208a1e77fd472ab75a0f18"
+    },
+    {
+      "base_bytes": 0,
+      "base_sha256": null,
+      "mode": "100644",
+      "path": "tests/python/test_indexed_phase_timing.py",
+      "post_bytes": 11407,
+      "post_sha256": "e076cc00c629b3ba1bf187e5c130b9d7eaadb2148f01d92a9c25e81a61b6d9ab"
+    }
+  ],
+  "command_scope": [
+    "pytest",
+    "-x",
+    "-n0",
+    "-vv",
+    "--tb=short",
+    "-o",
+    "addopts=",
+    "tests/python/test_indexed_phase_timing.py"
+  ],
+  "coverage": [
+    "Fixed 13-field nanosecond accumulators and failure/zero-clock behavior",
+    "Once-only best-effort reports and inclusive-scope labels",
+    "Existing worker timing gate/report placement inspected via AST",
+    "Stubbed four-target dispatch preserves options, call order, result and exception identities",
+    "Packed stackmap forwarding and COFF assembly/container split with stubbed work"
+  ],
+  "created_at": "2026-10-10T01:38:46.230566+00:00",
+  "deselected": [],
+  "evidence": {
+    "base_postseal_sha256": "a21b4019974cde50191dd6aeed615c6d1e2cf0914e0e022ecca78022917701b1",
+    "bootstrap_sha256": "6d5c7dc6a120b619db1ee3a80b40e4779668d22ce69d96d78aaae10a398a9860",
+    "candidate_postseal_sha256": "70d8a43adc12b3146e141516ed9fc8c1820a6e4b6772b38a3cc923c28eb5b2c0",
+    "collection_sha256": "7386aea7b851d4c4b1aa871b50d1d317e7b6e084c1b5123d0f8702e41510431f",
+    "durable_stdout_sha256": "f55afd171d1a2bd571cabb2078c53076388241e900490a1385f03861b433a548",
+    "guard_sha256": "727b84789c2b9d484864cec7a6258b9946be5e4353796558f7b2426827f9216b",
+    "junit_sha256": "e44bcd6bee8c5405515b5fe2aeabc35de7eb5656ac654a5c0c762e3a630c8e28",
+    "payload_sha256": "3d2fd898af105260b63867bba7c4a4aa452401dac615322fac50b026fb38ab9b",
+    "qualification_sha256": "7607a83bf12781847f5821031b680f1a74b99b33e64d28700ab3681af23ff5f9"
+  },
+  "execution_boundary": {
+    "audit_denials": 0,
+    "cleanup_status": "CLEAN",
+    "continuous_free_disk_reserve_bytes": 4294967296,
+    "elapsed_and_rss_scope": "Diagnostic gate including hashing/imports/tests/cleanup; not a speed or memory benchmark",
+    "guard_elapsed_s": 4.598700393005856,
+    "guard_status": "COMPLETE",
+    "hard_address_space_bytes": 4294967296,
+    "hard_process_limit": 0,
+    "host": "CPython 3.15.0rc1 on Linux x86_64",
+    "host_deadline_s": 300,
+    "max_net_disk_growth_bytes": 536870912,
+    "no_remaining_children": true,
+    "returncode": 0,
+    "root_reaped": true,
+    "sampled_process_rss_bytes": 77840384,
+    "shared_exclusive_lock_released": true
+  },
+  "limits": [
+    "Tests do not execute real compiler generation, backend algorithms, object emission, runtime builds, FFI or native programs.",
+    "Native compilation and execution of the new timing helper remain UNRUN.",
+    "Real worker timing output, all-GC, full async/gateway, pcc1 and complete Stage1/fixed point remain UNRUN for this increment.",
+    "No algorithmic improvement, speedup, memory benefit or complete-master validation is claimed.",
+    "Only the eight bound production/test files are proposed for later application; preserved artifacts remain unapplied until separate approval."
+  ],
+  "production_base_commit": "b68d422cf134357a16ea79be004c1174c7e39fac",
+  "repository": "ikshengmin/pcc",
+  "retained_snapshot_codegen_checksum": "e0145952375a080377be0084bcb6b91ce825102c213b5453473c3896d2fac36c",
+  "schema": "pcc.indexed-phase-timing-focused-host.v1",
+  "source_integrity": {
+    "candidate_before_after": "PASS",
+    "candidate_files": 30027,
+    "candidate_logical_bytes": 390532827,
+    "imported_source_closure": "PASS",
+    "ordinary_independent_copy": true,
+    "protected_base_after": "PASS"
+  },
+  "source_relation": "Retained V6 snapshot: complete pcc subtree equals published b68d422c; full source retains older unrelated docs/bootstrap and native-test f391 bytes. Not a full current-master checkout.",
+  "status": "PASS",
+  "test_file": "tests/python/test_indexed_phase_timing.py"
+}

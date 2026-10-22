@@ -9,7 +9,7 @@ import pytest
 from pcc.backend.self_backend_dispatch import emit_self_asm
 from pcc.backend.self_backend_targets import classify_self_backend_target_triple
 from pcc.backend.self_backend_x86_64_linux import emit_x86_64_linux_asm
-from pcc.llvm_capi import binding as llvm
+from pcc.frontends.python.pipeline_targets import host_target_triple
 from tests.c_testsuite_cases import _host_cc, subprocess_env
 
 
@@ -18,9 +18,7 @@ _SIGN64 = 1 << 63
 _INT64_MIN = -(1 << 63)
 _REPO = Path(__file__).resolve().parents[2]
 _INVENTORY = _REPO / "docs" / "refs_docs" / "compiler-rt-builtins-inventory.md"
-llvm.initialize_native_target()
-llvm.initialize_native_asmprinter()
-_HOST_TRIPLE = llvm.Target.from_default_triple().triple
+_HOST_TRIPLE = host_target_triple()
 _SELF_TARGET_VERDICT = classify_self_backend_target_triple(_HOST_TRIPLE)
 _SELF_TARGET_GATE = (
     None

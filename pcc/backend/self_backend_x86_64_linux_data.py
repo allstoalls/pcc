@@ -3,12 +3,12 @@ from __future__ import annotations
 """x86_64 Linux global/data emission helpers for the self backend."""
 
 import re
-import struct
 
 from . import BackendUnavailable
 from .self_backend_ir import GlobalDef, TypeDesc, _align_to
-from .self_backend_literals import fp_bitcast_initializer_bits
+from .self_backend_literals import fp_bitcast_initializer_bits, wide_int_quad_lines
 from .self_backend_module_symbols import PreparedModuleSymbols
+from .wide_float import encode_float_bits, float_bytes
 from .self_backend_parse import (
     decode_global_name,
     decode_value_token,
@@ -102,6 +102,13 @@ def emit_scalar_initializer(
     elif init == "true":
         init = "1"
     if ty.is_ptr:
+        if init.startswith("bitcast"):
+            decoded = decode_value_token(init, type_context=module_symbols.type_context)
+            if decoded == init or decoded.startswith("cexpr:"):
+                raise BackendUnavailable(
+                    f"x86_64 self backend does not support pointer bitcast global initializer for {global_name!r}: {init!r}"
+                )
+            return emit_scalar_initializer(ty, decoded, global_name, module_symbols)
         if init.startswith("gep0:"):
             return [f"  .quad {asm_symbol(init.split(':', 1)[1], module_symbols)}"]
         if init.startswith("gepconst:"):
@@ -110,20 +117,20 @@ def emit_scalar_initializer(
             suffix = "" if offset == 0 else f"+{offset}"
             return [f"  .quad {asm_symbol(base, module_symbols)}{suffix}"]
         if init.startswith("getelementptr"):
-            base, offset = parse_constant_gep(init)
+            base, offset = parse_constant_gep(init, type_context=module_symbols.type_context)
             suffix = "" if offset == 0 else f"+{offset}"
             return [f"  .quad {asm_symbol(base, module_symbols)}{suffix}"]
         if init.startswith("@"):
             return [f"  .quad {asm_symbol(decode_global_name(init), module_symbols)}"]
+        if init.startswith("inttoptrconst:"):
+            return [f"  .quad {int(init.split(':', 1)[1])}"]
         if init.startswith("inttoptr"):
-            decoded = decode_value_token(init)
+            decoded = decode_value_token(init, type_context=module_symbols.type_context)
             if decoded.startswith("inttoptrconst:"):
                 return [f"  .quad {int(decoded.split(':', 1)[1])}"]
             raise BackendUnavailable(
                 f"x86_64 self backend does not support non-constant inttoptr global initializer for {global_name!r}: {init!r}"
             )
-        if init.startswith("inttoptrconst:"):
-            return [f"  .quad {int(init.split(':', 1)[1])}"]
         return [f"  .quad {int(init)}"]
     if ty.is_int:
         if ty.width <= 8:
@@ -132,13 +139,16 @@ def emit_scalar_initializer(
             return [f"  .short {int(init)}"]
         if ty.width <= 32:
             return [f"  .long {int(init)}"]
+        if ty.width > 64:
+            return wide_int_quad_lines(init, ty.slot_size)
         return [f"  .quad {int(init)}"]
     if ty.is_fp:
+        if ty.width == 80:
+            return emit_byte_data(float_bytes(init, 80))
         if is_hex_literal(init):
             bits = int(init, 16)
             if ty.width <= 32:
-                value = struct.unpack(">d", bits.to_bytes(8, byteorder="big", signed=False))[0]
-                fp32_bits = struct.unpack("<I", struct.pack("<f", value))[0]
+                fp32_bits = encode_float_bits(init, 32)
                 return [f"  .long {fp32_bits}"]
             if ty.width <= 64:
                 return [f"  .quad {bits}"]
@@ -215,7 +225,7 @@ def emit_typed_initializer(
         lines: list[str] = []
         stride = _align_to(ty.elem.slot_size, ty.elem.align)
         for item in items:
-            lines.extend(emit_typed_initializer(ty.elem, strip_typed_initializer(item), global_name, module_symbols))
+            lines.extend(emit_typed_initializer(ty.elem, strip_typed_initializer(item, type_context=module_symbols.type_context), global_name, module_symbols))
             lines.extend(emit_zero_fill(stride - ty.elem.slot_size))
         return lines
     if ty.is_struct:
@@ -234,7 +244,7 @@ def emit_typed_initializer(
         for index, (field_ty, item) in enumerate(zip(ty.fields, items)):
             field_offset = ty.field_offset(index)
             lines.extend(emit_zero_fill(field_offset - offset))
-            lines.extend(emit_typed_initializer(field_ty, strip_typed_initializer(item), global_name, module_symbols))
+            lines.extend(emit_typed_initializer(field_ty, strip_typed_initializer(item, type_context=module_symbols.type_context), global_name, module_symbols))
             offset = field_offset + field_ty.slot_size
         lines.extend(emit_zero_fill(ty.slot_size - offset))
         return lines
@@ -405,5 +415,8 @@ def emit_globals(
             lines.extend(emit_zero_fill(global_.type.slot_size))
         else:
             lines.append(emit_global_initializer(global_, module_symbols))
+        if global_.type.slot_size == 0:
+            # An empty struct/union object still needs a distinct address.
+            lines.append("  .zero 1")
         lines.append("")
     return lines

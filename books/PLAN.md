@@ -29,8 +29,8 @@
   仓库地图;编译模式(single-file / merged / --separate-tus / --sources-from-make);
   CLI 层(`pcc/pcc.py`、`cli_core.py`、`cli_bootstrap.py`)、`api.py`、`project.py`;
   三后端选择(llvm / llvm_capi / self)与关键旗标(`--python-libpython`、`--ir-scaffold`)。
-- 素材:`pcc/pcc.py`、`pcc/cli_core.py`、`pcc/api.py`、`pcc/project.py`、
-  `pcc/evaluater/c_evaluator.py`(只看流水线骨架)、`pcc/py_frontend/pipeline.py`(同)、
+- 素材:`pcc/pcc.py`、`pcc/driver/cli_core.py`、`pcc/api.py`、`pcc/driver/project.py`、
+  `pcc/frontends/c/evaluator/c_evaluator.py`(只看流水线骨架)、`pcc/frontends/python/pipeline.py`(同)、
   `README.md`、`AGENTS.md` Repository Map / Compile Modes。
 - 设计问题:为什么 merged TU 是目录默认?为什么 host 查询走 subprocess 而非 in-process?
 
@@ -38,22 +38,22 @@
 
 ### 第 3 章 C 前端:解析、伪 libc 与求值器 (The C Frontend: Parsing, fake-libc, and the Evaluator)
 文件:`ch03-c-frontend.md`
-- 边界:`pcc/parse/c_parser.py`(PLY、解析器缓存与版本号)、`pcc/preprocessor.py`、
+- 边界:`pcc/frontends/c/parse/c_parser.py`(PLY、解析器缓存与版本号)、`pcc/frontends/c/preprocessor.py`、
   `utils/fake_libc_include/` 的设计(为什么伪造 libc 头;host ABI 失配在哪暴露)、
-  `pcc/evaluater/c_evaluator.py` 流水线(preprocess/parse/IR/optimize/execute)、
-  `pcc/project.py` 源收集与 `--sources-from-make` 的原理及限制。
+  `pcc/frontends/c/evaluator/c_evaluator.py` 流水线(preprocess/parse/IR/optimize/execute)、
+  `pcc/driver/project.py` 源收集与 `--sources-from-make` 的原理及限制。
 - 素材:上列文件 + `AGENTS.md` Common Pitfalls 里 stale parser cache、目录探针误编译。
 - 案例研究:从 `docs/investigations/INDEX.md` 选 C 侧条目(struct/union tag 重用、
   static/incomplete array、casted function-pointer globals 类)。
 
 ### 第 4 章 C 语义降低与符号性 (C Semantic Lowering and Signedness)
 文件:`ch04-c-lowering-signedness.md`
-- 边界:`pcc/codegen/c_codegen.py` 的组织;核心不变式——int 与 unsigned 同为 i32、
+- 边界:`pcc/frontends/c/codegen/c_codegen.py` 的组织;核心不变式——int 与 unsigned 同为 i32、
   符号性单独跟踪(`_tag_unsigned`/`_clear_unsigned`/`_is_unsigned_val`/
   `_convert_int_value`/`_usual_arithmetic_conversion`/`_shift_operand_conversion`);
   usual arithmetic conversions 与 C 标准的对应;经典失败模式(位形对、签名丢 →
   sdiv/srem/ashr/signed compare);常量折叠是语义子系统;数据布局 bug vs 表达式语义 bug。
-- 素材:`pcc/codegen/c_codegen.py`(读上述 helper 与调用点)、`AGENTS.md` 符号性一节、
+- 素材:`pcc/frontends/c/codegen/c_codegen.py`(读上述 helper 与调用点)、`AGENTS.md` 符号性一节、
   `docs/debugging-playbook.md` §10/§12、`tests/c/test_unsigned_loads.py`。
 - 案例研究:Lua/libc-heavy 程序暴露符号性丢失的真实案例(查 INDEX)。
 
@@ -61,7 +61,7 @@
 
 ### 第 5 章 类型化 Python 前端 (The Typed-Python Frontend)
 文件:`ch05-typed-python-frontend.md`
-- 边界:`pcc/parse/py_parse.py`/`py_lift.py` → `pcc/py_frontend/py_ast.py` →
+- 边界:`pcc/frontends/python/py_parse.py`/`py_lift.py` → `pcc/frontends/python/py_ast.py` →
   `pipeline.py` → `type_infer.py`;类型推断对原生降低的角色;严格模式哲学
   (不支持的习语默认 fail loudly,而非静默回退);`--ir-scaffold` 三态的含义。
 - 素材:上列文件、`README.md` Python 状态表、`docs/python-limitations.md`(若在)。
@@ -74,7 +74,7 @@
   (挑 4–6 个代表深讲:exception_lowering、ownership 相关、subscript/exact_int 双路径、
   for_loop/comprehension、format/fstring);`native_*.py` 原生模块降低;
   生成代码必须在可 raise 调用后插 `py_err_occurred()` 检查的降低义务。
-- 素材:`pcc/py_frontend/codegen/` 目录、`AGENTS.md` layer1 split 段。
+- 素材:`pcc/frontends/python/codegen/` 目录、`AGENTS.md` layer1 split 段。
 - 案例研究:双下标路径(subscript_lowering vs exact_int_lowering 改一半 = 半失效)、
   六条除法降低路径——同一语义散布多路径的维护代价(查 INDEX 对应调查)。
 
@@ -87,7 +87,7 @@
   (del_method@96、attrs@104、metaclass@112);C 与 pcc-Python 镜像(`py_internal.h` vs
   `py_runtime/py/py_class.py`)必须逐字节一致的纪律;实例、attr 存取、metaclass;
   "object has no attribute X 但类明明定义了 X"的三因检查顺序。
-- 素材:`pcc/py_runtime/include/py_runtime.h`、`src/py_internal.h`、`src/py_class.c`、
+- 素材:`pcc/runtime/include/py_runtime.h`、`src/py_internal.h`、`src/py_class.c`、
   `src/py_obj.c`、`py/py_class.py`、`AGENTS.md` 对象头/布局节。
 - 案例研究:布局漂移类 bug(INDEX 检索 layout/class);dataclass default-None setattr
   clobber 邻槽问题。
@@ -109,7 +109,7 @@
   `pcc_gc_store_ptr()` 的平衡契约(incref 新值 / decref 旧值);owned-local 清理与
   GC root(ownership 相关 lowering);`py_user_del_dispatch()` 与 PY_FLAG_FINALIZED
   防复活再入;为什么"禁止为了过 gate 而弱化所有权/清理"。
-- 素材:`pcc/py_frontend/codegen/ownership*_lowering.py`(以实际文件名为准,rg 查)、
+- 素材:`pcc/frontends/python/codegen/ownership*_lowering.py`(以实际文件名为准,rg 查)、
   `src/py_obj.c`、`src/py_obj_dealloc.c`、`AGENTS.md` 自举回归纪律第 5 条。
 - 案例研究:bootstrap 所有权回归案例(INDEX: ownership / owned-local / return)。
 
@@ -123,7 +123,7 @@
   读写屏障 API(`pcc_gc_load_ptr`/`pcc_gc_store_ptr`)及哪些后端依赖哪侧;
   帧根:槽粒度、非 LIFO,为什么 frame_index 必须是哈希(换链表曾把 gc3 退化到 900s);
   终结器/弱引用/复活/挂起协程帧/调度队列/C 扩展引用——任何后端不得靠弱化这些取胜。
-- 素材:`pcc/py_runtime/src/py_gc_backend.c`、`src/py_obj_gc.c`、`include/py_runtime.h`、
+- 素材:`pcc/runtime/src/py_gc_backend.c`、`src/py_obj_gc.c`、`include/py_runtime.h`、
   `py/py_gc_backend.py`、`AGENTS.md` 5-GC equality、
   `docs/investigations/gc-5backend-*`(对象生命周期契约、异常 referent roots 等)。
 - 案例研究:exc-referent 根缺失的根因在前端 ownership lowering 而非运行时
@@ -149,11 +149,11 @@
 
 ### 第 12 章 LLVM 后端与 llvm_capi 对齐 (The LLVM Backends and llvm_capi Parity)
 文件:`ch12-llvm-backends.md`
-- 边界:llvmlite 路径与 in-repo `pcc/llvm_capi/` C-API builder;llvmlite 作为 oracle 的
+- 边界:llvmlite 路径与 in-repo `pcc/ir/` C-API builder;llvmlite 作为 oracle 的
   parity 测试法(`tests/c/test_llvm_capi_ir_parity.py`);IR Fix Policy——为什么文本级
   重写只剩 va_arg 一个豁免;`postprocess_ir_text()` 与属性剥离
   (nuw/nneg/range()/initializes()/dead_on_unwind);system-link 路径直接发 native object。
-- 素材:`pcc/llvm_capi/`、`AGENTS.md` IR Fix Policy、上述测试。
+- 素材:`pcc/ir/`、`AGENTS.md` IR Fix Policy、上述测试。
 - 案例研究:capi/llvmlite 不一致案例(INDEX 检索 llvm_capi / parity)。
 
 ### 第 13 章 self 后端:没有 LLVM 的原生发射 (The Self Backend: Native Emission without LLVM)
@@ -177,8 +177,8 @@
   如何让 pcc-Python 写分配器、线程、GC、libc-like substrate 与 ABI shim;
   `PCC_PY_OBJECTS`/provenance 归档构建;fallback 棘轮与 link-map 闭包的正交关系;
   当前有限 DONE_STRONG 切片与 `LIBC-P3-FREESTANDING-RUNTIME-CLOSURE` 开放边界。
-- 素材:`AGENTS.md` Runtime layering、`pcc/py_runtime/Makefile`、
-  `pcc/py_runtime/py/freestanding_{mem_str,allocator,linux_start,gc_index_table,platform_io}.py`、
+- 素材:`AGENTS.md` Runtime layering、`pcc/runtime/Makefile`、
+  `pcc/runtime/py/freestanding_{mem_str,allocator,linux_start,gc_index_table,platform_io}.py`、
   `docs/goal/evidence/2026-08-03-{linux-zero-libc-python-start,freestanding-gc-done-strong,freestanding-mem-str-done-strong,freestanding-allocator-done-strong,freestanding-platform-wrappers-done-strong}.md`、
   `tests/fallback_baseline.json`。
 - 案例研究:`PCC_RUNTIME_CC=cc` 的 oracle 假信心;`py_capi_shim.o` 改名
@@ -187,7 +187,7 @@
 ### 第 15 章 自举:pcc1→pcc2→pcc3 不动点 (Bootstrap: the pcc1→pcc2→pcc3 Fixed Point)
 文件:`ch15-bootstrap-fixed-point.md`
 - 边界:阶段命名(pcc0 host → pcc1 → pcc2 → pcc3);`scripts/bootstrap.sh` 与
-  `pcc/cli_bootstrap.py`;不动点的内涵——字节同一不只是 diff,是语义/运行时/codegen/
+  `pcc/driver/cli_bootstrap.py`;不动点的内涵——字节同一不只是 diff,是语义/运行时/codegen/
   对象模型/后端/诊断的相干性证据;差异分类学(semantic/IR-text/class-layout/
   object-model/backend nondeterminism/link metadata/perf-only/diagnostic);
   权威基线 `tests/bootstrap_gate_baseline.json` 与五 GC 全自举闸
@@ -208,7 +208,7 @@
   与 Valhalla 的关系(借投影模型,不借 Java 定宽 int)。
 - 边界(诚实部分):**已确认开放问题**——typed-int 未装箱 +/-/* 在 i64 溢出时静默回绕
   (违反义务 2),设计张力(unboxed vs bignum)与候选方案,如实呈现。
-- 素材:`pcc/value_model.py`、`pcc/py_runtime/src/py_int_*.c` 群、`AGENTS.md` 义务 7、
+- 素材:`pcc/value_model.py`、`pcc/runtime/src/py_int_*.c` 群、`AGENTS.md` 义务 7、
   INDEX 检索 valueclass / typed-int / overflow 的调查。
 
 ### 第 17 章 包、C-API shim 与扩展 ABI (Packages, the C-API Shim, and Extension ABI)
@@ -266,8 +266,8 @@
   CoreGraphics/Metal/AppKit 边界与 `mac_diff_app` canary。明确“吸收机制”不等于
   React/Tailwind/Tauri API/wire compatibility。
 - 素材(2026-09-06 已迁至 allstoalls/pcc-gui,核心最后版本 `977ad074`):`docs/design/gui-declarative-absorption.md`、
-  `pcc/py_runtime/gui_declarative_contract_v1.json`、
-  `pcc/py_runtime/py/pcc_gui_{kit,components,scheduler,events,style,commands,app_lifecycle}.py`、
+  `pcc/runtime/gui_declarative_contract_v1.json`、
+  `pcc/runtime/py/pcc_gui_{kit,components,scheduler,events,style,commands,app_lifecycle}.py`、
   `projects/mac_diff_app/{declarative_app,declarative_headless,app}.py`、
   `tests/python/test_pcc_gui_*.py`、`tests/python/test_mac_diff_app_declarative.py`。
 - 设计问题:为什么 committed tree 只能有一个 mutation owner?为什么 priority lane 需要

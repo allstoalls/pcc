@@ -6,7 +6,7 @@ import pytest
 
 
 def test_contextual_failure_preserves_module_and_cause(tmp_path, monkeypatch, capsys):
-    from pcc.py_frontend import pipeline_context, type_infer
+    from pcc.frontends.python import pipeline_context, type_infer
 
     source = tmp_path / "broken.py"
     source.write_text("value = 1\n")
@@ -25,8 +25,8 @@ def test_contextual_failure_preserves_module_and_cause(tmp_path, monkeypatch, ca
 
 
 def test_pipeline_context_facade_has_single_function_owners():
-    from pcc.py_frontend import pipeline
-    from pcc.py_frontend import pipeline_context as context
+    from pcc.frontends.python import pipeline
+    from pcc.frontends.python import pipeline_context as context
 
     for name in (
         "build_closed_world_context",
@@ -44,25 +44,25 @@ def test_pipeline_context_facade_has_single_function_owners():
 
 
 def test_contextual_host_export_surface_contains_only_schema_owners():
-    from pcc.py_frontend.pipeline_context import _contextual_host_export_surface
+    from pcc.frontends.python.pipeline_context import _contextual_host_export_surface
 
     host_info = {"kind": "class", "class_name": "L1CodeGen"}
     class_info = {"kind": "class", "class_name": "ClassInfo"}
     lowering_info = {"kind": "class", "class_name": "ClassLowering"}
     exports = {
-        "pcc.py_frontend.codegen.layer1": {
+        "pcc.frontends.python.codegen.layer1": {
             "L1CodeGen": host_info,
             "unrelated": {"kind": "function"},
         },
-        "pcc.py_frontend.codegen.class_gen": {
+        "pcc.frontends.python.codegen.class_gen": {
             "ClassInfo": class_info,
             "ClassLowering": lowering_info,
             "unrelated": {"kind": "function"},
         },
     }
     assert _contextual_host_export_surface(exports) == {
-        "pcc.py_frontend.codegen.layer1": {"L1CodeGen": host_info},
-        "pcc.py_frontend.codegen.class_gen": {
+        "pcc.frontends.python.codegen.layer1": {"L1CodeGen": host_info},
+        "pcc.frontends.python.codegen.class_gen": {
             "ClassInfo": class_info,
             "ClassLowering": lowering_info,
         },
@@ -70,7 +70,7 @@ def test_contextual_host_export_surface_contains_only_schema_owners():
 
 
 def test_context_fallback_counter_counts_calls_not_declarations():
-    from pcc.py_frontend.pipeline_context import count_py_cpy_fallback_calls
+    from pcc.frontends.python.pipeline_context import count_py_cpy_fallback_calls
 
     ir = """\
 declare ptr @py_cpy_import(ptr)
@@ -81,7 +81,7 @@ declare ptr @py_cpy_import(ptr)
 
 
 def test_closed_world_derived_map_only_selects_unique_owners():
-    from pcc.py_frontend.pipeline_context import _closed_world_derived_class_map
+    from pcc.frontends.python.pipeline_context import _closed_world_derived_class_map
 
     exports = {
         "left": {
@@ -99,7 +99,7 @@ def test_closed_world_derived_map_only_selects_unique_owners():
 
 
 def test_computed_raw_int_module_global_exports_provider_storage_abi(tmp_path):
-    from pcc.py_frontend.pipeline_context import build_closed_world_context
+    from pcc.frontends.python.pipeline_context import build_closed_world_context
 
     src = tmp_path / "provider.py"
     src.write_text("FLAG = 1 << 1\n", encoding="utf-8")
@@ -117,10 +117,10 @@ def test_computed_raw_int_module_global_exports_provider_storage_abi(tmp_path):
 
 
 def test_unpacked_init_fields_keep_export_and_type_schema_order(tmp_path):
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.pipeline_context import build_closed_world_context
-    from pcc.py_frontend.py_ast import ClassType
-    from pcc.py_frontend.type_infer import infer_module
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.pipeline_context import build_closed_world_context
+    from pcc.frontends.python.py_ast import ClassType
+    from pcc.frontends.python.type_infer import infer_module
 
     src = tmp_path / "provider.py"
     src.write_text(
@@ -162,9 +162,9 @@ def test_unpacked_init_fields_keep_export_and_type_schema_order(tmp_path):
 
 
 def test_cleanup_method_does_not_replace_declared_field_type(tmp_path):
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.py_ast import ListType
-    from pcc.py_frontend.type_infer import infer_module
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.py_ast import ListType
+    from pcc.frontends.python.type_infer import infer_module
 
     source = """
 class Record:
@@ -186,7 +186,7 @@ def read(record: Record):
 
 
 def test_dataclass_unannotated_class_constant_is_not_an_exported_field(tmp_path):
-    from pcc.py_frontend.pipeline_context import build_closed_world_context
+    from pcc.frontends.python.pipeline_context import build_closed_world_context
 
     src = tmp_path / "provider.py"
     src.write_text(
@@ -211,10 +211,10 @@ def test_dataclass_unannotated_class_constant_is_not_an_exported_field(tmp_path)
 
 
 def test_constructor_field_type_wins_over_earlier_method_write(tmp_path):
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.export_meta import encode_type
-    from pcc.py_frontend.pipeline_context import build_closed_world_context
-    from pcc.py_frontend.type_infer import infer_module
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.export_meta import encode_type
+    from pcc.frontends.python.pipeline_context import build_closed_world_context
+    from pcc.frontends.python.type_infer import infer_module
 
     source = """
 class Record:
@@ -240,10 +240,10 @@ def read(record: Record):
 
 
 def test_declared_instance_field_type_wins_over_method_write(tmp_path):
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.export_meta import encode_type
-    from pcc.py_frontend.pipeline_context import build_closed_world_context
-    from pcc.py_frontend.type_infer import infer_module
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.export_meta import encode_type
+    from pcc.frontends.python.pipeline_context import build_closed_world_context
+    from pcc.frontends.python.type_infer import infer_module
 
     source = """
 class Record:
@@ -267,7 +267,7 @@ def read(record: Record):
 
 
 def test_untyped_constructor_write_does_not_export_cleanup_method_type(tmp_path):
-    from pcc.py_frontend.pipeline_context import build_closed_world_context
+    from pcc.frontends.python.pipeline_context import build_closed_world_context
 
     constructor = "    def __init__(self):\n        self.values = []\n"
     cleanup = (
@@ -286,7 +286,7 @@ def test_untyped_constructor_write_does_not_export_cleanup_method_type(tmp_path)
 
 
 def test_dataclass_method_field_does_not_add_constructor_parameter(tmp_path):
-    from pcc.py_frontend.pipeline_context import build_closed_world_context
+    from pcc.frontends.python.pipeline_context import build_closed_world_context
 
     source = """
 from dataclasses import dataclass
@@ -361,9 +361,9 @@ _CONSTRUCTOR_FIELD_INITIALIZERS = (
 @pytest.mark.parametrize("initializer", _CONSTRUCTOR_FIELD_INITIALIZERS,
                          ids=("conditional", "adopted_attribute"))
 def test_unknown_constructor_rhs_preserves_established_field_type(tmp_path, initializer):
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.py_ast import ClassType, DynType
-    from pcc.py_frontend.type_infer import infer_module
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.py_ast import ClassType, DynType
+    from pcc.frontends.python.type_infer import infer_module
 
     source = _constructor_field_projection_source(initializer)
     typed = infer_module(parse_and_lift(source, str(tmp_path / "owner.py"), "pcc.owner"))
@@ -378,8 +378,8 @@ def test_unknown_constructor_rhs_preserves_established_field_type(tmp_path, init
 @pytest.mark.parametrize("initializer", _CONSTRUCTOR_FIELD_INITIALIZERS,
                          ids=("conditional", "adopted_attribute"))
 def test_declared_arena_field_keeps_direct_aggregate_getter_ir(tmp_path, initializer):
-    from pcc.ir_diff import IrSummary
-    from pcc.py_frontend.pipeline_context import compile_contextual_per_module_fallback_counts
+    from pcc.diagnostics.ir_diff import IrSummary
+    from pcc.frontends.python.pipeline_context import compile_contextual_per_module_fallback_counts
 
     path = tmp_path / "owner.py"
     path.write_text(_constructor_field_projection_source(initializer), encoding="utf-8")

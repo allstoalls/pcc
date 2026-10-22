@@ -10,17 +10,14 @@ from __future__ import annotations
 
 import ctypes
 import os
-import platform
-import shutil
-import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
 
-from .cli_contract import DEFAULT_PUBLIC_BACKEND
-from .evaluater.c_evaluator import CEvaluator
-from .project import TranslationUnit, collect_translation_units, translation_unit_include_dirs
+from pcc.driver.cli_contract import DEFAULT_PUBLIC_BACKEND
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.driver.project import TranslationUnit, collect_translation_units, translation_unit_include_dirs
 
 
 # ---------------------------------------------------------------------------
@@ -54,17 +51,10 @@ class BuildArtifact:
 # ---------------------------------------------------------------------------
 
 def _resolve_public_backend(backend):
-    """The public build API ships the CLI's backend, not llvm.
+    """Validate the same owned backend exposed by the public CLI."""
+    from .backend import resolve_backend
 
-    `CEvaluator(backend=None)` resolves to llvm, which the C suite relies on
-    as its differential oracle.  Inheriting that default here made
-    `api.build` and the `pcc` CLI emit different objects for the same source
-    -- the divergence `tests/c/test_api_cli_object_parity.py` exists to catch
-    -- and pulled llvmlite onto the public API's default path.
-    """
-    if backend is None:
-        return DEFAULT_PUBLIC_BACKEND
-    return backend
+    return resolve_backend(DEFAULT_PUBLIC_BACKEND if backend is None else backend).kind
 
 
 def build(
@@ -87,10 +77,10 @@ def build(
         sources: One or more C source file paths.
         include_dirs: Extra -I include directories.
         cpp_args: Extra preprocessor flags (e.g. ["-DFOO=1"]).
-        libs: System libraries to link (e.g. ["z", "ssl"]).
-            Translates to -lz, -lssl at link time. Works like libc —
-            uses pre-compiled system libraries, does not compile them.
-        link_args: Raw linker flags (escape hatch).
+        libs: Requested system libraries. The owned Darwin arm64 publisher
+            supports System, c, m, pthread and dl through libSystem.
+            Unsupported libraries fail explicitly.
+        link_args: Linker arguments accepted by the selected owned publisher.
         optimize: Optimization level (0-3 or bool).
         kind: "exe", "sharedlib", or "object".
         backend: Backend implementation to use. Defaults to the owned self backend.
@@ -138,13 +128,13 @@ def build(
     # The CLI applies this; `api.build` did not, so the same source compiled
     # at two different optimisation levels depending on the entry point.
     # Reuse the CLI's own function rather than restating the rule.
-    from .cli_core import _effective_self_backend_opt_level
+    from pcc.driver.cli_core import _effective_self_backend_opt_level
 
     opt_level = _effective_self_backend_opt_level(
         resolved_backend, ev._normalize_opt_level(optimize)
     )
     use_system_cpp = ev.backend != "self" and ev._has_system_cpp()
-    from .evaluater.c_evaluator import _artifact_to_compiled_unit
+    from pcc.frontends.c.evaluator.c_evaluator import _artifact_to_compiled_unit
 
     artifacts = ev._compile_translation_units(
         units,
@@ -217,44 +207,40 @@ def build(
 
 def _link_exe(ev, compiled_units, out_dir, link_args, opt_level):
     """Link compiled units into an executable."""
-    if ev.backend == "self":
-        output = os.path.join(out_dir, "a.out")
-        ev.emit_executable(compiled_units, output, optimize=opt_level, link_args=link_args)
-        return output
-    cc = ev._system_cc()
-    obj_paths = []
-    obj_path = os.path.join(out_dir, "output.o")
-    ev.emit_compiled_units(compiled_units, emit_obj=obj_path, optimize=opt_level)
-    obj_paths.append(obj_path)
+    from .backend.self_backend_target_match import is_aarch64_darwin_triple
 
-    bin_path = os.path.join(out_dir, "a.out")
-    cmd = [cc] + obj_paths + ["-o", bin_path] + ev._platform_link_flags() + link_args
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-    if result.returncode != 0:
-        raise RuntimeError(f"link failed: {result.stderr[:500]}")
-    return bin_path
+    if is_aarch64_darwin_triple(ev.target_triple):
+        from .backend.macho_shared import validate_link_args
+
+        validate_link_args(link_args)
+        # The owned executable already binds libSystem, including these
+        # explicitly validated Darwin C/math/thread/dl library constituents.
+        link_args = []
+    output = os.path.join(out_dir, "a.out")
+    ev.emit_executable(compiled_units, output, optimize=opt_level, link_args=link_args)
+    return output
 
 
 def _link_shared(ev, compiled_units, out_dir, link_args, opt_level):
-    """Link compiled units into a shared library."""
-    cc = ev._system_cc()
-    obj_paths = []
-    obj_path = os.path.join(out_dir, "output.o")
-    ev.emit_compiled_units(compiled_units, emit_obj=obj_path, optimize=opt_level)
-    obj_paths.append(obj_path)
+    """Publish a real shared-library artifact through the owned linker."""
+    from .backend.macho_shared import link_shared_library, validate_link_args, validate_target
+    from .backend.owned_object_emit import emit_owned_object
 
-    if platform.system() == "Darwin":
-        suffix = ".dylib"
-        shared_flag = "-dynamiclib"
-    else:
-        suffix = ".so"
-        shared_flag = "-shared"
-
-    lib_path = os.path.join(out_dir, f"libpcc_module{suffix}")
-    cmd = [cc, shared_flag] + obj_paths + ["-o", lib_path] + link_args
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-    if result.returncode != 0:
-        raise RuntimeError(f"shared lib link failed: {result.stderr[:500]}")
+    validate_target(ev.target_triple)
+    validate_link_args(link_args)
+    prepared = ev._prepare_self_backend_units(compiled_units, optimize=opt_level) if opt_level else compiled_units
+    objects = [emit_owned_object(text, ev.target_triple) for _name, text, _return, _definitions in prepared]
+    lib_path = os.path.join(out_dir, "libpcc_module.dylib")
+    data = link_shared_library(objects, target=ev.target_triple, identity=lib_path, link_args=link_args)
+    descriptor, temporary = tempfile.mkstemp(dir=out_dir, prefix=".pcc-shared-")
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(data)
+        os.chmod(temporary, 0o755)
+        os.replace(temporary, lib_path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
     return lib_path
 
 
@@ -317,8 +303,9 @@ def module(
         sources: One or more C source file paths.
         include_dirs: Extra -I include directories.
         cpp_args: Extra preprocessor flags.
-        libs: System libraries to link (e.g. ["z", "ssl"]).
-        link_args: Raw linker flags.
+        libs: Requested system libraries, subject to the owned publisher's
+            supported library surface (currently Darwin libSystem).
+        link_args: Linker arguments accepted by the owned publisher.
         optimize: Optimization level (0-3 or bool).
         backend: Backend implementation to use.
         jobs: Parallel compilation jobs.

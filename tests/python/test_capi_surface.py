@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pcc.capi_surface import (
+from pcc.frontends.c.capi_surface import (
     CApiPriority,
     abi_version_diagnostic,
     default_capi_symbols,

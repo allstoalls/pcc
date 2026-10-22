@@ -9,7 +9,7 @@ from tests.runtime_build_cache import cached_threaded_pcc_python_runtime
 
 
 REPO_ROOT = Path(__file__).absolute().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 
 
 def _build_threaded_runtime(tmp_path: Path) -> Path:
@@ -18,7 +18,7 @@ def _build_threaded_runtime(tmp_path: Path) -> Path:
 
 
 def test_threading_stdlib_native_lock_event_smoke(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "threading_smoke.py"
     exe = tmp_path / "threading_smoke.out"
@@ -45,7 +45,7 @@ def test_threading_stdlib_native_lock_event_smoke(tmp_path):
 
 
 def test_thread_start_runs_target_via_native_dispatch_under_default_runtime(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "thread_start_native.py"
     exe = tmp_path / "thread_start_native.out"
@@ -72,7 +72,7 @@ def test_thread_start_runs_target_via_native_dispatch_under_default_runtime(tmp_
 
 
 def test_thread_start_on_for_loop_target_from_thread_list(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "thread_for_target.py"
     exe = tmp_path / "thread_for_target.out"
@@ -102,7 +102,7 @@ def test_thread_start_on_for_loop_target_from_thread_list(tmp_path):
 
 
 def test_thread_start_on_for_loop_target_from_appended_thread_name(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "thread_for_append_name.py"
     exe = tmp_path / "thread_for_append_name.out"
@@ -136,7 +136,7 @@ def test_thread_start_on_for_loop_target_from_appended_thread_name(tmp_path):
 
 
 def test_threading_import_from_and_sync_primitives_native(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "threading_from_native.py"
     exe = tmp_path / "threading_from_native.out"
@@ -239,7 +239,7 @@ def test_pthread_thread_object_survives_dropped_user_reference(tmp_path):
 
 
 def test_pthread_lock_serializes_shared_list_updates(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     monkeypatch.setenv("PCC_WITH_THREADS", "1")
     work_runtime = _build_threaded_runtime(tmp_path)

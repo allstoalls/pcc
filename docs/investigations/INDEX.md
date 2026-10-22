@@ -5,7 +5,7 @@ Each entry shows the doc title and a one-line summary pulled from the first pros
 
 Historical search index, not current implementation truth. Start with source and execution; check a matching experiment's revision and later corrections before adopting its conclusion.
 
-Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.py`.
+Regenerate with `uv run python scripts/regen_investigations_index.py`.
 
 ## codegen
 
@@ -129,6 +129,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - IN PROGRESS — 4 fixes landed + verified; #5/#6 remain diagnosed but not fixed.
 - [pcc1-pproxy-gc4-live-proxy-readuntil-empty.md](pcc1-pproxy-gc4-live-proxy-readuntil-empty.md) — **pcc1 pproxy GC4 live proxy readuntil returns empty**
   - The user wants the no-libpython self-backend `pcc1` built in
+- [pcc1-prior-gate-compile-time.md](pcc1-prior-gate-compile-time.md) — **pcc1 misses the 300 s prior-gate compile on ARM CI**
+  - active — 2026-10-19. Breakdown and two admission causes measured; the
 - [pcc1-profiling-sampling-parity.md](pcc1-profiling-sampling-parity.md) — **pcc1-native profiling.sampling parity with Python 3.15**
   - The user requires pcc1 to provide the Python 3.15 PEP 799
 - [pcc1-qualification-cache-and-project-selection.md](pcc1-qualification-cache-and-project-selection.md) — **pcc1 qualification misses effective cache and discovery selection**
@@ -367,6 +369,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - Backend #4 now has forwarding, stable IDs, and an object-level relocation set,
 - [gc-backend4-relocation-mutator-quiescence.md](gc-backend4-relocation-mutator-quiescence.md) — **Backend 4 relocation lacks a mutator-quiescent payload phase**
   - Backend 4 can copy, remap, and retire pointer-bearing object payloads while
+- [gc-backend4-relocation-set-free-walk.md](gc-backend4-relocation-set-free-walk.md) — **GC4 frees walk the whole relocation set**
+  - active — 2026-10-14. The free-path walk is fixed by a member filter; the
 - [gc-backend4-relocation-set.md](gc-backend4-relocation-set.md) — **Backend #4 needs a relocation set**
   - Backend #4 is meant to model a ZGC-style colored relocating collector.
 - [gc-backend4-relocation-shared-slot-contract.md](gc-backend4-relocation-shared-slot-contract.md) — **backend-4 relocation duplicates the shared object-slot contract**
@@ -644,7 +648,7 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - resolved (2026-06-18)
 - [contextual-per-module-fallback-gate.md](contextual-per-module-fallback-gate.md) — **contextual per-module fallback gate for Python self-host**
   - Raw per-module fallback counts treat mixin files such as
-- [cpython-315rc1-host-migration.md](cpython-315rc1-host-migration.md) — **migrate pcc's default host to CPython 3.15.0rc1**
+- [cpython-315rc1-host-migration.md](cpython-315rc1-host-migration.md) — **migrate pcc's default host to CPython 3.15 (rc1, then 3.15.0)**
   - The user requires pcc to track the newest Python and explicitly directs the
 - [cpython-symbol-collision-and-teardown.md](cpython-symbol-collision-and-teardown.md) — **CPython Symbol Collision and Teardown Order Investigation**
   - During the execution of Phase 4 CPython fallback tests (such as `test_callable_type_alias_literal_with_cpython_values`), compiled binarie...
@@ -664,6 +668,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - The native fragment vertical passes host ASM/PCO differentials but its full
 - [custom-obj-eq-dict-set-key-no-libpython.md](custom-obj-eq-dict-set-key-no-libpython.md) — **user __eq__ in dict/set key lookup (no-libpython)**
   - active — gap CONFIRMED + a fix ATTEMPTED and REVERTED 2026-05-30 (it works for
+- [dataclass-factory-default-capture-corrupts-section-data.md](dataclass-factory-default-capture-corrupts-section-data.md) — **dataclass factory defaults corrupt section data**
+  - Active — 2026-10-01. Source12 fixes independent container factories and the
 - [decorator-first-class-fn-silent-null-no-libpython.md](decorator-first-class-fn-silent-null-no-libpython.md) — **function decorators silently return null under --python-libpython=off (first-class-function limitation)**
   - Under strict no-libpython (`--backend self --python-libpython=off`, DEFAULT
 - [default-backend-verdict.md](default-backend-verdict.md) — **Default backend verdict**
@@ -1090,6 +1096,8 @@ Regenerate with `env -u LC_ALL uv run python scripts/regen_investigations_index.
   - resolved (2026-08-15) — cold `pcc0 -> pcc1` self-backend build measured
 - [stage1-lazy-import-host-probe-spawn.md](stage1-lazy-import-host-probe-spawn.md) — **stage1 lazy-import discovery spawns host probes that execute the pcc package**
   - Resolved locally on 2026-09-17. Red→green regression landed; the 420-second
+- [stage1-link-memory-budget.md](stage1-link-memory-budget.md) — **Stage1 links exceed the compact stack-map memory budget**
+  - active — 2026-10-14. Measured on CI run 38584467472 (`9cbcb1e9`); the Mach-O
 - [stage1-private-pycache-disabled-worker-startup.md](stage1-private-pycache-disabled-worker-startup.md) — **private Stage1 environment disables every worker bytecode cache**
   - The source-frozen Stage1 harness gives every CPython process an isolated
 - [stage1-receipt-metric-contract-rejected.md](stage1-receipt-metric-contract-rejected.md) — **Stage1 receipt validator rejects current producer metric labels**

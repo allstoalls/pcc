@@ -1,0 +1,129 @@
+{
+  "baseline": {
+    "postpasses": {
+      "actual_libpython_calls": 0,
+      "blocks": 76359,
+      "functions": 230,
+      "instructions": 363208,
+      "object_slot_calls": 5,
+      "public_functions": 229,
+      "reporter_calls": 0,
+      "status_sites": 13623,
+      "strict_no_libpython_stubs": 0,
+      "text_bytes": 29652173,
+      "unreachable": 13800
+    },
+    "postpasses_sha256": "0b4ef641a62d2daa33a5d597d603d6f6473abfe4b8b4b55829044a5abb350282",
+    "raw": {
+      "actual_libpython_calls": 0,
+      "blocks": 76359,
+      "functions": 230,
+      "instructions": 363544,
+      "object_slot_calls": 5,
+      "public_functions": 229,
+      "reporter_calls": 0,
+      "status_sites": 13623,
+      "strict_no_libpython_stubs": 0,
+      "text_bytes": 29670757,
+      "unreachable": 13800
+    },
+    "raw_sha256": "df2c7a16a0e0e48d9bf76cb890679b7b148b9b1beb8cab0534126c51f38e56ff"
+  },
+  "candidate": {
+    "postpasses": {
+      "actual_libpython_calls": 0,
+      "blocks": 49117,
+      "functions": 231,
+      "instructions": 273293,
+      "object_slot_calls": 5,
+      "public_functions": 229,
+      "reporter_calls": 13623,
+      "status_sites": 13623,
+      "strict_no_libpython_stubs": 0,
+      "text_bytes": 24283132,
+      "unreachable": 177
+    },
+    "postpasses_sha256": "4d9c1613dff81b108f4f1184c62ba6b13f18fa8e2640448c9d6d093798d39799",
+    "raw": {
+      "actual_libpython_calls": 0,
+      "blocks": 49117,
+      "functions": 231,
+      "instructions": 273629,
+      "object_slot_calls": 5,
+      "public_functions": 229,
+      "reporter_calls": 13623,
+      "status_sites": 13623,
+      "strict_no_libpython_stubs": 0,
+      "text_bytes": 24301681,
+      "unreachable": 177
+    },
+    "raw_sha256": "a5e6e9f684f722b243a9b74c62e584c884dc1684da14f202c23d5bdc77e8ccb7"
+  },
+  "candidate_source_inventory_sha256": "ea395e18a173ec4172c8badd68bbccb53a66390e4c130b8a78f6702fbc177635",
+  "canonical_source_inventory_sha256": "5643f83014b0ff2801adb0d3f204dd63541ef9eda6a7d13dc688dc6565b25ea1",
+  "date_utc": "2026-10-09",
+  "driver_preservation_commit": "320f881a91f6f8570acd9ccb1a78880613eee5af",
+  "driver_sha256": "ee6b7535a499237a1cfd686db8f50546a24e9f2e23e89e195c3561d0eea08ef3",
+  "execution_boundary": {
+    "audit_denials": 0,
+    "cleanup": "Root reaped; ECHILD; no remaining admitted handles.",
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "minimum_free_bytes": 4294967296,
+    "observed_guard_elapsed_s": 102.06322569700023,
+    "peak_sampled_root_rss_bytes": 505114624,
+    "single_host_process": true,
+    "wall_limit_s": 300.0
+  },
+  "input_classes": 56,
+  "input_function_definitions": 113,
+  "input_module": "pcc.frontends.c.ast.c_ast",
+  "input_sha256": "21eacf1370cec218ea7ff97092ee47a96752505067caad2699f20239c74f2b58",
+  "limitations": [
+    "The baseline restores the reviewed prior inline method within the same candidate frontend; it is not a separate compiler build.",
+    "This is the real c_ast module in normal single-source library mode using the owned sys builtin, not the full Stage1 compiler graph.",
+    "Local alpha-renamed cleanup contracts, including the reviewed equal-value PHI edge normalization after mem2reg, are structural evidence rather than a complete program-equivalence proof.",
+    "Observer-weighted single-order elapsed time is not a speedup benchmark.",
+    "Native runtime/executables, parallel workers, full Stage1 and fixed-point qualification remain UNRUN."
+  ],
+  "observed_scope_details": {
+    "default_pass_instruction_removal_per_arm": 336,
+    "interpretation": "The checked status sites are predominantly owned-result and argument leases. Empty noreturn inventories do not establish general noreturn coverage.",
+    "noreturn_inventory_entries": 0,
+    "postpass_phi_edges_normalized": 0,
+    "unique_cleanup_programs": 9
+  },
+  "packet_manifest_sha256": "a0b76f890d4611f9768ad34eae0defc500f098500ab9be7164cee0242b2c23bd",
+  "passes": [
+    "mem2reg",
+    "sroa"
+  ],
+  "payload_result_sha256": "b0b24bef47531ab0ce7340f9a3c202229b7b2c4c9693e48ffa92525b6dc5609a",
+  "postpass_reduction": {
+    "blocks": {
+      "absolute": 27242,
+      "percent": 35.6762
+    },
+    "instructions": {
+      "absolute": 89915,
+      "percent": 24.7558
+    },
+    "text_bytes": {
+      "absolute": 5369041,
+      "percent": 18.1067
+    }
+  },
+  "qualification_sha256": "10ce1b6f27279e89cf4547b7eb171b5ee7d681f5f21d3d35bf1c9014c5bed8ed",
+  "schema": "pcc.cold-slot-real-module-public-result.v1",
+  "source_base_commit": "818187ba7dfff54df589b93bc10594f87786fe22",
+  "source_seals": "Complete before/after inventories PASS",
+  "status": "PASS",
+  "target": "x86_64-unknown-linux-gnu",
+  "verified_contracts": [
+    "Both complete source inventories retain exact bytes, modes and original vendor links before and after.",
+    "Actual raw and default-pass IR is accepted by the owned parser/verifier, with no py_cpy calls or strict no-libpython stubs.",
+    "All 13623 signed-negative status edges, 229 public functions and five object-slot call sites are preserved.",
+    "Reporter calls remain confined to failure blocks with the reviewed source-frame and cleanup contracts.",
+    "The new internal reporter remains noinline and normally returning after the default passes."
+  ]
+}

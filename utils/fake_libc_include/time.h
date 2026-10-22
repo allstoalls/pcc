@@ -26,6 +26,15 @@ struct tm {
     const char *tm_zone;
 };
 
+/* clock() ticks per second: 1000000 on Darwin and glibc (XSI), 1000 on Win64. */
+#ifndef CLOCKS_PER_SEC
+#ifdef _WIN64
+#define CLOCKS_PER_SEC 1000
+#else
+#define CLOCKS_PER_SEC 1000000
+#endif
+#endif
+
 #ifndef CLOCK_REALTIME
 #define CLOCK_REALTIME 0
 #endif

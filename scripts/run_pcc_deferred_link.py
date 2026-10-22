@@ -2,7 +2,7 @@
 """Run a pcc-owned Mach-O link after the compiled coordinator exits.
 
 The compiled pcc1 writes a small, versioned plan after all direct artifacts
-are frozen.  ``bootstrap.sh`` then runs this host-side transition owner only
+are frozen.  ``bootstrap.py`` then runs this host-side transition owner only
 after pcc1 has returned, so the coordinator's allocator high water cannot
 overlap the assembler/linker process tree.  The linked artifact is still
 produced by pcc's own linker. Codegen plans can select a separately qualified
@@ -205,7 +205,7 @@ def _run_codegen_worker(worker: Path, manifest: Path, *, assembly_only: bool) ->
 
 def _result_path_from_worker_manifest(path: Path) -> Path:
     lines = path.read_text(encoding="utf-8").splitlines()
-    if len(lines) < 2 or lines[0] != "pcc.py_frontend.codegen_worker.v4":
+    if len(lines) < 2 or lines[0] != "pcc.frontends.python.codegen_worker.v4":
         raise DeferredLinkError("invalid deferred worker manifest: " + str(path))
     return _required_absolute_path(lines[1], "worker result")
 
@@ -214,7 +214,7 @@ def _worker_manifest_ast_bytes(path: Path) -> int:
     lines = path.read_text(encoding="utf-8").splitlines()
     if (
         len(lines) < 12
-        or lines[0] != "pcc.py_frontend.codegen_worker.v4"
+        or lines[0] != "pcc.frontends.python.codegen_worker.v4"
         or lines[-2] != "1"
     ):
         raise DeferredLinkError(
@@ -304,7 +304,7 @@ def _indexed_emit_floor_bytes(sidecar: Path, *, assembly_only: bool) -> int:
             payload_bytes * _INDEXED_ASM_PER_SIDECAR_MB_BYTES
         ) // 1_000_000
     else:
-        from pcc.py_frontend.deferred_frontend_schedule import indexed_pco_floor_bytes
+        from pcc.frontends.python.deferred_frontend_schedule import indexed_pco_floor_bytes
         raw_gc = str(os.environ.get("PCC_GC_BACKEND", "0"))
         return indexed_pco_floor_bytes(payload_bytes, 0 if raw_gc == "0" else -1)
     if floor > _INDEXED_EMIT_FLOOR_CAP_BYTES:
@@ -325,7 +325,7 @@ def _indexed_emit_floors(
 
 def _indexed_frontend_floor_bytes(ast_bytes: int) -> int:
     """Bound the post-split frontend from the complete v48 226-worker sample."""
-    from pcc.py_frontend.deferred_frontend_schedule import indexed_frontend_floor_bytes
+    from pcc.frontends.python.deferred_frontend_schedule import indexed_frontend_floor_bytes
     return indexed_frontend_floor_bytes(ast_bytes)
 
 

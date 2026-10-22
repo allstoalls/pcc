@@ -9,9 +9,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from dataclasses import replace
 
-from pcc.codegen.c_codegen import LLVMCodeGenerator
-from pcc.llvm_capi import compat, ir
-from pcc.py_frontend.codegen.layer1 import L1CodeGen
+from pcc.frontends.c.codegen.c_codegen import CCodeGenerator
+from pcc.ir import compat, ir
+from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
 
 def _class_sources(root):
@@ -58,29 +58,34 @@ def test_owned_compat_bindings_are_the_real_provider():
 
 
 def test_field_owner_uses_real_mro_name_and_source_module():
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.type_infer import infer_module
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.type_infer import infer_module
 
     ast_module = infer_module(
-        parse_and_lift("x = 1\n", "<contract>", "pcc.py_frontend.codegen.unsafe_lowering")
+        parse_and_lift("x = 1\n", "<contract>", "pcc.frontends.python.codegen.unsafe_lowering")
     )
     codegen = L1CodeGen(ast_module, ir_scaffold_mode="on")
     codegen.current_class = SimpleNamespace(
         name="UnsafeIntrinsicMixin", owning_module=None, export_class_name=None
     )
     assert codegen._scaffold_current_class_owner() == "L1CodeGen"
-    codegen.ast_module = replace(ast_module, name="pcc.codegen.c_codegen")
+    codegen.ast_module = replace(ast_module, name="pcc.frontends.c.codegen.c_codegen")
     codegen.current_class = SimpleNamespace(
-        name="LLVMCodeGenerator", owning_module=None, export_class_name=None
+        name="CCodeGenerator", owning_module=None, export_class_name=None
     )
-    assert codegen._scaffold_current_class_owner() == "LLVMCodeGenerator"
+    assert codegen._scaffold_current_class_owner() == "CCodeGenerator"
     codegen.ast_module = replace(ast_module, name="application")
     assert codegen._scaffold_current_class_owner() == ""
 
 
 def test_l1_and_c_codegen_builder_writes_stay_within_verified_facts():
-    expected_count = {"L1CodeGen": 33, "LLVMCodeGenerator": 4}
-    for root in (L1CodeGen, LLVMCodeGenerator):
+    # The slot-based and legacy lambda adapters each restore the caller's
+    # saved builder on rejection, in addition to the shared successful exit.
+    # The aggregate adapter also restores the saved builder in its finally block.
+    # The outlined slot-call status reporter builds its own function and then
+    # restores the caller's builder (02b9bc2d3; 9007dbd1d moved one restore).
+    expected_count = {"L1CodeGen": 37, "CCodeGenerator": 4}
+    for root in (L1CodeGen, CCodeGenerator):
         writes = []
         for path, cls in _class_sources(root):
             for method in cls.body:
@@ -120,8 +125,40 @@ def test_l1_and_c_codegen_builder_writes_stay_within_verified_facts():
         assert len(writes) == expected_count[root.__name__], (root.__name__, writes)
 
 
+def test_lambda_adapter_builder_restores_keep_the_callers_verified_owner():
+    from pcc.frontends.python.codegen.lambda_helpers_lowering import LambdaHelperLoweringMixin
+
+    tree = ast.parse(Path(inspect.getsourcefile(LambdaHelperLoweringMixin)).read_text())
+    owner = next(node for node in tree.body if isinstance(node, ast.ClassDef))
+    method = next(
+        node for node in owner.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_maybe_emit_native_lambda_func"
+    )
+    saved = [
+        node.value for node in ast.walk(method)
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "saved_builder" for target in node.targets)
+    ]
+    assert len(saved) == 1 and _self_field(saved[0], "builder")
+    writes = [
+        node.value for node in ast.walk(method)
+        if isinstance(node, ast.Assign)
+        and any(_self_field(target, "builder") for target in node.targets)
+    ]
+    assert sum(_is_irbuilder_ctor(value) for value in writes) == 1
+    assert sum(isinstance(value, ast.Name) and value.id == "saved_builder" for value in writes) == 3
+    handlers = [node for node in ast.walk(method) if isinstance(node, ast.ExceptHandler)]
+    assert len(handlers) == 2
+    for handler in handlers:
+        assert isinstance(handler.type, ast.Name) and handler.type.id == "NotImplementedError"
+        restoration = handler.body[0]
+        assert isinstance(restoration, ast.Assign)
+        assert len(restoration.targets) == 1 and _self_field(restoration.targets[0], "builder")
+        assert isinstance(restoration.value, ast.Name) and restoration.value.id == "saved_builder"
+
+
 def test_class_lowering_parent_is_constructed_from_l1_codegen():
-    from pcc.py_frontend.codegen.class_gen import ClassLowering
+    from pcc.frontends.python.codegen.class_gen import ClassLowering
 
     path = Path(inspect.getsourcefile(ClassLowering))
     tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -148,7 +185,7 @@ def test_class_lowering_parent_is_constructed_from_l1_codegen():
 
 
 def test_classgen_helper_parameters_have_only_proven_callers():
-    from pcc.py_frontend.codegen.class_gen import ClassLowering
+    from pcc.frontends.python.codegen.class_gen import ClassLowering
 
     path = Path(inspect.getsourcefile(ClassLowering))
     tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -157,6 +194,32 @@ def test_classgen_helper_parameters_have_only_proven_callers():
         for node in tree.body
         if isinstance(node, ast.FunctionDef)
         and any(argument.arg == "parent" for argument in node.args.args)
+    }
+    expected_helper_calls = {
+        "_classgen_annotation_is_object_param": 2,
+        "_classgen_attr_name_ptr": 2,
+        "_classgen_current_name_load": 7,
+        "_classgen_current_param_ref_text": 1,
+        "_classgen_dataclass_factory_default": 1,
+        "_classgen_emit_arg_expr": 4,
+        "_classgen_emit_bool_literal_fallback": 4,
+        "_classgen_emit_container_literal_fallback": 8,
+        "_classgen_emit_dynamic_attr_value": 2,
+        "_classgen_emit_int_literal_fallback": 4,
+        "_classgen_emit_none_literal_fallback": 5,
+        "_classgen_emit_str_literal_fallback": 4,
+        "_classgen_emit_str_literal_object": 2,
+        "_classgen_expr_class_hint": 1,
+        "_classgen_literal_fallback": 2,
+        "_classgen_local_assignment_class_info": 1,
+        "_classgen_log": 11,
+        "_classgen_maybe_unbox_recovered_arg": 8,
+        "_classgen_method_return_hint_from_info": 1,
+        "_classgen_recover_attr_value": 4,
+        "_classgen_recover_call_value": 2,
+        "_classgen_recover_method_call_arg": 1,
+        "_classgen_recover_self_method_call_value": 1,
+        "_classgen_unbox_into_scalar_slot": 2,
     }
 
     def is_self_parent(value):
@@ -171,7 +234,7 @@ def test_classgen_helper_parameters_have_only_proven_callers():
         def __init__(self):
             self.owner_class = ""
             self.functions = []
-            self.parent_calls = 0
+            self.parent_calls = {}
             self.builder_calls = 0
 
         def visit_ClassDef(self, node):
@@ -227,7 +290,7 @@ def test_classgen_helper_parameters_have_only_proven_callers():
                     assert is_self_parent(actual) and self.owner_class == "ClassLowering", (
                         name, node.lineno, ast.unparse(actual)
                     )
-                self.parent_calls += 1
+                self.parent_calls[name] = self.parent_calls.get(name, 0) + 1
             if name == "_classgen_builder_call":
                 assert any(function.name in helpers for function in self.functions)
                 assert len(node.args) >= 1
@@ -243,8 +306,8 @@ def test_classgen_helper_parameters_have_only_proven_callers():
 
     calls = Calls()
     calls.visit(tree)
-    assert len(helpers) == 23
-    assert calls.parent_calls == 79
+    assert set(helpers) == set(expected_helper_calls)
+    assert calls.parent_calls == expected_helper_calls
     assert calls.builder_calls == 1
 
     for source in path.parents[2].rglob("*.py"):
@@ -257,7 +320,14 @@ def test_classgen_helper_parameters_have_only_proven_callers():
     for source in path.parent.glob("*.py"):
         if source == path:
             continue
-        for node in ast.walk(ast.parse(source.read_text(encoding="utf-8"))):
+        source_tree = ast.parse(source.read_text(encoding="utf-8"))
+        call_owners = {}
+        for function in ast.walk(source_tree):
+            if isinstance(function, ast.FunctionDef):
+                for call in ast.walk(function):
+                    if isinstance(call, ast.Call):
+                        call_owners[id(call)] = function.name
+        for node in ast.walk(source_tree):
             if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
                 continue
             if node.func.attr != "emit_instantiate":
@@ -271,12 +341,18 @@ def test_classgen_helper_parameters_have_only_proven_callers():
             assert node.args and isinstance(node.args[-1], ast.Name) and node.args[-1].id == "self", (
                 source, node.lineno
             )
-            instantiate_calls.append((source, node.lineno))
-    assert len(instantiate_calls) == 4
+            instantiate_calls.append((source.name, call_owners[id(node)]))
+    assert sorted(instantiate_calls) == [
+        ("call_expression_lowering.py", "_emit_call"),
+        ("call_expression_lowering.py", "_emit_class_init_call"),
+        ("exception_lowering.py", "_build_exception_value"),
+        ("native_modules.py", "_maybe_emit_native_module_alias_call"),
+        ("unary_call_lowering.py", "_maybe_emit_builtin_type_method"),
+    ]
 
 
 def test_classgen_nested_builder_and_method_function_provenance():
-    from pcc.py_frontend.codegen.class_gen import ClassLowering
+    from pcc.frontends.python.codegen.class_gen import ClassLowering
 
     path = Path(inspect.getsourcefile(ClassLowering))
     tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -333,12 +409,12 @@ def test_classgen_nested_builder_and_method_function_provenance():
 
 
 def test_classgen_proven_ir_receivers_keep_direct_calls():
-    from pcc.parse.py_lift import parse_and_lift
-    from pcc.py_frontend.type_infer import infer_module
-    from pcc.py_frontend.codegen.class_gen import ClassLowering
+    from pcc.frontends.python.py_lift import parse_and_lift
+    from pcc.frontends.python.type_infer import infer_module
+    from pcc.frontends.python.codegen.class_gen import ClassLowering
 
     source = Path(inspect.getsourcefile(ClassLowering))
-    module = infer_module(parse_and_lift(source.read_text(encoding="utf-8"), str(source), "pcc.py_frontend.codegen.class_gen"))
+    module = infer_module(parse_and_lift(source.read_text(encoding="utf-8"), str(source), "pcc.frontends.python.codegen.class_gen"))
     text = str(L1CodeGen(module, emit_cpy_main_exitcode=False, ir_scaffold_mode="off").generate(module))
 
     def body(symbol):
@@ -346,16 +422,16 @@ def test_classgen_proven_ir_receivers_keep_direct_calls():
         assert match, symbol
         return match.group(1)
 
-    method = body("user_pcc_py_frontend_codegen_class_gen_ClassLowering__emit_method_body")
-    nested = body("user_pcc_py_frontend_codegen_class_gen___nested_bind_method_arg")
-    if "@user_pcc_llvm_capi_ir_scaffold_Function_append_basic_block" not in method:
+    method = body("user_pcc_frontends_python_codegen_class_gen_ClassLowering__emit_method_body")
+    nested = body("user_pcc_frontends_python_codegen_class_gen___nested_bind_method_arg")
+    if "@user_pcc_ir_ir_scaffold_Function_append_basic_block" not in method:
         raise AssertionError("proven ir.Function receiver lost direct append_basic_block")
     if "%cpy.fn.append_basic_block" in method:
         raise AssertionError("proven ir.Function receiver entered CPython dispatch")
     for symbol in (
-        "@user_pcc_llvm_capi_ir_IRBuilder_call1",
-        "@user_pcc_llvm_capi_ir_IRBuilder_alloca",
-        "@user_pcc_llvm_capi_ir_IRBuilder_store",
+        "@user_pcc_ir_ir_IRBuilder_call1",
+        "@user_pcc_ir_ir_IRBuilder_alloca",
+        "@user_pcc_ir_ir_IRBuilder_store",
     ):
         if symbol not in nested:
             raise AssertionError("proven nested IRBuilder receiver lost " + symbol)

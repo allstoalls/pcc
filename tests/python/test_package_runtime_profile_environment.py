@@ -10,14 +10,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pcc.package_environment as package_environment
+import pcc.package.environment as package_environment
 import pcc.package.uv_lock_sync as uv_lock_sync
 from pcc.package.runtime_profile import (
     RUNTIME_PROFILE_ENV_VARS,
     RUNTIME_PROFILE_SCHEMA,
     runtime_profile,
 )
-from pcc.package_environment import resolve_package_environment
+from pcc.package.environment import resolve_package_environment
 
 from tests.python.package_environment_profile_contract import (
     assert_profile_environment_invariance,

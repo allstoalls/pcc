@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pcc.py_frontend import parser
-from pcc.py_frontend.py_ast import Import, ImportFrom
+from pcc.frontends.python import parser
+from pcc.frontends.python.py_ast import Import, ImportFrom
 
 
 def test_stdlib_pathlib_base64_hashlib_string_time_import_shapes():

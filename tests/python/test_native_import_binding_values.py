@@ -14,8 +14,8 @@ import sys
 
 import pytest
 
-from pcc.py_frontend.codegen.hoist_boxing import _box_stmts
-from pcc.py_frontend.py_ast import (
+from pcc.frontends.python.codegen.hoist_boxing import _box_stmts
+from pcc.frontends.python.py_ast import (
     Assign,
     DynType,
     Import,
@@ -120,7 +120,7 @@ main()
 
 
 def test_escaping_closures_see_import_bindings_on_every_gc(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     (tmp_path / "helper.py").write_text(HELPER, encoding="utf-8")
     source = tmp_path / "import_bindings.py"
@@ -134,7 +134,7 @@ def test_escaping_closures_see_import_bindings_on_every_gc(
     output = tmp_path / "import_bindings"
     python_program_compiler(
         str(source), str(output), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         ran = subprocess.run(

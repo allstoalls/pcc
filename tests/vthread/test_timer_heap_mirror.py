@@ -4,7 +4,7 @@ This is the runtime-structure mirror slice of the CPU-only timer oracle
 (``pcc/vthread/timer_oracle.py``). Two views of the oracle's
 ``MinHeapTimerQueue`` are diffed against it:
 
-  * ``pcc/py_runtime/py/py_timer_heap.py`` -- the pcc-Python port, run
+  * ``pcc/runtime/py/py_timer_heap.py`` -- the pcc-Python port, run
     in-process (also valid CPython) on scripted cases + a randomized parity
     sequence;
   * the production ``freestanding_timer_heap`` members of the runtime
@@ -22,7 +22,7 @@ import sys
 import textwrap
 from pathlib import Path
 
-from pcc.dependency_verdict import probe_first_executable_dependency
+from pcc.diagnostics.dependency_verdict import probe_first_executable_dependency
 
 import pytest
 
@@ -42,7 +42,7 @@ def _load_port():
     name = "pcc_runtime_py_timer_heap_port"
     if name in sys.modules:
         return sys.modules[name]
-    path = _repo_root() / "pcc" / "py_runtime" / "py" / "py_timer_heap.py"
+    path = _repo_root() / "pcc" / "runtime" / "py" / "py_timer_heap.py"
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -232,13 +232,13 @@ def _oracle_dataset(n: int, ncancel: int, steps):
     return inserts, cancels, seq
 
 
-def test_c_abi_timer_heap_matches_oracle_dataset(tmp_path, pcc_py_runtime_archive):
+def test_c_abi_timer_heap_matches_oracle_dataset(tmp_path, pcc_runtime_archive):
     if not CC_VERDICT.available:
         pytest.fail(CC_VERDICT.skip_reason())
     cc = CC_VERDICT.resolved_path
 
     root = _repo_root()
-    src_dir = root / "pcc" / "py_runtime" / "src"
+    src_dir = root / "pcc" / "runtime" / "src"
     heap_h = src_dir / "py_timer_heap.h"
     assert heap_h.is_file()
 
@@ -307,7 +307,7 @@ def test_c_abi_timer_heap_matches_oracle_dataset(tmp_path, pcc_py_runtime_archiv
             "-Wextra",
             f"-I{src_dir}",
             str(harness),
-            str(pcc_py_runtime_archive),
+            str(pcc_runtime_archive),
             "-lm",
             "-o",
             str(exe),
@@ -322,13 +322,13 @@ def test_c_abi_timer_heap_matches_oracle_dataset(tmp_path, pcc_py_runtime_archiv
     assert run.stdout.strip() == "dataset-ok"
 
 
-def test_c_abi_timer_heap_scripted_semantics(tmp_path, pcc_py_runtime_archive):
+def test_c_abi_timer_heap_scripted_semantics(tmp_path, pcc_runtime_archive):
     if not CC_VERDICT.available:
         pytest.fail(CC_VERDICT.skip_reason())
     cc = CC_VERDICT.resolved_path
 
     root = _repo_root()
-    src_dir = root / "pcc" / "py_runtime" / "src"
+    src_dir = root / "pcc" / "runtime" / "src"
 
     harness = tmp_path / "timer_heap_semantics.c"
     harness.write_text(textwrap.dedent(r"""
@@ -400,7 +400,7 @@ def test_c_abi_timer_heap_scripted_semantics(tmp_path, pcc_py_runtime_archive):
     exe = tmp_path / "timer_heap_semantics.out"
     build = subprocess.run(
         [cc, "-std=c11", "-Wall", "-Wextra", f"-I{src_dir}",
-         str(harness), str(pcc_py_runtime_archive), "-lm", "-o", str(exe)],
+         str(harness), str(pcc_runtime_archive), "-lm", "-o", str(exe)],
         capture_output=True, text=True, timeout=60,
     )
     assert build.returncode == 0, build.stdout + build.stderr
@@ -411,7 +411,7 @@ def test_c_abi_timer_heap_scripted_semantics(tmp_path, pcc_py_runtime_archive):
 
 def test_timer_heap_port_is_in_the_production_archive():
     """The production archive carries the timer heap the C ABI tests link."""
-    makefile = (_repo_root() / "pcc" / "py_runtime" / "Makefile").read_text(
+    makefile = (_repo_root() / "pcc" / "runtime" / "Makefile").read_text(
         encoding="utf-8"
     )
     assert "freestanding_timer_heap" in makefile.split(

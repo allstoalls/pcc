@@ -5,7 +5,7 @@ import textwrap
 
 
 def test_tuple_concat_after_singleton_tuple_rebind_self_backend(tmp_path):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = tmp_path / "tuple_concat_rebind.py"
     src.write_text(textwrap.dedent(

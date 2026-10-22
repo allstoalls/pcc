@@ -3,6 +3,8 @@ name: Publish to PyPI
 on:
   release:
     types: [published]
+  # Build and gate every platform wheel without publishing anything.
+  workflow_dispatch:
 
 jobs:
   # Publication is not gated on the truth matrix: the head-truth light/heavy
@@ -10,28 +12,148 @@ jobs:
   # macOS matrix made releases unusable and blocked them outright on any red
   # gate. The gate runner itself (scripts/head_truth_gate.py) is unchanged and
   # is run locally.
-  pypi-publish:
-    name: Upload release to PyPI
+  sdist:
+    name: Build sdist
     runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      id-token: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version-file: .python-version
 
       - name: Install build dependencies
         run: pip install build
 
       - name: Build sdist
-        # sdist-only: hatch_build.py self-compiles a native `pcc` on
-        # every user's `pip install`, so no platform wheels are
-        # published. See pyproject.toml + hatch_build.py.
         run: python -m build --sdist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  # Each wheel bundles the pcc1 that this job's own Stage1 built, tagged
+  # py3-none-<platform> by hatch_build.py. A platform whose Stage1 (and on
+  # Linux/Windows its five-collector canary) or installed-wheel execution
+  # fails uploads nothing, so only passing platforms are published.
+  native-wheel:
+    name: Native wheel / ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    env:
+      PCC_BUILD_BACKEND: self
+      PCC_RUNTIME_CC: pcc
+      PCC_RUNTIME_HIGH: py
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: macos-arm64, runner: macos-15 }
+          - { platform: linux-x86_64, runner: ubuntu-24.04, docker_platform: linux/amd64 }
+          - { platform: linux-aarch64, runner: ubuntu-24.04-arm, docker_platform: linux/arm64 }
+          - { platform: windows-x86_64, runner: windows-2022 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install wheel-build tools
+        run: python -m pip install build hatchling
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install locked development dependencies
+        run: uv sync --frozen --dev
+
+      - name: Build Stage1 pcc1
+        run: uv run --frozen --no-sync python scripts/ci_worker_size_prior_gate.py --out-dir build/worker-prior-gate --phase stage1
+
+      # GITHUB_ENV reaches only later steps, so the handoff is its own step.
+      - name: Hand the Stage1 pcc1 to the wheel build
+        run: uv run --frozen --no-sync python scripts/ci_stage1_compiler.py
+
+      - name: Build this platform's wheel
+        run: python -m build --wheel --no-isolation --outdir dist
+
+      - name: Install wheel and execute native output on the runner
+        run: python scripts/ci_native_wheel_gate.py dist
+
+      # The images install the wheel on the requires-python floor (3.13);
+      # every other step runs the interpreter .python-version names.
+      - name: Install and execute the Linux wheel inside Docker
+        if: startsWith(matrix.platform, 'linux-')
+        shell: bash
+        run: |
+          docker info --format '{{.OSType}} {{.Architecture}}'
+          docker run --rm --platform "${{ matrix.docker_platform }}" \
+            --mount "type=bind,source=$PWD,target=/workspace,readonly" \
+            --workdir /workspace \
+            --network none \
+            python:3.13-bookworm \
+            python scripts/ci_native_wheel_gate.py dist
+
+      - name: Install and execute the Windows wheel inside Docker
+        if: matrix.platform == 'windows-x86_64'
+        shell: pwsh
+        run: |
+          $service = Get-Service docker -ErrorAction SilentlyContinue
+          if ($service -and $service.Status -ne 'Running') { Start-Service docker }
+          docker info --format '{{.OSType}} {{.Architecture}}'
+          docker run --rm --isolation=process `
+            --mount "type=bind,source=$env:GITHUB_WORKSPACE,target=C:\workspace" `
+            --workdir C:\workspace `
+            python:3.13-windowsservercore-ltsc2022 `
+            python scripts/ci_native_wheel_gate.py dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.platform }}
+          path: dist/*.whl
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Preserve Stage1 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-stage1-${{ matrix.platform }}
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            build/bootstrap/stage*.json
+            build/bootstrap/stage*.process.*/result.json
+            build/bootstrap/stage*.process.*/target.stderr
+            build/platform-qualification/**/*.log
+            build/platform-qualification/**/*.json
+            build/worker-prior-gate/**/*.json
+            build/worker-prior-gate/**/*.log
+
+  pypi-publish:
+    name: Upload release to PyPI
+    needs: [sdist, native-wheel]
+    if: ${{ always() && github.event_name == 'release' && needs.sdist.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+
+      - name: Require at least one platform wheel
+        run: |
+          ls -l dist
+          ls dist/*.whl
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

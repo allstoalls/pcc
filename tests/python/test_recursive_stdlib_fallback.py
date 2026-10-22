@@ -30,7 +30,7 @@ def test_shlex_compile_succeeds_despite_collections_codegen_failure():
     """User code that imports shlex should compile cleanly even
     though shlex's transitive dep collections.py fails pcc codegen.
     """
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     src = _BUILD / "fb_shlex.py"
     src.write_text(textwrap.dedent(
@@ -56,7 +56,7 @@ def test_shlex_compile_succeeds_despite_collections_codegen_failure():
 def test_simple_module_still_native():
     """Regression check: keyword (which compiles cleanly) still gets
     the native treatment after the fallback path was added."""
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
     import re
 
     src = _BUILD / "fb_keyword.py"

@@ -14,9 +14,9 @@ REPO_ROOT = repo_root()
 
 
 def test_tagged_int_str_uses_pcc_python_runtime(
-    tmp_path, monkeypatch, pcc_py_runtime_archive
+    tmp_path, monkeypatch, pcc_runtime_archive
 ):
-    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_py_runtime_archive))
+    monkeypatch.setenv("PCC_RUNTIME_ARCHIVE", str(pcc_runtime_archive))
     src = tmp_path / "int_str_pcc_py.py"
     exe = tmp_path / "int_str_pcc_py.out"
     src.write_text(

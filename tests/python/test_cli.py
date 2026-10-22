@@ -3,20 +3,19 @@ import shutil
 import subprocess
 import sys
 
-from click.testing import CliRunner
+import pytest
 
-from pcc.cli_core import cli_main
-from pcc.gpu_backend import resolve_gpu_backend
-from pcc.passes import find_opt_binary
-from pcc.pcc import main
+from pcc.driver.cli_core import cli_main, parse_cli_args
+from pcc.backend.gpu_dispatch import resolve_gpu_backend
+from tests.cli_support import run_cli
 
 
-def test_help_shows_jobs_default_8():
-    result = CliRunner().invoke(main, ["--help"])
-
-    assert result.exit_code == 0
-    assert "--jobs INTEGER RANGE" in result.output
-    assert "[default: 8;" in result.output
+def test_help_shows_jobs_default_8(capfd):
+    assert cli_main(["--help"]) == 0
+    assert "--jobs N" in capfd.readouterr().out
+    parsed, status, error = parse_cli_args(["main.c"])
+    assert status == 0, error
+    assert parsed[6] == 8
 
 
 def test_python_m_help_does_not_import_click():
@@ -48,7 +47,7 @@ def test_python_m_help_does_not_import_click():
     assert "click blocked" not in result.stderr
 
 
-def test_importing_pcc_wrapper_without_click_falls_back_to_plain_main():
+def test_installed_cli_launcher_help_does_not_import_click():
     repo_root = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
@@ -57,10 +56,10 @@ def test_importing_pcc_wrapper_without_click_falls_back_to_plain_main():
         "orig_import = builtins.__import__\n"
         "def blocked(name, globals=None, locals=None, fromlist=(), level=0):\n"
         "    if name == 'click' or name.startswith('click.'):\n"
-        "        raise ImportError('click blocked for pcc.pcc import')\n"
+        "        raise ImportError('click blocked for CLI launcher')\n"
         "    return orig_import(name, globals, locals, fromlist, level)\n"
         "builtins.__import__ = blocked\n"
-        "mod = importlib.import_module('pcc.pcc')\n"
+        "mod = importlib.import_module('pcc.driver.cli_launcher')\n"
         "print(callable(mod.main))\n"
         "print(mod.main(['--help']))\n"
     )
@@ -164,7 +163,7 @@ def test_plain_cli_python_libpython_default_is_off(tmp_path):
 
 
 def test_python_libpython_resolver_defaults_to_off():
-    from pcc.py_frontend.pipeline import _resolve_libpython_mode
+    from pcc.frontends.python.pipeline import _resolve_libpython_mode
 
     saved = os.environ.get("PCC_PYTHON_LIBPYTHON")
     try:
@@ -217,12 +216,12 @@ def test_python_libpython_off_reports_friendly_error_for_fallback_script(tmp_pat
 def test_jobs_requires_separate_tus(tmp_path):
     (tmp_path / "main.c").write_text("int main(void) { return 0; }\n", encoding="utf-8")
 
-    result = CliRunner().invoke(main, ["--jobs", "2", str(tmp_path)])
+    result = run_cli(["--jobs", "2", str(tmp_path)])
 
-    assert result.exit_code == 1
+    assert result.returncode == 1
     assert (
         "Error: --jobs requires --separate-tus, --depends-on, or --system-link"
-        in result.output
+        in (result.stdout + result.stderr)
     )
 
 
@@ -245,12 +244,11 @@ def test_depends_on_supports_file_with_dependency_make_goal(tmp_path):
         "int main(void) { return helper() == 41 ? 0 : 1; }\n"
     , encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["--depends-on", f"{dep_dir}=lib", str(main_path)],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0
 
 
 def test_jobs_allowed_with_depends_on(tmp_path):
@@ -269,12 +267,11 @@ def test_jobs_allowed_with_depends_on(tmp_path):
         "int main(void) { return helper() == 41 ? 0 : 1; }\n"
     , encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["--jobs", "2", "--depends-on", f"{dep_dir}=lib", str(main_path)],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0
 
 
 def test_system_link_supports_depends_on_multi_input(tmp_path):
@@ -286,12 +283,11 @@ def test_system_link_supports_depends_on_multi_input(tmp_path):
         "int main(void) { return helper() == 41 ? 0 : 1; }\n"
     , encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["--system-link", "--depends-on", str(helper_path), str(main_path)],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0
 
 
 def test_system_link_supports_link_arg_archive(tmp_path):
@@ -324,12 +320,11 @@ def test_system_link_supports_link_arg_archive(tmp_path):
         text=True,
     )
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["--system-link", f"--link-arg={helper_a}", str(main_path)],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0
 
 
 def test_prepare_cmd_and_ensure_make_goal_support_fresh_dependency_project(tmp_path):
@@ -363,8 +358,7 @@ def test_prepare_cmd_and_ensure_make_goal_support_fresh_dependency_project(tmp_p
         "int main(void) { return helper() == 41 ? 0 : 1; }\n"
     , encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         [
             "--prepare-cmd",
             f"cd {dep_dir} && ./configure.sh",
@@ -377,7 +371,7 @@ def test_prepare_cmd_and_ensure_make_goal_support_fresh_dependency_project(tmp_p
         ],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0
 
 
 def test_cpp_arg_supports_single_file_define(tmp_path):
@@ -389,12 +383,11 @@ def test_cpp_arg_supports_single_file_define(tmp_path):
         "int main(void) { return VALUE == 42 ? 0 : 1; }\n"
     , encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["--cpp-arg=-DVALUE=42", str(main_path)],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0
 
 
 def test_cpp_arg_supports_depends_on_multi_input(tmp_path):
@@ -414,36 +407,36 @@ def test_cpp_arg_supports_depends_on_multi_input(tmp_path):
         "int main(void) { return helper() == VALUE ? 0 : 1; }\n"
     , encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["--cpp-arg=-DVALUE=41", "--depends-on", str(helper_path), str(main_path)],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0
 
 
-def test_backend_llvm_flag_is_accepted(tmp_path):
+@pytest.mark.parametrize("backend", ["llvm", "llvm_capi", "llvmlite", "llvm-capi"])
+def test_removed_backends_are_rejected_before_compilation(tmp_path, backend):
     main_path = tmp_path / "main.c"
     main_path.write_text("int main(void) { return 0; }\n", encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
-        ["--backend", "llvm", str(main_path)],
+    result = run_cli(
+        ["--backend", backend, str(main_path)],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 2
+    assert "invalid backend" in result.stderr
+    assert "expected self" in result.stderr
 
 
 def test_backend_self_can_run_simple_program(tmp_path):
     main_path = tmp_path / "main.c"
     main_path.write_text("int main(void) { return 0; }\n", encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["--backend", "self", str(main_path)],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0
 
 
 def test_backend_self_env_can_run_simple_program(tmp_path, monkeypatch):
@@ -456,16 +449,33 @@ def test_backend_self_env_can_run_simple_program(tmp_path, monkeypatch):
     assert result == 0
 
 
+def test_cli_launcher_emits_and_runs_owned_c_executable(tmp_path):
+    source = tmp_path / "main.c"
+    executable = tmp_path / "program"
+    source.write_text(
+        "int answer(void) { return 42; } int main(void) { return answer(); }\n",
+        encoding="utf-8",
+    )
+    result = run_cli(
+        ["--backend", "self", "-O2", str(source), "-o", str(executable)],
+        entry="pcc.driver.cli_launcher",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "clamped" not in result.stderr
+    assert "LLVM vectorizer" not in result.stderr
+    assert subprocess.run([str(executable)], timeout=10).returncode == 42
+
+
 def test_gpu_backend_metal_flag_is_accepted_as_device_config(tmp_path):
     main_path = tmp_path / "main.c"
     main_path.write_text("int main(void) { return 0; }\n", encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["--gpu-backend", "metal", str(main_path)],
     )
 
-    assert result.exit_code == 0, result.output
+    assert result.returncode == 0, (result.stdout + result.stderr)
 
 
 def test_gpu_backend_metal_is_annotated_kernel_only():
@@ -481,12 +491,11 @@ def test_backend_self_emit_asm_starts_aarch64_mvp(tmp_path):
     asm_path = tmp_path / "main.s"
     main_path.write_text("int main(void) { return 7; }\n", encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["--backend", "self", "--emit-asm", str(asm_path), str(main_path)],
     )
 
-    assert result.exit_code == 0, result.output
+    assert result.returncode == 0, (result.stdout + result.stderr)
     assert asm_path.is_file()
     asm_text = asm_path.read_text(encoding="utf-8")
     assert "_main:" in asm_text
@@ -498,8 +507,7 @@ def test_backend_self_emit_asm_honors_x86_64_linux_target(tmp_path):
     asm_path = tmp_path / "main.s"
     main_path.write_text("int main(void) { return 7; }\n", encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         [
             "--backend",
             "self",
@@ -511,7 +519,7 @@ def test_backend_self_emit_asm_honors_x86_64_linux_target(tmp_path):
         ],
     )
 
-    assert result.exit_code == 0, result.output
+    assert result.returncode == 0, (result.stdout + result.stderr)
     asm_text = asm_path.read_text(encoding="utf-8")
     assert ".intel_syntax noprefix" in asm_text
     assert "\nmain:\n" in asm_text
@@ -522,52 +530,45 @@ def test_pass_option_can_select_single_repo_pass_at_o0(tmp_path):
     main_path = tmp_path / "main.c"
     main_path.write_text("int main(void) { return 0; }\n", encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["-O0", "--pass", "canonicalize", str(main_path)],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0
 
 
-def test_pass_option_can_select_registered_llvm_alias_at_o0(tmp_path):
+def test_pass_option_can_select_owned_function_attribute_alias_at_o0(tmp_path):
     main_path = tmp_path / "main.c"
     main_path.write_text("int main(void) { return 0; }\n", encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["-O0", "--pass", "function-attrs", str(main_path)],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0
 
 
 def test_disable_pass_rejects_unknown_name(tmp_path):
     main_path = tmp_path / "main.c"
     main_path.write_text("int main(void) { return 0; }\n", encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["--disable-pass", "definitely-not-a-pass", str(main_path)],
     )
 
-    assert result.exit_code == 1
-    assert "unknown pass name(s): definitely-not-a-pass" in result.output
+    assert result.returncode == 1
+    assert "unknown pass name(s): definitely-not-a-pass" in (result.stdout + result.stderr)
 
 
-def test_pass_option_can_select_single_llvm_pass_when_opt_available(tmp_path):
-    if find_opt_binary() is None:
-        return
-
+def test_pass_option_can_select_owned_instruction_combining_alias(tmp_path):
     main_path = tmp_path / "main.c"
     main_path.write_text("int main(void) { return 0; }\n", encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["--pass", "instcombine", str(main_path)],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0
 
 
 def test_cpp_arg_supports_sources_from_make_directory(tmp_path):
@@ -596,12 +597,11 @@ def test_cpp_arg_supports_sources_from_make_directory(tmp_path):
         "\tcc -c -o ignored.o ignored.c\n"
     , encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["--cpp-arg=-DVALUE=41", "--sources-from-make", "app", str(tmp_path)],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0
 
 
 def test_cpp_arg_supports_sources_from_make_directory_with_separate_tus(tmp_path):
@@ -630,8 +630,7 @@ def test_cpp_arg_supports_sources_from_make_directory_with_separate_tus(tmp_path
         "\tcc -c -o ignored.o ignored.c\n"
     , encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         [
             "--cpp-arg=-DVALUE=41",
             "--separate-tus",
@@ -643,7 +642,7 @@ def test_cpp_arg_supports_sources_from_make_directory_with_separate_tus(tmp_path
         ],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0
 
 
 def test_sources_from_make_infers_cpp_args_from_compile_commands(tmp_path):
@@ -670,12 +669,11 @@ def test_sources_from_make_infers_cpp_args_from_compile_commands(tmp_path):
         "\tcc $(CPPFLAGS) -c -o main.o main.c\n"
     , encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["--sources-from-make", "app", str(tmp_path)],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0
 
 
 def test_depends_on_make_goal_infers_cpp_args_from_compile_commands(tmp_path):
@@ -703,12 +701,11 @@ def test_depends_on_make_goal_infers_cpp_args_from_compile_commands(tmp_path):
         "int main(void) { return helper() == VALUE ? 0 : 1; }\n"
     , encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["--depends-on", f"{dep_dir}=lib", str(main_path)],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0
 
 
 def test_explicit_cpp_arg_overrides_make_inferred_cpp_arg(tmp_path):
@@ -735,9 +732,8 @@ def test_explicit_cpp_arg_overrides_make_inferred_cpp_arg(tmp_path):
         "\tcc $(CPPFLAGS) -c -o main.o main.c\n"
     , encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main,
+    result = run_cli(
         ["--sources-from-make", "app", "--cpp-arg=-DVALUE=41", str(tmp_path)],
     )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0

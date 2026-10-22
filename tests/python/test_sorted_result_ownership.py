@@ -8,7 +8,7 @@ import pytest
 
 @pytest.mark.parametrize("fail_iteration", [False, True])
 def test_sorted_without_key_releases_temporary_iterable(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive,
     fail_iteration,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
@@ -43,7 +43,7 @@ main()
     binary = tmp_path / "sorted_plain_input"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         ran = subprocess.run(
@@ -56,7 +56,7 @@ main()
 
 @pytest.mark.parametrize("source_shape", ["call", "attribute", "borrowed"])
 def test_sorted_key_releases_temporary_input_owner(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive, source_shape,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive, source_shape,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     setup, value = {
@@ -108,7 +108,7 @@ main()
     binary = tmp_path / "sorted_input_owner"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         ran = subprocess.run(
@@ -124,7 +124,7 @@ main()
 
 @pytest.mark.parametrize("fail_key", [False, True])
 def test_sorted_input_outlives_callbacks_and_is_released_on_error(
-    tmp_path, monkeypatch, python_program_compiler, pcc_py_runtime_archive, fail_key,
+    tmp_path, monkeypatch, python_program_compiler, pcc_runtime_archive, fail_key,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = tmp_path / "sorted_input_lifetime.py"
@@ -162,7 +162,7 @@ main()
     binary = tmp_path / "sorted_input_lifetime"
     python_program_compiler(
         str(source), str(binary), backend="self", libpython_mode="off",
-        runtime_archive=str(pcc_py_runtime_archive),
+        runtime_archive=str(pcc_runtime_archive),
     )
     for backend in range(5):
         ran = subprocess.run(
@@ -178,7 +178,7 @@ main()
     "sorted(values, reverse=True)",
 ])
 def test_sorted_result_is_released_and_generator_join_keeps_range_owner(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, monkeypatch, expression,
+    tmp_path, pcc_runtime_archive, python_program_compiler, monkeypatch, expression,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = tmp_path / "sorted_owner.py"
@@ -211,7 +211,7 @@ main()
 '''.replace("EXPRESSION", expression))
     binary = tmp_path / "sorted_owner"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)))
@@ -222,7 +222,7 @@ main()
 
 
 def test_sorted_custom_comparison_releases_result_storage(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, monkeypatch,
+    tmp_path, pcc_runtime_archive, python_program_compiler, monkeypatch,
 ):
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     source = tmp_path / "sorted_custom_owner.py"
@@ -255,7 +255,7 @@ main()
 ''')
     binary = tmp_path / "sorted_custom_owner"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=20,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)))

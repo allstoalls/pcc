@@ -48,7 +48,7 @@ def _direct_self_init_field_index(
 
 
 def test_class_method_registration_uses_stable_function_ref(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     monkeypatch.setenv("PCC_PYTHON_IR_PASSES", "off")
     src = tmp_path / "method_ref.py"
@@ -78,14 +78,16 @@ def test_class_method_registration_uses_stable_function_ref(tmp_path, monkeypatc
     text = out.read_text(encoding="utf-8")
     # Method registration must reference the method by a STABLE, named
     # function symbol derived from the method (so cross-module class schema
-    # is deterministic), not an anonymous/inlined ref. After the method
-    # dispatch rework the registration passes the method's stable native
-    # adapter symbol to py_func_new_named (previously a `bitcast ptr
-    # @user_method_ref_Box_value to ptr`); the raw method symbol is still
-    # emitted and called.
-    assert (
-        "@py_func_new_named(ptr @user_method_ref_Box_value_method_native_adapter"
-        in text
+    # is deterministic), not an anonymous/inlined ref. The registration
+    # passes the method's stable native adapter symbol to the function
+    # constructor (py_func_new_named, then py_func_new_signature_slots, and
+    # py_func_new_static_def for a static signature); the raw method symbol
+    # is still emitted and called.
+    adapter = "@user_method_ref_Box_value_method_native_adapter"
+    assert re.search(
+        r"@py_func_new_(?:named|static_def)\(ptr " + adapter
+        + r"|@py_func_new_signature_slots\(ptr [^,]+, ptr [^,]+, ptr " + adapter,
+        text,
     ), text
     assert "define external ptr @user_method_ref_Box_value(" in text, text
     # the original malformed-ref guard: the function ref must never be
@@ -94,7 +96,7 @@ def test_class_method_registration_uses_stable_function_ref(tmp_path, monkeypatc
 
 
 def test_pcc_cross_module_class_schema_matches_local_layout(tmp_path):
-    from pcc.py_frontend.pipeline import (
+    from pcc.frontends.python.pipeline import (
         _collect_relative_module_closure,
         _filter_ir_scaffold_closure,
         compile_python_multi,
@@ -108,6 +110,9 @@ def test_pcc_cross_module_class_schema_matches_local_layout(tmp_path):
     srcs, mods = _filter_ir_scaffold_closure(srcs, mods, ir_scaffold_mode="on")
     out = tmp_path / "pcc_main.ll"
 
+    # Admit stdlib providers as the production compile of pcc/__main__.py
+    # does: without them html.parser.HTMLParser (a base in
+    # pcc.package.acquire) is foreign and its super().__init__ fails closed.
     compile_python_multi(
         srcs,
         str(out),
@@ -117,12 +122,13 @@ def test_pcc_cross_module_class_schema_matches_local_layout(tmp_path):
         libpython_mode="off",
         ir_scaffold_mode="on",
         backend="self",
+        recursive_stdlib=True,
     )
 
     text = out.read_text(encoding="utf-8")
     body = re.search(
         r"define\s+(?:external\s+)?void\s+"
-        r"@user_pcc_py_frontend_codegen_class_gen_ClassLowering__emit_method_body"
+        r"@user_pcc_frontends_python_codegen_class_gen_ClassLowering__emit_method_body"
         r"\([^)]*\)[^{]*\{(?P<body>.*?)\n\}",
         text,
         re.DOTALL,

@@ -3,8 +3,8 @@ from __future__ import annotations
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
-from pcc.py_frontend.pipeline import compile_python_multi
+from pcc.frontends.python.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python_multi
 
 
 def test_imported_decorator_factory_call_is_metadata_noop(tmp_path):
@@ -73,7 +73,7 @@ def test_module_global_decorator_factory_call_is_metadata_noop(tmp_path):
     compile_python(
         str(entry),
         str(exe),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )
@@ -106,7 +106,7 @@ def test_noop_decorated_function_with_kwargs_uses_direct_call(tmp_path):
     compile_python(
         str(entry),
         str(exe),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )
@@ -138,7 +138,7 @@ def test_native_decorated_function_call_accepts_kwargs_for_codegen(tmp_path):
     compile_python(
         str(entry),
         str(exe),
-        backend="llvm",
+        backend="self",
         libpython_mode="off",
         ir_scaffold_mode="on",
     )

@@ -33,7 +33,7 @@ main()
 
 
 def test_static_container_emission_preserves_values_and_fresh_nested_objects(
-    tmp_path, monkeypatch, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, monkeypatch, pcc_runtime_archive, python_program_compiler,
 ):
     monkeypatch.setenv("PCC_STATIC_AGGREGATE", "1")
     source = tmp_path / "static_containers.py"
@@ -43,7 +43,7 @@ def test_static_container_emission_preserves_values_and_fresh_nested_objects(
     assert expected.returncode == 0, expected.stderr
     binary = tmp_path / "static_containers"
     python_program_compiler(str(source), str(binary), backend="self", libpython_mode="off",
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(backend)))
@@ -52,7 +52,7 @@ def test_static_container_emission_preserves_values_and_fresh_nested_objects(
 
 
 def test_static_container_probe_reaches_each_counter(tmp_path, monkeypatch):
-    from pcc.py_frontend.pipeline import compile_python
+    from pcc.frontends.python.pipeline import compile_python
 
     monkeypatch.setenv("PCC_STATIC_AGGREGATE", "1")
     source = tmp_path / "static_containers.py"

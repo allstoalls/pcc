@@ -1,4 +1,10 @@
-"""Owned clone/exit machine-boundary routines for the Linux thread runtime."""
+"""Owned clone/exit machine-boundary routines for the Linux thread runtime.
+
+Clone replaces the child stack pointer but inherits the creator's frame pointer.
+Terminate that chain before the first compiled child call: thread registration
+walks saved frame pointers and must never follow the creator's mutable stack.
+The parent path must retain its frame pointer so it can return normally.
+"""
 
 
 def assembly(aarch64: bool) -> str:
@@ -27,6 +33,7 @@ pcc_linux_thread_spawn:
 L_pcc_clone_child:
   ldr x9, [sp]
   ldr x0, [sp, #8]
+  mov x29, xzr
   blr x9
   mov x0, #0
   mov x8, #93
@@ -78,6 +85,7 @@ pcc_linux_thread_spawn:
 .Lpcc_clone_child:
   mov r11, QWORD PTR [rsp]
   mov rdi, QWORD PTR [rsp + 8]
+  xor ebp, ebp
   call r11
   xor edi, edi
   mov eax, 60

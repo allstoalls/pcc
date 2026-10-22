@@ -1,6 +1,6 @@
 [project]
 name = "python-cc"
-version = "0.1.7"
+version = "0.1.8"
 description = "A Python-authored compiler toolchain that compiles C and Python to native code with its own backend."
 readme = "README.md"
 license = "MIT"
@@ -27,7 +27,7 @@ mlx = ["mlx>=0.32.0"]
 Homepage = "https://github.com/allstoalls/pcc"
 
 [project.scripts]
-pcc = "pcc.cli_launcher:main"
+pcc = "pcc.driver.cli_launcher:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -43,15 +43,15 @@ packages = ["pcc", "utils"]
 # directory tree, but we list these explicitly so future moves don't
 # silently drop them.
 include = [
-    "pcc/py_runtime/src/**",
-    "pcc/py_runtime/include/**",
-    "pcc/py_runtime/py/**",
-    "pcc/py_runtime/Makefile",
+    "pcc/runtime/src/**",
+    "pcc/runtime/include/**",
+    "pcc/runtime/py/**",
+    "pcc/runtime/Makefile",
 ]
 
 # Wheel-build hook in hatch_build.py:
-#  - compiles pcc/py_runtime → libpy_runtime_pcc_py.a (soft-fail: lazy
-#    first-run path in pcc.py_frontend.pipeline can rebuild)
+#  - compiles pcc/runtime → libpy_runtime_pcc_py.a (soft-fail: lazy
+#    first-run path in pcc.frontends.python.pipeline can rebuild)
 #  - self-compiles pcc/__main__.py → native `pcc1` bootstrap helper, shipped
 #    via .data/scripts/pcc1. The public `pcc` command remains a Python launcher
 #    for the full cli_core path.

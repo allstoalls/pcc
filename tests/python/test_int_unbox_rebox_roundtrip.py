@@ -18,7 +18,7 @@ owned result instead of increfing it. Tracked as M5-SELFHOST-BIG-INT-LITERAL.
 it passes was documented "caller can ignore". For a value above 2**63-1
 `py_int_to_i64` yields 0, so an immediate re-box produced 0 instead of the
 original bignum. Because the parser lifts literals with `int(e.text, 0)`
-(`pcc/parse/py_lift.py:583`), that also made every over-i64 *literal* in
+(`pcc/frontends/python/py_lift.py:583`), that also made every over-i64 *literal* in
 compiled source become 0 -- which is what left pcc2 unable to print any integer
 (a mask spelled `& 0xFFFFFFFFFFFFFFFF` became `& 0`).
 

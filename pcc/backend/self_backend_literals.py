@@ -101,3 +101,23 @@ __all__ = [
     "is_float_literal",
     "is_hex_literal",
 ]
+
+
+def wide_int_quad_lines(init: str, size: int) -> list[str]:
+    """Little-endian ``.quad`` words of an integer constant wider than 64 bits.
+
+    ``init`` is a 128-bit decimal literal; ``object`` keeps the arithmetic
+    exact in pcc's own build, where ``int`` is an i64 lane.
+    """
+    number: object = int(init)
+    number = number % (1 << (size * 8))
+    lines: list[str] = []
+    offset = 0
+    while offset < size:
+        word: object = number % (1 << 64)
+        if word >= (1 << 63):
+            word = word - (1 << 64)
+        lines.append("  .quad " + str(word))
+        number = number // (1 << 64)
+        offset += 8
+    return lines

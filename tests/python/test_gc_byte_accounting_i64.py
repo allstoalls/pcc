@@ -4,15 +4,16 @@ import os
 import subprocess
 import textwrap
 
-from pcc.py_frontend.pipeline import compile_python
+from pcc.frontends.python.pipeline import compile_python
 
 
 ACCOUNTING_PROBE = r'''
+import gc
+
 from pcc.extern import extern, c_int64, c_ptr, c_rawptr, c_void
 from pcc.unsafe import global_addr, load_i32, load_i64, store_i32, store_i64, ptr_is_null
 
 backend = extern("pcc_gc_backend", (), c_int64)
-threads = extern("pcc_threads_enabled", (), c_int64)
 note_alloc = extern("pcc_gc_note_alloc", (c_int64,), c_void)
 telemetry = extern("pcc_gc_telemetry", (c_int64,), c_int64)
 threshold = extern("pcc_gc_tracing_debt_threshold", (), c_int64)
@@ -26,16 +27,19 @@ known_size = extern("pcc_gc_object_known_size", (c_ptr,), c_int64)
 
 def probe() -> int:
     selected: int = int(backend())
-    if (selected != 1 and selected != 2) or threads() != 0:
+    if selected != 1 and selected != 2:
         return 100
     auto_cell = global_addr("pcc_gc_in_auto_step")
     live_cell = global_addr("pcc_gc_live_bytes")
+    # The pacing threshold applies the pause to the heap the last mark found.
+    marked_cell = global_addr("pcc_gc_tracing_marked_bytes")
     debt_cell = global_addr("pcc_gc_debt_bytes")
     override_cell = global_addr("pcc_gc_debt_threshold_override")
     pause_cell = global_addr("pcc_gc_pause")
     multiplier_cell = global_addr("pcc_gc_stepmul")
     saved_auto: int = int(load_i32(auto_cell, 0))
     saved_live: int = int(load_i64(live_cell, 0))
+    saved_marked: int = int(load_i64(marked_cell, 0))
     saved_debt: int = int(load_i64(debt_cell, 0))
     saved_override: int = int(load_i64(override_cell, 0))
     saved_pause: int = int(load_i32(pause_cell, 0))
@@ -72,19 +76,19 @@ def probe() -> int:
         status = status | 32
 
     store_i64(override_cell, 0, 0)
-    store_i64(live_cell, 0, 238609295)
+    store_i64(marked_cell, 0, 238609295)
     first_wide_threshold: int = int(threshold())
     if first_wide_threshold != 2147483655:
         status = status | 64
-    store_i64(live_cell, 0, 2147483712)
+    store_i64(marked_cell, 0, 2147483712)
     large_threshold: int = int(threshold())
     if large_threshold != 19327353408:
         status = status | 128
-    # Intermediate live*900 would overflow, but the final *9 still fits.
-    store_i64(live_cell, 0, 1000000000000000001)
+    # Intermediate marked*900 would overflow, but the final *9 still fits.
+    store_i64(marked_cell, 0, 1000000000000000001)
     if threshold() != 9000000000000000009:
         status = status | 16384
-    store_i64(live_cell, 0, 9223372036854775807)
+    store_i64(marked_cell, 0, 9223372036854775807)
     if threshold() != 9223372036854775807:
         status = status | 32768
     store_i32(pause_cell, 0, 137)
@@ -137,6 +141,7 @@ def probe() -> int:
 
     # Restore all synthetic state before print or other managed allocation.
     store_i64(live_cell, 0, saved_live)
+    store_i64(marked_cell, 0, saved_marked)
     store_i64(debt_cell, 0, saved_debt)
     store_i64(override_cell, 0, saved_override)
     store_i32(pause_cell, 0, saved_pause)
@@ -149,6 +154,10 @@ def probe() -> int:
 
 
 def main() -> None:
+    # The runtime is threaded: the GC1/GC2 collector thread and mutator
+    # assists would begin cycles on, and pay, the synthetic debt below.
+    # Both are automatic collection, which gc.disable() pauses.
+    gc.disable()
     print("status", probe())
 
 main()
@@ -190,9 +199,9 @@ def _environment(backend):
 
 
 def test_native_gc12_byte_counters_cross_32_bit_boundaries(
-    tmp_path, pcc_py_runtime_archive,
+    tmp_path, pcc_runtime_archive,
 ):
-    executable = _compile(tmp_path, pcc_py_runtime_archive, ACCOUNTING_PROBE)
+    executable = _compile(tmp_path, pcc_runtime_archive, ACCOUNTING_PROBE)
     for backend in (1, 2):
         result = subprocess.run(
             [str(executable)], env=_environment(backend), capture_output=True,
@@ -207,9 +216,9 @@ def test_native_gc12_byte_counters_cross_32_bit_boundaries(
 
 
 def test_native_gc_debt_override_retains_values_above_32_bits(
-    tmp_path, pcc_py_runtime_archive,
+    tmp_path, pcc_runtime_archive,
 ):
-    executable = _compile(tmp_path, pcc_py_runtime_archive, OVERRIDE_PROBE)
+    executable = _compile(tmp_path, pcc_runtime_archive, OVERRIDE_PROBE)
     for backend in (1, 2):
         for value in (2147483648, 3221225472, 4294967360, 1099511627776):
             env = _environment(backend)

@@ -8,7 +8,7 @@ import pytest
 
 @pytest.mark.parametrize("parenthesized", [False, True])
 def test_multi_with_as_bindings(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler, parenthesized,
+    tmp_path, pcc_runtime_archive, python_program_compiler, parenthesized,
 ):
     header = 'with Context(7) as first, Context(8) as second:'
     if parenthesized:
@@ -31,7 +31,7 @@ main()
 ''', encoding='utf-8')
     binary = tmp_path / 'with_bindings'
     python_program_compiler(str(source), str(binary), backend='self', libpython_mode='off',
-                            runtime_archive=str(pcc_py_runtime_archive))
+                            runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(gc)))
@@ -43,8 +43,8 @@ main()
 
 def test_native_with_invalid_target_diagnostic_has_source_location():
     from types import SimpleNamespace
-    from pcc.py_frontend.codegen.async_with_lowering import AsyncWithLoweringMixin
-    from pcc.py_frontend.py_ast import DynType, Name, SourceSpan, TupleExpr, With
+    from pcc.frontends.python.codegen.async_with_lowering import AsyncWithLoweringMixin
+    from pcc.frontends.python.py_ast import DynType, Name, SourceSpan, TupleExpr, With
 
     span = SourceSpan('with_bindings.py', 17, 4, 17, 30)
     ty = DynType('dyn')
@@ -63,7 +63,7 @@ def test_native_with_invalid_target_diagnostic_has_source_location():
 
 
 def test_with_control_exit_order_and_exit_exception(
-    tmp_path, pcc_py_runtime_archive, python_program_compiler,
+    tmp_path, pcc_runtime_archive, python_program_compiler,
 ):
     source = tmp_path / 'with_control.py'
     source.write_text('''
@@ -105,7 +105,7 @@ main()
     assert expected.returncode == 0, expected.stderr
     binary = tmp_path / 'with_control'
     python_program_compiler(str(source), str(binary), backend='self', libpython_mode='off',
-                   runtime_archive=str(pcc_py_runtime_archive))
+                   runtime_archive=str(pcc_runtime_archive))
     for gc in range(5):
         result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10,
                                 env=dict(os.environ, PCC_GC_BACKEND=str(gc)))

@@ -4,23 +4,20 @@ import os
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from functools import lru_cache
 from pathlib import Path
 
-from pcc.evaluater.c_evaluator import CEvaluator
-from pcc.project import TranslationUnit
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
+from pcc.driver.project import TranslationUnit
+from tests.owned_c_corpus import run_owned_c_corpus
 from tests.worker_process import run_worker_process
+from tests.corpus_execution_phases import (
+    CStageResult, ExecutionPhases, PccCompileResult, run_reference_stages,
+)
 
 DEFAULT_TIMEOUT = 10
 XDIST_TIMEOUT = 20
-
-
-@dataclass(frozen=True)
-class PccCompileResult:
-    returncode: int
-    stdout: str
-    stderr: str
 
 
 @dataclass(frozen=True)
@@ -103,25 +100,16 @@ def run_native(
     cc = _host_cc()
     config = case_config(case_path)
     with tempfile.TemporaryDirectory(prefix="c_testsuite_native_") as tmpdir:
+        object_path = Path(tmpdir) / "a.o"
         binary = Path(tmpdir) / "a.out"
-        compile_result = subprocess.run(
-            [cc, *config.native_cflags, str(case_path), "-o", str(binary)],
-            cwd=repo_root,
-            env=subprocess_env(),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+        commands = (
+            ("compile", [cc, *config.native_cflags, "-c", str(case_path),
+                         "-o", str(object_path)]),
+            ("link", [cc, *config.native_cflags, str(object_path), "-o", str(binary)]),
+            ("run", [str(binary)]),
         )
-        if compile_result.returncode != 0:
-            return compile_result
-        return subprocess.run(
-            [str(binary)],
-            cwd=repo_root,
-            env=subprocess_env(),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
+        return run_reference_stages(commands, cwd=repo_root,
+                                    env=subprocess_env(), timeout=timeout)
 
 
 @lru_cache(maxsize=None)
@@ -143,52 +131,52 @@ def _run_pcc_worker(mode: str, case_path: Path, timeout: int) -> PccCompileResul
         timeout,
     )
     if result.timed_out:
-        return PccCompileResult(124, "", "timeout")
+        return PccCompileResult.from_stages((
+            CStageResult("worker", 124, stderr="timeout", completed=False),
+        ))
     payload = result.payload
     if payload is None:
-        return PccCompileResult(
-            1,
-            "",
-            f"pcc worker exited without result (exitcode={result.exitcode})",
-        )
-    return PccCompileResult(
-        payload["returncode"],
-        payload["stdout"],
-        payload["stderr"],
+        return PccCompileResult.from_stages((CStageResult(
+            "worker", 1,
+            stderr=f"pcc worker exited without result (exitcode={result.exitcode})",
+            completed=False,
+        ),))
+    return PccCompileResult.from_stages(
+        CStageResult(**stage) for stage in payload["stages"]
     )
 
 
 def _pcc_worker_entry(mode: str, case_path_str: str, timeout: int, conn) -> None:
-    case_path = Path(case_path_str)
-    config = case_config(case_path)
-    unit = TranslationUnit(case_path.name, str(case_path), _read_case_source(case_path))
+    phases = ExecutionPhases()
     try:
+        case_path = Path(case_path_str)
+        unit = TranslationUnit(case_path.name, str(case_path), _read_case_source(case_path))
+        config = case_config(case_path)
+        cpp_args = config.cpp_args
         evaluator = CEvaluator()
         if mode == "compile":
+            phases.begin("compile")
             evaluator.compile_translation_units(
-                [unit],
-                base_dir=str(case_path.parent),
-                include_dirs=[str(case_path.parent)],
-                cpp_args=config.cpp_args,
+                [unit], base_dir=str(case_path.parent),
+                include_dirs=[str(case_path.parent)], cpp_args=cpp_args,
             )
-            conn.send({"returncode": 0, "stdout": "", "stderr": ""})
-            return
-
-        result = evaluator.run_translation_units_with_system_cc(
-            [unit],
-            base_dir=str(case_path.parent),
-            include_dirs=[str(case_path.parent)],
-            cpp_args=config.cpp_args,
-            timeout=timeout,
-        )
-        conn.send(
-            {
-                "returncode": result.returncode,
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-            }
-        )
+            outcome = phases.complete()
+        else:
+            result = run_owned_c_corpus(
+                evaluator, [unit], base_dir=str(case_path.parent),
+                include_dirs=[str(case_path.parent)], cpp_args=cpp_args,
+                timeout=timeout, on_stage=phases.begin,
+            )
+            outcome = phases.complete(result)
     except Exception as exc:
-        conn.send({"returncode": 1, "stdout": "", "stderr": str(exc)})
+        outcome = phases.fail(exc)
     finally:
-        conn.close()
+        try:
+            conn.send({
+                "returncode": outcome.returncode,
+                "stdout": outcome.stdout,
+                "stderr": outcome.stderr,
+                "stages": [asdict(stage) for stage in outcome.stages],
+            })
+        finally:
+            conn.close()

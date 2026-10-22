@@ -1,0 +1,523 @@
+"""Owned Intel-syntax file driver for the x86_64 Linux self backend.
+
+The self emitter writes a deliberately finite GNU-style assembly dialect.
+This module owns that complete file boundary: directives, sections, symbols,
+data, instructions, and RELA records become an ``ElfObject`` without invoking
+``as``/``cc``.  Any dialect growth fails closed and must be added together with
+an encoder differential.
+"""
+
+from __future__ import annotations
+
+import struct
+import re
+from dataclasses import dataclass, field
+
+from .elf_x86_64 import (
+    R_X86_64_64,
+    SHF_ALLOC,
+    SHF_EXECINSTR,
+    SHF_TLS,
+    SHF_WRITE,
+    SHT_NOBITS,
+    SHT_PROGBITS,
+    STB_GLOBAL,
+    STB_LOCAL,
+    STT_FUNC,
+    STT_NOTYPE,
+    STT_OBJECT,
+    STT_TLS,
+    ElfObject,
+    ElfRelocation,
+    ElfSection,
+    ElfSymbol,
+)
+from .x86_64_encode import (
+    X86EncodeError,
+    _OperandParseCache,
+    encode_instruction,
+)
+
+
+@dataclass(frozen=True)
+class _Align:
+    log2: int
+    fill: int
+
+
+@dataclass(frozen=True, slots=True)
+class _Label:
+    name: str
+
+
+@dataclass(frozen=True)
+class _Data:
+    payload: bytes
+
+
+@dataclass(frozen=True)
+class _Zero:
+    size: int
+
+
+@dataclass(frozen=True)
+class _SymbolData:
+    symbol: str
+    addend: int
+
+
+@dataclass(frozen=True)
+class _SymbolDifference:
+    left: str
+    right: str
+    width: int
+
+
+@dataclass(frozen=True, slots=True)
+class _Instruction:
+    text: str
+
+
+@dataclass(frozen=True)
+class _SizeHere:
+    symbol: str
+
+
+@dataclass
+class _SectionPlan:
+    name: str
+    type: int
+    flags: int
+    align: int
+    entries: list[object] = field(default_factory=list)
+    source_text: str = field(default="", repr=False, compare=False)
+
+
+@dataclass(slots=True)
+class _SymbolMeta:
+    global_: bool = False
+    type: int = STT_NOTYPE
+    size: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _PendingRelocation:
+    section_name: str
+    offset: int
+    symbol: str
+    type: int
+    addend: int
+
+
+_SECTION_SPECS = {
+    # ELF sh_addralign is the maximum alignment actually requested inside the
+    # section.  The emitter writes a .p2align before every function/global, so
+    # begin at one rather than inventing an eight/sixteen-byte requirement
+    # that GNU as would not put on a byte-only section.
+    ".text": (SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 1),
+    ".rodata": (SHT_PROGBITS, SHF_ALLOC, 1),
+    ".data": (SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 1),
+    ".pcc_stackmaps": (SHT_PROGBITS, SHF_ALLOC, 1),
+    ".tdata": (SHT_PROGBITS, SHF_ALLOC | SHF_WRITE | SHF_TLS, 1),
+    ".tbss": (SHT_NOBITS, SHF_ALLOC | SHF_WRITE | SHF_TLS, 1),
+    ".note.GNU-stack": (SHT_PROGBITS, 0, 1),
+}
+
+
+def _parse_int(text: str) -> int:
+    try:
+        return int(text.strip(), 0)
+    except ValueError as exc:
+        raise X86EncodeError(f"expected integer in directive, got {text!r}") from exc
+
+
+def _align(value: int, log2: int) -> int:
+    alignment = 1 << log2
+    return (value + alignment - 1) & ~(alignment - 1)
+
+
+def _data_items(text: str) -> list[str]:
+    items = [item.strip() for item in text.split(",")]
+    if not items or any(not item for item in items):
+        raise X86EncodeError(f"empty data item list {text!r}")
+    return items
+
+
+def _integer_payload(value: int, width: int, *, owner: str) -> bytes:
+    bits = width * 8
+    if value < -(1 << (bits - 1)) or value > (1 << bits) - 1:
+        raise X86EncodeError(
+            f"{owner} value {value} does not fit {bits} bits"
+        )
+    return (value & ((1 << bits) - 1)).to_bytes(width, "little")
+
+
+def _symbol_plus_addend(text: str) -> tuple[str, int]:
+    item = text.strip()
+    for index in range(1, len(item)):
+        if item[index] not in "+-":
+            continue
+        symbol = item[:index].strip()
+        if not symbol:
+            break
+        addend = _parse_int(item[index:])
+        return symbol, addend
+    if not item or any(char.isspace() for char in item):
+        raise X86EncodeError(f"invalid symbol-valued data item {text!r}")
+    return item, 0
+
+
+def _section_from_directive(line: str) -> str:
+    body = line[len(".section"):].strip()
+    parts = [part.strip() for part in body.split(",")]
+    if not parts or not parts[0]:
+        raise X86EncodeError(f"bad section directive {line!r}")
+    name = parts[0]
+    initializer = name.startswith((".init_array.", ".fini_array.")) and name.rsplit(".", 1)[1].isdigit()
+    if (name not in _SECTION_SPECS and not initializer) or len(parts) not in (1, 3):
+        raise X86EncodeError(f"section shape not proven: {line!r}")
+    if len(parts) == 1:
+        return name
+    section_type, flags, _alignment = (SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8) if initializer else _SECTION_SPECS[name]
+    expected_flags = ""
+    for letter, bit in (("a", SHF_ALLOC), ("w", SHF_WRITE), ("x", SHF_EXECINSTR), ("T", SHF_TLS)):
+        if flags & bit:
+            expected_flags += letter
+    expected_type = "@nobits" if section_type == SHT_NOBITS else "@progbits"
+    spelled_flags = parts[1]
+    if (
+        not (spelled_flags.startswith('"') and spelled_flags.endswith('"'))
+        or set(spelled_flags[1:-1]) != set(expected_flags)
+        or parts[2] != expected_type
+    ):
+        raise X86EncodeError(f"section attributes not proven: {line!r}")
+    return name
+
+
+_ASSEMBLY_LINE_CHUNK_CHARS = 65536
+_ASSEMBLY_LINE_BREAKS = "\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029"
+
+
+def _iter_assembly_lines(asm_text: str):
+    """Keep splitlines semantics without retaining the whole line list."""
+    position = 0
+    length = len(asm_text)
+    fragments: list[str] = []
+    while position < length:
+        end = min(position + _ASSEMBLY_LINE_CHUNK_CHARS, length)
+        # Do not separate the two characters of one CRLF boundary.
+        if end < length and asm_text[end - 1] == "\r" and asm_text[end] == "\n":
+            end += 1
+        chunk = asm_text[position:end]
+        position = end
+        for line in chunk.splitlines(True):
+            complete = line[-1] in "\r\n"
+            if not complete and line[-1] in _ASSEMBLY_LINE_BREAKS:
+                # Match the executing runtime's splitlines contract even when
+                # a less common separator happens to end a chunk.
+                complete = line[-1].splitlines() == [""]
+            if complete:
+                if line.endswith("\r\n"):
+                    line = line[:-2]
+                else:
+                    line = line[:-1]
+                if fragments:
+                    fragments.append(line)
+                    yield "".join(fragments)
+                    fragments = []
+                else:
+                    yield line
+            else:
+                fragments.append(line)
+    if fragments:
+        yield "".join(fragments)
+
+
+# A negative plan integer packs one validated instruction's character span.
+# Short spans stay in the native small-integer lane for ordinary object sizes;
+# oversized lines retain the ordinary text record without truncating anything.
+_INSTRUCTION_SPAN_BASE = 65536
+_INSTRUCTION_SPAN_CODEC = struct.Struct("<q")
+_INSTRUCTION_SPAN_CHUNK_BYTES = 8192
+_INSTRUCTION_SPAN_MIN_RUN = 5
+
+# Fixed scratch-payload bound, matching the existing plan-chunk scale.
+# This is not an environment-tuned cache or a cap on object/section size.
+_NUMERIC_DATA_BATCH_BYTES = 8192
+
+
+def _append_instruction_span(entries: list[object], span: int) -> None:
+    # Keep short runs in their original representation. On the supported host
+    # five spans are the first bytearray payload smaller than its boxed ints,
+    # even before the removed list slots. Labels/directives stop promotion.
+    if (
+        entries
+        and isinstance(entries[-1], bytearray)
+        and len(entries[-1]) < _INSTRUCTION_SPAN_CHUNK_BYTES
+    ):
+        run = entries[-1]
+    else:
+        preceding = _INSTRUCTION_SPAN_MIN_RUN - 1
+        promote = (
+            len(entries) >= preceding
+            and _INSTRUCTION_SPAN_MIN_RUN * _INSTRUCTION_SPAN_CODEC.size
+            <= _INSTRUCTION_SPAN_CHUNK_BYTES
+        )
+        offset = 1
+        while promote and offset <= preceding:
+            previous = entries[-offset]
+            if not isinstance(previous, int) or previous >= 0:
+                promote = False
+            offset += 1
+        if not promote:
+            entries.append(span)
+            return
+        run = bytearray()
+        for offset in range(preceding, 0, -1):
+            run.extend(_INSTRUCTION_SPAN_CODEC.pack(entries[-offset]))
+        for offset in range(preceding):
+            entries.pop()
+        entries.append(run)
+    run.extend(_INSTRUCTION_SPAN_CODEC.pack(span))
+
+
+def _iter_plan_entries(plan: _SectionPlan, *, consume: bool = False):
+    for index, entry in enumerate(plan.entries):
+        if consume:
+            plan.entries[index] = None
+        if isinstance(entry, bytearray):
+            if len(entry) % _INSTRUCTION_SPAN_CODEC.size:
+                raise X86EncodeError("truncated compact instruction span run")
+            for offset in range(0, len(entry), _INSTRUCTION_SPAN_CODEC.size):
+                yield _INSTRUCTION_SPAN_CODEC.unpack_from(entry, offset)[0]
+            if consume:
+                entry.clear()
+        else:
+            yield entry
+
+
+def _instruction_text(entry, source_text: str) -> str:
+    if isinstance(entry, _Instruction):
+        return entry.text
+    if not isinstance(entry, int) or entry >= 0:
+        raise X86EncodeError("invalid compact instruction record")
+    encoded = -entry - 1
+    start = encoded // _INSTRUCTION_SPAN_BASE
+    size = encoded % _INSTRUCTION_SPAN_BASE
+    if size == 0 or start + size > len(source_text):
+        raise X86EncodeError("compact instruction span is outside source")
+    return source_text[start:start + size]
+
+
+def _parse_file(asm_text: str, *, compact_instructions: bool = False):
+    plans: dict[str, _SectionPlan] = {}
+    order: list[str] = []
+    symbols: dict[str, _SymbolMeta] = {}
+    current: _SectionPlan | None = None
+    saw_syntax = False
+    pending_data = bytearray()
+    data_batch_bytes = _NUMERIC_DATA_BATCH_BYTES
+
+    def flush_data() -> None:
+        if pending_data:
+            assert current is not None
+            # Only immutable _Data enters the plan. Raw bytearray entries
+            # already belong to the compact instruction-span transport.
+            current.entries.append(_Data(bytes(pending_data)))
+            pending_data.clear()
+
+    def switch(name: str) -> None:
+        nonlocal current
+        spec = _SECTION_SPECS.get(name)
+        if name.startswith((".init_array.", ".fini_array.")) and name.rsplit(".", 1)[1].isdigit():
+            spec = (SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8)
+        if spec is None:
+            raise X86EncodeError(f"section {name!r} is outside the ELF contract")
+        if name not in plans:
+            plans[name] = _SectionPlan(
+                name, spec[0], spec[1], spec[2],
+                source_text=asm_text if compact_instructions else "",
+            )
+            order.append(name)
+        current = plans[name]
+
+    source_position = 0
+    for raw_line in _iter_assembly_lines(asm_text):
+        raw_start = 0
+        if compact_instructions:
+            raw_start = asm_text.find(raw_line, source_position)
+            if raw_start < 0:
+                raise X86EncodeError("assembly line is outside its source")
+            source_position = raw_start + len(raw_line)
+        line = raw_line.strip()
+        if not line:
+            continue
+        # Keep every nonempty nonnumeric source-line boundary, including section,
+        # label, alignment, zero-fill, metadata and instruction boundaries.
+        if pending_data and not line.startswith((
+            ".byte ", ".short ", ".long ", ".quad ", ".float ", ".double ",
+        )):
+            flush_data()
+        if line == ".intel_syntax noprefix":
+            if saw_syntax or current is not None or symbols:
+                raise X86EncodeError(
+                    ".intel_syntax noprefix must be the first file directive"
+                )
+            saw_syntax = True
+            continue
+        if not saw_syntax:
+            raise X86EncodeError(
+                "owned x86 assembly must begin with .intel_syntax noprefix"
+            )
+        if line == ".text":
+            switch(".text")
+            continue
+        if line == ".data":
+            switch(".data")
+            continue
+        if line.startswith(".section"):
+            switch(_section_from_directive(line))
+            continue
+        if line.startswith(".globl "):
+            name = line.split(None, 1)[1].strip()
+            if not name:
+                raise X86EncodeError(f"bad .globl directive {line!r}")
+            symbols.setdefault(name, _SymbolMeta()).global_ = True
+            continue
+        if line.startswith(".type "):
+            body = line[len(".type "):]
+            pieces = [part.strip() for part in body.split(",")]
+            if len(pieces) != 2 or not pieces[0] or pieces[1] not in ("@function", "@object", "@tls_object"):
+                raise X86EncodeError(f"bad .type directive {line!r}")
+            symbol_type = STT_FUNC if pieces[1] == "@function" else STT_TLS if pieces[1] == "@tls_object" else STT_OBJECT
+            meta = symbols.setdefault(pieces[0], _SymbolMeta())
+            if meta.type not in (STT_NOTYPE, symbol_type):
+                raise X86EncodeError(
+                    f"conflicting .type directives for {pieces[0]!r}"
+                )
+            meta.type = symbol_type
+            continue
+        if line.startswith(".size "):
+            if current is None:
+                raise X86EncodeError(".size before any section")
+            body = line[len(".size "):]
+            pieces = [part.strip() for part in body.split(",", 1)]
+            if len(pieces) != 2:
+                raise X86EncodeError(f"bad .size directive {line!r}")
+            meta = symbols.setdefault(pieces[0], _SymbolMeta())
+            if pieces[1] == ".-" + pieces[0]:
+                current.entries.append(_SizeHere(pieces[0]))
+            else:
+                size = _parse_int(pieces[1])
+                if size < 0:
+                    raise X86EncodeError(f"negative symbol size in {line!r}")
+                if meta.size is not None and meta.size != size:
+                    raise X86EncodeError(
+                        f"conflicting .size directives for {pieces[0]!r}"
+                    )
+                meta.size = size
+            continue
+        if line.startswith(".p2align "):
+            if current is None:
+                raise X86EncodeError(".p2align before any section")
+            pieces = _data_items(line[len(".p2align "):])
+            log2 = _parse_int(pieces[0])
+            if log2 < 0 or log2 > 16:
+                raise X86EncodeError(f".p2align outside finite range: {line!r}")
+            fill = _parse_int(pieces[1]) if len(pieces) == 2 else (
+                0x90 if current.flags & SHF_EXECINSTR else 0
+            )
+            if len(pieces) > 2 or not 0 <= fill <= 255:
+                raise X86EncodeError(f"bad .p2align fill: {line!r}")
+            current.align = max(current.align, 1 << log2)
+            current.entries.append(_Align(log2, fill))
+            continue
+        if line.startswith((".byte ", ".short ", ".long ", ".quad ")):
+            if current is None:
+                raise X86EncodeError("data directive before any section")
+            directive, rest = line.split(None, 1)
+            width = {".byte": 1, ".short": 2, ".long": 4, ".quad": 8}[directive]
+            for item in _data_items(rest):
+                try:
+                    value = int(item, 0)
+                except ValueError:
+                    difference = re.fullmatch(r"([.$A-Za-z_][.$\w]*)\s*-\s*([.$A-Za-z_][.$\w]*)", item)
+                    if difference:
+                        flush_data()
+                        current.entries.append(_SymbolDifference(difference.group(1), difference.group(2), width))
+                        continue
+                    if width != 8:
+                        raise X86EncodeError(
+                            f"symbol-valued {directive} is not proven: {line!r}"
+                        )
+                    symbol, addend = _symbol_plus_addend(item)
+                    flush_data()
+                    current.entries.append(_SymbolData(symbol, addend))
+                else:
+                    payload = _integer_payload(value, width, owner=directive)
+                    if data_batch_bytes > 0 and len(payload) <= data_batch_bytes:
+                        if len(pending_data) + len(payload) > data_batch_bytes:
+                            flush_data()
+                        pending_data.extend(payload)
+                    else:
+                        flush_data()
+                        current.entries.append(_Data(payload))
+            continue
+        if line.startswith((".float ", ".double ")):
+            if current is None:
+                raise X86EncodeError("floating data before any section")
+            directive, rest = line.split(None, 1)
+            fmt = "<f" if directive == ".float" else "<d"
+            for item in _data_items(rest):
+                try:
+                    payload = struct.pack(fmt, float(item))
+                except (ValueError, OverflowError) as exc:
+                    raise X86EncodeError(f"bad {directive} value {item!r}") from exc
+                if data_batch_bytes > 0 and len(payload) <= data_batch_bytes:
+                    if len(pending_data) + len(payload) > data_batch_bytes:
+                        flush_data()
+                    pending_data.extend(payload)
+                else:
+                    flush_data()
+                    current.entries.append(_Data(payload))
+            continue
+        if line.startswith((".zero ", ".space ")):
+            if current is None:
+                raise X86EncodeError("zero-fill before any section")
+            size = _parse_int(line.split(None, 1)[1])
+            if size < 0:
+                raise X86EncodeError(f"negative zero-fill {line!r}")
+            current.entries.append(_Zero(size))
+            continue
+        if line.startswith(".") and not line.endswith(":"):
+            raise X86EncodeError(f"directive not proven: {line!r}")
+        if line.endswith(":"):
+            if current is None:
+                raise X86EncodeError(f"label before any section: {line!r}")
+            name = line[:-1].strip()
+            if not name:
+                raise X86EncodeError("empty label")
+            # Labels carry no metadata by themselves. Keep their definitions
+            # in the plan; only explicit declarations need a metadata entry.
+            current.entries.append(_Label(name))
+            continue
+        if current is None or not current.flags & SHF_EXECINSTR:
+            raise X86EncodeError(f"instruction outside .text: {line!r}")
+        if compact_instructions and len(line) < _INSTRUCTION_SPAN_BASE:
+            start = raw_start + len(raw_line) - len(raw_line.lstrip())
+            span = -(start * _INSTRUCTION_SPAN_BASE + len(line) + 1)
+            if span >= -(1 << 63):
+                _append_instruction_span(current.entries, span)
+            else:
+                # Preserve arbitrarily large source offsets without wrapping
+                # them into the fixed-width private transport.
+                current.entries.append(_Instruction(line))
+        else:
+            current.entries.append(_Instruction(line))
+    if not saw_syntax:
+        raise X86EncodeError(
+            "owned x86 assembly must begin with .intel_syntax noprefix"
+        )
+    flush_data()
+    return plans, order, symbols
+

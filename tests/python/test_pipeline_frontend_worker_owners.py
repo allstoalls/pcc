@@ -8,11 +8,11 @@ from pathlib import Path
 import subprocess
 import pytest
 
-from pcc.py_frontend import pipeline
-from pcc.py_frontend import pipeline_frontend_parallel as parallel
-from pcc.py_frontend import pipeline_frontend_workers as worker_policy
-from pcc.py_frontend import pipeline_frontend_worker_execution as worker_execution
-from pcc.py_frontend import module_action_dag
+from pcc.frontends.python import pipeline
+from pcc.frontends.python import pipeline_frontend_parallel as parallel
+from pcc.frontends.python import pipeline_frontend_workers as worker_policy
+from pcc.frontends.python import pipeline_frontend_worker_execution as worker_execution
+from pcc.frontends.python import module_action_dag
 
 
 def test_direct_indexed_placeholder_uses_host_target_without_rewriting_explicit_target():
@@ -89,16 +89,16 @@ def test_action_dependencies_keep_from_import_submodules_and_ir_provider():
     pipeline_path = Path(pipeline.__file__).resolve()
     pipeline_dependencies = pipeline._python_frontend_action_dependencies(
         str(pipeline_path),
-        "pcc.py_frontend.pipeline",
+        "pcc.frontends.python.pipeline",
         (
-            "pcc.py_frontend.pipeline",
-            "pcc.py_frontend.pipeline_paths",
-            "pcc.py_frontend.type_infer",
+            "pcc.frontends.python.pipeline",
+            "pcc.driver.paths",
+            "pcc.frontends.python.type_infer",
         ),
     )
     assert pipeline_dependencies == (
-        "pcc.py_frontend.pipeline_paths",
-        "pcc.py_frontend.type_infer",
+        "pcc.driver.paths",
+        "pcc.frontends.python.type_infer",
     )
 
     method_path = pipeline_path.with_name("codegen") / (
@@ -106,22 +106,22 @@ def test_action_dependencies_keep_from_import_submodules_and_ir_provider():
     )
     method_dependencies = pipeline._python_frontend_action_dependencies(
         str(method_path),
-        "pcc.py_frontend.codegen.method_call_expression_lowering",
+        "pcc.frontends.python.codegen.method_call_expression_lowering",
         (
-            "pcc.py_frontend.codegen.method_call_expression_lowering",
-            "pcc.py_frontend.codegen.errors",
-            "pcc.py_frontend.codegen.freestanding_abi_constants",
-            "pcc.py_frontend.codegen.marshal",
-            "pcc.py_frontend.py_ast",
-            "pcc.llvm_capi.ir",
+            "pcc.frontends.python.codegen.method_call_expression_lowering",
+            "pcc.frontends.python.codegen.errors",
+            "pcc.frontends.python.codegen.freestanding_abi_constants",
+            "pcc.frontends.python.codegen.marshal",
+            "pcc.frontends.python.py_ast",
+            "pcc.ir.ir",
         ),
     )
     assert method_dependencies == (
-        "pcc.llvm_capi.ir",
-        "pcc.py_frontend.codegen.errors",
-        "pcc.py_frontend.codegen.freestanding_abi_constants",
-        "pcc.py_frontend.codegen.marshal",
-        "pcc.py_frontend.py_ast",
+        "pcc.ir.ir",
+        "pcc.frontends.python.codegen.errors",
+        "pcc.frontends.python.codegen.freestanding_abi_constants",
+        "pcc.frontends.python.codegen.marshal",
+        "pcc.frontends.python.py_ast",
     )
 
 
@@ -629,12 +629,39 @@ def test_native_auto_frontend_bounds_export_and_codegen_lanes(
     assert [name for name, _ir in result[0]] == module_names
 
 
+@pytest.mark.parametrize(
+    "native_object", [None, "", "1", " 0 "],
+    ids=["native-absent", "native-empty", "native-one", "native-explicit"],
+)
+@pytest.mark.parametrize(
+    "frontend_jobs", [None, "", "auto", " 7 "],
+    ids=["jobs-absent", "jobs-empty", "jobs-auto", "jobs-explicit"],
+)
+@pytest.mark.parametrize(
+    "worker_outcome", ["success", "nonzero", "exception", "base_exception"],
+)
 def test_native_in_process_codegen_reuses_coordinator_and_forces_asm(
     tmp_path,
     monkeypatch,
+    native_object,
+    frontend_jobs,
+    worker_outcome,
 ):
     monkeypatch.setenv("PCC_PY_FRONTEND_IN_PROCESS_CODEGEN", "1")
-    monkeypatch.setenv("PCC_DIRECT_INDEXED_NATIVE_OBJECT", "1")
+    original_environment = {
+        "PCC_DIRECT_INDEXED_NATIVE_OBJECT": native_object,
+        "PCC_PY_FRONTEND_JOBS": frontend_jobs,
+    }
+    for name, value in original_environment.items():
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+    failure = (
+        BaseException("in-process worker interrupted")
+        if worker_outcome == "base_exception"
+        else RuntimeError("in-process worker raised")
+    )
     src_paths = []
     module_names = ["large", "small"]
     for index, size in enumerate((220_000, 20)):
@@ -664,7 +691,13 @@ def test_native_in_process_codegen_reuses_coordinator_and_forces_asm(
 
     def run_in_process(manifest_path):
         assert os.environ["PCC_DIRECT_INDEXED_NATIVE_OBJECT"] == "0"
+        assert os.environ["PCC_PY_FRONTEND_JOBS"] == "1"
         in_process_calls.append(manifest_path)
+        if len(in_process_calls) == 2:
+            if worker_outcome == "nonzero":
+                return 7
+            if worker_outcome in ("exception", "base_exception"):
+                raise failure
         result_path, ir_dir, names, indices = manifests[manifest_path]
         index = indices[0]
         ir_path = Path(ir_dir) / ("module_" + str(index) + ".ll")
@@ -685,43 +718,65 @@ def test_native_in_process_codegen_reuses_coordinator_and_forces_asm(
         )
         return 0
 
-    result = parallel.compile_parallel_uncached(
-        src_paths,
-        module_names,
-        jobs=10,
-        entry_module="large",
-        sibling_inits=("small",),
-        libpython_mode="off",
-        ir_scaffold_mode="on",
-        verbose=False,
-        can_spawn_worker=lambda: True,
-        worker_command_prefix=lambda: ["pcc1"],
-        chunk_count_for_workers=lambda *_args: 2,
-        codegen_chunks=lambda *_args: [[0], [1]],
-        ast_wire_enabled=lambda: False,
-        build_shared_exports_callback=lambda *_args, **_kwargs: "exports.json",
-        write_manifest=write_manifest,
-        shell_quote_arg=str,
-        worker_arg="--worker",
-        worker_env_prefix=lambda: "PCC_PY_FRONTEND_JOBS=1",
-        join_strings=lambda values, sep: sep.join(values),
-        run_worker_commands=lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("in-process codegen must not launch worker commands")
-        ),
-        profiled_gc_collect=lambda *_args, **_kwargs: None,
-        read_worker_ir=lambda *_args: (_ for _ in ()).throw(
-            AssertionError("direct artifact must not read worker IR")
-        ),
-        profile_begin=lambda _profile: 0,
-        profile_end=lambda *_args: None,
-        profile_counter=lambda *_args: None,
-        pipeline_error=RuntimeError,
-        run_worker_manifest_in_process=run_in_process,
-    )
+    def compile_in_process():
+        return parallel.compile_parallel_uncached(
+            src_paths,
+            module_names,
+            jobs=10,
+            entry_module="large",
+            sibling_inits=("small",),
+            libpython_mode="off",
+            ir_scaffold_mode="on",
+            verbose=False,
+            can_spawn_worker=lambda: True,
+            worker_command_prefix=lambda: ["pcc1"],
+            chunk_count_for_workers=lambda *_args: 2,
+            codegen_chunks=lambda *_args: [[0], [1]],
+            ast_wire_enabled=lambda: False,
+            build_shared_exports_callback=lambda *_args, **_kwargs: "exports.json",
+            write_manifest=write_manifest,
+            shell_quote_arg=str,
+            worker_arg="--worker",
+            worker_env_prefix=lambda: "PCC_PY_FRONTEND_JOBS=1",
+            join_strings=lambda values, sep: sep.join(values),
+            run_worker_commands=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                AssertionError("in-process codegen must not launch worker commands")
+            ),
+            profiled_gc_collect=lambda *_args, **_kwargs: None,
+            read_worker_ir=lambda *_args: (_ for _ in ()).throw(
+                AssertionError("direct artifact must not read worker IR")
+            ),
+            profile_begin=lambda _profile: 0,
+            profile_end=lambda *_args: None,
+            profile_counter=lambda *_args: None,
+            pipeline_error=RuntimeError,
+            run_worker_manifest_in_process=run_in_process,
+        )
+
+    result = None
+    if worker_outcome == "success":
+        result = compile_in_process()
+    elif worker_outcome == "nonzero":
+        with pytest.raises(
+            RuntimeError, match="in-process frontend codegen worker failed"
+        ):
+            compile_in_process()
+    else:
+        with pytest.raises(type(failure)) as caught:
+            compile_in_process()
+        assert caught.value is failure
 
     assert len(in_process_calls) == 2
-    assert os.environ["PCC_DIRECT_INDEXED_NATIVE_OBJECT"] == "1"
-    assert [kind for _name, kind, _path in result[7]] == ["ASM", "ASM"]
+    restored_environment = {
+        name: os.environ[name]
+        for name in original_environment if name in os.environ
+    }
+    assert restored_environment == {
+        name: value for name, value in original_environment.items()
+        if value is not None
+    }
+    if worker_outcome == "success":
+        assert [kind for _name, kind, _path in result[7]] == ["ASM", "ASM"]
 
 
 @pytest.mark.parametrize(
@@ -749,7 +804,10 @@ def test_native_codegen_checkpoint_persists_sidecars_and_singleton_manifests(
         source.write_text("x" * size, encoding="utf-8")
         sources.append(str(source))
 
+    export_attempts = []
+
     def build_exports(tmp, _srcs, _names, _chunks, *_args, **kwargs):
+        export_attempts.append(tmp)
         ast_dir = Path(kwargs["ast_dir"])
         ast_dir.mkdir(parents=True, exist_ok=True)
         for index in range(2):
@@ -761,45 +819,51 @@ def test_native_codegen_checkpoint_persists_sidecars_and_singleton_manifests(
         return str(exports)
 
     counters = {}
-    result = parallel.compile_parallel_uncached(
-        sources,
-        ["large", "small"],
-        jobs=jobs,
-        entry_module="large",
-        sibling_inits=("small",),
-        libpython_mode="off",
-        ir_scaffold_mode="on",
-        verbose=False,
-        artifact_dir=str(artifacts),
-        can_spawn_worker=lambda: True,
-        worker_command_prefix=lambda: [str(tmp_path / "pcc1")],
-        chunk_count_for_workers=lambda *_args: 2,
-        codegen_chunks=lambda *_args: [[0], [1]],
-        ast_wire_enabled=lambda: False,
-        build_shared_exports_callback=build_exports,
-        write_manifest=worker_policy.write_worker_manifest,
-        shell_quote_arg=str,
-        worker_arg="--worker",
-        worker_env_prefix=lambda: "PCC_PY_FRONTEND_JOBS=1",
-        join_strings=lambda values, sep: sep.join(values),
-        run_worker_commands=lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("deferred codegen must stop before worker launch")
-        ),
-        profiled_gc_collect=lambda *_args, **_kwargs: None,
-        read_worker_ir=lambda *_args: "",
-        profile_begin=lambda _profile: 0,
-        profile_end=lambda *_args: None,
-        profile_counter=lambda _profile, name, value: counters.__setitem__(
-            name, value
-        ),
-        pipeline_error=RuntimeError,
-        auto_source_lanes=auto_source_lanes,
-    )
+
+    def compile_checkpoint():
+        return parallel.compile_parallel_uncached(
+            sources,
+            ["large", "small"],
+            jobs=jobs,
+            entry_module="large",
+            sibling_inits=("small",),
+            libpython_mode="off",
+            ir_scaffold_mode="on",
+            verbose=False,
+            artifact_dir=str(artifacts),
+            can_spawn_worker=lambda: True,
+            worker_command_prefix=lambda: [str(tmp_path / "pcc1")],
+            chunk_count_for_workers=lambda *_args: 2,
+            codegen_chunks=lambda *_args: [[0], [1]],
+            ast_wire_enabled=lambda: False,
+            build_shared_exports_callback=build_exports,
+            write_manifest=worker_policy.write_worker_manifest,
+            shell_quote_arg=str,
+            worker_arg="--worker",
+            worker_env_prefix=lambda: "PCC_PY_FRONTEND_JOBS=1",
+            join_strings=lambda values, sep: sep.join(values),
+            run_worker_commands=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                AssertionError("deferred codegen must stop before worker launch")
+            ),
+            profiled_gc_collect=lambda *_args, **_kwargs: None,
+            read_worker_ir=lambda *_args: "",
+            profile_begin=lambda _profile: 0,
+            profile_end=lambda *_args: None,
+            profile_counter=lambda _profile, name, value: counters.__setitem__(
+                name, value
+            ),
+            pipeline_error=RuntimeError,
+            auto_source_lanes=auto_source_lanes,
+        )
+
+    result = compile_checkpoint()
 
     assert result == ("PCC_DEFERRED_FRONTEND_CODEGEN",)
     lines = plan.read_text(encoding="utf-8").splitlines()
     assert lines[0] == "pcc.frontend-codegen-plan.v2"
-    assert lines[7:11] == ["2", "1", "2", "2"]
+    # With an explicit tree budget, the plan retains the requested ceiling;
+    # the execution driver owns memory admission when the plan is resumed.
+    assert lines[7:11] == ["2", "1", str(jobs), "2"]
     assert lines[11] == "pidx-pco-v1"
     assert counters["multi_frontend_export_safe_jobs"] == (10 if auto_source_lanes else 2)
     persisted = [Path(path) for path in lines[12:]]
@@ -808,9 +872,27 @@ def test_native_codegen_checkpoint_persists_sidecars_and_singleton_manifests(
     assert Path(manifest["ast_dir"]).is_dir()
     assert Path(manifest["exports_path"]).is_file()
 
+    # Reusing a plan's per-process state must fail before publishing another
+    # plan or nesting the new AST under the previous AST directory.
+    state_root = plan.with_name(plan.name + ".state." + str(os.getpid()))
+    original_state = {
+        path.relative_to(state_root): path.read_bytes()
+        for path in state_root.rglob("*") if path.is_file()
+    }
+    original_plan = plan.read_bytes()
+    with pytest.raises(FileExistsError):
+        compile_checkpoint()
+    assert len(export_attempts) == 2
+    assert plan.read_bytes() == original_plan
+    assert not (Path(manifest["ast_dir"]) / "ast").exists()
+    assert {
+        path.relative_to(state_root): path.read_bytes()
+        for path in state_root.rglob("*") if path.is_file()
+    } == original_state
+
 
 def test_native_preload_respects_explicit_frontend_width(monkeypatch, tmp_path):
-    from pcc.py_frontend import type_infer
+    from pcc.frontends.python import type_infer
 
     monkeypatch.setenv("PCC_PY_FRONTEND_JOBS", "2")
     monkeypatch.setenv("PCC_PRELOAD_DELTA_JOBS", "6")

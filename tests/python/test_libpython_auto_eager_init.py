@@ -39,8 +39,8 @@ def test_auto_late_worker_fallback_initializes_cpython_in_main(
     tmp_path, monkeypatch
 ):
     """A worker-only fallback must not win CPython initialization."""
-    from pcc.py_frontend import pipeline
-    from pcc.py_frontend.codegen.layer1 import L1CodeGen
+    from pcc.frontends.python import pipeline
+    from pcc.frontends.python.codegen.layer1 import L1CodeGen
 
     src = tmp_path / "late_worker.py"
     out = tmp_path / "late_worker.ll"
@@ -111,7 +111,7 @@ def test_auto_late_worker_fallback_initializes_cpython_in_main(
 
 def test_auto_without_fallback_does_not_initialize_cpython(tmp_path):
     """The late-init repair must preserve ``auto`` as an opt-in fallback."""
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     src = tmp_path / "native_only.py"
     out = tmp_path / "native_only.ll"
@@ -131,7 +131,7 @@ def test_auto_without_fallback_does_not_initialize_cpython(tmp_path):
 
 def test_multi_auto_late_sibling_fallback_initializes_entry_main(tmp_path):
     """An aggregate fallback must initialize before sibling module code."""
-    from pcc.py_frontend import pipeline
+    from pcc.frontends.python import pipeline
 
     entry = tmp_path / "entry.py"
     worker = tmp_path / "worker.py"

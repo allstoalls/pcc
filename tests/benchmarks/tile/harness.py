@@ -351,7 +351,7 @@ class MetalRuntimeReport:
 
 def metal_toolchain_available() -> bool:
     """Mirror of metal_finalize's real probe: Metal compiler can execute."""
-    from pcc.gpu_metal import metal_toolchain_usable
+    from pcc.backend.metal import metal_toolchain_usable
 
     return metal_toolchain_usable()
 

@@ -13,7 +13,7 @@ from tests.runtime_build_cache import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_DIR = REPO_ROOT / "pcc" / "py_runtime"
+RUNTIME_DIR = REPO_ROOT / "pcc" / "runtime"
 
 
 def _compile_probe(tmp_path: Path, kind: str, backend: int) -> Path:

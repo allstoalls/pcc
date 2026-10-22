@@ -5,7 +5,7 @@ import subprocess
 import textwrap
 
 
-def test_context_enter_exit_runtime(tmp_path, pcc_py_runtime_archive):
+def test_context_enter_exit_runtime(tmp_path, pcc_runtime_archive):
     src = tmp_path / "context_probe.c"
     exe = tmp_path / "context_probe"
     src.write_text(
@@ -64,9 +64,9 @@ def test_context_enter_exit_runtime(tmp_path, pcc_py_runtime_archive):
     subprocess.run(
         [
             os.environ.get("CC", "cc"),
-            "-I", str(pcc_py_runtime_archive.parent / "include"),
-            "-I", str(pcc_py_runtime_archive.parent / "src"),
-            str(src), str(pcc_py_runtime_archive),
+            "-I", str(pcc_runtime_archive.parent / "include"),
+            "-I", str(pcc_runtime_archive.parent / "src"),
+            str(src), str(pcc_runtime_archive),
             "-lm", "-o", str(exe),
         ],
         check=True,
@@ -77,7 +77,7 @@ def test_context_enter_exit_runtime(tmp_path, pcc_py_runtime_archive):
 
 def test_context_runtime_guards_silent_null_before_owned_method_cleanup():
     py_source = open(
-        "pcc/py_runtime/py/py_context_runtime.py", encoding="utf-8"
+        "pcc/runtime/py/py_context_runtime.py", encoding="utf-8"
     ).read()
 
     for source in (py_source,):

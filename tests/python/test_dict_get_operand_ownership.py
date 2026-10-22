@@ -8,8 +8,8 @@ import pytest
 
 
 @pytest.mark.parametrize("key", ["hit", "miss"])
-def test_dict_get_releases_fresh_defaults(tmp_path: Path, pcc_py_runtime_archive, key):
-    from pcc.py_frontend.pipeline import compile_python
+def test_dict_get_releases_fresh_defaults(tmp_path: Path, pcc_runtime_archive, key):
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "dict_default.py"
     source.write_text('''from pcc.extern import c_int64, extern
@@ -34,7 +34,7 @@ main()
 '''.replace("KEY", repr(key)))
     binary = tmp_path / "dict_default"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND="0"),
                          capture_output=True, text=True, timeout=15)
     assert ran.returncode == 0, ran.stdout + ran.stderr
@@ -43,8 +43,8 @@ main()
     assert growth1 < 16384 and growth2 < 16384, (growth1, growth2)
 
 
-def test_dict_get_preserves_aliases_rebinding_and_failure_cleanup(tmp_path: Path, pcc_py_runtime_archive):
-    from pcc.py_frontend.pipeline import compile_python
+def test_dict_get_preserves_aliases_rebinding_and_failure_cleanup(tmp_path: Path, pcc_runtime_archive):
+    from pcc.frontends.python.pipeline import compile_python
 
     source = tmp_path / "dict_get_lifetime.py"
     source.write_text('''import gc
@@ -90,7 +90,7 @@ main()
 ''')
     binary = tmp_path / "dict_get_lifetime"
     compile_python(str(source), str(binary), backend="self", libpython_mode="off",
-                   ir_scaffold_mode="on", runtime_archive=str(pcc_py_runtime_archive))
+                   ir_scaffold_mode="on", runtime_archive=str(pcc_runtime_archive))
     for backend in range(5):
         ran = subprocess.run([str(binary)], env=dict(os.environ, PCC_GC_BACKEND=str(backend)),
                              capture_output=True, text=True, timeout=15)

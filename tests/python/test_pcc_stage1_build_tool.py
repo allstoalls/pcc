@@ -20,14 +20,13 @@ def _load_tool():
     return module
 
 
-def test_stage1_jobs_auto_resolves_from_the_unified_budget_formula() -> None:
+def test_stage1_jobs_auto_is_only_the_cpu_ceiling() -> None:
     tool = _load_tool()
     gib = 1024**3
     # Explicit numeric jobs stay authoritative.
     assert tool._resolve_frontend_jobs("2", 64 * gib) == 2
-    # auto derives from the shared budget formula: (8 GiB - 1 GiB reserve)
-    # // 2 GiB measured host worker peak = 3.
-    assert tool._resolve_frontend_jobs("auto", 8 * gib) == 3
+    # Phase admission uses real inputs and the spawning process's RSS later.
+    assert tool._resolve_frontend_jobs("auto", 8 * gib) == tool._resolve_frontend_jobs("auto", 6 * gib)
     # A wide budget is cpu/hard-cap bound, never more than 10.
     assert tool._resolve_frontend_jobs("auto", 64 * gib) <= 10
     assert tool._resolve_frontend_jobs("auto", 64 * gib) >= 1
@@ -37,13 +36,28 @@ def test_stage1_jobs_auto_resolves_from_the_unified_budget_formula() -> None:
         tool._resolve_frontend_jobs("fast", 8 * gib)
 
 
-def test_stage1_default_memory_budget_names_its_ceiling() -> None:
+def test_stage1_default_memory_budget_names_its_ceiling(monkeypatch) -> None:
+    from scripts import run_process_tree_sample as guard
+
     tool = _load_tool()
+    monkeypatch.delenv("PCC_WORKER_TREE_BUDGET_BYTES", raising=False)
+    monkeypatch.setattr(guard, "_host_memory_observation", lambda: {
+        "platform": "linux", "available_bytes": 6 * 1024**3,
+        "cgroup_limits_verified": True,
+    })
     explicit = tool._host_memory_budget_bytes(123)
     assert explicit == 123
     derived = tool._host_memory_budget_bytes(0)
-    # Half of physical memory, or 0 when the probe is unavailable.
-    assert derived >= 0
+    assert derived == 3 * 1024**3
+
+
+def test_stage1_default_adopts_guard_and_rejects_conflicting_explicit_cap(monkeypatch):
+    tool = _load_tool()
+    monkeypatch.setenv("PCC_WORKER_TREE_BUDGET_BYTES", str(6 * 1024**3))
+    assert tool._host_memory_budget_bytes(0) == 6 * 1024**3
+    assert tool._host_memory_budget_bytes(6 * 1024**3) == 6 * 1024**3
+    with pytest.raises(ValueError, match="restart under a matching guard"):
+        tool._host_memory_budget_bytes(4 * 1024**3)
 
 
 def test_stage1_thread_mode_is_explicit_and_receipt_bound() -> None:
@@ -65,7 +79,7 @@ def test_stage1_thread_mode_is_explicit_and_receipt_bound() -> None:
             "--output-dir",
             "/tmp/output",
         ]
-    ).with_threads == 0
+    ).with_threads == 1
     assert tool._parser().parse_args(
         [
             "--arm",
@@ -91,12 +105,12 @@ def test_stage1_direct_indexed_mode_is_explicit_and_receipt_bound() -> None:
 
     tool._set_stage1_build_modes(
         environment,
-        with_threads=0,
+        with_threads=1,
         direct_indexed_emit=True,
     )
 
     assert environment == {
-        "PCC_WITH_THREADS": "0",
+        "PCC_WITH_THREADS": "1",
         "PCC_PYTHON_IR_PASSES": "default",
         "PCC_DIRECT_INDEXED_KERNEL_CAPTURE": "1",
         "PCC_DIRECT_INDEXED_KERNEL_EMIT": "1",
@@ -125,7 +139,7 @@ def test_stage1_direct_indexed_mode_is_explicit_and_receipt_bound() -> None:
     assert tool._parser().parse_args(common).python_ir_passes == "default"
     control = tool._parser().parse_args(common + ["--python-ir-passes", "off"])
     tool._set_stage1_build_modes(
-        environment, with_threads=0, python_ir_passes=control.python_ir_passes,
+        environment, with_threads=1, python_ir_passes=control.python_ir_passes,
     )
     assert environment["PCC_PYTHON_IR_PASSES"] == "off"
 
@@ -213,13 +227,13 @@ def test_stage1_function_smoke_rejects_every_failure(tmp_path: Path, ab_args) ->
 
 @pytest.mark.integration
 def test_stage1_function_smoke_passes_on_native_pcc1(
-    tmp_path: Path, native_pcc1_compiler, pcc_py_runtime_archive,
+    tmp_path: Path, native_pcc1_compiler, pcc_runtime_archive,
 ) -> None:
     tool = _load_tool()
     env = dict(os.environ)
     env.pop("LC_ALL", None)
     env.update(
-        PCC_RUNTIME_ARCHIVE=str(pcc_py_runtime_archive),
+        PCC_RUNTIME_ARCHIVE=str(pcc_runtime_archive),
         PCC_RUNTIME_CC="/usr/bin/false",
         PCC_HOST_PYTHON="/usr/bin/false",
         PCC_HOST_PCC="/usr/bin/false",

@@ -1,0 +1,70 @@
+{
+  "archive_bytes": 49997088,
+  "archive_owner": "unchanged owned_runtime_build.build_runtime_archive with normal owned library-IR/object/archive owners",
+  "archive_sha256": "42ed3029a7fdf560dba6ba8f8c22133f736e2cba0a0ed65267505f25d51af97a",
+  "archive_sidecar_and_deep_member_readback": "PASS",
+  "base_commit": "761bcdaf62408d56060bb9074585218e6b8bccc4",
+  "build_seconds": 271.0051514100014,
+  "capi_inventory_sha256": "22fac549efc3f5b042da9ce4f3f75611290ddac2912503c94f1ca2532b526f1e",
+  "capi_symbol_count": 444,
+  "codegen_checksum": "819d8a565812fb28205d0056fc859ac8810d2cd5518ca3129a80e8674173fc35",
+  "deep_member_verification_sha256": "482e3aaba53ef9b10ba816ba440333519b7ff7baef0206696c0e4f87da3ed20c",
+  "guard": {
+    "cleanup": "CLEAN",
+    "continuous_minimum_free_bytes": 4294967296,
+    "denied_audit_events": 0,
+    "echild": true,
+    "elapsed_seconds": 273.0519822489987,
+    "hard_address_space_bytes": 4294967296,
+    "hard_nproc": 0,
+    "outer_timeout_seconds": 1200.0,
+    "peak_sampled_root_rss_bytes": 290463744,
+    "returncode": 0,
+    "root_reaped": true,
+    "status": "COMPLETE"
+  },
+  "imported_source_closure": "PASS",
+  "member_count": 191,
+  "native_execution": "UNRUN",
+  "old_runtime_relation": "This archive was newly built and fully admitted for the changed runtime/codegen; old cold-slot archive a6645f90 was not reused",
+  "packet_manifest_sha256": "9f9989b865e66aec6a340d99ff1aceaf9b25cf7ba4c87804ca3b6120cb9492a3",
+  "performance_claim": "None",
+  "preservation_commit": "8f2e4c0f4d8e2234476eeeb0eaf058d510264c9e",
+  "private_runtime_source_after": {
+    "bytes": 5144901,
+    "files": 220,
+    "status": "PASS"
+  },
+  "production_base_commit": "02b9bc2d3c071bbc3e547a63e045daa73cc6e1bc",
+  "provenance_sha256": "833b500639eb9408ca933d8e056059c5ccfe116c1c97b7ba790e677560576491",
+  "qualification_sha256": "a2d0312f6e24cf00f207201f4baac1e1a7de935e5c1b8a6fd13121c3cee6f428",
+  "result_sha256": "252f882546155bf9ed91dfc5e686d8b40c377e4f226de66f867243f0a6cccd58",
+  "runtime_config": {
+    "refcount": "atomic",
+    "threads": true
+  },
+  "schema": "pcc.oserror_owned_runtime_public_qualification.v1",
+  "scope": "Complete compile-only owned runtime for current production plus nine OSError postimages; no emitted native execution",
+  "source_after": {
+    "bytes": 44453538,
+    "files": 3866,
+    "status": "PASS"
+  },
+  "source_before": {
+    "bytes": 44453538,
+    "files": 3866,
+    "status": "PASS"
+  },
+  "source_manifest_sha256": "03538c5d750db4b1e8541cae229d0c5695a376a2b5ed80b6a451cb7818319c19",
+  "status": "PASS",
+  "target": "x86_64-unknown-linux-gnu",
+  "unrun": [
+    "native OSError behavior",
+    "GC0-4 behavior",
+    "macOS",
+    "pcc1",
+    "full Stage1",
+    "full async/gateway",
+    "broad regression suite"
+  ]
+}

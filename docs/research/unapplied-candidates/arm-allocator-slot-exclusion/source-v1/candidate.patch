@@ -1,0 +1,490 @@
+--- a/pcc/backend/self_backend_aarch64_darwin_regalloc.py
++++ b/pcc/backend/self_backend_aarch64_darwin_regalloc.py
+@@ -452,8 +452,36 @@
+         blocks.append(block_id)
+ 
+ 
++def _slot_excludes_register_interval(
++    kernel,
++    value_id: int,
++    value_count: int,
++    slot_count: int,
++    reload_offsets: set[int],
++) -> bool:
++    """Use only bounds-proven frozen slot facts as negative evidence.
++
++    Unknown IDs or records keep the ordinary liveness walk.  In particular,
++    do not inspect candidate types or project instruction data here: their
++    original admission paths own diagnostics and type interning.
++    """
++
++    if type(value_id) is not int or value_id < 0 or value_id >= value_count:
++        return False
++    slot_id = kernel.value_scalars.get_unchecked(value_id * 8 + 2)
++    if type(slot_id) is not int:
++        return False
++    if slot_id < 0:
++        return True
++    if slot_id >= slot_count:
++        return False
++    offset = kernel.slot_scalars.get_unchecked(slot_id * 2)
++    return type(offset) is int and (offset < 0 or offset in reload_offsets)
++
++
+ def _function_level_facts(
+     kernel,
++    reload_offsets: list[int] | None = None,
+ ) -> tuple[
+     list[int], dict[int, int], list[int], list[bool], list[int], list[int],
+     dict[int, int],
+@@ -627,6 +655,28 @@
+     # the back edge); a value live into a block is live from its first
+     # position -- layout order need not follow dominance, so such a block may
+     # precede the definition.
++    # All three interval consumers reject absent slots and active reload
++    # slots before reading solved liveness.  Leave discovery, PHIs, CFG and
++    # every later eligibility/diagnostic step in their original order; only
++    # omit a per-value backward walk that no interval can consume.  The
++    # default None preserves the full-facts helper contract for callers that
++    # do not supply the allocator's already-fixed reload policy.
++    excluded_offsets: set[int] = set()
++    value_count = 0
++    slot_count = 0
++    if reload_offsets is not None:
++        slot_facts_known = (
++            len(kernel.value_scalars) == len(kernel.value_names) * 8
++            and len(kernel.slot_scalars) % 2 == 0
++        )
++        for offset in reload_offsets:
++            if type(offset) is not int:
++                slot_facts_known = False
++                break
++            excluded_offsets.add(offset)
++        if slot_facts_known:
++            value_count = len(kernel.value_names)
++            slot_count = len(kernel.slot_scalars) // 2
+     first_live: dict[int, int] = {}
+     visited: list[int] = [-1] * len(successors)
+     pending: list[int] = []
+@@ -638,6 +688,13 @@
+             if block_id != home and visited[block_id] != value_id:
+                 visited[block_id] = value_id
+                 pending.append(block_id)
++        if pending and value_count and _slot_excludes_register_interval(
++            kernel, value_id, value_count, slot_count, excluded_offsets,
++        ):
++            # Keep the textual last_use entry.  This value will never reach
++            # an interval consumer, and visited stamps are value-specific.
++            pending.clear()
++            continue
+         while pending:
+             block_id = pending.pop()
+             base = block_base[block_id]
+@@ -1302,7 +1359,7 @@
+             call_barriers,
+             hard_barriers,
+             first_live,
+-        ) = _function_level_facts(kernel)
++        ) = _function_level_facts(kernel, reload_offsets)
+         # A fused multiply reads its inputs at the consumer, not at the mul.
+         # The per-block overrides below cover instruction results; arguments
+         # and phis take their intervals straight from these last uses.
+--- /dev/null
++++ b/tests/python/test_aarch64_allocator_slot_exclusion.py
+@@ -0,0 +1,396 @@
++"""Allocator-only slot exclusions preserve all consumers of solved liveness.
++
++These are host tests.  They invoke the ordinary owned backend for small IR
++fixtures, never a compiler executable, runtime build, subprocess or native code.
++"""
++from __future__ import annotations
++
++from contextlib import contextmanager
++from types import SimpleNamespace
++
++import pytest
++
++from pcc.backend import self_backend_aarch64_darwin_prologue as prologue
++from pcc.backend import self_backend_aarch64_darwin_regalloc as regalloc
++from pcc.backend.native_object import NativeObject, encode_native_object
++from pcc.backend.self_backend_aarch64_darwin import (
++    emit_aarch64_darwin_indexed_transport,
++)
++from pcc.backend.self_backend_aarch64_darwin_abi import (
++    aggregate_returned_indirect,
++    aggregate_returned_indirect_indexed,
++)
++from pcc.backend.self_backend_kernel import get_indexed_function_kernel
++from pcc.backend.self_backend_parse import parse_self_backend_module
++from pcc.backend.self_backend_prepare import (
++    prepare_module_for_target,
++    prepare_parsed_module_for_target,
++)
++from pcc.backend.self_backend_value_arena import CompilerIntArena
++from pcc.ir import ir
++
++
++_LOOP = '''
++target triple = "{target}"
++declare void @side()
++define void @loop_live(i64 %n, ptr %out) {{
++entry:
++  %cell = alloca i64, align 8
++  store i64 %n, ptr %cell
++  %base = add i64 %n, 7
++  br label %head
++head:
++  %i = phi i64 [0, %entry], [%next, %body]
++  %cmp = icmp slt i64 %i, %n
++  br i1 %cmp, label %body, label %exit
++body:
++  %loaded = load i64, ptr %cell
++  %use = add i64 %base, %loaded
++  store i64 %use, ptr %out
++  call void @side()
++  %next = add i64 %i, 1
++  br label %head
++exit:
++  ret void
++}}
++'''
++
++_MANAGED = '''
++target triple = "{target}"
++@frame_map = internal constant i32 1
++declare void @pcc_gc_frame_enter(ptr, ptr)
++declare void @pcc_gc_frame_leave(ptr)
++declare void @pcc_thread_safepoint()
++declare void @opaque_call(ptr)
++define void @refresh(ptr %obj) {{
++entry:
++  %root = alloca ptr, align 8
++  store ptr %obj, ptr %root, align 8
++  call void @pcc_gc_frame_enter(ptr @frame_map, ptr %root)
++  %before = load ptr, ptr %root, align 8
++  %derived = getelementptr i8, ptr %before, i64 24
++  call void @pcc_thread_safepoint()
++  br label %after
++ after:
++  call void @opaque_call(ptr %derived)
++  call void @pcc_gc_frame_leave(ptr %root)
++  ret void
++}}
++'''
++
++_CAST_CALL = '''
++target triple = "{target}"
++declare i64 @produce(i64)
++define i64 @call_cast(i64 %n, i1 %pick) {{
++entry:
++  %frozen = freeze i64 %n
++  %a = call i64 @produce(i64 %frozen)
++  %ptr = inttoptr i64 %a to ptr
++  %back = ptrtoint ptr %ptr to i64
++  br i1 %pick, label %left, label %right
++left:
++  %left_value = add i64 %back, %frozen
++  br label %join
++right:
++  %right_value = mul i64 %back, 5
++  br label %join
++join:
++  %result = phi i64 [%left_value, %left], [%right_value, %right]
++  ret i64 %result
++}}
++'''
++
++_TARGETS = ("arm64-apple-darwin23.6.0", "aarch64-unknown-linux-gnu")
++
++
++@contextmanager
++def _prepared(source):
++    prepared = prepare_module_for_target(
++        source,
++        aggregate_returned_indirect=aggregate_returned_indirect,
++        aggregate_returned_indirect_indexed=aggregate_returned_indirect_indexed,
++        materialize_legacy_slots=False,
++    )
++    try:
++        yield prepared.functions[0], get_indexed_function_kernel(prepared.functions[0])
++    finally:
++        for function in prepared.functions:
++            get_indexed_function_kernel(function).close_native_tables()
++
++
++def _allocation_state(function, kernel):
++    return (
++        kernel.legacy_value_registers(),
++        tuple(function.aarch64_callee_saved),
++        dict(function.aarch64_fused_branch_values),
++        function.aarch64_frameless,
++        tuple(function.aarch64_madd_fusions),
++        kernel.value_scalars.diagnostic_values(),
++        kernel.slot_scalars.diagnostic_values(),
++        kernel.type_scalars.diagnostic_values(),
++        kernel.diagnostic_projections,
++        kernel.type_object_projections,
++    )
++
++
++@pytest.mark.parametrize(
++    "value_id,slot_id,offset,reloads,expected",
++    [
++        (0, -1, 16, set(), True),
++        (0, -9, 16, set(), True),
++        (0, 0, -1, set(), True),
++        (0, 0, 16, {16}, True),
++        (0, 0, 16, {24}, False),
++        (0, 0, 0, set(), False),
++        (-1, -1, 16, set(), False),
++        (1, -1, 16, set(), False),
++        (1000000, -1, 16, set(), False),
++        (0, 1, 16, set(), False),
++        (0, 1000000, 16, set(), False),
++        ("unknown", -1, 16, set(), False),
++        (True, -1, 16, set(), False),
++        (0, "unknown", 16, set(), False),
++        (0, True, 16, set(), False),
++        (0, 0, "unknown", set(), False),
++        (0, 0, True, set(), False),
++    ],
++)
++def test_only_proven_slot_facts_exclude(value_id, slot_id, offset, reloads, expected):
++    values = CompilerIntArena()
++    slots = CompilerIntArena()
++    try:
++        values.append4(-1, -1, slot_id, -1)
++        values.append4(-1, -1, -1, 0)
++        slots.append2(offset, -1)
++        kernel = SimpleNamespace(value_scalars=values, slot_scalars=slots)
++        before = values.diagnostic_values(), slots.diagnostic_values()
++        assert regalloc._slot_excludes_register_interval(
++            kernel, value_id, 1, 1, reloads,
++        ) is expected
++        assert (values.diagnostic_values(), slots.diagnostic_values()) == before
++    finally:
++        values.close()
++        slots.close()
++
++
++@pytest.mark.parametrize("reload_base", [False, True])
++def test_skipped_value_does_not_shorten_any_retained_interval(reload_base):
++    with _prepared(_LOOP.format(target=_TARGETS[0])) as (_function, kernel):
++        cell = kernel.value_id("cell")
++        base = kernel.value_id("base")
++        assert cell >= 0 and base >= 0
++        assert kernel.value_slot_offset(cell) < 0
++        baseline = regalloc._function_level_facts(kernel)
++        reloads = [kernel.value_slot_offset(base)] if reload_base else []
++        candidate = regalloc._function_level_facts(kernel, reloads)
++        excluded = {cell}
++        if reload_base:
++            # Slot reuse can exclude more than one SSA value, by design.
++            excluded.update(
++                value_id for value_id in baseline[1]
++                if kernel.value_slot_offset(value_id) in reloads
++            )
++        assert cell in baseline[6] and cell not in candidate[6]
++        if reload_base:
++            assert base in baseline[6] and base not in candidate[6]
++        assert baseline[0] == candidate[0]
++        assert baseline[2:6] == candidate[2:6]
++        assert baseline[1].keys() == candidate[1].keys()
++        for value_id in baseline[1]:
++            if value_id not in excluded:
++                assert baseline[1][value_id] == candidate[1][value_id]
++                assert baseline[6].get(value_id) == candidate[6].get(value_id)
++        # No persistent memoization: a later full-facts call is unchanged.
++        assert regalloc._function_level_facts(kernel) == baseline
++
++
++@pytest.mark.parametrize("unknown", ["short-values", "odd-slots", "bad-reload", "invalid-slot"])
++def test_uncertain_slot_state_keeps_original_full_facts(unknown):
++    with _prepared(_LOOP.format(target=_TARGETS[0])) as (_function, kernel):
++        baseline = regalloc._function_level_facts(kernel)
++        reloads = []
++        replacement = None
++        if unknown == "short-values":
++            old = kernel.value_scalars
++            replacement = CompilerIntArena()
++            kernel.value_scalars = replacement
++        elif unknown == "odd-slots":
++            kernel.slot_scalars.append(0)
++        elif unknown == "bad-reload":
++            reloads = [[]]
++        else:
++            # Only this value becomes uncertain; the valid missing-slot
++            # alloca remains legitimately excluded, so compare the value.
++            value_id = kernel.value_id("base")
++            kernel.value_scalars.set_unchecked(value_id * 8 + 2, 1000000)
++        try:
++            candidate = regalloc._function_level_facts(kernel, reloads)
++            if unknown == "invalid-slot":
++                assert candidate[1][value_id] == baseline[1][value_id]
++                assert candidate[6].get(value_id) == baseline[6].get(value_id)
++            else:
++                assert candidate == baseline
++        finally:
++            if replacement is not None:
++                kernel.value_scalars = old
++                replacement.close()
++
++
++@pytest.mark.parametrize("target", _TARGETS)
++@pytest.mark.parametrize("mode", ["callee", "function", "block"])
++@pytest.mark.parametrize("fixture", [_LOOP, _MANAGED, _CAST_CALL], ids=["loop-phi", "managed-reload", "call-cast"])
++def test_complete_object_and_allocator_state_match_unfiltered_facts(monkeypatch, target, mode, fixture):
++    monkeypatch.setenv("PCC_SELF_CALLEE_SAVED_REGISTERS", "1" if mode == "callee" else "0")
++    monkeypatch.setenv("PCC_SELF_FUNCTION_LIVE_INTERVALS", "1" if mode == "function" else "0")
++    monkeypatch.setenv("PCC_SELF_CALL_RESULT_REGISTERS", "1")
++    source = fixture.format(target=target)
++    original_facts = regalloc._function_level_facts
++    original_allocate = prologue.allocate_aarch64_block_registers
++    original_excludes = regalloc._slot_excludes_register_interval
++
++    def emit(filtered):
++        states = []
++        exclusions = []
++        facts_calls = []
++
++        def facts(kernel, reload_offsets=None):
++            facts_calls.append(reload_offsets)
++            return original_facts(kernel, reload_offsets if filtered else None)
++
++        def excludes(kernel, value_id, value_count, slot_count, reload_offsets):
++            result = original_excludes(kernel, value_id, value_count, slot_count, reload_offsets)
++            if result:
++                exclusions.append((kernel.value_name(value_id), tuple(sorted(reload_offsets))))
++            return result
++
++        def allocate(function):
++            original_allocate(function)
++            states.append(_allocation_state(function, get_indexed_function_kernel(function)))
++
++        with monkeypatch.context() as patch:
++            patch.setattr(regalloc, "_function_level_facts", facts)
++            patch.setattr(regalloc, "_slot_excludes_register_interval", excludes)
++            patch.setattr(prologue, "allocate_aarch64_block_registers", allocate)
++            transport = emit_aarch64_darwin_indexed_transport(
++                parse_self_backend_module(source), optimize=False,
++            )
++            sections, undefined = transport.assemble_sections()
++            packed = encode_native_object(NativeObject.from_sections(sections, undefined=undefined))
++        return packed, sections, undefined, states, exclusions, facts_calls
++
++    baseline = emit(False)
++    candidate = emit(True)
++    assert candidate[:4] == baseline[:4]
++    assert candidate[5] == baseline[5]
++    assert baseline[4] == []
++    if mode == "block":
++        assert candidate[5] == [] and candidate[4] == []
++    else:
++        assert candidate[5]
++        if fixture == _LOOP:
++            assert any(name == "cell" for name, _ in candidate[4])
++        if mode == "callee" and fixture == _MANAGED:
++            assert any(offsets for _, offsets in candidate[4]), "real stackmap reload policy was not exercised"
++
++
++def test_late_diagnostic_projection_still_occurs_in_original_order(monkeypatch):
++    monkeypatch.setenv("PCC_SELF_CALLEE_SAVED_REGISTERS", "1")
++    original_facts = regalloc._function_level_facts
++    outcomes = []
++    for filtered in (False, True):
++        with _prepared(_CAST_CALL.format(target=_TARGETS[0])) as (function, kernel):
++            # An actual candidate-definition projection remains late even
++            # when this result's absent slot rules out any interval.
++            frozen_id = kernel.value_id("frozen")
++            kernel.publish_value_slot_id(frozen_id, -1)
++            assert frozen_id in original_facts(kernel)[6]
++            assert frozen_id not in original_facts(kernel, [])[6]
++            events = []
++            original_data = type(kernel).instruction_data
++
++            def data(self, block_id, instruction_index):
++                events.append((block_id, instruction_index))
++                raise ValueError("retained candidate-data diagnostic")
++
++            def facts(current, reload_offsets=None):
++                events.append("facts")
++                return original_facts(current, reload_offsets if filtered else None)
++
++            with monkeypatch.context() as patch:
++                patch.setattr(type(kernel), "instruction_data", data)
++                patch.setattr(regalloc, "_function_level_facts", facts)
++                with pytest.raises(ValueError, match="^retained candidate-data diagnostic$") as caught:
++                    regalloc.allocate_aarch64_block_registers(function)
++            assert type(kernel).instruction_data is original_data
++            outcomes.append((type(caught.value), str(caught.value), events))
++    assert outcomes[0] == outcomes[1]
++    assert outcomes[0][2] == ["facts", (0, 0)]
++
++
++@pytest.mark.parametrize("bad_edge", [False, True])
++def test_inline_error_edges_remain_in_original_scan_and_first_error(monkeypatch, bad_edge):
++    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_CAPTURE", "1")
++    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_EMIT", "1")
++    monkeypatch.setenv("PCC_DIRECT_INDEXED_KERNEL_FUSE_USES", "1")
++    monkeypatch.setattr(ir, "_DIRECT_INLINE_ERROR_EDGE_CAPTURE_ENABLED", True)
++    module = ir.Module(name="slot-exclusion-inline-edge")
++    module.triple = _TARGETS[0]
++    i64 = ir.IntType(64)
++    function = ir.Function(module, ir.FunctionType(i64, [i64]), name="probe")
++    function.args[0].name = "n"
++    entry = function.append_basic_block("entry")
++    error = function.append_basic_block("error")
++    builder = ir.IRBuilder(entry)
++    base = builder.add(function.args[0], ir.Constant(i64, 1), name="base")
++    failed = builder.icmp_signed("!=", base, ir.Constant(i64, 0), name="failed")
++    assert ir.IRBuilder_try_inline_error_edge(builder, failed, error, 42, 0)
++    builder.ret(base)
++    builder.position_at_end(error)
++    result = builder.add(base, function.args[0], name="result")
++    builder.ret(result)
++    prepared = prepare_parsed_module_for_target(
++        module.direct_indexed_module(),
++        aggregate_returned_indirect=aggregate_returned_indirect,
++        aggregate_returned_indirect_indexed=aggregate_returned_indirect_indexed,
++        materialize_legacy_slots=False,
++    )
++    kernel = get_indexed_function_kernel(prepared.functions[0])
++    try:
++        assert len(kernel.error_edge_scalars) == 8
++        base_id = kernel.value_id("base")
++        assert base_id >= 0
++        reloads = [kernel.value_slot_offset(base_id)]
++        assert reloads[0] >= 0
++        calls = []
++        original_target = type(kernel).inline_error_edge_target
++
++        def target(self, edge_id):
++            calls.append(edge_id)
++            if bad_edge:
++                raise IndexError("retained inline-edge diagnostic")
++            return original_target(self, edge_id)
++
++        with monkeypatch.context() as patch:
++            patch.setattr(type(kernel), "inline_error_edge_target", target)
++            if bad_edge:
++                outcomes = []
++                for policy in (None, reloads):
++                    with pytest.raises(IndexError) as caught:
++                        regalloc._function_level_facts(kernel, policy)
++                    outcomes.append((type(caught.value), str(caught.value)))
++                assert outcomes[0] == outcomes[1]
++            else:
++                baseline = regalloc._function_level_facts(kernel)
++                candidate = regalloc._function_level_facts(kernel, reloads)
++                assert base_id in baseline[6] and base_id not in candidate[6]
++                assert candidate[0] == baseline[0]
++                assert candidate[2:6] == baseline[2:6]
++                assert candidate[1].keys() == baseline[1].keys()
++                for value_id in baseline[1]:
++                    if kernel.value_slot_offset(value_id) not in reloads:
++                        assert candidate[1][value_id] == baseline[1][value_id]
++                        assert candidate[6].get(value_id) == baseline[6].get(value_id)
++        assert calls == [0, 0]
++    finally:
++        for parsed_function in prepared.functions:
++            get_indexed_function_kernel(parsed_function).close_native_tables()

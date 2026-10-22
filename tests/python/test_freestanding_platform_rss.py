@@ -7,12 +7,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from pcc.py_frontend import pipeline
+from pcc.frontends.python import pipeline
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLATFORM_SOURCE = (
-    REPO_ROOT / "pcc" / "py_runtime" / "py" / "freestanding_platform_rss.py"
+    REPO_ROOT / "pcc" / "runtime" / "py" / "freestanding_platform_rss.py"
 )
 
 
@@ -144,7 +144,7 @@ def test_linux_platform_rss_uses_proc_status_and_raw_syscalls(
     monkeypatch,
 ) -> None:
     from pcc.backend.self_backend_dispatch import emit_self_asm
-    from pcc.py_frontend.codegen.unsafe_lowering import UnsafeIntrinsicMixin
+    from pcc.frontends.python.codegen.unsafe_lowering import UnsafeIntrinsicMixin
 
     monkeypatch.setattr(
         UnsafeIntrinsicMixin,
@@ -181,10 +181,10 @@ def test_linux_platform_rss_uses_proc_status_and_raw_syscalls(
 
 def test_runtime_archive_rss_symbols_are_owned_by_python_port(
     tmp_path: Path,
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     members = subprocess.run(
-        ["ar", "-t", str(pcc_py_runtime_archive)],
+        ["ar", "-t", str(pcc_runtime_archive)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -195,5 +195,5 @@ def test_runtime_archive_rss_symbols_are_owned_by_python_port(
     _run_rss_harness(
         tmp_path,
         "platform_rss_archive",
-        pcc_py_runtime_archive,
+        pcc_runtime_archive,
     )

@@ -24,7 +24,7 @@ repo_root = os.path.dirname(os.path.dirname(this_dir))
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
-from pcc.evaluater.c_evaluator import CEvaluator
+from pcc.frontends.c.evaluator.c_evaluator import CEvaluator
 
 
 def _emit_asm(source: str, optimize, monkeypatch, tmp_path) -> str:

@@ -59,11 +59,11 @@ main()
 
 @pytest.mark.integration
 def test_vthread_effect_handler_abi_symbols_exist(
-    pcc_py_runtime_archive: Path,
+    pcc_runtime_archive: Path,
 ) -> None:
     """The kont-style effect handler ABI must be exported by the runtime."""
     import re
-    src = (REPO / "pcc" / "py_runtime" / "py" / "py_virtual_thread_runtime.py").read_text(
+    src = (REPO / "pcc" / "runtime" / "py" / "py_virtual_thread_runtime.py").read_text(
         encoding="utf-8"
     )
     for symbol in (
@@ -77,7 +77,7 @@ def test_vthread_effect_handler_abi_symbols_exist(
 
 @pytest.mark.integration
 def test_vthread_effect_handler_dispatch_from_c_probe(
-    tmp_path: Path, pcc_py_runtime_archive: Path
+    tmp_path: Path, pcc_runtime_archive: Path
 ) -> None:
     """A C probe links the archive, registers a handler, performs an effect,
     and observes the handler's continue/short-circuit decision."""
@@ -120,8 +120,8 @@ int main(void) {
     build = subprocess.run(
         [
             "clang", "-std=c11",
-            f"-I{REPO / 'pcc' / 'py_runtime' / 'include'}",
-            str(probe), str(pcc_py_runtime_archive), "-pthread", "-o", str(exe),
+            f"-I{REPO / 'pcc' / 'runtime' / 'include'}",
+            str(probe), str(pcc_runtime_archive), "-pthread", "-o", str(exe),
         ],
         capture_output=True,
         text=True,

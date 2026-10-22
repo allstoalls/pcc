@@ -34,6 +34,7 @@ from pcc.backend.arm64_encode import (
 from pcc.backend.arm64_asm_driver import assemble_lines
 from pcc.backend.self_backend_value_arena import CompilerIntArena
 from pcc.backend.self_backend_aarch64_darwin_mem import (
+    DIRECT_CALL_INSTRUCTION_PLACEHOLDER,
     DIRECT_INSTRUCTION_PLACEHOLDER,
     begin_direct_instruction_capture,
     borrow_direct_instruction_records,
@@ -257,7 +258,7 @@ def test_direct_memory_capture_keeps_owner_until_explicit_end() -> None:
         assert second == DIRECT_INSTRUCTION_PLACEHOLDER
         assert third == DIRECT_INSTRUCTION_PLACEHOLDER
         assert fourth == DIRECT_INSTRUCTION_PLACEHOLDER
-        assert fifth == DIRECT_INSTRUCTION_PLACEHOLDER
+        assert fifth == DIRECT_CALL_INSTRUCTION_PLACEHOLDER
         assert len(records) == 20
         assert symbols == ["_callee"]
     finally:
@@ -280,6 +281,7 @@ def test_direct_capture_exception_does_not_poison_later_asm() -> None:
             optimize=False,
         )
         assert DIRECT_INSTRUCTION_PLACEHOLDER not in asm
+        assert DIRECT_CALL_INSTRUCTION_PLACEHOLDER not in asm
     finally:
         records.close()
         end_direct_instruction_capture()
@@ -332,6 +334,7 @@ def test_all_emission_modes_reserve_capture_scope(monkeypatch, outer_structured)
     else:
         result = emitter.emit_aarch64_darwin_asm(source, optimize=False)
         assert DIRECT_INSTRUCTION_PLACEHOLDER not in result
+        assert DIRECT_CALL_INSTRUCTION_PLACEHOLDER not in result
     assert nested_rejected == [True]
 
 
@@ -816,3 +819,54 @@ def test_rare_emitter_vocabulary_publishes_scalar_words(line: str) -> None:
     assert candidate_sections == oracle_sections
     assert candidate_undefined == oracle_undefined
     records.close()
+
+
+@pytest.mark.parametrize("count", [0, 1, 1023, 1024, 1025, 2048, 2057])
+def test_compiler_word_pack_preserves_chunk_boundaries_and_input(count) -> None:
+    values = [0, 1, 0x12345678, 0x80000000, 0xFFFFFFFF]
+    words = CompilerIntArena()
+    expected = bytearray()
+    for index in range(count):
+        value = values[index % len(values)]
+        words.append(value)
+        expected.extend(value.to_bytes(4, "little"))
+    before = words.diagnostic_values()
+    assert words.pack_u32_bytes() == bytes(expected)
+    assert words.pack_u32_bytes() == bytes(expected)
+    assert words.diagnostic_values() == before
+    words.close()
+
+
+@pytest.mark.parametrize("bad", [-1, 0x100000000])
+def test_compiler_word_pack_rejects_invalid_tail_after_full_chunk(bad) -> None:
+    words = CompilerIntArena()
+    for _ in range(1024):
+        words.append(0xFFFFFFFF)
+    words.append(bad)
+    with pytest.raises(ValueError, match="outside uint32"):
+        words.pack_u32_bytes()
+    assert len(words) == 1025 and words.get_unchecked(1024) == bad
+    words.close()
+    with pytest.raises(RuntimeError, match="closed"):
+        words.pack_u32_bytes()
+
+
+def test_compiler_word_pack_bounds_temporary_host_objects() -> None:
+    import tracemalloc
+
+    words = CompilerIntArena()
+    count = 65536
+    for _ in range(count):
+        words.append(0xD503201F)
+    tracemalloc.start()
+    try:
+        packed = words.pack_u32_bytes()
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+        words.close()
+    assert packed == b"\x1f\x20\x03\xd5" * count
+    # Input allocation precedes tracing. Packing holds compact chunks plus
+    # final output and bounded 1024-word scratch, not one object per word
+    # across the whole module. Leave ample fixed interpreter overhead.
+    assert peak <= 3 * len(packed) + 512 * 1024
